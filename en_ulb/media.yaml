@@ -1,0 +1,933 @@
+resource:
+  version: '{latest}'
+  media:
+    -
+     identifier: 'pdf'
+     version: '{latest}'
+     contributor: []
+     url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_v{latest}.pdf'
+projects:
+  -
+    identifier: 'gen'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_01-GEN_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/gen/{chapter}/CONTENTS/wav/chapter/en_ulb_gen_c{chapter}.wav'
+  -
+    identifier: 'exo'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_02-EXO_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/exo/{chapter}/CONTENTS/wav/chapter/en_ulb_exo_c{chapter}.wav'
+  -
+    identifier: 'lev'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_03-LEV_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/lev/{chapter}/CONTENTS/wav/chapter/en_ulb_lev_c{chapter}.wav'
+  -
+    identifier: 'num'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_04-NUM_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/num/{chapter}/CONTENTS/wav/chapter/en_ulb_num_c{chapter}.wav'
+  -
+    identifier: 'deu'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_05-DEU_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/deu/{chapter}/CONTENTS/wav/chapter/en_ulb_deu_c{chapter}.wav'
+  -
+    identifier: 'jos'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_06-JOS_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jos/{chapter}/CONTENTS/wav/chapter/en_ulb_jos_c{chapter}.wav'
+  -
+    identifier: 'jdg'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_07-JDG_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jdg/{chapter}/CONTENTS/wav/chapter/en_ulb_jdg_c{chapter}.wav'
+  -
+    identifier: 'rut'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_08-RUT_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/rut/{chapter}/CONTENTS/wav/chapter/en_ulb_rut_c{chapter}.wav'
+  -
+    identifier: '1sa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_09-1SA_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1sa/{chapter}/CONTENTS/wav/chapter/en_ulb_1sa_c{chapter}.wav'
+  -
+    identifier: '2sa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_10-2SA_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2sa/{chapter}/CONTENTS/wav/chapter/en_ulb_2sa_c{chapter}.wav'
+  -
+    identifier: '1ki'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_11-1KI_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1ki/{chapter}/CONTENTS/wav/chapter/en_ulb_1ki_c{chapter}.wav'
+  -
+    identifier: '2ki'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_12-2KI_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2ki/{chapter}/CONTENTS/wav/chapter/en_ulb_2ki_c{chapter}.wav'
+  -
+    identifier: '1ch'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_13-1CH_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1ch/{chapter}/CONTENTS/wav/chapter/en_ulb_1ch_c{chapter}.wav'
+  -
+    identifier: '2ch'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_14-2CH_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2ch/{chapter}/CONTENTS/wav/chapter/en_ulb_2ch_c{chapter}.wav'
+  -
+    identifier: 'ezr'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_15-EZR_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/ezr/{chapter}/CONTENTS/wav/chapter/en_ulb_ezr_c{chapter}.wav'
+  -
+    identifier: 'neh'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_16-NEH_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/neh/{chapter}/CONTENTS/wav/chapter/en_ulb_neh_c{chapter}.wav'
+  -
+    identifier: 'est'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_17-EST_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/est/{chapter}/CONTENTS/wav/chapter/en_ulb_est_c{chapter}.wav'
+  -
+    identifier: 'job'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_18-JOB_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/job/{chapter}/CONTENTS/wav/chapter/en_ulb_job_c{chapter}.wav'
+  -
+    identifier: 'psa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_19-PSA_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/psa/{chapter}/CONTENTS/wav/chapter/en_ulb_psa_c{chapter}.wav'
+  -
+    identifier: 'pro'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_20-PRO_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/pro/{chapter}/CONTENTS/wav/chapter/en_ulb_pro_c{chapter}.wav'
+  -
+    identifier: 'ecc'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_21-ECC_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/ecc/{chapter}/CONTENTS/wav/chapter/en_ulb_ecc_c{chapter}.wav'
+  -
+    identifier: 'sng'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_22-SNG_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/sng/{chapter}/CONTENTS/wav/chapter/en_ulb_sng_c{chapter}.wav'
+  -
+    identifier: 'isa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_23-ISA_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/isa/{chapter}/CONTENTS/wav/chapter/en_ulb_isa_c{chapter}.wav'
+  -
+    identifier: 'jer'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_24-JER_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jer/{chapter}/CONTENTS/wav/chapter/en_ulb_jer_c{chapter}.wav'
+  -
+    identifier: 'lam'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_25-LAM_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/lam/{chapter}/CONTENTS/wav/chapter/en_ulb_lam_c{chapter}.wav'
+  -
+    identifier: 'ezk'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_26-EZK_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/ezk/{chapter}/CONTENTS/wav/chapter/en_ulb_ezk_c{chapter}.wav'
+  -
+    identifier: 'dan'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_27-DAN_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/dan/{chapter}/CONTENTS/wav/chapter/en_ulb_dan_c{chapter}.wav'
+  -
+    identifier: 'hos'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_28-HOS_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/hos/{chapter}/CONTENTS/wav/chapter/en_ulb_hos_c{chapter}.wav'
+  -
+    identifier: 'jol'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_29-JOL_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jol/{chapter}/CONTENTS/wav/chapter/en_ulb_jol_c{chapter}.wav'
+  -
+    identifier: 'amo'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_30-AMO_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/amo/{chapter}/CONTENTS/wav/chapter/en_ulb_amo_c{chapter}.wav'
+  -
+    identifier: 'oba'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_31-OBA_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/oba/{chapter}/CONTENTS/wav/chapter/en_ulb_oba_c{chapter}.wav'
+  -
+    identifier: 'jon'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_32-JON_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jon/{chapter}/CONTENTS/wav/chapter/en_ulb_jon_c{chapter}.wav'
+  -
+    identifier: 'mic'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_33-MIC_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/mic/{chapter}/CONTENTS/wav/chapter/en_ulb_mic_c{chapter}.wav'
+  -
+    identifier: 'nam'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_34-NAM_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/nam/{chapter}/CONTENTS/wav/chapter/en_ulb_nam_c{chapter}.wav'
+  -
+    identifier: 'hab'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_35-HAB_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/hab/{chapter}/CONTENTS/wav/chapter/en_ulb_hab_c{chapter}.wav'
+  -
+    identifier: 'zep'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_36-ZEP_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/zep/{chapter}/CONTENTS/wav/chapter/en_ulb_zep_c{chapter}.wav'
+  -
+    identifier: 'hag'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_37-HAG_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/hag/{chapter}/CONTENTS/wav/chapter/en_ulb_hag_c{chapter}.wav'
+  -
+    identifier: 'zec'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_38-ZEC_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/zec/{chapter}/CONTENTS/wav/chapter/en_ulb_zec_c{chapter}.wav'
+  -
+    identifier: 'mal'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_39-MAL_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/mal/{chapter}/CONTENTS/wav/chapter/en_ulb_mal_c{chapter}.wav'
+  -
+    identifier: 'mat'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_41-MAT_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/mat/{chapter}/CONTENTS/wav/chapter/en_ulb_mat_c{chapter}.wav'
+  -
+    identifier: 'mrk'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_42-MRK_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/mrk/{chapter}/CONTENTS/wav/chapter/en_ulb_mrk_c{chapter}.wav'
+  -
+    identifier: 'luk'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_43-LUK_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/luk/{chapter}/CONTENTS/wav/chapter/en_ulb_luk_c{chapter}.wav'
+  -
+    identifier: 'jhn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_44-JHN_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jhn/{chapter}/CONTENTS/wav/chapter/en_ulb_jhn_c{chapter}.wav'
+  -
+    identifier: 'act'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_45-ACT_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/act/{chapter}/CONTENTS/wav/chapter/en_ulb_act_c{chapter}.wav'
+  -
+    identifier: 'rom'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_46-ROM_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/rom/{chapter}/CONTENTS/wav/chapter/en_ulb_rom_c{chapter}.wav'
+  -
+    identifier: '1co'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_47-1CO_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1co/{chapter}/CONTENTS/wav/chapter/en_ulb_1co_c{chapter}.wav'
+  -
+    identifier: '2co'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_48-2CO_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2co/{chapter}/CONTENTS/wav/chapter/en_ulb_2co_c{chapter}.wav'
+  -
+    identifier: 'gal'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_49-GAL_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/gal/{chapter}/CONTENTS/wav/chapter/en_ulb_gal_c{chapter}.wav'
+  -
+    identifier: 'eph'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_50-EPH_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/eph/{chapter}/CONTENTS/wav/chapter/en_ulb_eph_c{chapter}.wav'
+  -
+    identifier: 'php'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_51-PHP_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/php/{chapter}/CONTENTS/wav/chapter/en_ulb_php_c{chapter}.wav'
+  -
+    identifier: 'col'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_52-COL_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/col/{chapter}/CONTENTS/wav/chapter/en_ulb_col_c{chapter}.wav'
+  -
+    identifier: '1th'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_53-1TH_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1th/{chapter}/CONTENTS/wav/chapter/en_ulb_1th_c{chapter}.wav'
+  -
+    identifier: '2th'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_54-2TH_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2th/{chapter}/CONTENTS/wav/chapter/en_ulb_2th_c{chapter}.wav'
+  -
+    identifier: '1ti'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_55-1TI_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1ti/{chapter}/CONTENTS/wav/chapter/en_ulb_1ti_c{chapter}.wav'
+  -
+    identifier: '2ti'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_56-2TI_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2ti/{chapter}/CONTENTS/wav/chapter/en_ulb_2ti_c{chapter}.wav'
+  -
+    identifier: 'tit'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_57-TIT_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/tit/{chapter}/CONTENTS/wav/chapter/en_ulb_tit_c{chapter}.wav'
+  -
+    identifier: 'phm'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_58-PHM_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/phm/{chapter}/CONTENTS/wav/chapter/en_ulb_phm_c{chapter}.wav'
+  -
+    identifier: 'heb'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_59-HEB_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/heb/{chapter}/CONTENTS/wav/chapter/en_ulb_heb_c{chapter}.wav'
+  -
+    identifier: 'jas'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_60-JAS_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jas/{chapter}/CONTENTS/wav/chapter/en_ulb_jas_c{chapter}.wav'
+  -
+    identifier: '1pe'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_61-1PE_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1pe/{chapter}/CONTENTS/wav/chapter/en_ulb_1pe_c{chapter}.wav'
+  -
+    identifier: '2pe'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_62-2PE_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2pe/{chapter}/CONTENTS/wav/chapter/en_ulb_2pe_c{chapter}.wav'
+  -
+    identifier: '1jn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_63-1JN_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/1jn/{chapter}/CONTENTS/wav/chapter/en_ulb_1jn_c{chapter}.wav'
+  -
+    identifier: '2jn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_64-2JN_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/2jn/{chapter}/CONTENTS/wav/chapter/en_ulb_2jn_c{chapter}.wav'
+  -
+    identifier: '3jn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_65-3JN_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/3jn/{chapter}/CONTENTS/wav/chapter/en_ulb_3jn_c{chapter}.wav'
+  -
+    identifier: 'jud'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_66-JUD_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/jud/{chapter}/CONTENTS/wav/chapter/en_ulb_jud_c{chapter}.wav'
+  -
+    identifier: 'rev'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/ulb/v{latest}/pdf/en_ulb_67-REV_v{latest}.pdf'
+      -
+       identifier: 'wav'
+       version: '{latest}'
+       contributor: []
+       chapter_url: 'https://audio-content.bibleineverylanguage.org/content/en/ulb/rev/{chapter}/CONTENTS/wav/chapter/en_ulb_rev_c{chapter}.wav'

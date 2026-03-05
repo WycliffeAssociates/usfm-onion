@@ -1,0 +1,31 @@
+[package]
+name = "usfm3-v2"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+rayon = ["dep:rayon"]
+
+[dependencies]
+quick-xml = "0.37"
+rayon = { version = "1.10", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+similar = "2"
+tsify = "0.5.6"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[test]]
+name = "roundtrip"
+path = "tests/roundtrip.rs"
+
+[[test]]
+name = "scanner"
+path = "tests/scanner.rs"
+
+[[bench]]
+name = "public_api"
+harness = false
