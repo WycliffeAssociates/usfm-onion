@@ -28,18 +28,38 @@ export interface UsjRoundtrip {
     fingerprint: string;
 }
 
+export interface WebApplyRevertsByBlockIdRequest {
+    diffBlockIds: string[];
+    baselineTokens: WebFlatToken[];
+    currentTokens: WebFlatToken[];
+    buildOptions?: WebBuildSidBlocksOptions | null;
+}
+
 export interface WebApplyTokenFixesRequest {
     tokens: WebFlatToken[];
     fixes: WebTokenFix[];
 }
 
-export interface WebBatchExecutionOptions {}
+export interface WebBatchExecutionOptions {
+    parallel?: boolean;
+}
 
 export interface WebBuildSidBlocksOptions {
     allowEmptySid?: boolean;
 }
 
+export interface WebBuildSidBlocksRequest {
+    tokens: WebFlatToken[];
+    buildOptions?: WebBuildSidBlocksOptions | null;
+}
+
 export interface WebChapterDiffGroup {
+    book: string;
+    chapter: number;
+    diffs: WebChapterTokenDiff[];
+}
+
+export interface WebChapterDiffReplacement {
     book: string;
     chapter: number;
     diffs: WebChapterTokenDiff[];
@@ -70,6 +90,12 @@ export interface WebContentRequest {
     targetFormat: WebDocumentFormat;
 }
 
+export interface WebDiffChapterTokenStreamsRequest {
+    baselineTokens: WebFlatToken[];
+    currentTokens: WebFlatToken[];
+    buildOptions?: WebBuildSidBlocksOptions | null;
+}
+
 export interface WebDiffContentRequest {
     baselineSource: string;
     baselineFormat: WebDocumentFormat;
@@ -77,6 +103,11 @@ export interface WebDiffContentRequest {
     currentFormat: WebDocumentFormat;
     tokenView?: WebTokenViewOptions | null;
     buildOptions?: WebBuildSidBlocksOptions | null;
+}
+
+export interface WebDiffSidBlocksRequest {
+    baselineBlocks: WebSidBlock[];
+    currentBlocks: WebSidBlock[];
 }
 
 export interface WebDiffTokensRequest {
@@ -238,6 +269,7 @@ export interface WebLintIssue {
     tokenId: string | null;
     relatedTokenId: string | null;
     sid: string | null;
+    fix: WebTokenFix | null;
 }
 
 export interface WebLintOpResult {
@@ -320,6 +352,25 @@ export interface WebProjectedUsfmDocument {
     lintIssues: WebLintIssue[] | null;
 }
 
+export interface WebReplaceChapterDiffsInMapRequest {
+    groups: WebChapterDiffGroup[];
+    book: string;
+    chapter: number;
+    diffs: WebChapterTokenDiff[];
+}
+
+export interface WebReplaceManyChapterDiffsInMapRequest {
+    groups: WebChapterDiffGroup[];
+    replacements: WebChapterDiffReplacement[];
+}
+
+export interface WebRevertDiffBlockRequest {
+    blockId: string;
+    baselineTokens: WebFlatToken[];
+    currentTokens: WebFlatToken[];
+    buildOptions?: WebBuildSidBlocksOptions | null;
+}
+
 export interface WebScanResult {
     tokens: WebScanToken[];
 }
@@ -337,6 +388,20 @@ export interface WebSidBlock {
     endExclusive: number;
     prevBlockId: string | null;
     textFull: string;
+}
+
+export interface WebSidBlockDiff {
+    blockId: string;
+    semanticSid: string;
+    status: string;
+    original: WebSidBlock | null;
+    current: WebSidBlock | null;
+    originalText: string;
+    currentText: string;
+    originalTextOnly: string;
+    currentTextOnly: string;
+    isWhitespaceChange: boolean;
+    isUsfmStructureChange: boolean;
 }
 
 export interface WebSkippedTokenTransform {
@@ -432,17 +497,33 @@ export type WebTokenFix = { type: "replaceToken"; label: string; targetTokenId: 
 export type WebWhitespacePolicy = "preserve" | "mergeToVisible";
 
 
+export function applyRevertByBlockId(request: WebRevertDiffBlockRequest): WebFlatToken[];
+
+export function applyRevertsByBlockId(request: WebApplyRevertsByBlockIdRequest): WebFlatToken[];
+
 export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTransformResult;
+
+export function buildSidBlocks(request: WebBuildSidBlocksRequest): WebSidBlock[];
 
 export function convertContent(request: WebContentRequest): string;
 
+export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsRequest): WebChapterTokenDiff[];
+
 export function diffContent(request: WebDiffContentRequest): WebChapterTokenDiff[];
+
+export function diffSidBlocks(request: WebDiffSidBlocksRequest): WebSidBlockDiff[];
 
 export function diffTokens(request: WebDiffTokensRequest): WebChapterTokenDiff[];
 
 export function diffUsfm(request: WebDiffUsfmRequest): WebChapterTokenDiff[];
 
 export function diffUsfmByChapter(request: WebDiffUsfmRequest): WebChapterDiffGroup[];
+
+export function diffUsfmSources(request: WebDiffUsfmRequest): WebChapterTokenDiff[];
+
+export function diffUsfmSourcesByChapter(request: WebDiffUsfmRequest): WebChapterDiffGroup[];
+
+export function flattenDiffMap(groups: WebChapterDiffGroup[]): WebChapterTokenDiff[];
 
 export function formatContent(request: WebFormatContentRequest): WebTokenTransformResult;
 
@@ -522,6 +603,14 @@ export function projectUsfmBatch(request: WebProjectContentsRequest): WebProject
 
 export function pushWhitespace(tokens: WebFlatToken[]): WebFlatToken[];
 
+export function replaceChapterDiffsInMap(request: WebReplaceChapterDiffsInMapRequest): WebChapterDiffGroup[];
+
+export function replaceManyChapterDiffsInMap(request: WebReplaceManyChapterDiffsInMapRequest): WebChapterDiffGroup[];
+
+export function revertDiffBlock(request: WebRevertDiffBlockRequest): WebFlatToken[];
+
+export function revertDiffBlocks(request: WebApplyRevertsByBlockIdRequest): WebFlatToken[];
+
 export function usfmToHtml(content: string, options?: WebHtmlOptions | null): string;
 
 export function usfmToUsj(content: string): string;
@@ -536,12 +625,20 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly applyRevertByBlockId: (a: any) => [number, number];
+    readonly applyRevertsByBlockId: (a: any) => [number, number];
     readonly applyTokenFixes: (a: any) => any;
+    readonly buildSidBlocks: (a: any) => [number, number];
     readonly convertContent: (a: any) => [number, number, number, number];
+    readonly diffChapterTokenStreams: (a: any) => [number, number];
     readonly diffContent: (a: any) => [number, number, number, number];
+    readonly diffSidBlocks: (a: any) => [number, number];
     readonly diffTokens: (a: any) => [number, number];
     readonly diffUsfm: (a: any) => [number, number];
     readonly diffUsfmByChapter: (a: any) => [number, number];
+    readonly diffUsfmSources: (a: any) => [number, number];
+    readonly diffUsfmSourcesByChapter: (a: any) => [number, number];
+    readonly flattenDiffMap: (a: number, b: number) => [number, number];
     readonly formatContent: (a: any) => [number, number, number];
     readonly formatContents: (a: any) => [number, number];
     readonly formatFlatTokenBatches: (a: any) => [number, number];
@@ -581,6 +678,10 @@ export interface InitOutput {
     readonly projectDocument: (a: any) => any;
     readonly projectUsfmBatch: (a: any) => [number, number];
     readonly pushWhitespace: (a: number, b: number) => [number, number];
+    readonly replaceChapterDiffsInMap: (a: any) => [number, number];
+    readonly replaceManyChapterDiffsInMap: (a: any) => [number, number];
+    readonly revertDiffBlock: (a: any) => [number, number];
+    readonly revertDiffBlocks: (a: any) => [number, number];
     readonly usfmToHtml: (a: number, b: number, c: number) => [number, number];
     readonly usfmToUsj: (a: number, b: number) => [number, number, number, number];
     readonly usfmToUsx: (a: number, b: number) => [number, number, number, number];
@@ -591,9 +692,9 @@ export interface InitOutput {
     readonly __wbindgen_exn_store: (a: number) => void;
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
-    readonly __externref_table_dealloc: (a: number) => void;
-    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_drop_slice: (a: number, b: number) => void;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

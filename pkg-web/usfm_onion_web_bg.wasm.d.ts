@@ -1,12 +1,20 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const applyRevertByBlockId: (a: any) => [number, number];
+export const applyRevertsByBlockId: (a: any) => [number, number];
 export const applyTokenFixes: (a: any) => any;
+export const buildSidBlocks: (a: any) => [number, number];
 export const convertContent: (a: any) => [number, number, number, number];
+export const diffChapterTokenStreams: (a: any) => [number, number];
 export const diffContent: (a: any) => [number, number, number, number];
+export const diffSidBlocks: (a: any) => [number, number];
 export const diffTokens: (a: any) => [number, number];
 export const diffUsfm: (a: any) => [number, number];
 export const diffUsfmByChapter: (a: any) => [number, number];
+export const diffUsfmSources: (a: any) => [number, number];
+export const diffUsfmSourcesByChapter: (a: any) => [number, number];
+export const flattenDiffMap: (a: number, b: number) => [number, number];
 export const formatContent: (a: any) => [number, number, number];
 export const formatContents: (a: any) => [number, number];
 export const formatFlatTokenBatches: (a: any) => [number, number];
@@ -46,6 +54,10 @@ export const projectContents: (a: any) => [number, number];
 export const projectDocument: (a: any) => any;
 export const projectUsfmBatch: (a: any) => [number, number];
 export const pushWhitespace: (a: number, b: number) => [number, number];
+export const replaceChapterDiffsInMap: (a: any) => [number, number];
+export const replaceManyChapterDiffsInMap: (a: any) => [number, number];
+export const revertDiffBlock: (a: any) => [number, number];
+export const revertDiffBlocks: (a: any) => [number, number];
 export const usfmToHtml: (a: number, b: number, c: number) => [number, number];
 export const usfmToUsj: (a: number, b: number) => [number, number, number, number];
 export const usfmToUsx: (a: number, b: number) => [number, number, number, number];
@@ -56,7 +68,7 @@ export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) =>
 export const __wbindgen_exn_store: (a: number) => void;
 export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
-export const __externref_table_dealloc: (a: number) => void;
-export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __externref_drop_slice: (a: number, b: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
 export const __wbindgen_start: () => void;

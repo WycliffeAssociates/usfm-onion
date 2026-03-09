@@ -3,12 +3,45 @@
 //#region exports
 
 /**
+ * @param {WebRevertDiffBlockRequest} request
+ * @returns {WebFlatToken[]}
+ */
+export function applyRevertByBlockId(request) {
+    const ret = wasm.applyRevertByBlockId(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebApplyRevertsByBlockIdRequest} request
+ * @returns {WebFlatToken[]}
+ */
+export function applyRevertsByBlockId(request) {
+    const ret = wasm.applyRevertsByBlockId(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
  * @param {WebApplyTokenFixesRequest} request
  * @returns {WebTokenTransformResult}
  */
 export function applyTokenFixes(request) {
     const ret = wasm.applyTokenFixes(request);
     return ret;
+}
+
+/**
+ * @param {WebBuildSidBlocksRequest} request
+ * @returns {WebSidBlock[]}
+ */
+export function buildSidBlocks(request) {
+    const ret = wasm.buildSidBlocks(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
@@ -35,6 +68,17 @@ export function convertContent(request) {
 }
 
 /**
+ * @param {WebDiffChapterTokenStreamsRequest} request
+ * @returns {WebChapterTokenDiff[]}
+ */
+export function diffChapterTokenStreams(request) {
+    const ret = wasm.diffChapterTokenStreams(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
  * @param {WebDiffContentRequest} request
  * @returns {WebChapterTokenDiff[]}
  */
@@ -43,6 +87,17 @@ export function diffContent(request) {
     if (ret[3]) {
         throw takeFromExternrefTable0(ret[2]);
     }
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebDiffSidBlocksRequest} request
+ * @returns {WebSidBlockDiff[]}
+ */
+export function diffSidBlocks(request) {
+    const ret = wasm.diffSidBlocks(request);
     var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v1;
@@ -79,6 +134,41 @@ export function diffUsfmByChapter(request) {
     var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v1;
+}
+
+/**
+ * @param {WebDiffUsfmRequest} request
+ * @returns {WebChapterTokenDiff[]}
+ */
+export function diffUsfmSources(request) {
+    const ret = wasm.diffUsfmSources(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebDiffUsfmRequest} request
+ * @returns {WebChapterDiffGroup[]}
+ */
+export function diffUsfmSourcesByChapter(request) {
+    const ret = wasm.diffUsfmSourcesByChapter(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebChapterDiffGroup[]} groups
+ * @returns {WebChapterTokenDiff[]}
+ */
+export function flattenDiffMap(groups) {
+    const ptr0 = passArrayJsValueToWasm0(groups, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.flattenDiffMap(ptr0, len0);
+    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v2;
 }
 
 /**
@@ -609,6 +699,50 @@ export function pushWhitespace(tokens) {
     var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v2;
+}
+
+/**
+ * @param {WebReplaceChapterDiffsInMapRequest} request
+ * @returns {WebChapterDiffGroup[]}
+ */
+export function replaceChapterDiffsInMap(request) {
+    const ret = wasm.replaceChapterDiffsInMap(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebReplaceManyChapterDiffsInMapRequest} request
+ * @returns {WebChapterDiffGroup[]}
+ */
+export function replaceManyChapterDiffsInMap(request) {
+    const ret = wasm.replaceManyChapterDiffsInMap(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebRevertDiffBlockRequest} request
+ * @returns {WebFlatToken[]}
+ */
+export function revertDiffBlock(request) {
+    const ret = wasm.revertDiffBlock(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * @param {WebApplyRevertsByBlockIdRequest} request
+ * @returns {WebFlatToken[]}
+ */
+export function revertDiffBlocks(request) {
+    const ret = wasm.revertDiffBlocks(request);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**

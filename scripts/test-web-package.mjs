@@ -41,6 +41,14 @@ const issues = pkg.lintContent({
 });
 assert.ok(Array.isArray(issues));
 
+const fixableIssues = pkg.lintContent({
+  source: "\\\\id GEN\\n\\\\c 1\\n\\\\ptext\\n",
+  format: "usfm",
+});
+assert.ok(
+  fixableIssues.some((issue) => issue.fix && issue.fix.type === "replaceToken"),
+);
+
 const formatted = pkg.formatContent({
   source,
   format: "usfm",
@@ -52,5 +60,15 @@ const diffs = pkg.diffUsfm({
   currentUsfm: `${source}God created\\n`,
 });
 assert.ok(Array.isArray(diffs));
+
+const reverted = pkg.revertDiffBlock({
+  blockId: diffs[0]?.blockId ?? "GEN 1:1",
+  baselineTokens: pkg.intoTokensFromContent({ source, format: "usfm" }),
+  currentTokens: pkg.intoTokensFromContent({
+    source: `${source}God created\\n`,
+    format: "usfm",
+  }),
+});
+assert.ok(Array.isArray(reverted));
 
 console.log("web package smoke test passed");

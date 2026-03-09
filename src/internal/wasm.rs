@@ -11,8 +11,11 @@ use crate::{
     },
     diff::{
         BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
-        DiffsByChapterMap, SidBlock, TokenAlignment, diff_content, diff_tokens, diff_usfm,
-        diff_usfm_by_chapter,
+        DiffsByChapterMap, SidBlock, SidBlockDiff, TokenAlignment, apply_revert_by_block_id,
+        apply_reverts_by_block_id, build_sid_blocks, diff_chapter_token_streams, diff_content,
+        diff_sid_blocks, diff_tokens, diff_usfm, diff_usfm_by_chapter, diff_usfm_sources,
+        diff_usfm_sources_by_chapter, flatten_diff_map, replace_chapter_diffs_in_map,
+        replace_many_chapter_diffs_in_map,
     },
     format::{
         self, FormatOptions, SkippedTokenTransform, TokenFix, TokenTemplate, TokenTransformChange,
@@ -70,7 +73,10 @@ pub enum WebWhitespacePolicy {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct WebBatchExecutionOptions {}
+pub struct WebBatchExecutionOptions {
+    #[serde(default = "default_parallel_true")]
+    pub parallel: bool,
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
@@ -293,6 +299,7 @@ pub struct WebLintIssue {
     pub token_id: Option<String>,
     pub related_token_id: Option<String>,
     pub sid: Option<String>,
+    pub fix: Option<WebTokenFix>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -386,6 +393,23 @@ pub struct WebSidBlock {
     pub end_exclusive: usize,
     pub prev_block_id: Option<String>,
     pub text_full: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebSidBlockDiff {
+    pub block_id: String,
+    pub semantic_sid: String,
+    pub status: String,
+    pub original: Option<WebSidBlock>,
+    pub current: Option<WebSidBlock>,
+    pub original_text: String,
+    pub current_text: String,
+    pub original_text_only: String,
+    pub current_text_only: String,
+    pub is_whitespace_change: bool,
+    pub is_usfm_structure_change: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -699,6 +723,82 @@ pub struct WebDiffTokensRequest {
     pub current_tokens: Vec<WebFlatToken>,
     #[serde(default)]
     pub build_options: Option<WebBuildSidBlocksOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebBuildSidBlocksRequest {
+    pub tokens: Vec<WebFlatToken>,
+    #[serde(default)]
+    pub build_options: Option<WebBuildSidBlocksOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebDiffSidBlocksRequest {
+    pub baseline_blocks: Vec<WebSidBlock>,
+    pub current_blocks: Vec<WebSidBlock>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebDiffChapterTokenStreamsRequest {
+    pub baseline_tokens: Vec<WebFlatToken>,
+    pub current_tokens: Vec<WebFlatToken>,
+    #[serde(default)]
+    pub build_options: Option<WebBuildSidBlocksOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebRevertDiffBlockRequest {
+    pub block_id: String,
+    pub baseline_tokens: Vec<WebFlatToken>,
+    pub current_tokens: Vec<WebFlatToken>,
+    #[serde(default)]
+    pub build_options: Option<WebBuildSidBlocksOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebApplyRevertsByBlockIdRequest {
+    pub diff_block_ids: Vec<String>,
+    pub baseline_tokens: Vec<WebFlatToken>,
+    pub current_tokens: Vec<WebFlatToken>,
+    #[serde(default)]
+    pub build_options: Option<WebBuildSidBlocksOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebReplaceChapterDiffsInMapRequest {
+    pub groups: Vec<WebChapterDiffGroup>,
+    pub book: String,
+    pub chapter: u32,
+    pub diffs: Vec<WebChapterTokenDiff>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebChapterDiffReplacement {
+    pub book: String,
+    pub chapter: u32,
+    pub diffs: Vec<WebChapterTokenDiff>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebReplaceManyChapterDiffsInMapRequest {
+    pub groups: Vec<WebChapterDiffGroup>,
+    pub replacements: Vec<WebChapterDiffReplacement>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -1327,6 +1427,61 @@ pub fn wasm_diff_tokens(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDif
     .collect()
 }
 
+#[wasm_bindgen(js_name = buildSidBlocks)]
+pub fn wasm_build_sid_blocks(request: WebBuildSidBlocksRequest) -> Vec<WebSidBlock> {
+    let tokens = request
+        .tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    build_sid_blocks(tokens.as_slice(), &build_sid_blocks_options(request.build_options))
+        .into_iter()
+        .map(map_sid_block)
+        .collect()
+}
+
+#[wasm_bindgen(js_name = diffSidBlocks)]
+pub fn wasm_diff_sid_blocks(request: WebDiffSidBlocksRequest) -> Vec<WebSidBlockDiff> {
+    let baseline = request
+        .baseline_blocks
+        .into_iter()
+        .map(from_web_sid_block)
+        .collect::<Vec<_>>();
+    let current = request
+        .current_blocks
+        .into_iter()
+        .map(from_web_sid_block)
+        .collect::<Vec<_>>();
+    diff_sid_blocks(baseline.as_slice(), current.as_slice())
+        .into_iter()
+        .map(map_sid_block_diff)
+        .collect()
+}
+
+#[wasm_bindgen(js_name = diffChapterTokenStreams)]
+pub fn wasm_diff_chapter_token_streams(
+    request: WebDiffChapterTokenStreamsRequest,
+) -> Vec<WebChapterTokenDiff> {
+    let baseline = request
+        .baseline_tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    let current = request
+        .current_tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    diff_chapter_token_streams(
+        baseline.as_slice(),
+        current.as_slice(),
+        &build_sid_blocks_options(request.build_options),
+    )
+    .into_iter()
+    .map(map_chapter_token_diff)
+    .collect()
+}
+
 #[wasm_bindgen(js_name = diffUsfm)]
 pub fn wasm_diff_usfm(request: WebDiffUsfmRequest) -> Vec<WebChapterTokenDiff> {
     diff_usfm(
@@ -1349,6 +1504,131 @@ pub fn wasm_diff_usfm_by_chapter(request: WebDiffUsfmRequest) -> Vec<WebChapterD
         &build_sid_blocks_options(request.build_options),
     );
     map_diff_groups(grouped)
+}
+
+#[wasm_bindgen(js_name = diffUsfmSources)]
+pub fn wasm_diff_usfm_sources(request: WebDiffUsfmRequest) -> Vec<WebChapterTokenDiff> {
+    diff_usfm_sources(
+        &request.baseline_usfm,
+        &request.current_usfm,
+        &token_view_options(request.token_view),
+        &build_sid_blocks_options(request.build_options),
+    )
+    .into_iter()
+    .map(map_chapter_token_diff)
+    .collect()
+}
+
+#[wasm_bindgen(js_name = diffUsfmSourcesByChapter)]
+pub fn wasm_diff_usfm_sources_by_chapter(request: WebDiffUsfmRequest) -> Vec<WebChapterDiffGroup> {
+    map_diff_groups(diff_usfm_sources_by_chapter(
+        &request.baseline_usfm,
+        &request.current_usfm,
+        &token_view_options(request.token_view),
+        &build_sid_blocks_options(request.build_options),
+    ))
+}
+
+#[wasm_bindgen(js_name = applyRevertByBlockId)]
+pub fn wasm_apply_revert_by_block_id(request: WebRevertDiffBlockRequest) -> Vec<WebFlatToken> {
+    let baseline = request
+        .baseline_tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    let current = request
+        .current_tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    apply_revert_by_block_id(
+        &request.block_id,
+        baseline.as_slice(),
+        current.as_slice(),
+        &build_sid_blocks_options(request.build_options),
+    )
+    .into_iter()
+    .map(map_flat_token)
+    .collect()
+}
+
+#[wasm_bindgen(js_name = revertDiffBlock)]
+pub fn wasm_revert_diff_block(request: WebRevertDiffBlockRequest) -> Vec<WebFlatToken> {
+    wasm_apply_revert_by_block_id(request)
+}
+
+#[wasm_bindgen(js_name = applyRevertsByBlockId)]
+pub fn wasm_apply_reverts_by_block_id(
+    request: WebApplyRevertsByBlockIdRequest,
+) -> Vec<WebFlatToken> {
+    let baseline = request
+        .baseline_tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    let current = request
+        .current_tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    apply_reverts_by_block_id(
+        request.diff_block_ids.as_slice(),
+        baseline.as_slice(),
+        current.as_slice(),
+        &build_sid_blocks_options(request.build_options),
+    )
+    .into_iter()
+    .map(map_flat_token)
+    .collect()
+}
+
+#[wasm_bindgen(js_name = revertDiffBlocks)]
+pub fn wasm_revert_diff_blocks(request: WebApplyRevertsByBlockIdRequest) -> Vec<WebFlatToken> {
+    wasm_apply_reverts_by_block_id(request)
+}
+
+#[wasm_bindgen(js_name = replaceChapterDiffsInMap)]
+pub fn wasm_replace_chapter_diffs_in_map(
+    request: WebReplaceChapterDiffsInMapRequest,
+) -> Vec<WebChapterDiffGroup> {
+    let map = from_web_diff_groups(request.groups);
+    map_diff_groups(replace_chapter_diffs_in_map(
+        &map,
+        &request.book,
+        request.chapter,
+        request.diffs.into_iter().map(from_web_chapter_token_diff).collect(),
+    ))
+}
+
+#[wasm_bindgen(js_name = replaceManyChapterDiffsInMap)]
+pub fn wasm_replace_many_chapter_diffs_in_map(
+    request: WebReplaceManyChapterDiffsInMapRequest,
+) -> Vec<WebChapterDiffGroup> {
+    let map = from_web_diff_groups(request.groups);
+    let replacements = request
+        .replacements
+        .into_iter()
+        .map(|entry| {
+            (
+                entry.book,
+                entry.chapter,
+                entry.diffs
+                    .into_iter()
+                    .map(from_web_chapter_token_diff)
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    map_diff_groups(replace_many_chapter_diffs_in_map(&map, replacements.as_slice()))
+}
+
+#[wasm_bindgen(js_name = flattenDiffMap)]
+pub fn wasm_flatten_diff_map(groups: Vec<WebChapterDiffGroup>) -> Vec<WebChapterTokenDiff> {
+    let map = from_web_diff_groups(groups);
+    flatten_diff_map(&map)
+        .into_iter()
+        .map(map_chapter_token_diff)
+        .collect()
 }
 
 fn rehydrate_parse_handle(document: &WebParsedDocument) -> ParseHandle {
@@ -1430,6 +1710,42 @@ fn map_lint_issue(issue: LintIssue) -> WebLintIssue {
         token_id: issue.token_id,
         related_token_id: issue.related_token_id,
         sid: issue.sid,
+        fix: issue.fix.map(map_token_fix),
+    }
+}
+
+fn map_token_fix(fix: TokenFix) -> WebTokenFix {
+    match fix {
+        TokenFix::ReplaceToken {
+            label,
+            target_token_id,
+            replacements,
+        } => WebTokenFix::ReplaceToken {
+            label,
+            target_token_id,
+            replacements: replacements
+                .into_iter()
+                .map(map_token_template)
+                .collect(),
+        },
+        TokenFix::InsertAfter {
+            label,
+            target_token_id,
+            insert,
+        } => WebTokenFix::InsertAfter {
+            label,
+            target_token_id,
+            insert: insert.into_iter().map(map_token_template).collect(),
+        },
+    }
+}
+
+fn map_token_template(template: TokenTemplate) -> WebTokenTemplate {
+    WebTokenTemplate {
+        kind: token_kind_name(&template.kind).to_string(),
+        text: template.text,
+        marker: template.marker,
+        sid: template.sid,
     }
 }
 
@@ -1519,8 +1835,35 @@ fn map_chapter_token_diff(diff: ChapterTokenDiff<FlatToken>) -> WebChapterTokenD
     }
 }
 
+fn map_sid_block_diff(diff: SidBlockDiff) -> WebSidBlockDiff {
+    WebSidBlockDiff {
+        block_id: diff.block_id,
+        semantic_sid: diff.semantic_sid,
+        status: diff_status_name(diff.status).to_string(),
+        original: diff.original.map(map_sid_block),
+        current: diff.current.map(map_sid_block),
+        original_text: diff.original_text,
+        current_text: diff.current_text,
+        original_text_only: diff.original_text_only,
+        current_text_only: diff.current_text_only,
+        is_whitespace_change: diff.is_whitespace_change,
+        is_usfm_structure_change: diff.is_usfm_structure_change,
+    }
+}
+
 fn map_sid_block(block: SidBlock) -> WebSidBlock {
     WebSidBlock {
+        block_id: block.block_id,
+        semantic_sid: block.semantic_sid,
+        start: block.start,
+        end_exclusive: block.end_exclusive,
+        prev_block_id: block.prev_block_id,
+        text_full: block.text_full,
+    }
+}
+
+fn from_web_sid_block(block: WebSidBlock) -> SidBlock {
+    SidBlock {
         block_id: block.block_id,
         semantic_sid: block.semantic_sid,
         start: block.start,
@@ -1551,6 +1894,61 @@ fn map_diff_groups(
         }
     }
     out
+}
+
+fn from_web_diff_groups(
+    groups: Vec<WebChapterDiffGroup>,
+) -> DiffsByChapterMap<ChapterTokenDiff<FlatToken>> {
+    let mut out = DiffsByChapterMap::new();
+    for group in groups {
+        out.entry(group.book)
+            .or_default()
+            .insert(
+                group.chapter,
+                group
+                    .diffs
+                    .into_iter()
+                    .map(from_web_chapter_token_diff)
+                    .collect(),
+            );
+    }
+    out
+}
+
+fn from_web_chapter_token_diff(diff: WebChapterTokenDiff) -> ChapterTokenDiff<FlatToken> {
+    ChapterTokenDiff {
+        block_id: diff.block_id,
+        semantic_sid: diff.semantic_sid,
+        status: parse_diff_status(&diff.status),
+        original: diff.original.map(from_web_sid_block),
+        current: diff.current.map(from_web_sid_block),
+        original_text: diff.original_text,
+        current_text: diff.current_text,
+        original_text_only: diff.original_text_only,
+        current_text_only: diff.current_text_only,
+        is_whitespace_change: diff.is_whitespace_change,
+        is_usfm_structure_change: diff.is_usfm_structure_change,
+        original_tokens: diff.original_tokens.into_iter().map(from_web_flat_token).collect(),
+        current_tokens: diff.current_tokens.into_iter().map(from_web_flat_token).collect(),
+        original_alignment: diff
+            .original_alignment
+            .into_iter()
+            .map(from_web_token_alignment)
+            .collect(),
+        current_alignment: diff
+            .current_alignment
+            .into_iter()
+            .map(from_web_token_alignment)
+            .collect(),
+        undo_side: parse_diff_undo_side(&diff.undo_side),
+    }
+}
+
+fn from_web_token_alignment(alignment: WebTokenAlignment) -> TokenAlignment {
+    TokenAlignment {
+        change: parse_diff_token_change(&alignment.change),
+        counterpart_index: alignment.counterpart_index,
+    }
 }
 
 fn from_web_token_fix(fix: WebTokenFix) -> TokenFix {
@@ -1604,8 +2002,12 @@ fn document_format(format: WebDocumentFormat) -> DocumentFormat {
 }
 
 fn batch_options(options: Option<WebBatchExecutionOptions>) -> BatchExecutionOptions {
-    let _ = options.unwrap_or(WebBatchExecutionOptions {});
-    BatchExecutionOptions { parallel: false }
+    let options = options.unwrap_or(WebBatchExecutionOptions {
+        parallel: default_parallel_true(),
+    });
+    BatchExecutionOptions {
+        parallel: options.parallel,
+    }
 }
 
 fn into_tokens_options(options: Option<WebIntoTokensOptions>) -> IntoTokensOptions {
@@ -1828,6 +2230,15 @@ fn diff_status_name(status: DiffStatus) -> &'static str {
     }
 }
 
+fn parse_diff_status(status: &str) -> DiffStatus {
+    match status {
+        "added" => DiffStatus::Added,
+        "deleted" => DiffStatus::Deleted,
+        "modified" => DiffStatus::Modified,
+        _ => DiffStatus::Unchanged,
+    }
+}
+
 fn diff_token_change_name(change: DiffTokenChange) -> &'static str {
     match change {
         DiffTokenChange::Unchanged => "unchanged",
@@ -1837,10 +2248,26 @@ fn diff_token_change_name(change: DiffTokenChange) -> &'static str {
     }
 }
 
+fn parse_diff_token_change(change: &str) -> DiffTokenChange {
+    match change {
+        "added" => DiffTokenChange::Added,
+        "deleted" => DiffTokenChange::Deleted,
+        "modified" => DiffTokenChange::Modified,
+        _ => DiffTokenChange::Unchanged,
+    }
+}
+
 fn diff_undo_side_name(side: DiffUndoSide) -> &'static str {
     match side {
         DiffUndoSide::Original => "original",
         DiffUndoSide::Current => "current",
+    }
+}
+
+fn parse_diff_undo_side(side: &str) -> DiffUndoSide {
+    match side {
+        "original" => DiffUndoSide::Original,
+        _ => DiffUndoSide::Current,
     }
 }
 
@@ -1890,6 +2317,10 @@ fn js_error(error: impl std::fmt::Display) -> JsError {
 }
 
 fn default_prefer_native_true() -> bool {
+    true
+}
+
+fn default_parallel_true() -> bool {
     true
 }
 
