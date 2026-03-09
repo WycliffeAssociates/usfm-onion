@@ -4,7 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::{collect_origin_usfm_fixtures, fixture_slug, log_fixture};
-use usfm3_v2::{from_usj_value, parse, to_usj_roundtrip_value};
+use usfm_onion::{
+    advanced::{from_usj_value, to_usj_lossless_value},
+    parse::parse,
+};
 
 fn fixture_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("testData")
@@ -13,13 +16,13 @@ fn fixture_root() -> PathBuf {
 #[test]
 fn usfm_usj_usfm_matches_origin_disk_strings() {
     let root = fixture_root();
-    let selected = std::env::var("USFM3_V2_USJ_ROUNDTRIP_FIXTURE").ok();
+    let selected = std::env::var("USFM_ONION_USJ_ROUNDTRIP_FIXTURE").ok();
 
     let fixtures: Vec<PathBuf> = if let Some(selected_slug) = selected.as_deref() {
         collect_origin_usfm_fixtures(&root)
             .into_iter()
             .filter(|origin| {
-                let slug = fixture_slug(&root, &origin);
+                let slug = fixture_slug(&root, origin);
                 slug == selected_slug
             })
             .collect()
@@ -39,8 +42,9 @@ fn usfm_usj_usfm_matches_origin_disk_strings() {
 
         let source = fs::read_to_string(&origin).expect("origin fixture should be readable");
         let handle = parse(&source);
-        let usj = to_usj_roundtrip_value(&handle);
-        let regenerated_usfm = from_usj_value(&usj).expect("generated USJ should serialize back to USFM");
+        let usj = to_usj_lossless_value(&handle);
+        let regenerated_usfm =
+            from_usj_value(&usj).expect("generated USJ should serialize back to USFM");
 
         if regenerated_usfm != source {
             failures.push(format!(

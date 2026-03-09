@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -41,13 +43,12 @@ pub fn fixture_slug(root: &Path, fixture: &Path) -> String {
         .strip_prefix(root)
         .unwrap_or(fixture)
         .to_string_lossy()
-        .replace(std::path::MAIN_SEPARATOR, "_")
-        .replace('.', "_")
+        .replace([std::path::MAIN_SEPARATOR, '.'], "_")
 }
 
 pub fn verbose_enabled() -> bool {
     matches!(
-        std::env::var("USFM3_V2_VERBOSE").ok().as_deref(),
+        std::env::var("USFM_ONION_VERBOSE").ok().as_deref(),
         Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
     )
 }

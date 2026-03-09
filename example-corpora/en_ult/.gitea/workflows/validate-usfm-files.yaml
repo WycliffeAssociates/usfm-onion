@@ -1,0 +1,33 @@
+name: Validate USFM Files
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+  push:
+    branches:
+      - master
+    tags:
+      - '*'
+
+jobs:
+  validate-usfm-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip pyyaml
+
+      - name: USFM File Validation Results <==== Click Here
+        run: |
+          python .gitea/workflows/validate_usfm_files.py

@@ -1,0 +1,716 @@
+Issues detected by verifyUSFM version 1.4.4, 2026-02-16, C:\DCS\Biage\preview
+   with reference to en_ulb 21-05 as the source text.
+-------------------
+First word in sentence is not capitalized: "aau" in MAT 2:16
+Check the punctuation at MAT 4:3: ,,
+First word in sentence is not capitalized: "kateai" at MAT 5:28
+First word in sentence is not capitalized: "keu" in MAT 5:30
+First word in sentence is not capitalized: "kaile" in MAT 6:16
+Check the punctuation at MAT 6:26: ?,
+First word in sentence is not capitalized: "beauu" in MAT 6:26
+First word in sentence is not capitalized: "kelate" in MAT 6:30
+First word in sentence is not capitalized: "kelu" in MAT 7:2
+First word in sentence is not capitalized: "isege" in MAT 7:27
+First word in sentence is not capitalized: "kee" in MAT 8:28
+Check the punctuation at MAT 8:29: ?,
+First word in sentence is not capitalized: "aa" in MAT 8:29
+First word in sentence is not capitalized: "tilogote" at MAT 8:31
+Word medial punctuation in MAT 8:32: "teve!"Ige
+First word in sentence is not capitalized: "ke" at MAT 9:9
+First word in sentence is not capitalized: "belakeale" in MAT 9:15
+First word in sentence is not capitalized: "keate" at MAT 9:21
+Non-standard chapter label at MAT 10: Sabuta 10
+First word in sentence is not capitalized: "katealelu" in MAT 10:23
+First word in sentence is not capitalized: "oo" in MAT 10:24
+Translation is very short compared to en_ulb 21-05 source: MAT 10:27
+Check the punctuation at MAT 10:31: ,.
+First word in sentence is not capitalized: "bela" in MAT 11:6
+First word in sentence is not capitalized: "aa" in MAT 11:6
+First word in sentence is not capitalized: "mana" in MAT 11:9
+First word in sentence is not capitalized: "tuvule" in MAT 12:10
+First word in sentence is not capitalized: "kosealelu" in MAT 12:20
+First word in sentence is not capitalized: "hodovuve" in MAT 12:20
+First word in sentence is not capitalized: "isito" in MAT 12:31
+First word in sentence is not capitalized: "kelu" in MAT 13:50
+First word in sentence is not capitalized: "voleale" in MAT 15:32
+Translation is very short compared to en_ulb 21-05 source: MAT 16:3
+First word in sentence is not capitalized: "vali" in MAT 17:17
+First word in sentence is not capitalized: "katealeluga" in MAT 17:20
+First word in sentence is not capitalized: "kelu" in MAT 18:5
+First word in sentence is not capitalized: "katealelu" in MAT 18:7
+First word in sentence is not capitalized: "duave" in MAT 19:17
+First word in sentence is not capitalized: "a" in MAT 19:18
+Missing verse between: MAT 21:7 and MAT 21:9
+First word in sentence is not capitalized: "ige" in MAT 21:16
+First word in sentence is not capitalized: "ige" in MAT 21:25
+First word in sentence is not capitalized: "ata" in MAT 21:28
+Free floating mark at MAT 21:30: " Ige
+First word in sentence is not capitalized: "abo" in MAT 21:42
+Translation is very short compared to en_ulb 21-05 source: MAT 22:19
+First word in sentence is not capitalized: "isi" in MAT 22:43
+Check the punctuation at MAT 22:44: ?.
+Check the punctuation at MAT 22:45: ?.
+Word medial punctuation in MAT 23:9: "mama"lailoi
+First word in sentence is not capitalized: "bela" in MAT 23:19
+First word in sentence is not capitalized: "keu" in MAT 24:14
+Check the punctuation at MAT 26:31: ,,
+First word in sentence is not capitalized: "vadeulabo" in MAT 26:62
+Translation is very short compared to en_ulb 21-05 source: MAT 27:27
+First word in sentence is not capitalized: "koloki" in MAT 27:45
+First word in sentence is not capitalized: "koloki" in MAT 27:45
+First word in sentence is not capitalized: "koloki" in MAT 27:46
+Inconsistent chapter titling: ['Sabta', 'Sabuta'] in MAT
+Check the punctuation at MRK 1:24: ?,
+First word in sentence is not capitalized: "loo" in MRK 1:24
+Check the punctuation at MRK 2:9: ?.
+Punctuation after quote mark at MRK 2:26: ".
+Check the punctuation at MRK 3:4: ?,
+First word in sentence is not capitalized: "bela" in MRK 3:4
+First word in sentence is not capitalized: "ige" in MRK 3:4
+Punctuation after quote mark at MRK 3:16: ".
+Check the punctuation at MRK 3:23: ?.
+Check the punctuation at MRK 3:33: ?.
+Non-standard chapter label at MRK 6: Maka 6
+First word in sentence is not capitalized: "isi" in MRK 6:3
+Translation is very short compared to en_ulb 21-05 source: MRK 6:17
+Punctuation after quote mark at MRK 7:34: ".
+First word in sentence is not capitalized: "huhue" in MRK 8:17
+First word in sentence is not capitalized: "au" in MRK 8:17
+First word in sentence is not capitalized: "au" in MRK 8:17
+First word in sentence is not capitalized: "au" in MRK 8:18
+First word in sentence is not capitalized: "au" in MRK 8:18
+First word in sentence is not capitalized: "au" in MRK 8:18
+First word in sentence is not capitalized: "ige" in MRK 8:19
+Check the punctuation at MRK 8:23: ?.
+Check the punctuation at MRK 8:27: ?.
+First word in sentence is not capitalized: "ogeta" in MRK 8:33
+Check the punctuation at MRK 8:37: ?.
+Non-standard chapter label at MRK 9: Maka 9
+Invalid number suffix: 6' at MRK 9:2
+Invalid number prefix: '6 at MRK 9:2
+First word in sentence is not capitalized: "lalai" in MRK 9:19
+First word in sentence is not capitalized: "katealelu" in MRK 9:19
+First word in sentence is not capitalized: "isi" in MRK 10:38
+First word in sentence is not capitalized: "daa" in MRK 11:30
+First word in sentence is not capitalized: "oo" in MRK 12:10
+Check the punctuation at MRK 12:14: ?,
+First word in sentence is not capitalized: "bela" in MRK 12:14
+First word in sentence is not capitalized: "kosealelu" in MRK 12:23
+First word in sentence is not capitalized: "ige" in MRK 12:37
+Invalid number suffix: 2' at MRK 12:42
+Invalid number prefix: '2 at MRK 12:42
+Non-standard chapter label at MRK 13: Maka 13
+First word in sentence is not capitalized: "keu" in MRK 14:6
+Invalid number suffix: 3' at MRK 14:30
+Invalid number prefix: '3 at MRK 14:30
+Check the punctuation at MRK 14:41: ?.
+First word in sentence is not capitalized: "ige" in MRK 14:41
+First word in sentence is not capitalized: "vadeula" in MRK 14:60
+First word in sentence is not capitalized: "ige" in MRK 14:64
+Translation is very short compared to en_ulb 21-05 source: MRK 14:72
+Check the punctuation at MRK 15:9: ?.
+Check the punctuation at MRK 15:12: ?.
+Check the punctuation at MRK 15:18: ?.
+Inconsistent chapter titling: ['Sabta', 'Maka'] in MRK
+Punctuation after quote mark at LUK 1:24: '.
+Invalid number suffix: 5' at LUK 1:24
+Invalid number prefix: '5 at LUK 1:24
+Punctuation after quote mark at LUK 1:31: '.
+First word in sentence is not capitalized: "da" in LUK 1:34
+Invalid number suffix: 6' at LUK 1:36
+Invalid number prefix: '6 at LUK 1:36
+Invalid number suffix: 3' at LUK 1:56
+Invalid number prefix: '3 at LUK 1:56
+Invalid number suffix: 8' at LUK 1:59
+Invalid number prefix: '8 at LUK 1:59
+Invalid number suffix: 7' at LUK 2:36
+Invalid number prefix: '7 at LUK 2:36
+Invalid number suffix: 84' at LUK 2:37
+Invalid number prefix: '84 at LUK 2:37
+Invalid number suffix: 12' at LUK 2:42
+Invalid number prefix: '12 at LUK 2:42
+Invalid number suffix: 3' at LUK 2:46
+Invalid number prefix: '3 at LUK 2:46
+First word in sentence is not capitalized: "aoivaga" at LUK 2:46
+Invalid number suffix: 15' at LUK 3:1
+Invalid number prefix: '15 at LUK 3:1
+Punctuation after quote mark at LUK 3:22: ".
+Invalid number suffix: 40' at LUK 4:2
+Invalid number prefix: '40 at LUK 4:2
+Translation is very short compared to en_ulb 21-05 source: LUK 4:29
+First word in sentence is not capitalized: "bela" in LUK 6:9
+First word in sentence is not capitalized: "ata" in LUK 6:9
+First word in sentence is not capitalized: "bela" in LUK 6:9
+Invalid number suffix: 12' at LUK 6:13
+Invalid number prefix: '12 at LUK 6:13
+Missing verse between: LUK 6:35 and LUK 6:37
+First word in sentence is not capitalized: "bela" in LUK 7:19
+First word in sentence is not capitalized: "bela" in LUK 7:20
+First word in sentence is not capitalized: "bela" in LUK 7:24
+Invalid number suffix: 500' at LUK 7:41
+Invalid number prefix: k500 at LUK 7:41
+Invalid number suffix: 12' at LUK 8:1
+Invalid number prefix: '12 at LUK 8:1
+Invalid number suffix: 7' at LUK 8:2
+Invalid number prefix: '7 at LUK 8:2
+Invalid number suffix: 100' at LUK 8:8
+Invalid number prefix: '100 at LUK 8:8
+Missing verse between: LUK 8:16 and LUK 8:18
+Punctuation after quote mark at LUK 8:32: '.
+Invalid number suffix: 12' at LUK 8:42
+Invalid number prefix: '12 at LUK 8:42
+Invalid number suffix: 12' at LUK 8:43
+Invalid number prefix: '12 at LUK 8:43
+Check the punctuation at LUK 9:18: ?.
+First word in sentence is not capitalized: "sito" in LUK 9:60
+Check the punctuation at LUK 11:46: .`
+Equals sign (=) in LUK 12:58
+First word in sentence is not capitalized: "keu" in LUK 13:7
+First word in sentence is not capitalized: "idi" in LUK 13:7
+First word in sentence is not capitalized: "ige" at LUK 13:8
+First word in sentence is not capitalized: "igeau" at LUK 13:9
+First word in sentence is not capitalized: "lahani" in LUK 13:11
+First word in sentence is not capitalized: "setene" in LUK 13:16
+Invalid number suffix: 10' at LUK 14:19
+Invalid number prefix: '10 at LUK 14:19
+Translation is very short compared to en_ulb 21-05 source: LUK 17:27
+First word in sentence is not capitalized: "bela" in LUK 18:8
+First word in sentence is not capitalized: "voleu" in LUK 18:10
+First word in sentence is not capitalized: "lge" at LUK 19:16
+First word in sentence is not capitalized: "tialeu" at LUK 19:29
+Translation is very short compared to en_ulb 21-05 source: LUK 24:15
+First word in sentence is not capitalized: "au" in JHN 1:21
+First word in sentence is not capitalized: "ige" in JHN 1:21
+Check the punctuation at JHN 1:22: ?.
+Free floating mark at JHN 1:41: Mesaea " Keliso"
+Check the punctuation at JHN 1:48: ?.
+Check the punctuation at JHN 2:4: ?.
+Forward slash in JHN 2:4
+First word in sentence is not capitalized: "dii" in JHN 2:4
+Invalid number suffix: 46' at JHN 2:20
+Invalid number prefix: '46 at JHN 2:20
+Check the punctuation at JHN 3:4: ?.
+Check the punctuation at JHN 3:10: ?,
+First word in sentence is not capitalized: "isito" in JHN 3:10
+Check the punctuation at JHN 3:12: ?.
+Invalid number suffix: 5' at JHN 4:18
+Invalid number prefix: '5 at JHN 4:18
+Invalid number suffix: 4' at JHN 4:35
+Invalid number prefix: '4 at JHN 4:35
+Punctuation after quote mark at JHN 4:40: '.
+Invalid number suffix: 2' at JHN 4:40
+Invalid number prefix: '2 at JHN 4:40
+First word in sentence is not capitalized: "kele" in JHN 4:46
+Invalid number suffix: 1' at JHN 4:52
+Invalid number prefix: '1 at JHN 4:52
+Invalid number suffix: 38' at JHN 5:5
+Invalid number prefix: '38 at JHN 5:5
+Translation is very short compared to en_ulb 21-05 source: JHN 5:7
+Check the punctuation at JHN 6:5: ?.
+Check the punctuation at JHN 6:42: ?.
+First word in sentence is not capitalized: "bela" in JHN 7:17
+First word in sentence is not capitalized: "kosi" in JHN 7:48
+First word in sentence is not capitalized: "eu" in JHN 8:22
+First word in sentence is not capitalized: "kateige" in JHN 8:25
+Translation is very short compared to en_ulb 21-05 source: JHN 8:39
+First word in sentence is not capitalized: "keu" in JHN 8:43
+First word in sentence is not capitalized: "da" in JHN 8:46
+Invalid number suffix: 50' at JHN 8:57
+Invalid number prefix: '50 at JHN 8:57
+First word in sentence is not capitalized: "au" in JHN 9:19
+First word in sentence is not capitalized: "au" in JHN 9:26
+Punctuation after quote mark at JHN 11:17: '.
+Invalid number suffix: 4' at JHN 11:17
+Invalid number prefix: '4 at JHN 11:17
+Punctuation after quote mark at JHN 11:18: '.
+Invalid number suffix: 2' at JHN 11:18
+Invalid number prefix: '2 at JHN 11:18
+Punctuation after quote mark at JHN 11:41: '.
+Invalid number suffix: 300' at JHN 12:5
+Invalid number prefix: k300 at JHN 12:5
+First word in sentence is not capitalized: "olela" in JHN 12:34
+First word in sentence is not capitalized: "keu" in JHN 13:13
+First word in sentence is not capitalized: "ata" in JHN 14:9
+Check the punctuation at JHN 16:31: ?.
+Invalid number suffix: 11' at JHN 18:1
+Invalid number prefix: '11 at JHN 18:1
+First word in sentence is not capitalized: "ige" in JHN 18:17
+First word in sentence is not capitalized: "le" in JHN 18:21
+First word in sentence is not capitalized: "ige" in JHN 18:25
+First word in sentence is not capitalized: "bela" in JHN 18:34
+First word in sentence is not capitalized: "au" in JHN 18:35
+First word in sentence is not capitalized: "ai" in JHN 18:35
+First word in sentence is not capitalized: "ige" in JHN 18:37
+Invalid number suffix: 12' at JHN 19:14
+Invalid number prefix: '12 at JHN 19:14
+Invalid number suffix: 4' at JHN 19:23
+Invalid number prefix: '4 at JHN 19:23
+Invalid number suffix: 100' at JHN 19:39
+Invalid number prefix: '100 at JHN 19:39
+First word in sentence is not capitalized: "ige" in JHN 20:13
+Invalid number suffix: 12' at JHN 20:24
+Invalid number prefix: '12 at JHN 20:24
+Invalid number suffix: 8' at JHN 20:26
+Invalid number prefix: '8 at JHN 20:26
+Chapter has 31 verses in the en_ulb 21-05 text: JHN 20:30
+Invalid number suffix: 200' at JHN 21:8
+Invalid number prefix: '200 at JHN 21:8
+Invalid number suffix: 3' at JHN 21:14
+Invalid number prefix: '3 at JHN 21:14
+Invalid number suffix: 3' at JHN 21:17
+Invalid number prefix: '3 at JHN 21:17
+First word in sentence is not capitalized: "da" in JHN 21:22
+Chapter has 15 verses in the en_ulb 21-05 text: ACT 6:14
+Unnumbered verse after ACT 8:17
+Invalid number suffix: 8' at ACT 9:33
+Invalid number prefix: '8 at ACT 9:33
+Possible verse number (3) in text at ACT 10:3
+Invalid number suffix: 3' at ACT 10:30
+Invalid number prefix: '3 at ACT 10:30
+Punctuation after quote mark at ACT 11:11: '.
+Invalid number suffix: 3' at ACT 11:11
+Invalid number prefix: '3 at ACT 11:11
+Invalid number suffix: 6' at ACT 11:12
+Invalid number prefix: '6 at ACT 11:12
+Possible verse number (4) in text at ACT 12:4
+Invalid number suffix: 40' at ACT 13:18
+Invalid number prefix: '40 at ACT 13:18
+Invalid number suffix: 7' at ACT 13:19
+Invalid number prefix: '7 at ACT 13:19
+Invalid number suffix: 450' at ACT 13:20
+Invalid number prefix: '450 at ACT 13:20
+Invalid number suffix: 40' at ACT 13:21
+Invalid number prefix: '40 at ACT 13:21
+Free floating mark at ACT 14:20: tilu. ' Bolou
+First word in sentence is not capitalized: "ige" in ACT 14:26
+Punctuation after quote mark at ACT 15:35: '.
+First word in sentence is not capitalized: "iale" at ACT 17:29
+Invalid number suffix: 6' at ACT 18:11
+Invalid number prefix: '6 at ACT 18:11
+First word in sentence is not capitalized: "sito" at ACT 18:15
+Invalid number suffix: 12' at ACT 19:7
+Invalid number prefix: '12 at ACT 19:7
+Invalid number suffix: 7' at ACT 19:14
+Invalid number prefix: '7 at ACT 19:14
+Punctuation after quote mark at ACT 19:19: '.
+Invalid number suffix: 000' at ACT 19:19
+Invalid number prefix: '50 at ACT 19:19
+Invalid number suffix: 7' at ACT 21:8
+Invalid number prefix: '7 at ACT 21:8
+Invalid number suffix: 4' at ACT 21:9
+Invalid number prefix: '4 at ACT 21:9
+Invalid number suffix: 4' at ACT 21:23
+Invalid number prefix: '4 at ACT 21:23
+Invalid number suffix: 4000' at ACT 21:38
+Invalid number prefix: '4000 at ACT 21:38
+Translation is very short compared to en_ulb 21-05 source: ACT 21:40
+Invalid number suffix: 40' at ACT 23:13
+Invalid number prefix: '40 at ACT 23:13
+Invalid number suffix: 40' at ACT 23:21
+Invalid number prefix: '40 at ACT 23:21
+Invalid number suffix: 200' at ACT 23:23
+Invalid number prefix: '200 at ACT 23:23
+Invalid number suffix: 5' at ACT 24:1
+Invalid number prefix: '5 at ACT 24:1
+Possible verse number (12) in text at ACT 24:11
+Invalid number suffix: 2' at ACT 24:27
+Invalid number prefix: '2 at ACT 24:27
+Invalid number suffix: 3' at ACT 25:1
+Invalid number prefix: '3 at ACT 25:1
+First word in sentence is not capitalized: "isi" in ACT 25:20
+Invalid number suffix: 12' at ACT 26:7
+Invalid number prefix: '12 at ACT 26:7
+Punctuation after quote mark at ACT 27:28: '.
+Invalid number suffix: 120' at ACT 27:28
+Invalid number prefix: '120 at ACT 27:28
+Invalid number suffix: 14' at ACT 27:33
+Invalid number prefix: '14 at ACT 27:33
+Punctuation after quote mark at ACT 27:37: '.
+Invalid number suffix: 276' at ACT 27:37
+Invalid number prefix: '276 at ACT 27:37
+Translation is very short compared to en_ulb 21-05 source: ROM 2:2
+Duplicated verse number: ROM 3:10
+Word medial punctuation in ROM 3:10: kele:"loui
+Translation is very short compared to en_ulb 21-05 source: ROM 7:23
+Invalid number suffix: 000' at ROM 11:4
+Invalid number prefix: '7 at ROM 11:4
+Invalid number suffix: 000' at ROM 11:5
+Invalid number prefix: '7 at ROM 11:5
+Translation is very short compared to en_ulb 21-05 source: ROM 15:14
+Missing verses between: ROM 16:8 and ROM 16:12
+Missing verse between: 1CO 3:10 and 1CO 3:12
+Translation is very short compared to en_ulb 21-05 source: 1CO 6:4
+First word in sentence is not capitalized: "aba" in 1CO 6:15
+Check the punctuation at 1CO 7:7: ..
+Missing verse between: 1CO 8:9 and 1CO 8:11
+First word in sentence is not capitalized: "daa" at 1CO 9:4
+Missing verse between: 1CO 10:23 and 1CO 10:25
+Non-standard chapter label at 1CO 12: Sabta 11
+Missing verse between: 1CO 16:13 and 1CO 16:15
+Inconsistent chapter titling: ['Sabta', 'Sabta 11'] in 1CO
+Non-standard chapter label at 2CO 1: SABTA 1
+First word in sentence is not capitalized: "ekalesia" in 2CO 1:1
+First word in sentence is not capitalized: "huhugei" in 2CO 1:2
+Check the punctuation at 2CO 1:9: ..
+First word in sentence is not capitalized: "isito" in 2CO 1:9
+First word in sentence is not capitalized: "isito" in 2CO 1:17
+Non-standard chapter label at 2CO 3: sabta 3
+First word in sentence is not capitalized: "basu" in 2CO 3:6
+First word in sentence is not capitalized: "u" in 2CO 3:6
+Non-standard chapter label at 2CO 4: SABTA 4
+First word in sentence is not capitalized: "isito" in 2CO 4:4
+First word in sentence is not capitalized: "katealelu" at 2CO 5:9
+Non-standard chapter label at 2CO 6: SABTA 6
+First word in sentence is not capitalized: "dale" at 2CO 6:18
+First word in sentence is not capitalized: "kele" in 2CO 7:11
+First word in sentence is not capitalized: "v" in 2CO 8:1
+Check the punctuation at 2CO 8:14: ..
+First word in sentence is not capitalized: "kea" in 2CO 8:14
+First word in sentence is not capitalized: "da" at 2CO 11:8
+First word in sentence is not capitalized: "kAbo" in 2CO 11:24
+Inconsistent chapter titling: ['SABTA', 'Sabta', 'sabta'] in 2CO
+Translation is very short compared to en_ulb 21-05 source: GAL 1:20
+Punctuation after quote mark at GAL 3:29: '.
+First word in sentence is not capitalized: "bela" in GAL 4:9
+Chapter has 31 verses in the en_ulb 21-05 text: GAL 4:30
+First word in sentence is not capitalized: "bela" in GAL 6:4
+Non-standard chapter label at EPH 4: sabta 4
+Inconsistent chapter titling: ['Sabta', 'sabta'] in EPH
+Missing verse between: 1TH 2:1 and 1TH 2:3
+First word in sentence is not capitalized: "isi" in 2TH 1:12
+First word in sentence is not capitalized: "abo" in 2TH 2:10
+First word in sentence is not capitalized: "isito" in 2TH 3:8
+Invalid number suffix: 60' at 1TI 5:9
+Invalid number prefix: '60 at 1TI 5:9
+First word in sentence is not capitalized: "lai" in 2TI 1:9
+Translation is very short compared to en_ulb 21-05 source: 2TI 1:12
+Repeated quotes at 2TI 2:9
+First word in sentence is not capitalized: "kea" at 2TI 2:18
+Repeated quotes at 2TI 2:20
+Non-standard chapter label at 2TI 3: Sapta 3
+First word in sentence is not capitalized: "kateivale" at 2TI 3:6
+First word in sentence is not capitalized: "keleate" in 2TI 3:8
+First word in sentence is not capitalized: "ige" in 2TI 3:9
+First word in sentence is not capitalized: "uu" in 2TI 3:16
+Inconsistent chapter titling: ['Sabta', 'Sapta'] in 2TI
+First word in sentence is not capitalized: "kosealelu" in PHM 1:9
+Translation is very short compared to en_ulb 21-05 source: HEB 2:8
+Punctuation after quote mark at HEB 3:18: ".
+Translation is very short compared to en_ulb 21-05 source: HEB 8:13
+Translation is very short compared to en_ulb 21-05 source: HEB 11:5
+First word in sentence is not capitalized: "ige" at HEB 11:23
+Punctuation after quote mark at JAS 1:1: '.
+Text begins with phrase-ending punctuation in 1PE 3:2
+Invalid number suffix: 8' at 1PE 3:20
+Invalid number prefix: '8 at 1PE 3:20
+Punctuation after quote mark at 1PE 5:13: '.
+Non-standard chapter label at 2PE 2: sabta 2
+First word in sentence is not capitalized: "kea" in 2PE 2:3
+First word in sentence is not capitalized: "toela" in 2PE 2:8
+First word in sentence is not capitalized: "keu" at 2PE 2:10
+First word in sentence is not capitalized: "kea" at 2PE 2:12
+First word in sentence is not capitalized: "vavita" in 2PE 2:17
+First word in sentence is not capitalized: "vavi" in 2PE 2:17
+First word in sentence is not capitalized: "isito" in 2PE 2:20
+First word in sentence is not capitalized: "ige" in 2PE 3:5
+First word in sentence is not capitalized: "sele" in 2PE 3:17
+Inconsistent chapter titling: ['Sabta', 'sabta'] in 2PE
+Invalid number suffix: 3' at 1JN 5:7
+Invalid number prefix: '3 at 1JN 5:7
+Missing verse between: 2JN 1:10 and 2JN 1:12
+Invalid number suffix: 7’ at REV 1:4
+Invalid number prefix: ‘7 at REV 1:4
+Free floating mark at REV 1:11: vole ‘ ephesus
+Invalid number suffix: 7’ at REV 1:11
+Invalid number prefix: ‘7 at REV 1:11
+Invalid number suffix: 7’ at REV 1:12
+Invalid number prefix: ‘7 at REV 1:12
+Invalid number suffix: 7’ at REV 1:16
+Invalid number prefix: ‘7 at REV 1:16
+Invalid number suffix: 7’ at REV 1:20
+Invalid number prefix: ‘7 at REV 1:20
+Mismatched parentheses at REV 2:1
+Mismatched parentheses at REV 2:6
+Possible verse number (10) in text at REV 2:10
+Invalid number suffix: 7’ at REV 3:1
+Invalid number prefix: ‘7 at REV 3:1
+First word of paragraph not capitalized near REV 3:1
+Invalid number suffix: 24’ at REV 4:4
+Invalid number prefix: ‘24 at REV 4:4
+Invalid number suffix: 7’ at REV 4:5
+Invalid number prefix: ‘7 at REV 4:5
+Invalid number suffix: 4’ at REV 4:8
+Invalid number prefix: ‘4 at REV 4:8
+Invalid number suffix: 24’ at REV 4:10
+Invalid number prefix: ‘24 at REV 4:10
+Invalid number suffix: 7’ at REV 5:1
+Invalid number prefix: ’7 at REV 5:1
+Possible verse number (7) in text at REV 5:6
+Possible verse number (7) in text at REV 5:6
+Possible verse number (7) in text at REV 5:6
+Invalid number suffix: 4’ at REV 5:8
+Invalid number prefix: ‘4 at REV 5:8
+Invalid number suffix: 4’ at REV 5:14
+Invalid number prefix: ’4 at REV 5:14
+First word in sentence is not capitalized: "mana" in REV 5:14
+Possible verse number (1) in text at REV 6:1
+Invalid number suffix: 2’ at REV 6:3
+Invalid number prefix: ‘2 at REV 6:3
+Invalid number suffix: 3’ at REV 6:5
+Invalid number prefix: ‘3 at REV 6:5
+Invalid number suffix: 4’ at REV 6:6
+Invalid number prefix: ‘4 at REV 6:6
+Invalid number suffix: 4’ at REV 6:7
+Invalid number prefix: ‘4 at REV 6:7
+Invalid number suffix: 5’ at REV 6:9
+Invalid number prefix: ‘5 at REV 6:9
+First word in sentence is not capitalized: "usege" in REV 6:11
+Invalid number suffix: 6’ at REV 6:12
+Invalid number prefix: ‘6 at REV 6:12
+Invalid number suffix: 4’ at REV 7:11
+Invalid number prefix: ‘4 at REV 7:11
+Invalid number suffix: 7’ at REV 8:1
+Invalid number prefix: ‘7 at REV 8:1
+Invalid number suffix: 7’ at REV 8:2
+Invalid number prefix: ‘7 at REV 8:2
+Possible verse number (7) in text at REV 8:6
+Invalid number suffix: 2’ at REV 8:8
+Invalid number prefix: ‘2 at REV 8:8
+Invalid number suffix: 3’ at REV 8:10
+Invalid number prefix: ‘3 at REV 8:10
+Forward slash in REV 8:12
+Invalid number suffix: 4’ at REV 8:12
+Invalid number prefix: ‘4 at REV 8:12
+First word in sentence is not capitalized: "solilu" in REV 8:12
+Invalid number suffix: 5’ at REV 9:1
+Invalid number prefix: ‘5 at REV 9:1
+Invalid number suffix: 5’ at REV 9:12
+Invalid number prefix: ‘5 at REV 9:12
+Invalid number suffix: 6’ at REV 9:13
+Invalid number prefix: ‘6 at REV 9:13
+Invalid number suffix: 6’ at REV 9:14
+Invalid number prefix: ‘6 at REV 9:14
+Punctuation after quote mark at REV 9:16: ’.
+Invalid number suffix: 000’ at REV 9:16
+Invalid number prefix: ‘200 at REV 9:16
+Invalid number suffix: 7’ at REV 10:3
+Invalid number prefix: ‘7 at REV 10:3
+First word in sentence is not capitalized: "isege" in REV 10:4
+Possible verse number (7) in text at REV 10:7
+First word in sentence is not capitalized: "keoai" in REV 10:8
+Invalid number suffix: 6’ at REV 11:2
+Invalid number prefix: ‘6 at REV 11:2
+First word in sentence is not capitalized: "dikaiavei" in REV 11:2
+First word in sentence is not capitalized: "olai" in REV 11:5
+Forward slash in REV 11:13
+Invalid number suffix: 1/ at REV 11:13
+Invalid number prefix: ‘1 at REV 11:13
+Invalid number suffix: 6’ at REV 11:14
+Invalid number prefix: ‘6 at REV 11:14
+Invalid number suffix: 7’ at REV 11:15
+Invalid number prefix: ‘7 at REV 11:15
+Invalid number suffix: 24’ at REV 11:16
+Invalid number prefix: ‘24 at REV 11:16
+Invalid number suffix: 12’ at REV 12:1
+Invalid number prefix: ‘12 at REV 12:1
+Invalid number suffix: 7’ at REV 12:3
+Invalid number prefix: ‘7 at REV 12:3
+Invalid number suffix: 1260’ at REV 12:6
+Invalid number prefix: “1260 at REV 12:6
+Invalid number suffix: 7’ at REV 13:1
+Invalid number prefix: ‘7 at REV 13:1
+First word in sentence is not capitalized: "ige" in REV 13:2
+Invalid number suffix: 42’ at REV 13:5
+Invalid number prefix: ‘42 at REV 13:5
+Invalid number suffix: 666’ at REV 13:18
+Invalid number prefix: ‘666 at REV 13:18
+Invalid number suffix: 000’ at REV 14:1
+Invalid number prefix: “144 at REV 14:1
+Possible verse number (4) in text at REV 14:3
+Invalid number suffix: 1600’ at REV 14:20
+Invalid number prefix: ‘1600 at REV 14:20
+Invalid number suffix: 7’ at REV 15:1
+Invalid number prefix: ‘7 at REV 15:1
+Invalid number suffix: 666’ at REV 15:2
+Invalid number prefix: ‘666 at REV 15:2
+Possible verse number (7) in text at REV 15:6
+Possible verse number (7) in text at REV 15:6
+Possible verse number (7) in text at REV 15:7
+Possible verse number (7) in text at REV 15:7
+Invalid number suffix: 7’ at REV 15:8
+Invalid number prefix: ‘7 at REV 15:8
+Invalid number suffix: 7’ at REV 16:1
+Invalid number prefix: ‘7 at REV 16:1
+Invalid number suffix: 1’ at REV 16:2
+Invalid number prefix: ‘1 at REV 16:2
+Invalid number suffix: 2’ at REV 16:3
+Invalid number prefix: ‘2 at REV 16:3
+Invalid number suffix: 3’ at REV 16:4
+Invalid number prefix: ‘3 at REV 16:4
+Invalid number suffix: 4’ at REV 16:8
+Invalid number prefix: ‘4 at REV 16:8
+Invalid number suffix: 5’ at REV 16:10
+Invalid number prefix: ‘5 at REV 16:10
+Mismatched square brackets at REV 16:11
+Optional text or untagged footnote at REV 16:11
+Invalid number suffix: 6’ at REV 16:12
+Invalid number prefix: ‘6 at REV 16:12
+Invalid number suffix: 7’ at REV 16:17
+Invalid number prefix: ‘7 at REV 16:17
+Chapter has 21 verses in the en_ulb 21-05 text: REV 16:20
+Invalid number suffix: 7’ at REV 17:1
+Invalid number prefix: ‘7 at REV 17:1
+Invalid number suffix: 7’ at REV 17:3
+Invalid number prefix: ‘7 at REV 17:3
+Possible verse number (7) in text at REV 17:7
+Punctuation after quote mark at REV 17:9: ’.
+Invalid number suffix: 7’ at REV 17:9
+Invalid number prefix: ‘7 at REV 17:9
+First word in sentence is not capitalized: "a" in REV 17:9
+First word in sentence is not capitalized: "ovo" in REV 17:9
+Invalid number suffix: 5’ at REV 17:10
+Invalid number prefix: ‘5 at REV 17:10
+First word in sentence is not capitalized: "naligei" in REV 17:10
+Invalid number suffix: 7’ at REV 17:11
+Invalid number prefix: ‘7 at REV 17:11
+Invalid number suffix: 10’ at REV 17:12
+Invalid number prefix: ‘10 at REV 17:12
+Invalid number suffix: 10’ at REV 17:13
+Invalid number prefix: ‘10 at REV 17:13
+Invalid number suffix: 10’ at REV 17:16
+Invalid number prefix: ‘10 at REV 17:16
+First word in sentence is not capitalized: "au" in REV 18:6
+First word in sentence is not capitalized: "vole" in REV 18:13
+Possible verse number (4) in text at REV 19:4
+Invalid number suffix: 1000’ at REV 20:2
+Invalid number prefix: ‘1000 at REV 20:2
+First word in sentence is not capitalized: "mouke" in REV 20:2
+Invalid number suffix: 1000’ at REV 20:3
+Invalid number prefix: ‘1000 at REV 20:3
+First word in sentence is not capitalized: "vagala" in REV 20:3
+Invalid number suffix: 1000’ at REV 20:4
+Invalid number prefix: ‘1000 at REV 20:4
+First word in sentence is not capitalized: "vuvune" in REV 20:4
+Invalid number suffix: 1000’ at REV 20:5
+Invalid number prefix: ‘1000 at REV 20:5
+Invalid number suffix: 1000’ at REV 20:6
+Invalid number prefix: ‘1000 at REV 20:6
+Invalid number suffix: 1000’ at REV 20:7
+Invalid number prefix: ‘1000 at REV 20:7
+First word in sentence is not capitalized: "siauvele" in REV 20:11
+Chapter has 15 verses in the en_ulb 21-05 text: REV 20:14
+Invalid number suffix: 7’ at REV 21:9
+Invalid number prefix: ‘7 at REV 21:9
+Possible verse number (12) in text at REV 21:12
+Possible verse number (12) in text at REV 21:12
+Invalid number suffix: 12’ at REV 21:14
+Invalid number prefix: ‘12 at REV 21:14
+Invalid number suffix: 1500’ at REV 21:16
+Invalid number prefix: ‘1500 at REV 21:16
+Invalid number suffix: 216’ at REV 21:17
+Invalid number prefix: ‘216 at REV 21:17
+Invalid number suffix: 12’ at REV 21:19
+Invalid number prefix: ‘12 at REV 21:19
+Invalid number suffix: 12’ at REV 21:21
+Invalid number prefix: ‘12 at REV 21:21
+Check the punctuation at REV 22:16: ,,
+Mixed case word in MAT 3:15: IGe
+Mixed case word in MAT 4:7: momaimainKOSIVE
+Mixed case word in MAT 6:12: LOi
+Mixed case word in MAT 8:24: IsegeIesu
+Mixed case word in MAT 10:1: IESUau
+Mixed case word in MAT 10:2: SimoniBita
+Mixed case word in MAT 10:25: IESUavoe
+Mixed case word in MAT 11:25: auMama
+Mixed case word in MAT 15:33: IgeDisaiboloea
+Mixed case word in LUK 6:38: DILAVAuleavota
+Mixed case word in LUK 8:2: IESUa
+Mixed case word in LUK 9:30: ILaidiati
+Mixed case word in LUK 15:9: ANELUIAle
+Mixed case word in LUK 15:10: ANELUiale
+Mixed case word in LUK 15:10: ANELUIAla
+Mixed case word in LUK 16:31: MOUSESEu
+Mixed case word in LUK 17:27: NOAu
+Mixed case word in LUK 17:29: LOTAu
+Mixed case word in LUK 20:25: DILAVAele
+Mixed case word in JHN 11:49: kKaiabasi
+Mixed case word in JHN 15:27: IESUlake
+Mixed case word in JHN 20:24: TGomasi
+Mixed case word in ACT 2:24: IESUu
+Mixed case word in ACT 11:22: kDielusalemae
+Mixed case word in ACT 12:4: lBita
+Mixed case word in ACT 12:20: lBalasita
+Mixed case word in ACT 14:11: DILAVAeala
+Mixed case word in ROM 3:9: KDiu
+Mixed case word in ROM 8:39: DILAVu
+Mixed case word in ROM 11:28: KDiuia
+Mixed case word in 1CO 11:4: KELISOlau
+Mixed case word in 1CO 14:24: DILAVAukoto
+Mixed case word in 1CO 15:48: kELISOu
+Mixed case word in 2CO 1:2: MamaDilava
+Mixed case word in 2CO 1:5: vateU
+Mixed case word in 2CO 7:6: kosealeluTaitasiu
+Mixed case word in 2CO 11:24: kAbo
+Mixed case word in 2CO 12:4: DIAVAu
+Mixed case word in PHP 1:1: BILIBIENISIoe
+Mixed case word in PHP 3:14: KELISOele
+Mixed case word in PHP 4:16: TESOLONIKAea
+Mixed case word in 2TI 1:9: IesuKeliso
+Mixed case word in PHM 1:8: IESu
+Mixed case word in HEB 8:10: DILAVAeabe
+Mixed case word in HEB 9:16: BUkale
+Mixed case word in HEB 11:6: DILAVAUle
+Mixed case word in 1PE 1:20: KELISOke
+Mixed case word in 1PE 3:6: SELAu
+Mixed case word in 1JN 3:12: KEINIu
+Mixed case word in REV 2:8: LAViA
+Mixed case word in REV 2:9: iVEGE
+Mixed case word in REV 2:9: LAVIGEi
+Mixed case word in REV 2:9: DIViA
+Mixed case word in REV 2:9: LOUi
+Mixed case word in REV 2:10: OTOVEi
+Mixed case word in REV 2:10: iVAi
+Mixed case word in REV 2:10: LAi
+Mixed case word in REV 2:11: MELIAi
+Mixed case word in REV 4:9: eXXXX
+Mixed case word in REV 21:9: XXvoleu
+Mixed case word in REV 21:10: diXXXX
+Mixed case word in REV 21:13: abutitXXX
+Mixed case word in REV 21:13: abuutitXXXX
+Other mixed case words occur more than once each: ['LASALOSIu', 'DILAVAtaga', 'IESUti', 'KELISOla', 'DIALVAu', 'DILAVAle', 'KELISOlu', 'KELISOta', 'KELISOti', 'DILAVAe', 'KOSIVEu', 'kXXXX']
+12853 unique words. 7139 (55%) of them occur only once.
+
+SUMMARY:
+First word in sentence is not capitalized: "...:  169 occurrences.
+Invalid number suffix: ...:  146 occurrences.
+Invalid number prefix: ...:  146 occurrences.
+Mixed case word in ...:  63 occurrences.
+Check the punctuation at ...:  35 occurrences.
+Punctuation after quote mark at ...:  22 occurrences.
+Translation is very short compared to en_ulb 21-05 source: ...:  21 occurrences.
+Possible verse number (...:  19 occurrences.
+Non-standard chapter label at ...:  12 occurrences.
+Missing verse between: ...:  9 occurrences.
+Inconsistent chapter titling: ['S...:  7 occurrences.
+Chapter has ...:  5 occurrences.
+Free floating mark at ...:  4 occurrences.
+Word medial punctuation in ...:  3 occurrences.
+Forward slash in ...:  3 occurrences.
+Repeated quotes at 2TI 2:...:  2 occurrences.
+Mismatched parentheses at REV 2:...:  2 occurrences.
+Equals sign (=) in LUK 12:58
+Unnumbered verse after ACT 8:17
+Duplicated verse number: ROM 3:10
+Missing verses between: ROM 16:8 and ROM 16:12
+Text begins with phrase-ending punctuation in 1PE 3:2
+First word of paragraph not capitalized near REV 3:1
+Mismatched square brackets at REV 16:11
+Optional text or untagged footnote at REV 16:11
+Other mixed case words occur more than once each: ['LASALOSIu', 'DILAVAtaga', 'IESUti', 'KELISOla', 'DIALVAu', 'DILAVAle', 'KELISOlu', 'KELISOta', 'KELISOti', 'DILAVAe', 'KOSIVEu', 'kXXXX']
+12853 unique words. 7139 (55%) of them occur only once.
+
+678 issues reported.
+But these kinds of warnings were suppressed:
+    Straight quotes.
+
+Inconsistent book names (Tesalonia for 1TH vs. Tesolonia for 2TH)

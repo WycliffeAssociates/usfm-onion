@@ -1,0 +1,668 @@
+resource:
+  version: '{latest}'
+  media:
+    -
+     identifier: 'pdf'
+     version: '{latest}'
+     contributor: []
+     url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_v{latest}.pdf'
+
+projects:
+  -
+    identifier: 'gen'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_01-GEN_v{latest}.pdf'
+  -
+    identifier: 'exo'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_02-EXO_v{latest}.pdf'
+
+  -
+    identifier: 'lev'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_03-LEV_v{latest}.pdf'
+
+  -
+    identifier: 'num'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_04-NUM_v{latest}.pdf'
+
+  -
+    identifier: 'deu'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_05-DEU_v{latest}.pdf'
+
+  -
+    identifier: 'jos'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_06-JOS_v{latest}.pdf'
+
+  -
+    identifier: 'jdg'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_07-JDG_v{latest}.pdf'
+
+  -
+    identifier: 'rut'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_08-RUT_v{latest}.pdf'
+
+  -
+    identifier: '1sa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_09-1SA_v{latest}.pdf'
+
+  -
+    identifier: '2sa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_10-2SA_v{latest}.pdf'
+
+  -
+    identifier: '1ki'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_11-1KI_v{latest}.pdf'
+
+  -
+    identifier: '2ki'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_12-2KI_v{latest}.pdf'
+
+  -
+    identifier: '1ch'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_13-1CH_v{latest}.pdf'
+
+  -
+    identifier: '2ch'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_14-2CH_v{latest}.pdf'
+
+  -
+    identifier: 'ezr'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_15-EZR_v{latest}.pdf'
+
+  -
+    identifier: 'neh'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_16-NEH_v{latest}.pdf'
+
+  -
+    identifier: 'est'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_17-EST_v{latest}.pdf'
+
+  -
+    identifier: 'job'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_18-JOB_v{latest}.pdf'
+
+  -
+    identifier: 'psa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_19-PSA_v{latest}.pdf'
+
+  -
+    identifier: 'pro'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_20-PRO_v{latest}.pdf'
+
+  -
+    identifier: 'ecc'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_21-ECC_v{latest}.pdf'
+
+  -
+    identifier: 'sng'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_22-SNG_v{latest}.pdf'
+
+  -
+    identifier: 'isa'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_23-ISA_v{latest}.pdf'
+
+  -
+    identifier: 'jer'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_24-JER_v{latest}.pdf'
+
+  -
+    identifier: 'lam'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_25-LAM_v{latest}.pdf'
+
+  -
+    identifier: 'ezk'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_26-EZK_v{latest}.pdf'
+
+  -
+    identifier: 'dan'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_27-DAN_v{latest}.pdf'
+
+  -
+    identifier: 'hos'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_28-HOS_v{latest}.pdf'
+
+  -
+    identifier: 'jol'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_29-JOL_v{latest}.pdf'
+
+  -
+    identifier: 'amo'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_30-AMO_v{latest}.pdf'
+
+  -
+    identifier: 'oba'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_31-OBA_v{latest}.pdf'
+
+  -
+    identifier: 'jon'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_32-JON_v{latest}.pdf'
+
+  -
+    identifier: 'mic'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_33-MIC_v{latest}.pdf'
+
+  -
+    identifier: 'nam'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_34-NAM_v{latest}.pdf'
+
+  -
+    identifier: 'hab'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_35-HAB_v{latest}.pdf'
+
+  -
+    identifier: 'zep'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_36-ZEP_v{latest}.pdf'
+
+  -
+    identifier: 'hag'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_37-HAG_v{latest}.pdf'
+
+  -
+    identifier: 'zec'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_38-ZEC_v{latest}.pdf'
+
+  -
+    identifier: 'mal'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_39-MAL_v{latest}.pdf'
+
+  -
+    identifier: 'mat'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_41-MAT_v{latest}.pdf'
+
+  -
+    identifier: 'mrk'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_42-MRK_v{latest}.pdf'
+
+  -
+    identifier: 'luk'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_43-LUK_v{latest}.pdf'
+
+  -
+    identifier: 'jhn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_44-JHN_v{latest}.pdf'
+
+  -
+    identifier: 'act'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_45-ACT_v{latest}.pdf'
+
+  -
+    identifier: 'rom'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_46-ROM_v{latest}.pdf'
+
+  -
+    identifier: '1co'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_47-1CO_v{latest}.pdf'
+
+  -
+    identifier: '2co'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_48-2CO_v{latest}.pdf'
+
+  -
+    identifier: 'gal'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_49-GAL_v{latest}.pdf'
+
+  -
+    identifier: 'eph'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_50-EPH_v{latest}.pdf'
+
+  -
+    identifier: 'php'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_51-PHP_v{latest}.pdf'
+
+  -
+    identifier: 'col'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_52-COL_v{latest}.pdf'
+
+  -
+    identifier: '1th'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_53-1TH_v{latest}.pdf'
+
+  -
+    identifier: '2th'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_54-2TH_v{latest}.pdf'
+
+  -
+    identifier: '1ti'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_55-1TI_v{latest}.pdf'
+
+  -
+    identifier: '2ti'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_56-2TI_v{latest}.pdf'
+
+  -
+    identifier: 'tit'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_57-TIT_v{latest}.pdf'
+
+  -
+    identifier: 'phm'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_58-PHM_v{latest}.pdf'
+
+  -
+    identifier: 'heb'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_59-HEB_v{latest}.pdf'
+
+  -
+    identifier: 'jas'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_60-JAS_v{latest}.pdf'
+
+  -
+    identifier: '1pe'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_61-1PE_v{latest}.pdf'
+
+  -
+    identifier: '2pe'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_62-2PE_v{latest}.pdf'
+
+  -
+    identifier: '1jn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_63-1JN_v{latest}.pdf'
+
+  -
+    identifier: '2jn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_64-2JN_v{latest}.pdf'
+
+  -
+    identifier: '3jn'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_65-3JN_v{latest}.pdf'
+
+  -
+    identifier: 'jud'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_66-JUD_v{latest}.pdf'
+
+  -
+    identifier: 'rev'
+    version: '{latest}'
+    media:
+      -
+       identifier: 'pdf'
+       version: '{latest}'
+       contributor: []
+       url: 'https://cdn.door43.org/en/unfoldingWord/en_ult/v{latest}/pdf/en_ult_67-REV_v{latest}.pdf'

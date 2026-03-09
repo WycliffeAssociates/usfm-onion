@@ -1,19 +1,36 @@
 [package]
-name = "usfm3-v2"
+name = "usfm_onion"
+default-run = "usfm-onion"
 version = "0.1.0"
 edition = "2024"
+description = "Rust-first USFM parsing, linting, formatting, conversion, and diffing"
+license = "MIT"
+readme = "README.md"
+keywords = ["usfm", "parser", "formatter", "bible", "text"]
+categories = ["parser-implementations", "text-processing"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
 rayon = ["dep:rayon"]
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
 quick-xml = "0.37"
 rayon = { version = "1.10", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 similar = "2"
 tsify = "0.5.6"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -29,3 +46,8 @@ path = "tests/scanner.rs"
 [[bench]]
 name = "public_api"
 harness = false
+
+[[bench]]
+name = "corpus_matrix"
+harness = false
+required-features = ["rayon"]

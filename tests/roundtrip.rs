@@ -3,7 +3,7 @@ mod common;
 use std::fs;
 use std::path::Path;
 
-use usfm3_v2::{parse, write_exact};
+use usfm_onion::parse::{parse, write_exact};
 
 #[test]
 fn all_origin_usfm_fixtures_roundtrip_exactly() {

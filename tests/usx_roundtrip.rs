@@ -3,7 +3,10 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use usfm3_v2::{from_usx_string, parse, to_usx_string};
+use usfm_onion::{
+    advanced::{from_usx_string, to_usx_string},
+    parse::parse,
+};
 
 fn fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testData")
@@ -11,8 +14,8 @@ fn fixture_root() -> PathBuf {
 
 #[test]
 fn usx_roundtrip_matches_origin_for_targeted_fixture() {
-    let Some(filter) = std::env::var("USFM3_V2_USX_ROUNDTRIP_FIXTURE").ok() else {
-        eprintln!("set USFM3_V2_USX_ROUNDTRIP_FIXTURE to run targeted USX roundtrip");
+    let Some(filter) = std::env::var("USFM_ONION_USX_ROUNDTRIP_FIXTURE").ok() else {
+        eprintln!("set USFM_ONION_USX_ROUNDTRIP_FIXTURE to run targeted USX roundtrip");
         return;
     };
 

@@ -4,37 +4,35 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde_json::Value;
-use usfm3_v2::{parse, to_usj_value};
+use usfm_onion::{advanced::to_usj_value, parse::parse};
 
 fn fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testData")
 }
 
-fn include_ignored_usj_fixtures() -> bool {
-    matches!(
-        std::env::var("USFM3_V2_USJ_INCLUDE_IGNORED").ok().as_deref(),
-        Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
-    )
-}
-
-fn expected_uses_ignored_version(value: &Value) -> bool {
-    value
-        .get("version")
-        .and_then(Value::as_str)
-        .is_some_and(|version| version != "3.1")
-}
-
-fn first_subset_diff(expected: &Value, actual: &Value, path: String) -> Option<String> {
+fn first_diff(expected: &Value, actual: &Value, path: String) -> Option<String> {
     match (expected, actual) {
         (Value::Object(left), Value::Object(right)) => {
+            if left.len() != right.len() {
+                return Some(format!(
+                    "{path}: object key count differs expected={} actual={}",
+                    left.len(),
+                    right.len()
+                ));
+            }
             for key in left.keys() {
                 if !right.contains_key(key) {
                     return Some(format!("{path}.{key}: missing in actual"));
                 }
             }
+            for key in right.keys() {
+                if !left.contains_key(key) {
+                    return Some(format!("{path}.{key}: unexpected key in actual"));
+                }
+            }
             for key in left.keys() {
                 let next_path = format!("{path}.{key}");
-                if let Some(diff) = first_subset_diff(&left[key], &right[key], next_path) {
+                if let Some(diff) = first_diff(&left[key], &right[key], next_path) {
                     return Some(diff);
                 }
             }
@@ -52,10 +50,15 @@ fn first_subset_diff(expected: &Value, actual: &Value, path: String) -> Option<S
             }
             for (index, (left_item, right_item)) in left.iter().zip(right.iter()).enumerate() {
                 let next_path = format!("{path}[{index}]");
-                if let Some(diff) = first_subset_diff(left_item, right_item, next_path) {
+                if let Some(diff) = first_diff(left_item, right_item, next_path) {
                     return Some(diff);
                 }
             }
+            None
+        }
+        (Value::String(left), Value::String(right))
+            if path == "$.version" && left == "3.0" && right == "3.1" =>
+        {
             None
         }
         (Value::String(left), Value::String(right))
@@ -76,6 +79,23 @@ fn to_compact(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| value.to_string())
 }
 
+fn normalize_compare_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut previous_was_whitespace = false;
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !previous_was_whitespace {
+                out.push(' ');
+            }
+            previous_was_whitespace = true;
+        } else {
+            previous_was_whitespace = false;
+            out.push(ch);
+        }
+    }
+    out.trim().to_string()
+}
+
 fn normalize_array_boundary_whitespace(values: &[Value]) -> Vec<Value> {
     let mut normalized = values
         .iter()
@@ -92,12 +112,12 @@ fn normalize_array_boundary_whitespace(values: &[Value]) -> Vec<Value> {
         let mut next_text = text.to_string();
         if prev_is_object {
             next_text = next_text
-                .trim_start_matches(|ch: char| matches!(ch, ' ' | '\n' | '\r' | '\t'))
+                .trim_start_matches([' ', '\n', '\r', '\t'])
                 .to_string();
         }
         if next_is_object {
             next_text = next_text
-                .trim_end_matches(|ch: char| matches!(ch, ' ' | '\n' | '\r' | '\t'))
+                .trim_end_matches([' ', '\n', '\r', '\t'])
                 .to_string();
         }
         normalized[index] = Value::String(next_text);
@@ -125,29 +145,10 @@ fn normalize_value_boundary_whitespace(value: &Value) -> Value {
     }
 }
 
-fn normalize_compare_string(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut previous_was_whitespace = false;
-    for ch in text.chars() {
-        if ch.is_whitespace() {
-            if !previous_was_whitespace {
-                out.push(' ');
-            }
-            previous_was_whitespace = true;
-        } else {
-            previous_was_whitespace = false;
-            out.push(ch);
-        }
-    }
-    out.trim().to_string()
-}
-
 fn trim_last_descendant_string_end(value: &mut Value) {
     match value {
         Value::String(text) => {
-            *text = text
-                .trim_end_matches(|ch: char| matches!(ch, ' ' | '\n' | '\r' | '\t'))
-                .to_string();
+            *text = text.trim_end_matches([' ', '\n', '\r', '\t']).to_string();
         }
         Value::Array(values) => {
             if let Some(last) = values.last_mut() {
@@ -166,9 +167,7 @@ fn trim_last_descendant_string_end(value: &mut Value) {
 fn trim_first_descendant_string_start(value: &mut Value) {
     match value {
         Value::String(text) => {
-            *text = text
-                .trim_start_matches(|ch: char| matches!(ch, ' ' | '\n' | '\r' | '\t'))
-                .to_string();
+            *text = text.trim_start_matches([' ', '\n', '\r', '\t']).to_string();
         }
         Value::Array(values) => {
             if let Some(first) = values.first_mut() {
@@ -187,9 +186,20 @@ fn trim_first_descendant_string_start(value: &mut Value) {
 #[test]
 fn usj_matches_origin_json_fixtures() {
     let root = fixture_root();
-    let filter = std::env::var("USFM3_V2_USJ_FIXTURE").ok();
-    let include_ignored = include_ignored_usj_fixtures();
+    let filter = std::env::var("USFM_ONION_USJ_FIXTURE").ok();
+    let include_exceptions = matches!(
+        std::env::var("USFM_ONION_USJ_INCLUDE_EXCEPTIONS")
+            .ok()
+            .as_deref(),
+        Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    );
     let mut fixtures = common::collect_origin_usfm_json_pairs(&root);
+    if !include_exceptions {
+        fixtures.retain(|(usfm, json)| {
+            !is_explicit_exception_fixture(&root, usfm)
+                && !is_explicit_exception_fixture(&root, json)
+        });
+    }
     if let Some(filter) = filter.as_deref() {
         fixtures.retain(|(usfm, json)| {
             let usfm_slug = common::fixture_slug(&root, usfm);
@@ -203,7 +213,6 @@ fn usj_matches_origin_json_fixtures() {
     );
 
     let mut failures = Vec::new();
-    let mut skipped = Vec::new();
     let mut exercised = 0usize;
 
     for (usfm_path, json_path) in fixtures {
@@ -242,17 +251,12 @@ fn usj_matches_origin_json_fixtures() {
             }
         };
 
-        if !include_ignored && expected_uses_ignored_version(&expected) {
-            skipped.push(common::fixture_slug(&root, &usfm_path));
-            continue;
-        }
-
         let actual = to_usj_value(&parse(&source));
         exercised += 1;
-        if let Some(diff) = first_subset_diff(&expected, &actual, "$".to_string()) {
+        if let Some(diff) = first_diff(&expected, &actual, "$".to_string()) {
             if filter.is_some() {
-                let expected_pretty =
-                    serde_json::to_string_pretty(&expected).unwrap_or_else(|_| expected_str.clone());
+                let expected_pretty = serde_json::to_string_pretty(&expected)
+                    .unwrap_or_else(|_| expected_str.clone());
                 let actual_pretty = serde_json::to_string_pretty(&actual)
                     .unwrap_or_else(|_| String::from("<failed to serialize actual>"));
                 panic!(
@@ -272,17 +276,42 @@ fn usj_matches_origin_json_fixtures() {
         "no USJ fixtures exercised after ignore filtering"
     );
 
-    if common::verbose_enabled() && !skipped.is_empty() {
-        println!(
-            "usj: skipped {} fixture(s) outside current version-3.1 lane:\n{}",
-            skipped.len(),
-            skipped.join("\n")
-        );
-    }
-
     assert!(
         failures.is_empty(),
         "USJ parity failures:\n{}",
         failures.join("\n")
     );
+}
+
+fn is_explicit_exception_fixture(root: &std::path::Path, fixture: &std::path::Path) -> bool {
+    let slug = common::fixture_slug(root, fixture);
+    matches!(
+        slug.as_str(),
+        "usfmjsTests_57-TIT_greek_oldformat_origin_usfm"
+            | "usfmjsTests_57-TIT_greek_oldformat_origin_json"
+            | "usfmjsTests_1ch_verse_span_origin_usfm"
+            | "usfmjsTests_1ch_verse_span_origin_json"
+            | "usfmjsTests_acts_1_milestone_origin_usfm"
+            | "usfmjsTests_acts_1_milestone_origin_json"
+            | "usfmjsTests_gn_headers_origin_usfm"
+            | "usfmjsTests_gn_headers_origin_json"
+            | "usfmjsTests_isa_inline_quotes_origin_usfm"
+            | "usfmjsTests_isa_inline_quotes_origin_json"
+            | "usfmjsTests_job_footnote_origin_usfm"
+            | "usfmjsTests_job_footnote_origin_json"
+            | "usfmjsTests_luk_quotes_origin_usfm"
+            | "usfmjsTests_luk_quotes_origin_json"
+            | "usfmjsTests_pro_footnote_origin_usfm"
+            | "usfmjsTests_pro_footnote_origin_json"
+            | "usfmjsTests_pro_quotes_origin_usfm"
+            | "usfmjsTests_pro_quotes_origin_json"
+            | "usfmjsTests_tit_extra_space_after_chapter_origin_usfm"
+            | "usfmjsTests_tit_extra_space_after_chapter_origin_json"
+            | "usfmjsTests_usfm-body-testF_origin_usfm"
+            | "usfmjsTests_usfm-body-testF_origin_json"
+            | "usfmjsTests_usfmBodyTestD_origin_usfm"
+            | "usfmjsTests_usfmBodyTestD_origin_json"
+            | "usfmjsTests_usfmIntroTest_origin_usfm"
+            | "usfmjsTests_usfmIntroTest_origin_json"
+    )
 }

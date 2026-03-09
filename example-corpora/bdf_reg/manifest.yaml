@@ -1,0 +1,242 @@
+dublin_core:
+  conformsto: rc0.2
+  contributor:
+  - Biage
+  - Daniel Moses
+  - Jastumbo
+  - Liah Sananah
+  - Ma
+  - Pjenkins
+  - Pr Ray Sanana
+  - Ps. Sananah
+  - Ray Sanana
+  - Rita Nave
+  - Samuel David
+  creator: Bible translation community
+  description: An unrestricted literal Bible
+  format: text/usfm
+  identifier: reg
+  issued: '2026-02-16'
+  language:
+    direction: ltr
+    identifier: bdf
+    title: Biage
+  modified: '2026-02-16'
+  publisher: Wycliffe Associates
+  relation:
+  - bdf/reg
+  - bdf/ulb
+  rights: CC BY-SA 4.0
+  source:
+  - identifier: ulb
+    language: en
+    version: '9'
+  - identifier: ulb
+    language: en
+    version: 21-05
+  - identifier: ulb
+    language: bn
+    version: '1'
+  - identifier: udb
+    language: en
+    version: '9'
+  - identifier: ulb
+    language: en
+    version: '12'
+  subject: Bible
+  title: Bible
+  type: bundle
+  version: '9.1'
+checking:
+  checking_entity: []
+  checking_level: '1'
+projects:
+- title: Matiu
+  identifier: mat
+  sort: 40
+  path: ./41-MAT.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Maka
+  identifier: mrk
+  sort: 41
+  path: ./42-MRK.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Luk
+  identifier: luk
+  sort: 42
+  path: ./43-LUK.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Dioni
+  identifier: jhn
+  sort: 43
+  path: ./44-JHN.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Abositolo
+  identifier: act
+  sort: 44
+  path: ./45-ACT.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Lomeni
+  identifier: rom
+  sort: 45
+  path: ./46-ROM.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 1 Kolinito
+  identifier: 1co
+  sort: 46
+  path: ./47-1CO.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 2 Kolinito
+  identifier: 2co
+  sort: 47
+  path: ./48-2CO.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Galatia
+  identifier: gal
+  sort: 48
+  path: ./49-GAL.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Ibisienisi
+  identifier: eph
+  sort: 49
+  path: ./50-EPH.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Bilibienisi
+  identifier: php
+  sort: 50
+  path: ./51-PHP.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Kolosenisi
+  identifier: col
+  sort: 51
+  path: ./52-COL.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 1 Tesalonia
+  identifier: 1th
+  sort: 52
+  path: ./53-1TH.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 2 Tesolonia
+  identifier: 2th
+  sort: 53
+  path: ./54-2TH.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 1 Timoti
+  identifier: 1ti
+  sort: 54
+  path: ./55-1TI.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 2 Timoti
+  identifier: 2ti
+  sort: 55
+  path: ./56-2TI.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Taitasi
+  identifier: tit
+  sort: 56
+  path: ./57-TIT.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Bilimoni
+  identifier: phm
+  sort: 57
+  path: ./58-PHM.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Hibulu
+  identifier: heb
+  sort: 58
+  path: ./59-HEB.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Diemisi
+  identifier: jas
+  sort: 59
+  path: ./60-JAS.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 1 Bita
+  identifier: 1pe
+  sort: 60
+  path: ./61-1PE.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 2 Bita
+  identifier: 2pe
+  sort: 61
+  path: ./62-2PE.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 1 Dioni
+  identifier: 1jn
+  sort: 62
+  path: ./63-1JN.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 2 Dioni
+  identifier: 2jn
+  sort: 63
+  path: ./64-2JN.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: 3 Dioni
+  identifier: 3jn
+  sort: 64
+  path: ./65-3JN.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Diudi
+  identifier: jud
+  sort: 65
+  path: ./66-JUD.usfm
+  categories:
+  - bible-nt
+  versification: ufw
+- title: Abokalubo
+  identifier: rev
+  sort: 66
+  path: ./67-REV.usfm
+  categories:
+  - bible-nt
+  versification: ufw

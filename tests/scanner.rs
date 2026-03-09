@@ -3,7 +3,10 @@ mod common;
 use std::fs;
 use std::path::Path;
 
-use usfm3_v2::{RawTokenKind, lex};
+use usfm_onion::{
+    model::ScanTokenKind,
+    parse::{RecoveryCode, lex, parse, recoveries},
+};
 
 #[test]
 fn scanner_covers_and_reconstructs_all_origin_usfm_fixtures() {
@@ -53,7 +56,7 @@ fn scanner_covers_and_reconstructs_all_origin_usfm_fixtures() {
                 break;
             }
 
-            if token.kind == RawTokenKind::Text && token.text.is_empty() {
+            if token.kind == ScanTokenKind::Text && token.text.is_empty() {
                 failures.push(format!("{slug}: token {index} is empty text"));
                 break;
             }
@@ -81,5 +84,58 @@ fn scanner_covers_and_reconstructs_all_origin_usfm_fixtures() {
         failures.is_empty(),
         "scanner fixture failures:\n{}",
         failures.join("\n")
+    );
+}
+
+#[test]
+fn glossary_newline_patterns_tokenize_as_newline_tokens() {
+    let crlf = lex("\r\n");
+    assert_eq!(crlf.tokens.len(), 1);
+    assert_eq!(crlf.tokens[0].kind, ScanTokenKind::Newline);
+
+    let cr = lex("\r");
+    assert_eq!(cr.tokens.len(), 1);
+    assert_eq!(cr.tokens[0].kind, ScanTokenKind::Newline);
+
+    let lf = lex("\n");
+    assert_eq!(lf.tokens.len(), 1);
+    assert_eq!(lf.tokens[0].kind, ScanTokenKind::Newline);
+}
+
+#[test]
+fn glossary_text_and_optbreak_boundaries_are_stable() {
+    let result = lex("alpha/beta//gamma");
+    assert_eq!(result.tokens.len(), 3);
+    assert_eq!(result.tokens[0].kind, ScanTokenKind::Text);
+    assert_eq!(result.tokens[0].text, "alpha/beta");
+    assert_eq!(result.tokens[1].kind, ScanTokenKind::OptBreak);
+    assert_eq!(result.tokens[1].text, "//");
+    assert_eq!(result.tokens[2].kind, ScanTokenKind::Text);
+    assert_eq!(result.tokens[2].text, "gamma");
+}
+
+#[test]
+fn glossary_text_escapes_do_not_start_attributes_or_markers() {
+    let result = lex("a\\|b \\/ c \\~ d \\\\ e");
+    assert_eq!(result.tokens.len(), 1);
+    assert_eq!(result.tokens[0].kind, ScanTokenKind::Text);
+    assert_eq!(result.tokens[0].text, "a\\|b \\/ c \\~ d \\\\ e");
+}
+
+#[test]
+fn invalid_lexical_sequences_report_stable_recovery_codes() {
+    let handle = parse("\\id GEN\n\\c 1\n\\p\n\\v 1 text \\qt-s |sid=\"GEN 1:1\" next\n\\em*");
+    let codes = recoveries(&handle)
+        .iter()
+        .map(|recovery| &recovery.code)
+        .collect::<Vec<_>>();
+
+    assert!(
+        codes.contains(&&RecoveryCode::MissingMilestoneSelfClose),
+        "expected MissingMilestoneSelfClose recovery code"
+    );
+    assert!(
+        codes.contains(&&RecoveryCode::StrayCloseMarker),
+        "expected StrayCloseMarker recovery code"
     );
 }

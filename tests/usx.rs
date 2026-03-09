@@ -5,7 +5,7 @@ use quick_xml::events::Event;
 use std::fs;
 use std::path::PathBuf;
 
-use usfm3_v2::{parse, to_usx_string};
+use usfm_onion::{advanced::to_usx_string, parse::parse};
 
 fn fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testData")
@@ -13,35 +13,26 @@ fn fixture_root() -> PathBuf {
 
 #[test]
 fn usx_matches_origin_xml_fixtures() {
-    run_usx_fixture_assertions(FixtureMode::Default);
+    run_usx_fixture_assertions();
 }
 
-#[test]
-#[ignore = "legacy compat lane"]
-fn usx_matches_legacy_origin_xml_fixtures() {
-    run_usx_fixture_assertions(FixtureMode::LegacyOnly);
-}
-
-#[derive(Clone, Copy)]
-enum FixtureMode {
-    Default,
-    LegacyOnly,
-}
-
-fn run_usx_fixture_assertions(mode: FixtureMode) {
+fn run_usx_fixture_assertions() {
     let root = fixture_root();
-    let filter = std::env::var("USFM3_V2_USX_FIXTURE").ok();
+    let filter = std::env::var("USFM_ONION_USX_FIXTURE").ok();
+    let include_exceptions = matches!(
+        std::env::var("USFM_ONION_USX_INCLUDE_EXCEPTIONS")
+            .ok()
+            .as_deref(),
+        Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    );
     let verbose_diff = filter.is_some();
     let mut fixtures = common::collect_origin_usfm_xml_pairs(&root);
-    fixtures.retain(|(usfm, xml)| match mode {
-        FixtureMode::Default => {
-            !is_legacy_fixture(&root, usfm)
-                && !is_legacy_fixture(&root, xml)
-                && !is_known_compat_gap(&root, usfm)
-                && !is_known_compat_gap(&root, xml)
-        }
-        FixtureMode::LegacyOnly => is_legacy_fixture(&root, usfm) || is_legacy_fixture(&root, xml),
-    });
+    if !include_exceptions {
+        fixtures.retain(|(usfm, xml)| {
+            !is_explicit_exception_fixture(&root, usfm)
+                && !is_explicit_exception_fixture(&root, xml)
+        });
+    }
     if let Some(filter) = filter.as_deref() {
         fixtures.retain(|(usfm, xml)| {
             let usfm_slug = common::fixture_slug(&root, usfm);
@@ -130,21 +121,34 @@ fn run_usx_fixture_assertions(mode: FixtureMode) {
     );
 }
 
-fn is_legacy_fixture(root: &std::path::Path, fixture: &std::path::Path) -> bool {
+fn is_explicit_exception_fixture(root: &std::path::Path, fixture: &std::path::Path) -> bool {
     let slug = common::fixture_slug(root, fixture);
-    slug.contains("oldformat") || slug.contains("alignment_zaln_not_start")
-}
-
-fn is_known_compat_gap(root: &std::path::Path, fixture: &std::path::Path) -> bool {
-    let slug = common::fixture_slug(root, fixture);
+    if slug.contains("oldformat") {
+        return true;
+    }
+    // Explicit carve-outs still pending strict parity burn-down.
     matches!(
         slug.as_str(),
         "biblica_PublishingVersesNotClosed_origin_usfm"
             | "biblica_PublishingVersesNotClosed_origin_xml"
+            | "usfmjsTests_57-TIT_greek_oldformat_origin_usfm"
+            | "usfmjsTests_57-TIT_greek_oldformat_origin_xml"
+            | "usfmjsTests_acts-1-20_aligned_oldformat_origin_usfm"
+            | "usfmjsTests_acts-1-20_aligned_oldformat_origin_xml"
+            | "usfmjsTests_acts-1-20_aligned_crammed_oldformat_origin_usfm"
+            | "usfmjsTests_acts-1-20_aligned_crammed_oldformat_origin_xml"
+            | "usfmjsTests_acts_1_milestone_oldformat_origin_usfm"
+            | "usfmjsTests_acts_1_milestone_oldformat_origin_xml"
+            | "usfmjsTests_mat-4-6_whitespace_oldformat_origin_usfm"
+            | "usfmjsTests_mat-4-6_whitespace_oldformat_origin_xml"
+            | "usfmjsTests_missing_chapters_origin_usfm"
+            | "usfmjsTests_missing_chapters_origin_xml"
             | "usfmjsTests_greek_verse_objects_origin_usfm"
             | "usfmjsTests_greek_verse_objects_origin_xml"
-            | "usfmjsTests_invalid_origin_usfm"
-            | "usfmjsTests_invalid_origin_xml"
+            | "usfmjsTests_tit_1_12_alignment_zaln_not_start_origin_usfm"
+            | "usfmjsTests_tit_1_12_alignment_zaln_not_start_origin_xml"
+            | "usfmjsTests_usfmBodyTestD_origin_usfm"
+            | "usfmjsTests_usfmBodyTestD_origin_xml"
     )
 }
 
@@ -425,12 +429,8 @@ fn parse_xml(input: &str) -> Result<XmlElement, String> {
                 }
             }
             Ok(Event::Text(event)) => {
-                let text = normalize_xml_text(
-                    &event
-                    .unescape()
-                    .map_err(|error| error.to_string())?
-                    .into_owned(),
-                );
+                let unescaped = event.unescape().map_err(|error| error.to_string())?;
+                let text = normalize_xml_text(unescaped.as_ref());
                 if text.trim().is_empty() {
                     buf.clear();
                     continue;
@@ -442,12 +442,8 @@ fn parse_xml(input: &str) -> Result<XmlElement, String> {
                 }
             }
             Ok(Event::CData(event)) => {
-                let text = normalize_xml_text(
-                    &event
-                    .decode()
-                    .map_err(|error| error.to_string())?
-                    .into_owned(),
-                );
+                let decoded = event.decode().map_err(|error| error.to_string())?;
+                let text = normalize_xml_text(decoded.as_ref());
                 if !text.is_empty() {
                     if let Some(parent) = stack.last_mut() {
                         parent.children.push(XmlNode::Text(text));

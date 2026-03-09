@@ -1,0 +1,28 @@
+{
+  "name": "usfm-onion-web",
+  "version": "0.1.0",
+  "description": "WebAssembly bindings for usfm_onion",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "pkg-web",
+    "README.md",
+    "LICENSE*"
+  ],
+  "exports": {
+    ".": {
+      "types": "./pkg-web/usfm_onion_web.d.ts",
+      "default": "./pkg-web/usfm_onion_web.js"
+    }
+  },
+  "types": "./pkg-web/usfm_onion_web.d.ts",
+  "scripts": {
+    "build": "npm run build:wasm:web",
+    "build:wasm": "npm run build:wasm:web",
+    "build:wasm:web": "wasm-pack build --target web --release --out-dir pkg-web --out-name usfm_onion_web",
+    "build:wasm:web:dev": "wasm-pack build --target web --dev --out-dir pkg-web --out-name usfm_onion_web",
+    "check:wasm:web": "cargo check --target wasm32-unknown-unknown",
+    "test:wasm:web": "npm run build:wasm:web:dev && node scripts/test-web-package.mjs"
+  }
+}
