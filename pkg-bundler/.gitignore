@@ -4,5 +4,6 @@
 !package.json
 !usfm_onion_web.d.ts
 !usfm_onion_web.js
+!usfm_onion_web_bg.js
 !usfm_onion_web_bg.wasm
 !usfm_onion_web_bg.wasm.d.ts

@@ -1,3 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
+mod native {
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use std::io::{self, Read};
@@ -215,7 +217,7 @@ struct FormatResultSummary {
     output: Option<String>,
 }
 
-fn main() -> ExitCode {
+pub(super) fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(error) => {
@@ -667,3 +669,12 @@ fn format_diff_status(status: DiffStatus) -> &'static str {
         DiffStatus::Unchanged => "unchanged",
     }
 }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn main() -> std::process::ExitCode {
+    native::main()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}

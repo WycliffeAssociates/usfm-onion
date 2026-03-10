@@ -4,17 +4,16 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const packageUrl = pathToFileURL(
-  path.join(rootDir, "pkg-web", "usfm_onion_web.js"),
-).href;
-const wasmPath = path.join(
-  path.join(rootDir, "pkg-web", "usfm_onion_web_bg.wasm"),
-);
+const target = process.argv[2] ?? "web";
+const pkgDir = path.join(rootDir, target === "bundler" ? "pkg-bundler" : "pkg-web");
+const packageUrl = pathToFileURL(path.join(pkgDir, "usfm_onion_web.js")).href;
+const wasmPath = path.join(pkgDir, "usfm_onion_web_bg.wasm");
 
 const pkg = await import(packageUrl);
-const wasmBytes = await readFile(wasmPath);
-
-await pkg.default({ module_or_path: wasmBytes });
+if (target === "web") {
+  const wasmBytes = await readFile(wasmPath);
+  await pkg.default({ module_or_path: wasmBytes });
+}
 
 const source = "\\\\id GEN\\n\\\\c 1\\n\\\\p\\n\\\\v 1 In the beginning\\n";
 const parsed = pkg.parseContent({
@@ -71,4 +70,4 @@ const reverted = pkg.revertDiffBlock({
 });
 assert.ok(Array.isArray(reverted));
 
-console.log("web package smoke test passed");
+console.log(`${target} package smoke test passed`);
