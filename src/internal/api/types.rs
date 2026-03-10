@@ -2,8 +2,8 @@ use crate::internal::usj_to_usfm::UsjToUsfmError;
 use crate::internal::usx::UsxError;
 use crate::internal::usx_to_usfm::UsxToUsfmError;
 use crate::lint::{LintIssue, LintOptions};
-use crate::model::editor_tree::EditorTreeDocument;
-use crate::model::token::FlatToken;
+use crate::model::document_tree::DocumentTreeDocument;
+use crate::model::token::Token;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::str::FromStr;
@@ -190,7 +190,7 @@ impl ProjectUsfmOptions {
 
 #[derive(Debug, Clone)]
 pub struct ProjectedUsfmDocument {
-    pub tokens: Vec<FlatToken>,
-    pub editor_tree: EditorTreeDocument,
+    pub tokens: Vec<Token>,
+    pub document_tree: DocumentTreeDocument,
     pub lint_issues: Option<Vec<LintIssue>>,
 }

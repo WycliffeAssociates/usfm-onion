@@ -1,7 +1,7 @@
 use crate::internal::syntax::Document;
 use crate::model::token::{
-    FlatToken, ScanToken, ScanTokenKind, Span, TokenKind, TokenViewOptions, WhitespacePolicy,
-    normalized_marker_name, number_prefix_len, strip_closing_star, strip_marker_backslash,
+    ScanToken, ScanTokenKind, Span, Token, TokenKind, TokenViewOptions, normalized_marker_name,
+    number_prefix_len, strip_closing_star, strip_marker_backslash,
 };
 use crate::parse::ParseRecovery;
 
@@ -57,11 +57,9 @@ pub fn recoveries(handle: &ParseHandle) -> &[ParseRecovery] {
     &handle.analysis.recoveries
 }
 
-pub fn tokens(handle: &ParseHandle, options: TokenViewOptions) -> Vec<FlatToken> {
+pub fn tokens(handle: &ParseHandle, _options: TokenViewOptions) -> Vec<Token> {
     let mut projected = project_raw_tokens(handle.raw_tokens(), handle.analysis());
-    if options.whitespace_policy == WhitespacePolicy::MergeToVisible {
-        merge_horizontal_whitespace(&mut projected);
-    }
+    merge_horizontal_whitespace(&mut projected);
 
     let book_code = handle.analysis.book_code.as_deref().unwrap_or("unknown");
     assign_ids(&mut projected, book_code);
@@ -69,17 +67,19 @@ pub fn tokens(handle: &ParseHandle, options: TokenViewOptions) -> Vec<FlatToken>
     projected
 }
 
-fn project_raw_tokens(raw_tokens: &[ScanToken], analysis: &ParseAnalysis) -> Vec<FlatToken> {
-    let mut projected = Vec::new();
+fn project_raw_tokens(raw_tokens: &[ScanToken], analysis: &ParseAnalysis) -> Vec<Token> {
+    let mut projected =
+        Vec::with_capacity(raw_tokens.len() + analysis.number_token_indexes.len() + 1);
+    let mut number_token_indexes = analysis.number_token_indexes.iter().copied().peekable();
 
     for (index, token) in raw_tokens.iter().enumerate() {
+        let is_number_token = matches!(number_token_indexes.peek(), Some(next) if *next == index);
+        if is_number_token {
+            number_token_indexes.next();
+        }
+
         match token.kind {
-            ScanTokenKind::Whitespace => projected.push(flat_token(
-                TokenKind::Whitespace,
-                token.span.clone(),
-                None,
-                token.text.clone(),
-            )),
+            ScanTokenKind::Whitespace => append_horizontal_whitespace(&mut projected, token),
             ScanTokenKind::Newline => projected.push(flat_token(
                 TokenKind::Newline,
                 token.span.clone(),
@@ -145,9 +145,7 @@ fn project_raw_tokens(raw_tokens: &[ScanToken], analysis: &ParseAnalysis) -> Vec
                     continue;
                 }
 
-                if analysis.number_token_indexes.contains(&index)
-                    && let Some(prefix_len) = number_prefix_len(&token.text)
-                {
+                if is_number_token && let Some(prefix_len) = number_prefix_len(&token.text) {
                     projected.push(flat_token(
                         TokenKind::Number,
                         token.span.start..token.span.start + prefix_len,
@@ -178,8 +176,8 @@ fn project_raw_tokens(raw_tokens: &[ScanToken], analysis: &ParseAnalysis) -> Vec
     projected
 }
 
-fn flat_token(kind: TokenKind, span: Span, marker: Option<String>, text: String) -> FlatToken {
-    FlatToken {
+fn flat_token(kind: TokenKind, span: Span, marker: Option<String>, text: String) -> Token {
+    Token {
         id: String::new(),
         kind,
         span,
@@ -189,43 +187,59 @@ fn flat_token(kind: TokenKind, span: Span, marker: Option<String>, text: String)
     }
 }
 
-fn merge_horizontal_whitespace(tokens: &mut Vec<FlatToken>) {
-    let mut index = 0usize;
-    while index < tokens.len() {
-        if tokens[index].kind != TokenKind::Whitespace {
-            index += 1;
+fn append_horizontal_whitespace(projected: &mut Vec<Token>, token: &ScanToken) {
+    if let Some(last) = projected.last_mut()
+        && last.kind != TokenKind::Newline
+    {
+        last.text.push_str(&token.text);
+        last.span = last.span.start..token.span.end;
+        return;
+    }
+
+    projected.push(flat_token(
+        TokenKind::Text,
+        token.span.clone(),
+        None,
+        token.text.clone(),
+    ));
+}
+
+fn merge_horizontal_whitespace(tokens: &mut Vec<Token>) {
+    for index in 1..tokens.len() {
+        if tokens[index].kind == TokenKind::Newline {
             continue;
         }
 
-        let ws = tokens[index].clone();
-        if let Some(next) = tokens.get_mut(index + 1)
-            && next.kind != TokenKind::Newline
-        {
-            next.text = format!("{}{}", ws.text, next.text);
-            next.span = ws.span.start..next.span.end;
-            tokens.remove(index);
+        if tokens[index - 1].kind != TokenKind::Newline {
             continue;
         }
 
-        if index > 0 {
-            let prev = &mut tokens[index - 1];
-            prev.text.push_str(&ws.text);
-            prev.span = prev.span.start..ws.span.end;
-            tokens.remove(index);
+        let leading_ws_len = tokens[index]
+            .text
+            .chars()
+            .take_while(|ch| matches!(ch, ' ' | '\t'))
+            .map(char::len_utf8)
+            .sum::<usize>();
+
+        if leading_ws_len == 0 {
             continue;
         }
 
-        index += 1;
+        let ws = tokens[index].text[..leading_ws_len].to_string();
+        tokens[index].text = tokens[index].text[leading_ws_len..].to_string();
+        tokens[index].span = tokens[index].span.start + leading_ws_len..tokens[index].span.end;
+        tokens[index - 1].text.push_str(&ws);
+        tokens[index - 1].span = tokens[index - 1].span.start..tokens[index].span.start;
     }
 }
 
-fn assign_ids(tokens: &mut [FlatToken], book_code: &str) {
+fn assign_ids(tokens: &mut [Token], book_code: &str) {
     for (index, token) in tokens.iter_mut().enumerate() {
         token.id = format!("{book_code}-{index}");
     }
 }
 
-fn assign_sids(tokens: &mut [FlatToken], book_code: &str) {
+fn assign_sids(tokens: &mut [Token], book_code: &str) {
     let mut current_sid = format!("{book_code} 0:0");
     let mut current_chapter = 0u32;
     let mut verse_duplicate_counters = std::collections::BTreeMap::<String, usize>::new();
@@ -279,10 +293,10 @@ fn parse_primary_number(number: &str) -> Result<u32, std::num::ParseIntError> {
     primary.parse()
 }
 
-fn next_number_token(tokens: &[FlatToken], start: usize) -> Option<&FlatToken> {
+fn next_number_token(tokens: &[Token], start: usize) -> Option<&Token> {
     for token in tokens.iter().skip(start) {
         match token.kind {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             TokenKind::Number => return Some(token),
             _ => return None,
         }
@@ -310,20 +324,15 @@ mod tests {
     }
 
     #[test]
-    fn whitespace_projection_does_not_mutate_canonical_source() {
+    fn projection_merges_horizontal_whitespace_without_mutating_source() {
         let source = "\\id GEN\n\\c 1\n\\p  \n\\v 1 In the beginning\n";
         let handle = parse(source);
-        let merged = tokens(
-            &handle,
-            TokenViewOptions {
-                whitespace_policy: WhitespacePolicy::MergeToVisible,
-            },
-        );
+        let merged = tokens(&handle, TokenViewOptions::default());
 
         assert!(
             merged
                 .iter()
-                .all(|token| token.kind != TokenKind::Whitespace)
+                .all(|token| token.kind != TokenKind::Newline || token.text == "\n")
         );
         assert_eq!(write_exact(&handle), source);
     }

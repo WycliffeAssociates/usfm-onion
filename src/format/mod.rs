@@ -12,7 +12,7 @@ pub use crate::internal::api::{
     format_usx_content_with_passes, format_usx_path,
 };
 pub use crate::internal::format::{
-    BoxedTokenFormatPass, FormatOptions, FormatProfile, FormatRule, FormattableFlatToken,
+    BoxedTokenFormatPass, FormatOptions, FormatProfile, FormatRule, FormattableToken,
     TokenFormatPass, format, format_mut, format_mut_with_passes, format_tokens, format_with_passes,
     prettify_tokens,
 };

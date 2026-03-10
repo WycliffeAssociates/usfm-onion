@@ -1,7 +1,7 @@
 use super::*;
 use crate::lint::LintOptions;
-use crate::model::TokenKind;
 use crate::parse::parse;
+use crate::{document_tree, tokens};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,11 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn into_tokens_preserves_horizontal_whitespace() {
     let handle = parse("\\id GEN\n\\c 1\n\\p  \n\\v 1 In the beginning\n");
     let projected = into_tokens(&handle, IntoTokensOptions::default());
-    assert!(
-        projected
-            .iter()
-            .any(|token| token.kind == TokenKind::Whitespace)
-    );
+    assert!(projected.iter().any(|token| token.text.ends_with("  ")));
 }
 
 #[test]
@@ -25,11 +21,8 @@ fn into_tokens_can_merge_horizontal_whitespace() {
             merge_horizontal_whitespace: true,
         },
     );
-    assert!(
-        projected
-            .iter()
-            .all(|token| token.kind != TokenKind::Whitespace)
-    );
+    let canonical = into_tokens(&handle, IntoTokensOptions::default());
+    assert_eq!(projected, canonical);
 }
 
 #[test]
@@ -175,9 +168,6 @@ fn token_intake_outputs_are_available_via_usfm_bridge() {
     let usj = into_usj_from_tokens(scan.tokens.as_slice());
     let usx = into_usx_from_tokens(scan.tokens.as_slice()).expect("usx should serialize");
     let vref = into_vref_from_tokens(scan.tokens.as_slice());
-    let usj_lossless = into_usj_lossless_from_tokens(scan.tokens.as_slice());
-    let usx_lossless =
-        into_usx_lossless_from_tokens(scan.tokens.as_slice()).expect("usx should serialize");
 
     assert_eq!(usj.doc_type, "USJ");
     assert!(usx.contains("<usx"));
@@ -185,17 +175,6 @@ fn token_intake_outputs_are_available_via_usfm_bridge() {
         vref.get("GEN 1:1").map(String::as_str),
         Some("In the beginning")
     );
-    assert!(usj_lossless.roundtrip.is_some());
-    assert!(usx_lossless.contains("usfm_onion_lossless"));
-}
-
-#[test]
-fn into_usx_lossless_roundtrips_exact_source_on_import() {
-    let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\n";
-    let handle = parse(source);
-    let usx = into_usx_lossless(&handle).expect("usx should serialize");
-    let restored = from_usx(&usx).expect("usx should import");
-    assert_eq!(restored, source);
 }
 
 #[test]
@@ -212,9 +191,9 @@ fn into_usj_and_into_vref_are_composable() {
 }
 
 #[test]
-fn into_editor_tree_preserves_linebreak_nodes() {
+fn into_document_tree_preserves_linebreak_nodes() {
     let handle = parse("\\id GEN Genesis\n\\c 1\n\\p\n\\v 1 In the beginning\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let json = serde_json::to_string(&serialized).expect("editor tree json");
 
@@ -222,9 +201,9 @@ fn into_editor_tree_preserves_linebreak_nodes() {
 }
 
 #[test]
-fn into_editor_tree_preserves_linebreak_between_chapter_and_paragraph() {
+fn into_document_tree_preserves_linebreak_between_chapter_and_paragraph() {
     let handle = parse("\\s5\n\\c 1\n\\p\n\\v 1 In the beginning\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -244,9 +223,9 @@ fn into_editor_tree_preserves_linebreak_between_chapter_and_paragraph() {
 }
 
 #[test]
-fn into_editor_tree_preserves_space_after_verse_number() {
+fn into_document_tree_preserves_space_after_verse_number() {
     let handle = parse("\\c 1\n\\p\n\\v 1 In the beginning\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -267,16 +246,16 @@ fn into_editor_tree_preserves_space_after_verse_number() {
     let following_text = para_content
         .iter()
         .skip(verse_index + 1)
-        .find_map(serde_json::Value::as_str)
+        .find_map(text_node_value)
         .expect("text after verse");
 
     assert!(following_text.starts_with(' '));
 }
 
 #[test]
-fn into_editor_tree_preserves_double_spaces_in_text_nodes() {
+fn into_document_tree_preserves_double_spaces_in_text_nodes() {
     let handle = parse("\\c 1\n\\p\n\\v 1 I will give  the inhabitants.\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -297,7 +276,7 @@ fn into_editor_tree_preserves_double_spaces_in_text_nodes() {
     let following_text = para_content
         .iter()
         .skip(verse_index + 1)
-        .find_map(serde_json::Value::as_str)
+        .find_map(text_node_value)
         .expect("text after verse");
 
     assert!(
@@ -307,9 +286,9 @@ fn into_editor_tree_preserves_double_spaces_in_text_nodes() {
 }
 
 #[test]
-fn into_editor_tree_preserves_space_after_book_code() {
+fn into_document_tree_preserves_space_after_book_code() {
     let handle = parse("\\id GEN Unlocked Literal Bible\n\\c 1\n\\p\n\\v 1 In the beginning\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -325,16 +304,16 @@ fn into_editor_tree_preserves_space_after_book_code() {
         .expect("book content");
     let first_text = book_content
         .iter()
-        .find_map(serde_json::Value::as_str)
+        .find_map(text_node_value)
         .expect("first text child");
 
     assert!(first_text.starts_with(' '));
 }
 
 #[test]
-fn into_editor_tree_uses_zero_verse_sid_for_chapters() {
+fn into_document_tree_uses_zero_verse_sid_for_chapters() {
     let handle = parse("\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -351,10 +330,18 @@ fn into_editor_tree_uses_zero_verse_sid_for_chapters() {
     );
 }
 
+fn text_node_value(node: &serde_json::Value) -> Option<&str> {
+    node.get("type")
+        .and_then(serde_json::Value::as_str)
+        .filter(|node_type| *node_type == "text")
+        .and_then(|_| node.get("value"))
+        .and_then(serde_json::Value::as_str)
+}
+
 #[test]
-fn into_editor_tree_preserves_explicit_note_char_closures() {
+fn into_document_tree_preserves_explicit_note_char_closures() {
     let handle = parse("\\c 1\n\\p\n\\v 26 text\\f + \\ft intro \\fqa quote\\fqa* \\f*\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -390,9 +377,9 @@ fn into_editor_tree_preserves_explicit_note_char_closures() {
 }
 
 #[test]
-fn into_editor_tree_preserves_exact_paragraph_marker_text() {
+fn into_document_tree_preserves_exact_paragraph_marker_text() {
     let handle = parse("\\m(for fine linen is righteous)\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -410,9 +397,9 @@ fn into_editor_tree_preserves_exact_paragraph_marker_text() {
 }
 
 #[test]
-fn into_editor_tree_preserves_marker_text_for_book_chapter_and_verse() {
+fn into_document_tree_preserves_marker_text_for_book_chapter_and_verse() {
     let handle = parse("\\id GEN Genesis\n\\c 1\n\\p\n\\v 1 In the beginning.\n");
-    let tree = into_editor_tree(&handle);
+    let tree = into_document_tree(&handle);
     let serialized = serde_json::to_value(&tree).expect("editor tree should serialize");
     let content = serialized
         .get("content")
@@ -469,7 +456,7 @@ fn project_usfm_can_return_tokens_tree_and_lint_from_one_parse() {
         },
     );
 
-    assert_eq!(projection.editor_tree.doc_type, "USJ");
+    assert_eq!(projection.document_tree.doc_type, "USJ");
     assert!(!projection.tokens.is_empty());
     assert!(projection.lint_issues.is_some());
 }
@@ -564,4 +551,34 @@ fn push_whitespace_matches_flat_projection_policy() {
         .collect::<Vec<_>>();
 
     assert_eq!(merged_shape, flat_shape);
+}
+
+#[test]
+fn document_tree_roundtrips_cross_reference_spacing() {
+    let source = "\\id MAT\n\\c 1\n\\p\n\\v 1 the first verse\n\\v 2 the second verse\n\\v 3 \\x - \\xo 2.23: \\xt Mrk 1.24; Luk 2.39; Jhn 1.45.\\x*and made his home in a town named Nazareth.\n";
+    let tree = document_tree::usfm_to_document_tree(source);
+    let flattened =
+        document_tree::document_tree_to_tokens(&tree).expect("document tree should flatten");
+
+    assert_eq!(tokens::tokens_to_usfm(&flattened), source);
+}
+
+#[test]
+fn document_tree_roundtrips_note_caller_spacing() {
+    let source = "\\id GEN\n\\ib\n\\ip Hi mom.\n\\c 1\n\\p \\v 1 Hi \\nd Bob\\nd*.\n\\p And\\f +\\fr 1.1 \\ft stuff\\f*\n\\b\n";
+    let tree = document_tree::usfm_to_document_tree(source);
+    let flattened =
+        document_tree::document_tree_to_tokens(&tree).expect("document tree should flatten");
+
+    assert_eq!(tokens::tokens_to_usfm(&flattened), source);
+}
+
+#[test]
+fn document_tree_roundtrips_nested_plus_prefixed_note_chars() {
+    let source = "\\id GEN\r\n\\c 1\r\n\\p\\v 1 something \\f + \\fr 1.1 \\ft \\+em \\+pn name\\+pn* stuff \\+em*\\f*\r\n";
+    let tree = document_tree::usfm_to_document_tree(source);
+    let flattened =
+        document_tree::document_tree_to_tokens(&tree).expect("document tree should flatten");
+
+    assert_eq!(tokens::tokens_to_usfm(&flattened), source);
 }

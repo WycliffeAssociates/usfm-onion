@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::{from_value as from_js_value, to_value as to_js_value};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
-use crate::{
+use usfm_onion::{
     convert::{
         HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, convert_content, from_usj,
-        from_usx, into_editor_tree, into_html, into_usj, into_usj_from_tokens, into_usj_lossless,
-        into_usj_lossless_from_tokens, into_usx, into_usx_from_tokens, into_usx_lossless,
-        into_usx_lossless_from_tokens, into_vref, into_vref_from_tokens, usfm_content_to_html,
+        from_usx, into_document_tree, into_html, into_usj, into_usj_from_tokens, into_usx,
+        into_usx_from_tokens, into_vref, into_vref_from_tokens, usfm_content_to_html,
     },
     diff::{
         BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
@@ -30,7 +30,7 @@ use crate::{
         lint_flat_token_batches, lint_flat_tokens,
     },
     model::{
-        DocumentFormat, EditorTreeDocument, FlatToken, ScanResult, ScanToken, ScanTokenKind, Span,
+        DocumentFormat, DocumentTreeDocument, ScanResult, ScanToken, ScanTokenKind, Span, Token,
         TokenKind, TokenViewOptions, UsjDocument, VrefMap, WhitespacePolicy,
     },
     parse::{
@@ -99,8 +99,7 @@ pub struct WebTokenViewOptions {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebLintSuppression {
     pub code: String,
-    pub span_start: usize,
-    pub span_end: usize,
+    pub sid: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -234,7 +233,7 @@ pub struct WebSpan {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct WebFlatToken {
+pub struct WebToken {
     pub id: String,
     pub kind: String,
     pub span: WebSpan,
@@ -306,8 +305,8 @@ pub struct WebLintIssue {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebProjectedUsfmDocument {
-    pub tokens: Vec<WebFlatToken>,
-    pub editor_tree: EditorTreeDocument,
+    pub tokens: Vec<WebToken>,
+    pub document_tree: DocumentTreeDocument,
     pub lint_issues: Option<Vec<WebLintIssue>>,
 }
 
@@ -362,7 +361,7 @@ pub struct WebSkippedTokenTransform {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebTokenTransformResult {
-    pub tokens: Vec<WebFlatToken>,
+    pub tokens: Vec<WebToken>,
     pub applied_changes: Vec<WebTokenTransformChange>,
     pub skipped_changes: Vec<WebSkippedTokenTransform>,
 }
@@ -427,8 +426,8 @@ pub struct WebChapterTokenDiff {
     pub current_text_only: String,
     pub is_whitespace_change: bool,
     pub is_usfm_structure_change: bool,
-    pub original_tokens: Vec<WebFlatToken>,
-    pub current_tokens: Vec<WebFlatToken>,
+    pub original_tokens: Vec<WebToken>,
+    pub current_tokens: Vec<WebToken>,
     pub original_alignment: Vec<WebTokenAlignment>,
     pub current_alignment: Vec<WebTokenAlignment>,
     pub undo_side: String,
@@ -447,7 +446,7 @@ pub struct WebChapterDiffGroup {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebTokenBatch {
-    pub tokens: Vec<WebFlatToken>,
+    pub tokens: Vec<WebToken>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -618,8 +617,8 @@ pub struct WebLintDocumentBatchRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct WebLintFlatTokensRequest {
-    pub tokens: Vec<WebFlatToken>,
+pub struct WebLintTokensRequest {
+    pub tokens: Vec<WebToken>,
     #[serde(default)]
     pub options: Option<WebTokenLintOptions>,
 }
@@ -627,8 +626,8 @@ pub struct WebLintFlatTokensRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct WebLintFlatTokenBatchesRequest {
-    pub token_batches: Vec<Vec<WebFlatToken>>,
+pub struct WebLintTokenBatchesRequest {
+    pub token_batches: Vec<Vec<WebToken>>,
     #[serde(default)]
     pub options: Option<WebTokenLintOptions>,
     #[serde(default)]
@@ -664,8 +663,8 @@ pub struct WebFormatContentsRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct WebFormatFlatTokensRequest {
-    pub tokens: Vec<WebFlatToken>,
+pub struct WebFormatTokensRequest {
+    pub tokens: Vec<WebToken>,
     #[serde(default)]
     pub format_options: Option<WebFormatOptions>,
 }
@@ -673,8 +672,8 @@ pub struct WebFormatFlatTokensRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct WebFormatFlatTokenBatchesRequest {
-    pub token_batches: Vec<Vec<WebFlatToken>>,
+pub struct WebFormatTokenBatchesRequest {
+    pub token_batches: Vec<Vec<WebToken>>,
     #[serde(default)]
     pub format_options: Option<WebFormatOptions>,
     #[serde(default)]
@@ -685,7 +684,7 @@ pub struct WebFormatFlatTokenBatchesRequest {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebApplyTokenFixesRequest {
-    pub tokens: Vec<WebFlatToken>,
+    pub tokens: Vec<WebToken>,
     pub fixes: Vec<WebTokenFix>,
 }
 
@@ -719,8 +718,8 @@ pub struct WebDiffUsfmRequest {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebDiffTokensRequest {
-    pub baseline_tokens: Vec<WebFlatToken>,
-    pub current_tokens: Vec<WebFlatToken>,
+    pub baseline_tokens: Vec<WebToken>,
+    pub current_tokens: Vec<WebToken>,
     #[serde(default)]
     pub build_options: Option<WebBuildSidBlocksOptions>,
 }
@@ -729,7 +728,7 @@ pub struct WebDiffTokensRequest {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebBuildSidBlocksRequest {
-    pub tokens: Vec<WebFlatToken>,
+    pub tokens: Vec<WebToken>,
     #[serde(default)]
     pub build_options: Option<WebBuildSidBlocksOptions>,
 }
@@ -746,8 +745,8 @@ pub struct WebDiffSidBlocksRequest {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebDiffChapterTokenStreamsRequest {
-    pub baseline_tokens: Vec<WebFlatToken>,
-    pub current_tokens: Vec<WebFlatToken>,
+    pub baseline_tokens: Vec<WebToken>,
+    pub current_tokens: Vec<WebToken>,
     #[serde(default)]
     pub build_options: Option<WebBuildSidBlocksOptions>,
 }
@@ -757,8 +756,8 @@ pub struct WebDiffChapterTokenStreamsRequest {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebRevertDiffBlockRequest {
     pub block_id: String,
-    pub baseline_tokens: Vec<WebFlatToken>,
-    pub current_tokens: Vec<WebFlatToken>,
+    pub baseline_tokens: Vec<WebToken>,
+    pub current_tokens: Vec<WebToken>,
     #[serde(default)]
     pub build_options: Option<WebBuildSidBlocksOptions>,
 }
@@ -768,8 +767,8 @@ pub struct WebRevertDiffBlockRequest {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebApplyRevertsByBlockIdRequest {
     pub diff_block_ids: Vec<String>,
-    pub baseline_tokens: Vec<WebFlatToken>,
-    pub current_tokens: Vec<WebFlatToken>,
+    pub baseline_tokens: Vec<WebToken>,
+    pub current_tokens: Vec<WebToken>,
     #[serde(default)]
     pub build_options: Option<WebBuildSidBlocksOptions>,
 }
@@ -821,7 +820,7 @@ pub struct WebParsedOpResult {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebTokensOpResult {
-    pub value: Option<Vec<WebFlatToken>>,
+    pub value: Option<Vec<WebToken>>,
     pub error: Option<String>,
 }
 
@@ -855,6 +854,8 @@ pub fn package_version() -> String {
 }
 
 #[wasm_bindgen(js_name = parseContent)]
+/// Parse raw content once and keep the returned document if you plan to project
+/// multiple views from it.
 pub fn wasm_parse_content(request: WebParseContentRequest) -> Result<WebParsedDocument, JsError> {
     let handle =
         parse_content(&request.source, document_format(request.format)).map_err(js_error)?;
@@ -905,7 +906,8 @@ pub fn wasm_lex_sources(request: WebLexSourcesRequest) -> Vec<WebScanResult> {
 }
 
 #[wasm_bindgen(js_name = intoTokens)]
-pub fn wasm_into_tokens(request: WebIntoTokensRequest) -> Vec<WebFlatToken> {
+/// Project a previously parsed document into canonical flat tokens.
+pub fn wasm_into_tokens(request: WebIntoTokensRequest) -> Vec<WebToken> {
     let handle = rehydrate_parse_handle(&request.document);
     into_tokens(&handle, into_tokens_options(request.token_options))
         .into_iter()
@@ -914,9 +916,13 @@ pub fn wasm_into_tokens(request: WebIntoTokensRequest) -> Vec<WebFlatToken> {
 }
 
 #[wasm_bindgen(js_name = intoTokensFromContent)]
+/// Parse raw content and immediately project flat tokens.
+///
+/// Prefer `parseContent(...)` plus `intoTokens(...)` when you will also lint,
+/// format, diff, or project other views from the same source.
 pub fn wasm_into_tokens_from_content(
     request: WebIntoTokensFromContentRequest,
-) -> Result<Vec<WebFlatToken>, JsError> {
+) -> Result<Vec<WebToken>, JsError> {
     into_tokens_from_content(
         &request.source,
         document_format(request.format),
@@ -971,7 +977,7 @@ pub fn wasm_into_tokens_batch(request: WebIntoTokensBatchRequest) -> Vec<WebToke
 }
 
 #[wasm_bindgen(js_name = intoUsfmFromTokens)]
-pub fn wasm_into_usfm_from_tokens(tokens: Vec<WebFlatToken>) -> String {
+pub fn wasm_into_usfm_from_tokens(tokens: Vec<WebToken>) -> String {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
@@ -980,7 +986,7 @@ pub fn wasm_into_usfm_from_tokens(tokens: Vec<WebFlatToken>) -> String {
 }
 
 #[wasm_bindgen(js_name = pushWhitespace)]
-pub fn wasm_push_whitespace(tokens: Vec<WebFlatToken>) -> Vec<WebFlatToken> {
+pub fn wasm_push_whitespace(tokens: Vec<WebToken>) -> Vec<WebToken> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
@@ -1051,21 +1057,25 @@ pub fn wasm_project_usfm_batch(
 }
 
 #[wasm_bindgen(js_name = intoUsj)]
-pub fn wasm_into_usj(document: WebParsedDocument) -> UsjDocument {
+pub fn wasm_into_usj(document: WebParsedDocument) -> Result<JsValue, JsError> {
     let handle = rehydrate_parse_handle(&document);
-    into_usj(&handle)
-}
-
-#[wasm_bindgen(js_name = intoUsjLossless)]
-pub fn wasm_into_usj_lossless(document: WebParsedDocument) -> UsjDocument {
-    let handle = rehydrate_parse_handle(&document);
-    into_usj_lossless(&handle)
+    to_js_value(&into_usj(&handle)).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = intoEditorTree)]
-pub fn wasm_into_editor_tree(document: WebParsedDocument) -> EditorTreeDocument {
+/// Project a parsed document into the canonical document tree.
+///
+/// `intoDocumentTree` is the preferred name. `intoEditorTree` remains as a
+/// compatibility alias for older consumers.
+pub fn wasm_into_document_tree(document: WebParsedDocument) -> Result<JsValue, JsError> {
     let handle = rehydrate_parse_handle(&document);
-    into_editor_tree(&handle)
+    to_js_value(&into_document_tree(&handle)).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = intoDocumentTree)]
+/// Project a parsed document into the canonical document tree.
+pub fn wasm_into_document_tree_alias(document: WebParsedDocument) -> Result<JsValue, JsError> {
+    wasm_into_document_tree(document)
 }
 
 #[wasm_bindgen(js_name = intoHtml)]
@@ -1080,12 +1090,6 @@ pub fn wasm_into_usx(request: WebIntoUsxRequest) -> Result<String, JsError> {
     into_usx(&handle).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = intoUsxLossless)]
-pub fn wasm_into_usx_lossless(request: WebIntoUsxRequest) -> Result<String, JsError> {
-    let handle = rehydrate_parse_handle(&request.document);
-    into_usx_lossless(&handle).map_err(js_error)
-}
-
 #[wasm_bindgen(js_name = intoVref)]
 pub fn wasm_into_vref(document: WebParsedDocument) -> Vec<WebVrefEntry> {
     let handle = rehydrate_parse_handle(&document);
@@ -1093,25 +1097,16 @@ pub fn wasm_into_vref(document: WebParsedDocument) -> Vec<WebVrefEntry> {
 }
 
 #[wasm_bindgen(js_name = intoUsjFromTokens)]
-pub fn wasm_into_usj_from_tokens(tokens: Vec<WebFlatToken>) -> UsjDocument {
+pub fn wasm_into_usj_from_tokens(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
-    into_usj_from_tokens(native.as_slice())
-}
-
-#[wasm_bindgen(js_name = intoUsjLosslessFromTokens)]
-pub fn wasm_into_usj_lossless_from_tokens(tokens: Vec<WebFlatToken>) -> UsjDocument {
-    let native = tokens
-        .into_iter()
-        .map(from_web_flat_token)
-        .collect::<Vec<_>>();
-    into_usj_lossless_from_tokens(native.as_slice())
+    to_js_value(&into_usj_from_tokens(native.as_slice())).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = intoUsxFromTokens)]
-pub fn wasm_into_usx_from_tokens(tokens: Vec<WebFlatToken>) -> Result<String, JsError> {
+pub fn wasm_into_usx_from_tokens(tokens: Vec<WebToken>) -> Result<String, JsError> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
@@ -1119,17 +1114,8 @@ pub fn wasm_into_usx_from_tokens(tokens: Vec<WebFlatToken>) -> Result<String, Js
     into_usx_from_tokens(native.as_slice()).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = intoUsxLosslessFromTokens)]
-pub fn wasm_into_usx_lossless_from_tokens(tokens: Vec<WebFlatToken>) -> Result<String, JsError> {
-    let native = tokens
-        .into_iter()
-        .map(from_web_flat_token)
-        .collect::<Vec<_>>();
-    into_usx_lossless_from_tokens(native.as_slice()).map_err(js_error)
-}
-
 #[wasm_bindgen(js_name = intoVrefFromTokens)]
-pub fn wasm_into_vref_from_tokens(tokens: Vec<WebFlatToken>) -> Vec<WebVrefEntry> {
+pub fn wasm_into_vref_from_tokens(tokens: Vec<WebToken>) -> Vec<WebVrefEntry> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
@@ -1138,7 +1124,8 @@ pub fn wasm_into_vref_from_tokens(tokens: Vec<WebFlatToken>) -> Vec<WebVrefEntry
 }
 
 #[wasm_bindgen(js_name = fromUsj)]
-pub fn wasm_from_usj(document: UsjDocument) -> Result<String, JsError> {
+pub fn wasm_from_usj(document: JsValue) -> Result<String, JsError> {
+    let document: UsjDocument = from_js_value(document).map_err(js_error)?;
     from_usj(&document).map_err(js_error)
 }
 
@@ -1199,6 +1186,9 @@ pub fn wasm_usx_to_usfm(content: &str) -> Result<String, JsError> {
 }
 
 #[wasm_bindgen(js_name = lintContent)]
+/// Parse content, project tokens, then lint.
+///
+/// If you already have canonical flat tokens, prefer `lintFlatTokens(...)`.
 pub fn wasm_lint_content(request: WebLintContentRequest) -> Result<Vec<WebLintIssue>, JsError> {
     lint_content(
         &request.source,
@@ -1259,8 +1249,9 @@ pub fn wasm_lint_document_batch(request: WebLintDocumentBatchRequest) -> Vec<Web
     .collect()
 }
 
-#[wasm_bindgen(js_name = lintFlatTokens)]
-pub fn wasm_lint_flat_tokens(request: WebLintFlatTokensRequest) -> Vec<WebLintIssue> {
+#[wasm_bindgen(js_name = lintTokens)]
+/// Lint canonical flat tokens without reparsing source content.
+pub fn wasm_lint_flat_tokens(request: WebLintTokensRequest) -> Vec<WebLintIssue> {
     let tokens = request
         .tokens
         .into_iter()
@@ -1272,8 +1263,15 @@ pub fn wasm_lint_flat_tokens(request: WebLintFlatTokensRequest) -> Vec<WebLintIs
         .collect()
 }
 
-#[wasm_bindgen(js_name = lintFlatTokenBatches)]
-pub fn wasm_lint_flat_token_batches(request: WebLintFlatTokenBatchesRequest) -> Vec<WebLintBatch> {
+#[wasm_bindgen(js_name = lintFlatTokens)]
+/// Lint canonical flat tokens without reparsing source content.
+pub fn wasm_lint_flat_tokens_alias(request: WebLintTokensRequest) -> Vec<WebLintIssue> {
+    wasm_lint_flat_tokens(request)
+}
+
+#[wasm_bindgen(js_name = lintTokenBatches)]
+/// Lint batches of canonical flat token streams without reparsing source content.
+pub fn wasm_lint_flat_token_batches(request: WebLintTokenBatchesRequest) -> Vec<WebLintBatch> {
     let batches = request
         .token_batches
         .into_iter()
@@ -1297,6 +1295,9 @@ pub fn wasm_lint_flat_token_batches(request: WebLintFlatTokenBatchesRequest) -> 
 }
 
 #[wasm_bindgen(js_name = formatContent)]
+/// Parse content, project tokens, then run the formatter.
+///
+/// If you already have canonical flat tokens, prefer `formatFlatTokens(...)`.
 pub fn wasm_format_content(
     request: WebFormatContentRequest,
 ) -> Result<WebTokenTransformResult, JsError> {
@@ -1333,8 +1334,9 @@ pub fn wasm_format_contents(request: WebFormatContentsRequest) -> Vec<WebTransfo
     .collect()
 }
 
-#[wasm_bindgen(js_name = formatFlatTokens)]
-pub fn wasm_format_flat_tokens(request: WebFormatFlatTokensRequest) -> WebTokenTransformResult {
+#[wasm_bindgen(js_name = formatTokens)]
+/// Format canonical flat tokens without reparsing source content.
+pub fn wasm_format_flat_tokens(request: WebFormatTokensRequest) -> WebTokenTransformResult {
     let tokens = request
         .tokens
         .into_iter()
@@ -1349,9 +1351,16 @@ pub fn wasm_format_flat_tokens(request: WebFormatFlatTokensRequest) -> WebTokenT
     map_transform_result(result)
 }
 
-#[wasm_bindgen(js_name = formatFlatTokenBatches)]
+#[wasm_bindgen(js_name = formatFlatTokens)]
+/// Format canonical flat tokens without reparsing source content.
+pub fn wasm_format_flat_tokens_alias(request: WebFormatTokensRequest) -> WebTokenTransformResult {
+    wasm_format_flat_tokens(request)
+}
+
+#[wasm_bindgen(js_name = formatTokenBatches)]
+/// Format batches of canonical flat token streams without reparsing source content.
 pub fn wasm_format_flat_token_batches(
-    request: WebFormatFlatTokenBatchesRequest,
+    request: WebFormatTokenBatchesRequest,
 ) -> Vec<WebTokenTransformResult> {
     let batches = request
         .token_batches
@@ -1390,6 +1399,9 @@ pub fn wasm_apply_token_fixes(request: WebApplyTokenFixesRequest) -> WebTokenTra
 }
 
 #[wasm_bindgen(js_name = diffContent)]
+/// Parse both sources, project canonical flat tokens, then diff.
+///
+/// If you already have canonical flat tokens, prefer `diffFlatTokens(...)`.
 pub fn wasm_diff_content(
     request: WebDiffContentRequest,
 ) -> Result<Vec<WebChapterTokenDiff>, JsError> {
@@ -1406,6 +1418,7 @@ pub fn wasm_diff_content(
 }
 
 #[wasm_bindgen(js_name = diffTokens)]
+/// Diff canonical flat token streams without reparsing source content.
 pub fn wasm_diff_tokens(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDiff> {
     let baseline = request
         .baseline_tokens
@@ -1427,6 +1440,12 @@ pub fn wasm_diff_tokens(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDif
     .collect()
 }
 
+#[wasm_bindgen(js_name = diffFlatTokens)]
+/// Diff canonical flat token streams without reparsing source content.
+pub fn wasm_diff_flat_tokens_alias(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDiff> {
+    wasm_diff_tokens(request)
+}
+
 #[wasm_bindgen(js_name = buildSidBlocks)]
 pub fn wasm_build_sid_blocks(request: WebBuildSidBlocksRequest) -> Vec<WebSidBlock> {
     let tokens = request
@@ -1434,10 +1453,13 @@ pub fn wasm_build_sid_blocks(request: WebBuildSidBlocksRequest) -> Vec<WebSidBlo
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
-    build_sid_blocks(tokens.as_slice(), &build_sid_blocks_options(request.build_options))
-        .into_iter()
-        .map(map_sid_block)
-        .collect()
+    build_sid_blocks(
+        tokens.as_slice(),
+        &build_sid_blocks_options(request.build_options),
+    )
+    .into_iter()
+    .map(map_sid_block)
+    .collect()
 }
 
 #[wasm_bindgen(js_name = diffSidBlocks)]
@@ -1530,7 +1552,7 @@ pub fn wasm_diff_usfm_sources_by_chapter(request: WebDiffUsfmRequest) -> Vec<Web
 }
 
 #[wasm_bindgen(js_name = applyRevertByBlockId)]
-pub fn wasm_apply_revert_by_block_id(request: WebRevertDiffBlockRequest) -> Vec<WebFlatToken> {
+pub fn wasm_apply_revert_by_block_id(request: WebRevertDiffBlockRequest) -> Vec<WebToken> {
     let baseline = request
         .baseline_tokens
         .into_iter()
@@ -1553,14 +1575,12 @@ pub fn wasm_apply_revert_by_block_id(request: WebRevertDiffBlockRequest) -> Vec<
 }
 
 #[wasm_bindgen(js_name = revertDiffBlock)]
-pub fn wasm_revert_diff_block(request: WebRevertDiffBlockRequest) -> Vec<WebFlatToken> {
+pub fn wasm_revert_diff_block(request: WebRevertDiffBlockRequest) -> Vec<WebToken> {
     wasm_apply_revert_by_block_id(request)
 }
 
 #[wasm_bindgen(js_name = applyRevertsByBlockId)]
-pub fn wasm_apply_reverts_by_block_id(
-    request: WebApplyRevertsByBlockIdRequest,
-) -> Vec<WebFlatToken> {
+pub fn wasm_apply_reverts_by_block_id(request: WebApplyRevertsByBlockIdRequest) -> Vec<WebToken> {
     let baseline = request
         .baseline_tokens
         .into_iter()
@@ -1583,7 +1603,7 @@ pub fn wasm_apply_reverts_by_block_id(
 }
 
 #[wasm_bindgen(js_name = revertDiffBlocks)]
-pub fn wasm_revert_diff_blocks(request: WebApplyRevertsByBlockIdRequest) -> Vec<WebFlatToken> {
+pub fn wasm_revert_diff_blocks(request: WebApplyRevertsByBlockIdRequest) -> Vec<WebToken> {
     wasm_apply_reverts_by_block_id(request)
 }
 
@@ -1596,7 +1616,11 @@ pub fn wasm_replace_chapter_diffs_in_map(
         &map,
         &request.book,
         request.chapter,
-        request.diffs.into_iter().map(from_web_chapter_token_diff).collect(),
+        request
+            .diffs
+            .into_iter()
+            .map(from_web_chapter_token_diff)
+            .collect(),
     ))
 }
 
@@ -1612,14 +1636,18 @@ pub fn wasm_replace_many_chapter_diffs_in_map(
             (
                 entry.book,
                 entry.chapter,
-                entry.diffs
+                entry
+                    .diffs
                     .into_iter()
                     .map(from_web_chapter_token_diff)
                     .collect::<Vec<_>>(),
             )
         })
         .collect::<Vec<_>>();
-    map_diff_groups(replace_many_chapter_diffs_in_map(&map, replacements.as_slice()))
+    map_diff_groups(replace_many_chapter_diffs_in_map(
+        &map,
+        replacements.as_slice(),
+    ))
 }
 
 #[wasm_bindgen(js_name = flattenDiffMap)]
@@ -1677,8 +1705,8 @@ fn map_recovery_payload(payload: RecoveryPayload) -> WebRecoveryPayload {
     }
 }
 
-fn map_flat_token(token: FlatToken) -> WebFlatToken {
-    WebFlatToken {
+fn map_flat_token(token: Token) -> WebToken {
+    WebToken {
         id: token.id,
         kind: token_kind_name(&token.kind).to_string(),
         span: map_span(token.span),
@@ -1688,8 +1716,8 @@ fn map_flat_token(token: FlatToken) -> WebFlatToken {
     }
 }
 
-fn from_web_flat_token(token: WebFlatToken) -> FlatToken {
-    FlatToken {
+fn from_web_flat_token(token: WebToken) -> Token {
+    Token {
         id: token.id,
         kind: parse_token_kind(&token.kind),
         span: token.span.start..token.span.end,
@@ -1723,10 +1751,7 @@ fn map_token_fix(fix: TokenFix) -> WebTokenFix {
         } => WebTokenFix::ReplaceToken {
             label,
             target_token_id,
-            replacements: replacements
-                .into_iter()
-                .map(map_token_template)
-                .collect(),
+            replacements: replacements.into_iter().map(map_token_template).collect(),
         },
         TokenFix::InsertAfter {
             label,
@@ -1752,14 +1777,14 @@ fn map_token_template(template: TokenTemplate) -> WebTokenTemplate {
 fn map_projected_document(document: ProjectedUsfmDocument) -> WebProjectedUsfmDocument {
     WebProjectedUsfmDocument {
         tokens: document.tokens.into_iter().map(map_flat_token).collect(),
-        editor_tree: document.editor_tree,
+        document_tree: document.document_tree,
         lint_issues: document
             .lint_issues
             .map(|issues| issues.into_iter().map(map_lint_issue).collect()),
     }
 }
 
-fn map_transform_result(result: TokenTransformResult<FlatToken>) -> WebTokenTransformResult {
+fn map_transform_result(result: TokenTransformResult<Token>) -> WebTokenTransformResult {
     WebTokenTransformResult {
         tokens: result.tokens.into_iter().map(map_flat_token).collect(),
         applied_changes: result
@@ -1798,7 +1823,7 @@ fn map_vref_map(map: VrefMap) -> Vec<WebVrefEntry> {
         .collect()
 }
 
-fn map_chapter_token_diff(diff: ChapterTokenDiff<FlatToken>) -> WebChapterTokenDiff {
+fn map_chapter_token_diff(diff: ChapterTokenDiff<Token>) -> WebChapterTokenDiff {
     WebChapterTokenDiff {
         block_id: diff.block_id,
         semantic_sid: diff.semantic_sid,
@@ -1880,9 +1905,7 @@ fn map_token_alignment(alignment: TokenAlignment) -> WebTokenAlignment {
     }
 }
 
-fn map_diff_groups(
-    groups: DiffsByChapterMap<ChapterTokenDiff<FlatToken>>,
-) -> Vec<WebChapterDiffGroup> {
+fn map_diff_groups(groups: DiffsByChapterMap<ChapterTokenDiff<Token>>) -> Vec<WebChapterDiffGroup> {
     let mut out = Vec::new();
     for (book, chapters) in groups {
         for (chapter, diffs) in chapters {
@@ -1898,24 +1921,22 @@ fn map_diff_groups(
 
 fn from_web_diff_groups(
     groups: Vec<WebChapterDiffGroup>,
-) -> DiffsByChapterMap<ChapterTokenDiff<FlatToken>> {
+) -> DiffsByChapterMap<ChapterTokenDiff<Token>> {
     let mut out = DiffsByChapterMap::new();
     for group in groups {
-        out.entry(group.book)
-            .or_default()
-            .insert(
-                group.chapter,
-                group
-                    .diffs
-                    .into_iter()
-                    .map(from_web_chapter_token_diff)
-                    .collect(),
-            );
+        out.entry(group.book).or_default().insert(
+            group.chapter,
+            group
+                .diffs
+                .into_iter()
+                .map(from_web_chapter_token_diff)
+                .collect(),
+        );
     }
     out
 }
 
-fn from_web_chapter_token_diff(diff: WebChapterTokenDiff) -> ChapterTokenDiff<FlatToken> {
+fn from_web_chapter_token_diff(diff: WebChapterTokenDiff) -> ChapterTokenDiff<Token> {
     ChapterTokenDiff {
         block_id: diff.block_id,
         semantic_sid: diff.semantic_sid,
@@ -1928,8 +1949,16 @@ fn from_web_chapter_token_diff(diff: WebChapterTokenDiff) -> ChapterTokenDiff<Fl
         current_text_only: diff.current_text_only,
         is_whitespace_change: diff.is_whitespace_change,
         is_usfm_structure_change: diff.is_usfm_structure_change,
-        original_tokens: diff.original_tokens.into_iter().map(from_web_flat_token).collect(),
-        current_tokens: diff.current_tokens.into_iter().map(from_web_flat_token).collect(),
+        original_tokens: diff
+            .original_tokens
+            .into_iter()
+            .map(from_web_flat_token)
+            .collect(),
+        current_tokens: diff
+            .current_tokens
+            .into_iter()
+            .map(from_web_flat_token)
+            .collect(),
         original_alignment: diff
             .original_alignment
             .into_iter()
@@ -2023,7 +2052,7 @@ fn token_view_options(options: Option<WebTokenViewOptions>) -> TokenViewOptions 
         .unwrap_or(WebWhitespacePolicy::Preserve);
     TokenViewOptions {
         whitespace_policy: match policy {
-            WebWhitespacePolicy::Preserve => WhitespacePolicy::Preserve,
+            WebWhitespacePolicy::Preserve => WhitespacePolicy::MergeToVisible,
             WebWhitespacePolicy::MergeToVisible => WhitespacePolicy::MergeToVisible,
         },
     }
@@ -2074,7 +2103,7 @@ fn token_lint_options(options: Option<WebTokenLintOptions>) -> TokenLintOptions 
             .filter_map(|suppression| {
                 parse_lint_code(&suppression.code).map(|code| LintSuppression {
                     code,
-                    span: suppression.span_start..suppression.span_end,
+                    sid: suppression.sid,
                 })
             })
             .collect(),
@@ -2147,7 +2176,6 @@ fn build_sid_blocks_options(options: Option<WebBuildSidBlocksOptions>) -> BuildS
 
 fn token_kind_name(kind: &TokenKind) -> &'static str {
     match kind {
-        TokenKind::Whitespace => "whitespace",
         TokenKind::Newline => "newline",
         TokenKind::OptBreak => "optbreak",
         TokenKind::Marker => "marker",
@@ -2163,7 +2191,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
 
 fn parse_token_kind(kind: &str) -> TokenKind {
     match kind {
-        "whitespace" => TokenKind::Whitespace,
+        "whitespace" => TokenKind::Text,
         "newline" => TokenKind::Newline,
         "optbreak" => TokenKind::OptBreak,
         "marker" => TokenKind::Marker,

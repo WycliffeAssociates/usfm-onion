@@ -57,7 +57,6 @@ impl SourceTokenText for ScanToken {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenKind {
-    Whitespace,
     Newline,
     OptBreak,
     Marker,
@@ -71,7 +70,7 @@ pub enum TokenKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FlatToken {
+pub struct Token {
     pub id: String,
     pub kind: TokenKind,
     pub span: Span,
@@ -80,7 +79,7 @@ pub struct FlatToken {
     pub text: String,
 }
 
-impl SourceTokenText for FlatToken {
+impl SourceTokenText for Token {
     fn source_text(&self) -> &str {
         self.text.as_str()
     }
@@ -89,7 +88,6 @@ impl SourceTokenText for FlatToken {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum WhitespacePolicy {
     #[default]
-    Preserve,
     MergeToVisible,
 }
 

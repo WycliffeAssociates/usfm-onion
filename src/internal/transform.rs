@@ -1,5 +1,5 @@
 use crate::internal::format::{
-    BoxedTokenFormatPass, FormatOptions, FormattableFlatToken, format_tokens,
+    BoxedTokenFormatPass, FormatOptions, FormattableToken, format_tokens,
 };
 use crate::model::token::TokenKind;
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,7 @@ pub struct TokenTransformResult<T> {
     pub skipped_changes: Vec<SkippedTokenTransform>,
 }
 
-pub fn apply_fixes<T: FormattableFlatToken>(
+pub fn apply_fixes<T: FormattableToken>(
     tokens: &[T],
     fixes: &[TokenFix],
 ) -> TokenTransformResult<T> {
@@ -162,7 +162,7 @@ pub fn apply_fixes<T: FormattableFlatToken>(
     }
 }
 
-pub fn format_tokens_result<T: FormattableFlatToken>(
+pub fn format_tokens_result<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
 ) -> TokenTransformResult<T> {
@@ -184,7 +184,7 @@ pub fn format_tokens_result<T: FormattableFlatToken>(
     }
 }
 
-pub fn format_tokens_result_with_passes<T: FormattableFlatToken>(
+pub fn format_tokens_result_with_passes<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
     passes: &[BoxedTokenFormatPass<T>],
@@ -226,7 +226,7 @@ enum ReplacementMode {
     InsertAfter,
 }
 
-fn build_replacement_tokens<T: FormattableFlatToken>(
+fn build_replacement_tokens<T: FormattableToken>(
     anchor: &T,
     templates: &[TokenTemplate],
     mode: ReplacementMode,
@@ -272,7 +272,7 @@ fn build_replacement_tokens<T: FormattableFlatToken>(
         .collect()
 }
 
-fn tokens_equivalent<T: FormattableFlatToken>(left: &[T], right: &[T]) -> bool {
+fn tokens_equivalent<T: FormattableToken>(left: &[T], right: &[T]) -> bool {
     if left.len() != right.len() {
         return false;
     }
@@ -289,7 +289,7 @@ fn tokens_equivalent<T: FormattableFlatToken>(left: &[T], right: &[T]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::format::FormattableFlatToken;
+    use crate::format::FormattableToken;
     use crate::format::{FormatOptions, TokenFormatPass};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -302,7 +302,7 @@ mod tests {
         lane: u8,
     }
 
-    impl FormattableFlatToken for EditorToken {
+    impl FormattableToken for EditorToken {
         fn id(&self) -> Option<&str> {
             Some(&self.id)
         }

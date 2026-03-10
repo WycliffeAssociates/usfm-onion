@@ -1,12 +1,16 @@
+use std::collections::BTreeMap;
+
 use serde_json::{Map, Value};
 
 use crate::internal::marker_defs::marker_default_attribute;
 use crate::internal::markers::lookup_marker;
 use crate::internal::recovery::{ParseRecovery, RecoveryCode, RecoveryPayload};
 use crate::internal::syntax::{ContainerKind, ContainerNode, LeafKind, Node};
-use crate::model::editor_tree::EditorTreeDocument;
-use crate::model::usj::{UsjDocument, UsjRoundtrip};
+use crate::model::document_tree::{DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode};
+use crate::model::token::TokenViewOptions;
+use crate::model::usj::{UsjDocument, UsjElement, UsjNode};
 use crate::parse::handle::ParseHandle;
+use crate::parse::handle::tokens;
 
 pub fn to_usj_value(handle: &ParseHandle) -> Value {
     to_usj_value_with_options(handle, UsjSerializerOptions::for_usj(handle))
@@ -32,50 +36,32 @@ pub(crate) fn to_usj_value_with_options(
     ]))
 }
 
-pub fn to_usj_lossless_value(handle: &ParseHandle) -> Value {
-    let mut value = to_usj_value(handle);
-    let fingerprint = roundtrip_fingerprint(&value);
-    let Value::Object(map) = &mut value else {
-        return value;
-    };
-
-    map.insert(
-        "_lossless_roundtrip".to_string(),
-        Value::Object(Map::from_iter([
-            (
-                "source".to_string(),
-                Value::String(handle.source().to_string()),
-            ),
-            (
-                "fingerprint".to_string(),
-                Value::String(format!("{fingerprint:016x}")),
-            ),
-        ])),
-    );
-
-    value
-}
-
 pub fn to_usj_document(handle: &ParseHandle) -> UsjDocument {
     serde_json::from_value(to_usj_value(handle)).expect("USJ serializer should produce typed USJ")
 }
 
-pub fn to_editor_tree_document(handle: &ParseHandle) -> EditorTreeDocument {
-    serde_json::from_value(to_usj_value_with_options(
-        handle,
-        UsjSerializerOptions::for_editor_tree(),
-    ))
-    .expect("editor tree serializer should produce typed tree")
+pub fn to_document_tree_document(handle: &ParseHandle) -> DocumentTreeDocument {
+    let mut serializer = UsjSerializer::new(handle, UsjSerializerOptions::for_document_tree());
+    let content = serializer.serialize_tree_children(
+        handle.document().children.as_slice(),
+        ContentTrim::none(true),
+    );
+    DocumentTreeDocument {
+        doc_type: "USJ".to_string(),
+        version: usj_version(handle.source()).to_string(),
+        tokens: tokens(handle, TokenViewOptions::default()),
+        content,
+    }
 }
 
-pub fn to_usj_lossless_document(handle: &ParseHandle) -> UsjDocument {
-    let mut document = to_usj_document(handle);
-    let value = to_usj_value(handle);
-    document.roundtrip = Some(UsjRoundtrip {
-        source: handle.source().to_string(),
-        fingerprint: format!("{:016x}", roundtrip_fingerprint(&value)),
-    });
-    document
+pub fn document_tree_to_usj_document(document: &DocumentTreeDocument) -> UsjDocument {
+    let mut content = Vec::new();
+    append_usj_nodes(&mut content, document.content.as_slice());
+    UsjDocument {
+        doc_type: "USJ".to_string(),
+        version: document.version.clone(),
+        content,
+    }
 }
 
 pub fn to_usj_string(handle: &ParseHandle) -> Result<String, serde_json::Error> {
@@ -86,12 +72,142 @@ pub fn to_usj_string_pretty(handle: &ParseHandle) -> Result<String, serde_json::
     serde_json::to_string_pretty(&to_usj_value(handle))
 }
 
-pub fn to_usj_lossless_string(handle: &ParseHandle) -> Result<String, serde_json::Error> {
-    serde_json::to_string(&to_usj_lossless_value(handle))
+fn document_tree_document_from_value(value: Value) -> DocumentTreeDocument {
+    let Value::Object(mut object) = value else {
+        panic!("editor tree serializer should produce an object");
+    };
+
+    DocumentTreeDocument {
+        doc_type: take_string(&mut object, "type"),
+        version: take_string(&mut object, "version"),
+        tokens: Vec::new(),
+        content: take_content(&mut object),
+    }
 }
 
-pub fn to_usj_lossless_string_pretty(handle: &ParseHandle) -> Result<String, serde_json::Error> {
-    serde_json::to_string_pretty(&to_usj_lossless_value(handle))
+fn document_tree_node_from_value(value: Value) -> DocumentTreeNode {
+    match value {
+        Value::String(value) => DocumentTreeNode::Element(DocumentTreeElement::Text { value }),
+        Value::Object(object) => {
+            DocumentTreeNode::Element(document_tree_element_from_object(object))
+        }
+        other => panic!("unexpected editor tree node value: {other:?}"),
+    }
+}
+
+fn document_tree_element_from_object(mut object: Map<String, Value>) -> DocumentTreeElement {
+    match take_string(&mut object, "type").as_str() {
+        "book" => DocumentTreeElement::Book {
+            marker: take_string(&mut object, "marker"),
+            code: take_string(&mut object, "code"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "chapter" => DocumentTreeElement::Chapter {
+            marker: take_string(&mut object, "marker"),
+            number: take_string(&mut object, "number"),
+            extra: take_extra(object),
+        },
+        "verse" => DocumentTreeElement::Verse {
+            marker: take_string(&mut object, "marker"),
+            number: take_string(&mut object, "number"),
+            extra: take_extra(object),
+        },
+        "para" => DocumentTreeElement::Para {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "char" => DocumentTreeElement::Char {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "note" => DocumentTreeElement::Note {
+            marker: take_string(&mut object, "marker"),
+            caller: take_string(&mut object, "caller"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "ms" => DocumentTreeElement::Milestone {
+            marker: take_string(&mut object, "marker"),
+            extra: take_extra(object),
+        },
+        "figure" => DocumentTreeElement::Figure {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "sidebar" => DocumentTreeElement::Sidebar {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "periph" => DocumentTreeElement::Periph {
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "table" => DocumentTreeElement::Table {
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "table:row" => DocumentTreeElement::TableRow {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "table:cell" => DocumentTreeElement::TableCell {
+            marker: take_string(&mut object, "marker"),
+            align: take_string(&mut object, "align"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "ref" => DocumentTreeElement::Ref {
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "unknown" => DocumentTreeElement::Unknown {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "unmatched" => DocumentTreeElement::Unmatched {
+            marker: take_string(&mut object, "marker"),
+            content: take_content(&mut object),
+            extra: take_extra(object),
+        },
+        "optbreak" => DocumentTreeElement::OptBreak {},
+        "linebreak" => DocumentTreeElement::LineBreak {
+            value: object
+                .remove("value")
+                .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                .unwrap_or_else(|| "\n".to_string()),
+        },
+        other => panic!("unexpected editor tree element type: {other}"),
+    }
+}
+
+fn take_string(object: &mut Map<String, Value>, key: &str) -> String {
+    match object.remove(key) {
+        Some(Value::String(value)) => value,
+        Some(other) => panic!("expected string for {key}, got {other:?}"),
+        None => panic!("missing string field {key}"),
+    }
+}
+
+fn take_content(object: &mut Map<String, Value>) -> Vec<DocumentTreeNode> {
+    match object.remove("content") {
+        Some(Value::Array(content)) => content
+            .into_iter()
+            .map(document_tree_node_from_value)
+            .collect(),
+        Some(other) => panic!("expected array for content, got {other:?}"),
+        None => Vec::new(),
+    }
+}
+
+fn take_extra(object: Map<String, Value>) -> BTreeMap<String, Value> {
+    object.into_iter().collect()
 }
 
 struct UsjSerializer<'a> {
@@ -203,14 +319,71 @@ impl<'a> UsjSerializer<'a> {
                 continue;
             }
 
-            for value in self.serialize_node(&nodes[index], trim.preserve_newlines) {
-                push_value(&mut out, value);
-            }
+            self.serialize_node_into(&nodes[index], trim.preserve_newlines, &mut out);
             index += 1;
         }
 
         normalize_content(&mut out, trim);
         out
+    }
+
+    fn serialize_tree_children(
+        &mut self,
+        nodes: &[Node],
+        trim: ContentTrim,
+    ) -> Vec<DocumentTreeNode> {
+        let mut out = Vec::new();
+        let mut index = 0usize;
+
+        while index < nodes.len() {
+            if let Some(table) = self.consume_tree_table(nodes, &mut index) {
+                push_tree_node(&mut out, table);
+                continue;
+            }
+
+            if let Some(chapter) = self.consume_tree_chapter(nodes, &mut index) {
+                push_tree_node(&mut out, chapter);
+                continue;
+            }
+
+            if let Some(verse) = self.consume_tree_verse(nodes, &mut index) {
+                push_tree_node(&mut out, verse);
+                continue;
+            }
+
+            self.serialize_tree_node_into(&nodes[index], trim.preserve_newlines, &mut out);
+            index += 1;
+        }
+
+        normalize_tree_content(&mut out, trim);
+        out
+    }
+
+    fn consume_tree_table(
+        &mut self,
+        nodes: &[Node],
+        index: &mut usize,
+    ) -> Option<DocumentTreeNode> {
+        let Node::Container(container) = nodes.get(*index)? else {
+            return None;
+        };
+        if container.kind != ContainerKind::TableRow {
+            return None;
+        }
+
+        let mut rows = Vec::new();
+        while let Some(Node::Container(row)) = nodes.get(*index) {
+            if row.kind != ContainerKind::TableRow {
+                break;
+            }
+            rows.push(self.serialize_tree_table_row(row));
+            *index += 1;
+        }
+
+        Some(DocumentTreeNode::Element(DocumentTreeElement::Table {
+            content: rows,
+            extra: BTreeMap::new(),
+        }))
     }
 
     fn serialize_container_with_trailing_ts_gap(
@@ -324,6 +497,56 @@ impl<'a> UsjSerializer<'a> {
         Some(self.serialize_chapter(marker_span, number_span.as_ref(), altnumber, pubnumber))
     }
 
+    fn consume_tree_chapter(
+        &mut self,
+        nodes: &[Node],
+        index: &mut usize,
+    ) -> Option<DocumentTreeNode> {
+        let Node::Chapter {
+            marker_span,
+            number_span,
+        } = nodes.get(*index)?
+        else {
+            return None;
+        };
+
+        let mut altnumber = None;
+        let mut pubnumber = None;
+        let mut next = *index + 1;
+        while let Some(node) = nodes.get(next) {
+            match node {
+                Node::Container(container) => match container.marker.as_str() {
+                    "ca" => {
+                        if let Some(text) =
+                            plain_text_from_nodes(container.children.as_slice(), self.source)
+                        {
+                            altnumber = Some(text);
+                            next += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    "cp" => {
+                        if let Some(text) =
+                            plain_text_from_nodes(container.children.as_slice(), self.source)
+                        {
+                            pubnumber = Some(text);
+                            next += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    _ => break,
+                },
+                _ if self.is_ignorable_metadata_trivia(node) => next += 1,
+                _ => break,
+            }
+        }
+
+        *index = next;
+        Some(self.serialize_tree_chapter(marker_span, number_span.as_ref(), altnumber, pubnumber))
+    }
+
     fn consume_verse(&mut self, nodes: &[Node], index: &mut usize) -> Option<Value> {
         let Node::Verse {
             marker_span,
@@ -370,20 +593,77 @@ impl<'a> UsjSerializer<'a> {
         Some(self.serialize_verse(marker_span, number_span.as_ref(), altnumber, pubnumber))
     }
 
-    fn serialize_node(&mut self, node: &Node, preserve_newlines: bool) -> Vec<Value> {
+    fn consume_tree_verse(
+        &mut self,
+        nodes: &[Node],
+        index: &mut usize,
+    ) -> Option<DocumentTreeNode> {
+        let Node::Verse {
+            marker_span,
+            number_span,
+        } = nodes.get(*index)?
+        else {
+            return None;
+        };
+
+        let mut altnumber = None;
+        let mut pubnumber = None;
+        let mut next = *index + 1;
+        while let Some(node) = nodes.get(next) {
+            match node {
+                Node::Container(container) => match container.marker.as_str() {
+                    "va" => {
+                        if let Some(text) =
+                            plain_text_from_nodes(container.children.as_slice(), self.source)
+                        {
+                            altnumber = Some(text);
+                            next += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    "vp" => {
+                        if let Some(text) =
+                            plain_text_from_nodes(container.children.as_slice(), self.source)
+                        {
+                            pubnumber = Some(text);
+                            next += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    _ => break,
+                },
+                _ if self.is_ignorable_metadata_trivia(node) => next += 1,
+                _ => break,
+            }
+        }
+
+        *index = next;
+        Some(self.serialize_tree_verse(marker_span, number_span.as_ref(), altnumber, pubnumber))
+    }
+
+    fn serialize_node_into(&mut self, node: &Node, preserve_newlines: bool, out: &mut Vec<Value>) {
         match node {
-            Node::Container(container) => self
-                .serialize_container(container)
-                .into_iter()
-                .collect::<Vec<_>>(),
+            Node::Container(container) => {
+                if let Some(value) = self.serialize_container(container) {
+                    push_value(out, value);
+                }
+            }
             Node::Chapter {
                 marker_span,
                 number_span,
-            } => vec![self.serialize_chapter(marker_span, number_span.as_ref(), None, None)],
+            } => push_value(
+                out,
+                self.serialize_chapter(marker_span, number_span.as_ref(), None, None),
+            ),
             Node::Verse {
                 marker_span,
                 number_span,
-            } => vec![self.serialize_verse(marker_span, number_span.as_ref(), None, None)],
+            } => push_value(
+                out,
+                self.serialize_verse(marker_span, number_span.as_ref(), None, None),
+            ),
             Node::Milestone {
                 marker,
                 marker_span,
@@ -391,13 +671,94 @@ impl<'a> UsjSerializer<'a> {
                 closed,
             } => {
                 if *closed {
-                    vec![self.serialize_milestone(marker, attribute_spans)]
+                    push_value(out, self.serialize_milestone(marker, attribute_spans));
                 } else {
-                    self.serialize_unclosed_milestone(marker_span, attribute_spans)
+                    self.serialize_unclosed_milestone_into(marker_span, attribute_spans, out);
                 }
             }
-            Node::Leaf { kind, span } => self.serialize_leaf(*kind, span, preserve_newlines),
+            Node::Leaf { kind, span } => {
+                self.serialize_leaf_into(*kind, span, preserve_newlines, out)
+            }
         }
+    }
+
+    fn serialize_tree_node_into(
+        &mut self,
+        node: &Node,
+        preserve_newlines: bool,
+        out: &mut Vec<DocumentTreeNode>,
+    ) {
+        match node {
+            Node::Container(container) => match container.kind {
+                ContainerKind::Book
+                | ContainerKind::Paragraph
+                | ContainerKind::Header
+                | ContainerKind::Meta
+                | ContainerKind::Character
+                | ContainerKind::Note
+                | ContainerKind::Figure
+                | ContainerKind::Sidebar
+                | ContainerKind::Periph
+                | ContainerKind::TableRow
+                | ContainerKind::TableCell
+                | ContainerKind::Unknown => {
+                    if let Some(node) = self.serialize_tree_container(container) {
+                        push_tree_node(out, node);
+                    }
+                }
+            },
+            Node::Chapter {
+                marker_span,
+                number_span,
+            } => push_tree_node(
+                out,
+                self.serialize_tree_chapter(marker_span, number_span.as_ref(), None, None),
+            ),
+            Node::Verse {
+                marker_span,
+                number_span,
+            } => push_tree_node(
+                out,
+                self.serialize_tree_verse(marker_span, number_span.as_ref(), None, None),
+            ),
+            Node::Milestone {
+                marker,
+                marker_span,
+                attribute_spans,
+                closed,
+            } => {
+                if *closed {
+                    push_tree_node(out, self.serialize_tree_milestone(marker, attribute_spans));
+                } else {
+                    self.serialize_tree_unclosed_milestone_into(marker_span, attribute_spans, out);
+                }
+            }
+            Node::Leaf { kind, span } => {
+                self.serialize_tree_leaf_into(*kind, span, preserve_newlines, out)
+            }
+        }
+    }
+
+    fn serialize_tree_container(&mut self, container: &ContainerNode) -> Option<DocumentTreeNode> {
+        let marker = container.marker.as_str();
+        if marker == "usfm" {
+            return None;
+        }
+
+        Some(match container.kind {
+            ContainerKind::Book => self.serialize_tree_book(container),
+            ContainerKind::Paragraph | ContainerKind::Header | ContainerKind::Meta => {
+                self.serialize_tree_para(container)
+            }
+            ContainerKind::Character => self.serialize_tree_character(container),
+            ContainerKind::Note => self.serialize_tree_note(container),
+            ContainerKind::Figure => self.serialize_tree_figure(container),
+            ContainerKind::Sidebar => self.serialize_tree_sidebar(container),
+            ContainerKind::Periph => self.serialize_tree_periph(container),
+            ContainerKind::TableRow => self.serialize_tree_table_row(container),
+            ContainerKind::TableCell => self.serialize_tree_table_cell(container),
+            ContainerKind::Unknown => self.serialize_tree_unknown(container),
+        })
     }
 
     fn serialize_container(&mut self, container: &ContainerNode) -> Option<Value> {
@@ -461,6 +822,43 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
+    fn serialize_tree_book(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let mut code = container
+            .special_span
+            .as_ref()
+            .map(|span| self.slice(span).trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| self.book_code.clone());
+        if code == "MAT" && source_uses_alternate_texts_book_code(self.source) {
+            code = "XXA".to_string();
+        }
+        if self.book_code.is_empty() || source_uses_alternate_texts_book_code(self.source) {
+            self.book_code = code.clone();
+        }
+
+        let content_trim = if self.preserve_vertical_whitespace {
+            ContentTrim::none(true)
+        } else {
+            ContentTrim::container(false)
+        };
+        let content = self.serialize_tree_children(container.children.as_slice(), content_trim);
+        let mut extra = BTreeMap::new();
+        if self.preserve_vertical_whitespace {
+            let marker_text = format!(
+                "{}{}",
+                self.slice(&container.marker_span),
+                marker_horizontal_suffix(self.source, &container.marker_span)
+            );
+            extra.insert("markerText".to_string(), Value::String(marker_text));
+        }
+        DocumentTreeNode::Element(DocumentTreeElement::Book {
+            marker: container.marker.clone(),
+            code,
+            content,
+            extra,
+        })
+    }
+
     fn serialize_para(&mut self, container: &ContainerNode) -> Value {
         let content = self.serialize_children(
             container.children.as_slice(),
@@ -484,6 +882,31 @@ impl<'a> UsjSerializer<'a> {
             map.insert("content".to_string(), Value::Array(content));
         }
         Value::Object(map)
+    }
+
+    fn serialize_tree_para(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let content = self.serialize_tree_children(
+            container.children.as_slice(),
+            ContentTrim::container(self.preserve_vertical_whitespace),
+        );
+        let mut extra = BTreeMap::new();
+        if self.preserve_vertical_whitespace {
+            let marker_text = format!(
+                "{}{}",
+                self.slice(&container.marker_span),
+                marker_horizontal_suffix(self.source, &container.marker_span)
+            );
+            extra.insert("markerText".to_string(), Value::String(marker_text));
+        }
+        DocumentTreeNode::Element(DocumentTreeElement::Para {
+            marker: container.marker.clone(),
+            content: if container.marker == "b" && content.is_empty() {
+                Vec::new()
+            } else {
+                content
+            },
+            extra,
+        })
     }
 
     fn serialize_character(&mut self, container: &ContainerNode) -> Value {
@@ -563,6 +986,89 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
+    fn serialize_tree_character(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let marker_info = lookup_marker(container.marker.as_str());
+        let explicitly_closed = marker_has_explicit_close(container, self.source);
+        let close_suffix = explicit_close_horizontal_suffix(container, self.source);
+        let inline_trim = if marker_info.valid_in_note {
+            ContentTrim::note_inline(self.preserve_vertical_whitespace)
+        } else {
+            ContentTrim::inline(self.preserve_vertical_whitespace)
+        };
+        let mut content = self.serialize_tree_children(container.children.as_slice(), inline_trim);
+        let attr_gap_before =
+            attribute_spans_have_leading_gap(self.source, &container.attribute_spans);
+        let content_has_trailing_whitespace =
+            content_ends_with_whitespace(container.children.as_slice(), self.source);
+        let attr_behavior = resolve_attribute_behavior(
+            self.source,
+            container.marker.as_str(),
+            &container.attribute_spans,
+            container.children.as_slice(),
+        );
+        if marker_info.valid_in_note
+            && needs_close_gap_prefix(container.marker.as_str())
+            && marker_follows_closing_marker(self.source, &container.marker_span)
+        {
+            prefix_tree_first_descendant_string(&mut content, " ");
+        }
+        if should_trim_char_close_gap(container, self.source)
+            && content_ends_with_whitespace(container.children.as_slice(), self.source)
+        {
+            trim_tree_last_descendant_string_end(&mut content);
+        }
+        if self.marker_was_unclosed(&container.marker_span, container.marker.as_str())
+            || (content_ends_with_newline_node(container.children.as_slice())
+                && !marker_info.valid_in_note)
+        {
+            trim_tree_last_descendant_string_end(&mut content);
+        }
+        let attrs = match attr_behavior {
+            AttributeBehavior::Flatten(attrs) => attrs,
+            AttributeBehavior::RawText(raw) => {
+                push_tree_text_segments(
+                    &mut content,
+                    &normalize_preserved_raw_attributes(
+                        container.marker.as_str(),
+                        &raw,
+                        attr_gap_before,
+                        content_has_trailing_whitespace,
+                    ),
+                );
+                Vec::new()
+            }
+        };
+        let mut extra = attributes_to_extra(attrs);
+        if container.marker == "ref" {
+            return DocumentTreeNode::Element(DocumentTreeElement::Ref { content, extra });
+        }
+
+        if self.preserve_vertical_whitespace {
+            let marker_text = format!(
+                "{}{}",
+                self.slice(&container.marker_span),
+                marker_horizontal_suffix(self.source, &container.marker_span)
+            );
+            extra.insert("markerText".to_string(), Value::String(marker_text));
+            extra.insert("closed".to_string(), Value::Bool(explicitly_closed));
+            if let Some(close_marker_text) = explicit_close_marker_text(container, self.source) {
+                extra.insert(
+                    "closeMarkerText".to_string(),
+                    Value::String(close_marker_text),
+                );
+            }
+            if !close_suffix.is_empty() {
+                extra.insert("closeSuffix".to_string(), Value::String(close_suffix));
+            }
+        }
+
+        DocumentTreeNode::Element(DocumentTreeElement::Char {
+            marker: container.marker.clone(),
+            content,
+            extra,
+        })
+    }
+
     fn serialize_note(&mut self, container: &ContainerNode) -> Value {
         let caller = container
             .special_span
@@ -597,6 +1103,48 @@ impl<'a> UsjSerializer<'a> {
         }
         map.insert("content".to_string(), Value::Array(content));
         Value::Object(map)
+    }
+
+    fn serialize_tree_note(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let caller = container
+            .special_span
+            .as_ref()
+            .map(|span| self.slice(span).trim().to_string())
+            .unwrap_or_default();
+        let (category, filtered) =
+            extract_category_nodes(container.children.as_slice(), self.source);
+        let mut content = self.serialize_tree_children(
+            filtered.as_slice(),
+            ContentTrim::note_inline(self.preserve_vertical_whitespace),
+        );
+        if self.note_was_unclosed(&container.marker_span) {
+            trim_tree_last_descendant_string_end(&mut content);
+        }
+        preserve_tree_note_continuation_spacing(&mut content);
+        hoist_trailing_fv_from_fqa_tree(&mut content);
+
+        let mut extra = BTreeMap::new();
+        if self.preserve_vertical_whitespace {
+            let explicitly_closed = !self.note_was_unclosed(&container.marker_span);
+            extra.insert("closed".to_string(), Value::Bool(explicitly_closed));
+            if note_has_prefix_gap(self.source, &container.marker_span) {
+                extra.insert("prefixGap".to_string(), Value::String(" ".to_string()));
+            }
+            let caller_suffix = note_caller_suffix(self.source, &container.marker_span, &caller);
+            if caller_suffix != " " {
+                extra.insert("callerSuffix".to_string(), Value::String(caller_suffix));
+            }
+        }
+        if let Some(category) = category {
+            extra.insert("category".to_string(), Value::String(category));
+        }
+
+        DocumentTreeNode::Element(DocumentTreeElement::Note {
+            marker: container.marker.clone(),
+            caller,
+            content,
+            extra,
+        })
     }
 
     fn serialize_figure(&mut self, container: &ContainerNode) -> Value {
@@ -637,6 +1185,37 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
+    fn serialize_tree_figure(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let mut content = self.serialize_tree_children(
+            container.children.as_slice(),
+            ContentTrim::inline(self.preserve_vertical_whitespace),
+        );
+        let attrs = collect_attributes(
+            self.source,
+            container.marker.as_str(),
+            &container.attribute_spans,
+        );
+
+        if self.marker_was_unclosed(&container.marker_span, container.marker.as_str()) {
+            if !container.attribute_spans.is_empty() {
+                let raw = join_attribute_spans(self.source, &container.attribute_spans);
+                push_tree_text_segments(&mut content, &normalize_text(&raw, true));
+            }
+
+            return DocumentTreeNode::Element(DocumentTreeElement::Char {
+                marker: container.marker.clone(),
+                content,
+                extra: BTreeMap::new(),
+            });
+        }
+
+        DocumentTreeNode::Element(DocumentTreeElement::Figure {
+            marker: container.marker.clone(),
+            content,
+            extra: attributes_to_extra(attrs),
+        })
+    }
+
     fn serialize_sidebar(&mut self, container: &ContainerNode) -> Value {
         let (category, filtered) =
             extract_category_nodes(container.children.as_slice(), self.source);
@@ -656,6 +1235,26 @@ impl<'a> UsjSerializer<'a> {
         }
         map.insert("content".to_string(), Value::Array(content));
         Value::Object(map)
+    }
+
+    fn serialize_tree_sidebar(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let (category, filtered) =
+            extract_category_nodes(container.children.as_slice(), self.source);
+        let content = self.serialize_tree_children(
+            filtered.as_slice(),
+            ContentTrim::container(self.preserve_vertical_whitespace),
+        );
+
+        let mut extra = BTreeMap::new();
+        if let Some(category) = category {
+            extra.insert("category".to_string(), Value::String(category));
+        }
+
+        DocumentTreeNode::Element(DocumentTreeElement::Sidebar {
+            marker: container.marker.clone(),
+            content,
+            extra,
+        })
     }
 
     fn serialize_periph(&mut self, container: &ContainerNode) -> Value {
@@ -680,6 +1279,24 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
+    fn serialize_tree_periph(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let (alt, skip_count) = extract_periph_alt(container.children.as_slice(), self.source);
+        let content = self.serialize_tree_children(
+            container.children.get(skip_count..).unwrap_or(&[]),
+            ContentTrim::container(self.preserve_vertical_whitespace),
+        );
+        let mut extra = attributes_to_extra(collect_attributes(
+            self.source,
+            container.marker.as_str(),
+            &container.attribute_spans,
+        ));
+        if let Some(alt) = alt {
+            extra.insert("alt".to_string(), Value::String(alt));
+        }
+
+        DocumentTreeNode::Element(DocumentTreeElement::Periph { content, extra })
+    }
+
     fn serialize_table_row(&mut self, container: &ContainerNode) -> Value {
         let content = self.serialize_children(
             container.children.as_slice(),
@@ -693,6 +1310,18 @@ impl<'a> UsjSerializer<'a> {
         );
         map.insert("content".to_string(), Value::Array(content));
         Value::Object(map)
+    }
+
+    fn serialize_tree_table_row(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let content = self.serialize_tree_children(
+            container.children.as_slice(),
+            ContentTrim::container(self.preserve_vertical_whitespace),
+        );
+        DocumentTreeNode::Element(DocumentTreeElement::TableRow {
+            marker: container.marker.clone(),
+            content,
+            extra: BTreeMap::new(),
+        })
     }
 
     fn serialize_table_cell(&mut self, container: &ContainerNode) -> Value {
@@ -714,6 +1343,19 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
+    fn serialize_tree_table_cell(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let content = self.serialize_tree_children(
+            container.children.as_slice(),
+            ContentTrim::inline(self.preserve_vertical_whitespace),
+        );
+        DocumentTreeNode::Element(DocumentTreeElement::TableCell {
+            marker: container.marker.clone(),
+            align: table_cell_alignment(container.marker.as_str()),
+            content,
+            extra: BTreeMap::new(),
+        })
+    }
+
     fn serialize_unknown(&mut self, container: &ContainerNode) -> Value {
         let content = self.serialize_children(
             container.children.as_slice(),
@@ -732,6 +1374,27 @@ impl<'a> UsjSerializer<'a> {
         );
         map.insert("content".to_string(), Value::Array(content));
         Value::Object(map)
+    }
+
+    fn serialize_tree_unknown(&mut self, container: &ContainerNode) -> DocumentTreeNode {
+        let content = self.serialize_tree_children(
+            container.children.as_slice(),
+            ContentTrim::inline(self.preserve_vertical_whitespace),
+        );
+        let node_type = if container.marker == "esbe" || container.marker == "*" {
+            DocumentTreeElement::Unmatched {
+                marker: container.marker.clone(),
+                content,
+                extra: BTreeMap::new(),
+            }
+        } else {
+            DocumentTreeElement::Unknown {
+                marker: container.marker.clone(),
+                content,
+                extra: BTreeMap::new(),
+            }
+        };
+        DocumentTreeNode::Element(node_type)
     }
 
     fn serialize_chapter(
@@ -775,6 +1438,50 @@ impl<'a> UsjSerializer<'a> {
             map.insert("pubnumber".to_string(), Value::String(pubnumber));
         }
         Value::Object(map)
+    }
+
+    fn serialize_tree_chapter(
+        &mut self,
+        marker_span: &std::ops::Range<usize>,
+        number_span: Option<&std::ops::Range<usize>>,
+        altnumber: Option<String>,
+        pubnumber: Option<String>,
+    ) -> DocumentTreeNode {
+        let marker = self.slice(marker_span).trim_start_matches('\\').to_string();
+        let number = number_span
+            .map(|span| self.slice(span).trim().to_string())
+            .unwrap_or_default();
+        self.current_chapter = strip_leading_zeros(&number);
+        let mut extra = BTreeMap::new();
+        if self.preserve_vertical_whitespace {
+            let marker_text = format!(
+                "{}{}",
+                self.slice(marker_span),
+                marker_horizontal_suffix(self.source, marker_span)
+            );
+            extra.insert("markerText".to_string(), Value::String(marker_text));
+        }
+        let sid = if self.current_chapter.is_empty() {
+            String::new()
+        } else if self.chapter_sid_uses_zero_verse {
+            format!("{} {}:0", self.book_code, self.current_chapter)
+        } else {
+            format!("{} {}", self.book_code, self.current_chapter)
+        };
+        if self.emit_sid {
+            extra.insert("sid".to_string(), Value::String(sid));
+        }
+        if let Some(altnumber) = altnumber {
+            extra.insert("altnumber".to_string(), Value::String(altnumber));
+        }
+        if let Some(pubnumber) = pubnumber {
+            extra.insert("pubnumber".to_string(), Value::String(pubnumber));
+        }
+        DocumentTreeNode::Element(DocumentTreeElement::Chapter {
+            marker,
+            number,
+            extra,
+        })
     }
 
     fn serialize_verse(
@@ -827,6 +1534,56 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
+    fn serialize_tree_verse(
+        &mut self,
+        marker_span: &std::ops::Range<usize>,
+        number_span: Option<&std::ops::Range<usize>>,
+        altnumber: Option<String>,
+        pubnumber: Option<String>,
+    ) -> DocumentTreeNode {
+        let marker = self.slice(marker_span).trim_start_matches('\\').to_string();
+        let number = number_span
+            .map(|span| self.slice(span).trim().to_string())
+            .unwrap_or_default();
+
+        let mut extra = BTreeMap::new();
+        if self.preserve_vertical_whitespace {
+            let marker_text = format!(
+                "{}{}",
+                self.slice(marker_span),
+                marker_horizontal_suffix(self.source, marker_span)
+            );
+            extra.insert("markerText".to_string(), Value::String(marker_text));
+        }
+        let sid =
+            if !self.book_code.is_empty() && !self.current_chapter.is_empty() && !number.is_empty()
+            {
+                format!(
+                    "{} {}:{}",
+                    self.book_code,
+                    self.current_chapter,
+                    strip_leading_zeros(&number)
+                )
+            } else {
+                String::new()
+            };
+        if self.emit_sid {
+            extra.insert("sid".to_string(), Value::String(sid));
+        }
+        if let Some(altnumber) = altnumber {
+            extra.insert("altnumber".to_string(), Value::String(altnumber));
+        }
+        if let Some(pubnumber) = pubnumber {
+            extra.insert("pubnumber".to_string(), Value::String(pubnumber));
+        }
+
+        DocumentTreeNode::Element(DocumentTreeElement::Verse {
+            marker,
+            number,
+            extra,
+        })
+    }
+
     fn serialize_milestone(
         &self,
         marker: &str,
@@ -840,48 +1597,111 @@ impl<'a> UsjSerializer<'a> {
         Value::Object(map)
     }
 
-    fn serialize_unclosed_milestone(
+    fn serialize_tree_milestone(
+        &self,
+        marker: &str,
+        attribute_spans: &[std::ops::Range<usize>],
+    ) -> DocumentTreeNode {
+        DocumentTreeNode::Element(DocumentTreeElement::Milestone {
+            marker: marker.to_string(),
+            extra: attributes_to_extra(collect_attributes(self.source, marker, attribute_spans)),
+        })
+    }
+
+    fn serialize_unclosed_milestone_into(
         &self,
         marker_span: &std::ops::Range<usize>,
         attribute_spans: &[std::ops::Range<usize>],
-    ) -> Vec<Value> {
+        out: &mut Vec<Value>,
+    ) {
         let mut raw = self.slice(marker_span).to_string();
         raw.push_str(&join_attribute_spans(self.source, attribute_spans));
-        let mut out = Vec::new();
-        push_text_segments(&mut out, &normalize_text(&raw, true));
-        out
+        push_text_segments(out, &normalize_text(&raw, true));
     }
 
-    fn serialize_leaf(
+    fn serialize_tree_unclosed_milestone_into(
+        &self,
+        marker_span: &std::ops::Range<usize>,
+        attribute_spans: &[std::ops::Range<usize>],
+        out: &mut Vec<DocumentTreeNode>,
+    ) {
+        let mut raw = self.slice(marker_span).to_string();
+        raw.push_str(&join_attribute_spans(self.source, attribute_spans));
+        push_tree_text_segments(out, &normalize_text(&raw, true));
+    }
+
+    fn serialize_leaf_into(
         &self,
         kind: LeafKind,
         span: &std::ops::Range<usize>,
         preserve_newlines: bool,
-    ) -> Vec<Value> {
-        let mut out = Vec::new();
+        out: &mut Vec<Value>,
+    ) {
         let text = match kind {
             LeafKind::Text | LeafKind::Whitespace | LeafKind::Attributes => {
                 normalize_text(self.slice(span), preserve_newlines)
             }
             LeafKind::OptBreak => {
-                return vec![Value::Object(Map::from_iter([(
-                    "type".to_string(),
-                    Value::String("optbreak".to_string()),
-                )]))];
+                push_value(
+                    out,
+                    Value::Object(Map::from_iter([(
+                        "type".to_string(),
+                        Value::String("optbreak".to_string()),
+                    )])),
+                );
+                return;
             }
             LeafKind::Newline => {
                 if preserve_newlines {
-                    return vec![Value::Object(Map::from_iter([(
-                        "type".to_string(),
-                        Value::String("linebreak".to_string()),
-                    )]))];
+                    push_value(
+                        out,
+                        Value::Object(Map::from_iter([(
+                            "type".to_string(),
+                            Value::String("linebreak".to_string()),
+                        )])),
+                    );
+                    return;
                 } else {
                     normalize_text(self.slice(span), false)
                 }
             }
         };
-        push_text_segments(&mut out, &text);
-        out
+        push_text_segments(out, &text);
+    }
+
+    fn serialize_tree_leaf_into(
+        &self,
+        kind: LeafKind,
+        span: &std::ops::Range<usize>,
+        preserve_newlines: bool,
+        out: &mut Vec<DocumentTreeNode>,
+    ) {
+        let text = match kind {
+            LeafKind::Text | LeafKind::Whitespace | LeafKind::Attributes => {
+                normalize_text(self.slice(span), preserve_newlines)
+            }
+            LeafKind::OptBreak => {
+                push_tree_node(
+                    out,
+                    DocumentTreeNode::Element(DocumentTreeElement::OptBreak {}),
+                );
+                return;
+            }
+            LeafKind::Newline => {
+                if preserve_newlines {
+                    push_tree_node(
+                        out,
+                        DocumentTreeNode::Element(DocumentTreeElement::LineBreak {
+                            value: self.slice(span).to_string(),
+                        }),
+                    );
+                    return;
+                } else {
+                    normalize_text(self.slice(span), false)
+                }
+            }
+        };
+        push_tree_text_segments(out, &text);
     }
 
     fn slice(&self, span: &std::ops::Range<usize>) -> &str {
@@ -936,7 +1756,7 @@ impl UsjSerializerOptions {
         }
     }
 
-    pub(crate) const fn for_editor_tree() -> Self {
+    pub(crate) const fn for_document_tree() -> Self {
         Self {
             emit_sid: true,
             preserve_vertical_whitespace: true,
@@ -956,6 +1776,209 @@ fn push_value(out: &mut Vec<Value>, value: Value) {
         }
         other => out.push(other),
     }
+}
+
+fn push_tree_node(out: &mut Vec<DocumentTreeNode>, node: DocumentTreeNode) {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Text { value }) => {
+            if value.is_empty() {
+                return;
+            }
+            if let Some(previous) = out.last_mut().and_then(tree_text_mut) {
+                previous.push_str(&value);
+            } else {
+                out.push(DocumentTreeNode::Element(DocumentTreeElement::Text {
+                    value,
+                }));
+            }
+        }
+        other => out.push(other),
+    }
+}
+
+fn append_usj_nodes(out: &mut Vec<UsjNode>, nodes: &[DocumentTreeNode]) {
+    for node in nodes {
+        let DocumentTreeNode::Element(element) = node;
+        match element {
+            DocumentTreeElement::Text { value } => push_usj_text(out, value),
+            DocumentTreeElement::LineBreak { .. } => {}
+            DocumentTreeElement::OptBreak {} => {
+                out.push(UsjNode::Element(UsjElement::OptBreak {}));
+            }
+            other => out.push(UsjNode::Element(document_tree_element_to_usj_element(
+                other,
+            ))),
+        }
+    }
+}
+
+fn push_usj_text(out: &mut Vec<UsjNode>, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+
+    match out.last_mut() {
+        Some(UsjNode::Text(previous)) => previous.push_str(text),
+        _ => out.push(UsjNode::Text(text.to_string())),
+    }
+}
+
+fn document_tree_element_to_usj_element(element: &DocumentTreeElement) -> UsjElement {
+    match element {
+        DocumentTreeElement::Text { value: _ } => {
+            unreachable!("text is handled as a UsjNode::Text")
+        }
+        DocumentTreeElement::Book {
+            marker,
+            code,
+            content,
+            extra,
+        } => UsjElement::Book {
+            marker: marker.clone(),
+            code: code.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Chapter {
+            marker,
+            number,
+            extra,
+        } => UsjElement::Chapter {
+            marker: marker.clone(),
+            number: number.clone(),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Verse {
+            marker,
+            number,
+            extra,
+        } => UsjElement::Verse {
+            marker: marker.clone(),
+            number: number.clone(),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Para {
+            marker,
+            content,
+            extra,
+        } => UsjElement::Para {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Char {
+            marker,
+            content,
+            extra,
+        } => UsjElement::Char {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Note {
+            marker,
+            caller,
+            content,
+            extra,
+        } => UsjElement::Note {
+            marker: marker.clone(),
+            caller: caller.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Milestone { marker, extra } => UsjElement::Milestone {
+            marker: marker.clone(),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Figure {
+            marker,
+            content,
+            extra,
+        } => UsjElement::Figure {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Sidebar {
+            marker,
+            content,
+            extra,
+        } => UsjElement::Sidebar {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Periph { content, extra } => UsjElement::Periph {
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Table { content, extra } => UsjElement::Table {
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::TableRow {
+            marker,
+            content,
+            extra,
+        } => UsjElement::TableRow {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::TableCell {
+            marker,
+            align,
+            content,
+            extra,
+        } => UsjElement::TableCell {
+            marker: marker.clone(),
+            align: align.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Ref { content, extra } => UsjElement::Ref {
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Unknown {
+            marker,
+            content,
+            extra,
+        } => UsjElement::Unknown {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::Unmatched {
+            marker,
+            content,
+            extra,
+        } => UsjElement::Unmatched {
+            marker: marker.clone(),
+            content: document_tree_children_to_usj_nodes(content),
+            extra: semantic_extra(extra),
+        },
+        DocumentTreeElement::OptBreak {} => UsjElement::OptBreak {},
+        DocumentTreeElement::LineBreak { .. } => {
+            unreachable!("linebreak nodes are not emitted in semantic USJ")
+        }
+    }
+}
+
+fn document_tree_children_to_usj_nodes(children: &[DocumentTreeNode]) -> Vec<UsjNode> {
+    let mut out = Vec::new();
+    append_usj_nodes(&mut out, children);
+    out
+}
+
+fn semantic_extra(
+    extra: &std::collections::BTreeMap<String, Value>,
+) -> std::collections::BTreeMap<String, Value> {
+    extra
+        .iter()
+        .filter(|(key, _)| key.as_str() != "markerText" && key.as_str() != "closed")
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
 }
 
 fn push_text_segments(out: &mut Vec<Value>, text: &str) {
@@ -982,6 +2005,45 @@ fn push_text_segments(out: &mut Vec<Value>, text: &str) {
 
     if !remainder.is_empty() {
         push_value(out, Value::String(remainder.to_string()));
+    }
+}
+
+fn push_tree_text_segments(out: &mut Vec<DocumentTreeNode>, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+
+    if !text.contains("//") {
+        push_tree_node(
+            out,
+            DocumentTreeNode::Element(DocumentTreeElement::Text {
+                value: text.to_string(),
+            }),
+        );
+        return;
+    }
+
+    let mut remainder = text;
+    while let Some(index) = remainder.find("//") {
+        if index > 0 {
+            push_tree_node(
+                out,
+                DocumentTreeNode::Element(DocumentTreeElement::Text {
+                    value: remainder[..index].to_string(),
+                }),
+            );
+        }
+        out.push(DocumentTreeNode::Element(DocumentTreeElement::OptBreak {}));
+        remainder = &remainder[index + 2..];
+    }
+
+    if !remainder.is_empty() {
+        push_tree_node(
+            out,
+            DocumentTreeNode::Element(DocumentTreeElement::Text {
+                value: remainder.to_string(),
+            }),
+        );
     }
 }
 
@@ -1044,6 +2106,465 @@ fn normalize_content(values: &mut Vec<Value>, trim: ContentTrim) {
     }
 
     values.retain(|value| !matches!(value, Value::String(text) if text.trim().is_empty()));
+}
+
+fn normalize_tree_content(values: &mut Vec<DocumentTreeNode>, trim: ContentTrim) {
+    if trim.trim_first_string_start {
+        while let Some(index) = values.iter().position(tree_node_is_text) {
+            let Some(text) = tree_text(values.get(index).expect("index should exist")) else {
+                break;
+            };
+            let trimmed = if index == 0 {
+                trim_ascii_start(text).to_string()
+            } else {
+                text.to_string()
+            };
+            if trimmed.is_empty() {
+                values.remove(index);
+                continue;
+            }
+            if let Some(text) = values.get_mut(index).and_then(tree_text_mut) {
+                *text = trimmed;
+            }
+            break;
+        }
+    }
+
+    if trim.trim_last_string_end {
+        while values.last().is_some_and(tree_node_is_text) {
+            let index = values.len() - 1;
+            let Some(text) = values.get(index).and_then(tree_text) else {
+                break;
+            };
+            let trimmed = trim_ascii_end(text).to_string();
+            if trimmed.is_empty() {
+                values.pop();
+                continue;
+            }
+            if let Some(text) = values.get_mut(index).and_then(tree_text_mut) {
+                *text = trimmed;
+            }
+            break;
+        }
+    }
+
+    for index in 0..values.len() {
+        let Some(text) = values.get(index).and_then(tree_text) else {
+            continue;
+        };
+        let mut normalized = if trim.preserve_newlines || text.contains('\n') {
+            text.to_string()
+        } else {
+            collapse_spaces(text)
+        };
+        if trim.trim_leading_after_chapter_or_verse
+            && index > 0
+            && values
+                .get(index - 1)
+                .and_then(tree_node_type)
+                .is_some_and(|node_type| matches!(node_type, "chapter" | "verse"))
+        {
+            normalized = trim_ascii_start(&normalized).to_string();
+        }
+        if let Some(text) = values.get_mut(index).and_then(tree_text_mut) {
+            *text = normalized;
+        }
+    }
+
+    values.retain(|value| !matches!(tree_text(value), Some(text) if text.trim().is_empty()));
+}
+
+fn attributes_to_extra(attrs: Vec<(String, String)>) -> BTreeMap<String, Value> {
+    attrs
+        .into_iter()
+        .map(|(key, value)| (key, Value::String(value)))
+        .collect()
+}
+
+fn tree_node_is_text(node: &DocumentTreeNode) -> bool {
+    matches!(
+        node,
+        DocumentTreeNode::Element(DocumentTreeElement::Text { .. })
+    )
+}
+
+fn tree_text(node: &DocumentTreeNode) -> Option<&str> {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Text { value }) => Some(value.as_str()),
+        _ => None,
+    }
+}
+
+fn tree_text_mut(node: &mut DocumentTreeNode) -> Option<&mut String> {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Text { value }) => Some(value),
+        _ => None,
+    }
+}
+
+fn tree_node_type(node: &DocumentTreeNode) -> Option<&'static str> {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Book { .. }) => Some("book"),
+        DocumentTreeNode::Element(DocumentTreeElement::Chapter { .. }) => Some("chapter"),
+        DocumentTreeNode::Element(DocumentTreeElement::Verse { .. }) => Some("verse"),
+        DocumentTreeNode::Element(DocumentTreeElement::Para { .. }) => Some("para"),
+        DocumentTreeNode::Element(DocumentTreeElement::Char { .. }) => Some("char"),
+        DocumentTreeNode::Element(DocumentTreeElement::Note { .. }) => Some("note"),
+        DocumentTreeNode::Element(DocumentTreeElement::Milestone { .. }) => Some("ms"),
+        DocumentTreeNode::Element(DocumentTreeElement::Figure { .. }) => Some("figure"),
+        DocumentTreeNode::Element(DocumentTreeElement::Sidebar { .. }) => Some("sidebar"),
+        DocumentTreeNode::Element(DocumentTreeElement::Periph { .. }) => Some("periph"),
+        DocumentTreeNode::Element(DocumentTreeElement::Table { .. }) => Some("table"),
+        DocumentTreeNode::Element(DocumentTreeElement::TableRow { .. }) => Some("table:row"),
+        DocumentTreeNode::Element(DocumentTreeElement::TableCell { .. }) => Some("table:cell"),
+        DocumentTreeNode::Element(DocumentTreeElement::Ref { .. }) => Some("ref"),
+        DocumentTreeNode::Element(DocumentTreeElement::Unknown { .. }) => Some("unknown"),
+        DocumentTreeNode::Element(DocumentTreeElement::Unmatched { .. }) => Some("unmatched"),
+        DocumentTreeNode::Element(DocumentTreeElement::OptBreak { .. }) => Some("optbreak"),
+        DocumentTreeNode::Element(DocumentTreeElement::LineBreak { .. }) => Some("linebreak"),
+        DocumentTreeNode::Element(DocumentTreeElement::Text { .. }) => Some("text"),
+    }
+}
+
+fn tree_marker(node: &DocumentTreeNode) -> Option<&str> {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Book { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Chapter { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Verse { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Para { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Char { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Note { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Milestone { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Figure { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Sidebar { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::TableRow { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::TableCell { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Unknown { marker, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Unmatched { marker, .. }) => {
+            Some(marker.as_str())
+        }
+        _ => None,
+    }
+}
+
+fn tree_content(node: &DocumentTreeNode) -> Option<&[DocumentTreeNode]> {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Book { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Para { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Char { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Note { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Figure { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Sidebar { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Periph { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Table { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::TableRow { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::TableCell { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Ref { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Unknown { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Unmatched { content, .. }) => {
+            Some(content.as_slice())
+        }
+        _ => None,
+    }
+}
+
+fn tree_content_mut(node: &mut DocumentTreeNode) -> Option<&mut Vec<DocumentTreeNode>> {
+    match node {
+        DocumentTreeNode::Element(DocumentTreeElement::Book { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Para { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Char { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Note { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Figure { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Sidebar { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Periph { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Table { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::TableRow { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::TableCell { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Ref { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Unknown { content, .. })
+        | DocumentTreeNode::Element(DocumentTreeElement::Unmatched { content, .. }) => {
+            Some(content)
+        }
+        _ => None,
+    }
+}
+
+fn trim_tree_last_descendant_string_end(values: &mut [DocumentTreeNode]) {
+    let Some(last) = values.last_mut() else {
+        return;
+    };
+    trim_tree_last_string_end(last);
+}
+
+fn trim_tree_last_string_end(value: &mut DocumentTreeNode) {
+    if let Some(text) = tree_text_mut(value) {
+        *text = trim_ascii_end(text).to_string();
+        return;
+    }
+    if let Some(content) = tree_content_mut(value) {
+        trim_tree_last_descendant_string_end(content);
+    }
+}
+
+fn prefix_tree_first_descendant_string(values: &mut [DocumentTreeNode], prefix: &str) {
+    for value in values {
+        if prefix_tree_first_string(value, prefix) {
+            return;
+        }
+    }
+}
+
+fn prefix_tree_first_string(value: &mut DocumentTreeNode, prefix: &str) -> bool {
+    if let Some(text) = tree_text_mut(value) {
+        text.insert_str(0, prefix);
+        return true;
+    }
+    if let Some(content) = tree_content_mut(value) {
+        for child in content {
+            if prefix_tree_first_string(child, prefix) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn preserve_tree_note_continuation_spacing(content: &mut [DocumentTreeNode]) {
+    for index in 1..content.len() {
+        let previous_marker = tree_marker(&content[index - 1]);
+        let current_marker = tree_marker(&content[index]);
+
+        if !(previous_marker == Some("fqa") && current_marker == Some("ft")) {
+            continue;
+        }
+
+        if tree_first_descendant_string_starts_with_trimmed_joining_punctuation(&content[index])
+            || tree_first_descendant_string_starts_with_trimmed_char(&content[index], ',')
+        {
+            trim_tree_first_descendant_string_start(&mut content[index]);
+        } else if tree_first_descendant_string_starts_with_trimmed_period_then_quote(
+            &content[index],
+        ) {
+            continue;
+        } else if tree_first_descendant_string_starts_with_trimmed_period(&content[index]) {
+            if !tree_last_descendant_string_ends_with_whitespace(&content[index - 1])
+                && !tree_first_descendant_string_starts_with_whitespace(&content[index])
+            {
+                ensure_tree_last_descendant_string_suffix(&mut content[index - 1], " ");
+                prefix_tree_first_descendant_string(std::slice::from_mut(&mut content[index]), " ");
+            }
+        } else if tree_first_descendant_string_starts_with_trimmed_word(&content[index])
+            && !tree_first_descendant_string_starts_with_whitespace(&content[index])
+            && (tree_last_descendant_string_ends_with_trimmed_char(&content[index - 1], ',')
+                || !tree_last_descendant_string_ends_with_whitespace(&content[index - 1]))
+        {
+            prefix_tree_first_descendant_string(std::slice::from_mut(&mut content[index]), " ");
+        }
+    }
+}
+
+fn hoist_trailing_fv_from_fqa_tree(content: &mut Vec<DocumentTreeNode>) {
+    let mut normalized = Vec::with_capacity(content.len());
+
+    for value in content.drain(..) {
+        let Some((before, fv, after)) = split_tree_fqa_with_trailing_fv(&value) else {
+            normalized.push(value);
+            continue;
+        };
+
+        if !before.is_empty() {
+            let mut fqa = value.clone();
+            if let Some(content) = tree_content_mut(&mut fqa) {
+                *content = before;
+            }
+            normalized.push(fqa);
+        }
+
+        normalized.push(fv);
+        normalized.extend(after);
+    }
+
+    *content = normalized;
+}
+
+fn split_tree_fqa_with_trailing_fv(
+    value: &DocumentTreeNode,
+) -> Option<(
+    Vec<DocumentTreeNode>,
+    DocumentTreeNode,
+    Vec<DocumentTreeNode>,
+)> {
+    if tree_node_type(value)? != "char" || tree_marker(value)? != "fqa" {
+        return None;
+    }
+
+    let content = tree_content(value)?;
+    let fv_index = content
+        .iter()
+        .position(|item| tree_node_type(item) == Some("char") && tree_marker(item) == Some("fv"))?;
+
+    if fv_index + 1 >= content.len() {
+        return None;
+    }
+
+    let before = content[..fv_index].to_vec();
+    let fv = content[fv_index].clone();
+    let after = content[fv_index + 1..].to_vec();
+    Some((before, fv, after))
+}
+
+fn tree_first_descendant_string_starts_with_trimmed_joining_punctuation(
+    value: &DocumentTreeNode,
+) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text
+            .trim_start()
+            .chars()
+            .next()
+            .is_some_and(is_joining_punctuation);
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .any(tree_first_descendant_string_starts_with_trimmed_joining_punctuation)
+    })
+}
+
+fn tree_first_descendant_string_starts_with_trimmed_period(value: &DocumentTreeNode) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text.trim_start().starts_with('.');
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .any(tree_first_descendant_string_starts_with_trimmed_period)
+    })
+}
+
+fn tree_first_descendant_string_starts_with_trimmed_char(
+    value: &DocumentTreeNode,
+    ch: char,
+) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text.trim_start().starts_with(ch);
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .any(|child| tree_first_descendant_string_starts_with_trimmed_char(child, ch))
+    })
+}
+
+fn tree_first_descendant_string_starts_with_trimmed_period_then_quote(
+    value: &DocumentTreeNode,
+) -> bool {
+    if let Some(text) = tree_text(value) {
+        let mut chars = text.trim_start().chars();
+        return chars.next() == Some('.')
+            && chars
+                .next()
+                .is_some_and(|ch| matches!(ch, '"' | '\'' | '”' | '’'));
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .any(tree_first_descendant_string_starts_with_trimmed_period_then_quote)
+    })
+}
+
+fn tree_first_descendant_string_starts_with_trimmed_word(value: &DocumentTreeNode) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text
+            .trim_start()
+            .chars()
+            .next()
+            .is_some_and(char::is_alphanumeric);
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .any(tree_first_descendant_string_starts_with_trimmed_word)
+    })
+}
+
+fn tree_first_descendant_string_starts_with_whitespace(value: &DocumentTreeNode) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text.chars().next().is_some_and(char::is_whitespace);
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .any(tree_first_descendant_string_starts_with_whitespace)
+    })
+}
+
+fn trim_tree_first_descendant_string_start(value: &mut DocumentTreeNode) {
+    if let Some(text) = tree_text_mut(value) {
+        *text = text.trim_start().to_string();
+        return;
+    }
+    if let Some(content) = tree_content_mut(value) {
+        for child in content {
+            trim_tree_first_descendant_string_start(child);
+            if !matches!(tree_text(child), Some(text) if text.is_empty()) {
+                break;
+            }
+        }
+    }
+}
+
+fn ensure_tree_last_descendant_string_suffix(value: &mut DocumentTreeNode, suffix: &str) {
+    if !tree_last_descendant_string_has_suffix(value, suffix) {
+        append_tree_last_string(value, suffix);
+    }
+}
+
+fn tree_last_descendant_string_has_suffix(value: &DocumentTreeNode, suffix: &str) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text.ends_with(suffix);
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .rev()
+            .any(|child| tree_last_descendant_string_has_suffix(child, suffix))
+    })
+}
+
+fn tree_last_descendant_string_ends_with_trimmed_char(value: &DocumentTreeNode, ch: char) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text.trim_end().ends_with(ch);
+    }
+    tree_content(value).is_some_and(|content| {
+        content
+            .iter()
+            .rev()
+            .any(|child| tree_last_descendant_string_ends_with_trimmed_char(child, ch))
+    })
+}
+
+fn tree_last_descendant_string_ends_with_whitespace(value: &DocumentTreeNode) -> bool {
+    if let Some(text) = tree_text(value) {
+        return text.chars().last().is_some_and(char::is_whitespace);
+    }
+    tree_content(value)
+        .and_then(|content| content.last())
+        .is_some_and(tree_last_descendant_string_ends_with_whitespace)
+}
+
+fn append_tree_last_string(value: &mut DocumentTreeNode, suffix: &str) -> bool {
+    if let Some(text) = tree_text_mut(value) {
+        text.push_str(suffix);
+        return true;
+    }
+    if let Some(content) = tree_content_mut(value) {
+        for child in content.iter_mut().rev() {
+            if append_tree_last_string(child, suffix) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn trim_last_descendant_string_end(values: &mut [Value]) {
@@ -1125,20 +2646,15 @@ fn should_trim_char_close_gap(container: &ContainerNode, source: &str) -> bool {
 }
 
 fn marker_has_explicit_close(container: &ContainerNode, source: &str) -> bool {
-    let Some(end) = last_descendant_end(container.children.as_slice()) else {
-        return source[container.marker_span.end..]
-            .starts_with(&format!("\\{}*", container.marker));
-    };
-
-    source[end..].starts_with(&format!("\\{}*", container.marker))
+    matching_explicit_close_marker_text(container, source).is_some()
 }
 
 fn explicit_close_horizontal_suffix(container: &ContainerNode, source: &str) -> String {
-    let Some(end) = last_descendant_end(container.children.as_slice()) else {
+    let Some(close_marker) = matching_explicit_close_marker_text(container, source) else {
         return String::new();
     };
-
-    let close_marker = format!("\\{}*", container.marker);
+    let end =
+        last_descendant_end(container.children.as_slice()).unwrap_or(container.marker_span.end);
     let Some(after_close) = source[end..].strip_prefix(&close_marker) else {
         return String::new();
     };
@@ -1149,11 +2665,57 @@ fn explicit_close_horizontal_suffix(container: &ContainerNode, source: &str) -> 
         .collect()
 }
 
+fn explicit_close_marker_text(container: &ContainerNode, source: &str) -> Option<String> {
+    matching_explicit_close_marker_text(container, source)
+}
+
+fn matching_explicit_close_marker_text(container: &ContainerNode, source: &str) -> Option<String> {
+    let end =
+        last_descendant_end(container.children.as_slice()).unwrap_or(container.marker_span.end);
+    let rest = source.get(end..)?;
+    let canonical = format!("\\{}*", container.marker);
+    if rest.starts_with(&canonical) {
+        return Some(canonical);
+    }
+
+    let plus_prefixed = format!("\\+{}*", container.marker);
+    rest.starts_with(&plus_prefixed).then_some(plus_prefixed)
+}
+
 fn marker_horizontal_suffix(source: &str, marker_span: &std::ops::Range<usize>) -> String {
     let Some(rest) = source.get(marker_span.end..) else {
         return String::new();
     };
     rest.chars()
+        .take_while(|ch| matches!(ch, ' ' | '\t'))
+        .collect()
+}
+
+fn note_has_prefix_gap(source: &str, marker_span: &std::ops::Range<usize>) -> bool {
+    marker_span.start > 0
+        && source[..marker_span.start]
+            .chars()
+            .next_back()
+            .is_some_and(|ch| matches!(ch, ' ' | '\t'))
+}
+
+fn note_caller_suffix(source: &str, marker_span: &std::ops::Range<usize>, caller: &str) -> String {
+    let Some(after_marker) = source.get(marker_span.end..) else {
+        return " ".to_string();
+    };
+    let after_marker_gap = after_marker
+        .chars()
+        .take_while(|ch| matches!(ch, ' ' | '\t'))
+        .map(char::len_utf8)
+        .sum::<usize>();
+    let Some(after_caller) = after_marker
+        .get(after_marker_gap..)
+        .and_then(|rest| rest.strip_prefix(caller))
+    else {
+        return " ".to_string();
+    };
+    after_caller
+        .chars()
         .take_while(|ch| matches!(ch, ' ' | '\t'))
         .collect()
 }
@@ -1582,16 +3144,6 @@ fn trim_ascii_start(text: &str) -> &str {
 
 fn trim_ascii_end(text: &str) -> &str {
     text.trim_end_matches([' ', '\n', '\r', '\t'])
-}
-
-pub(crate) fn roundtrip_fingerprint(value: &Value) -> u64 {
-    let encoded = serde_json::to_vec(value).unwrap_or_default();
-    let mut hash = 0xcbf29ce484222325u64;
-    for byte in encoded {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
 }
 
 fn collapse_spaces(text: &str) -> String {

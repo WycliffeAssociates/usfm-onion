@@ -162,12 +162,8 @@ This is the current core conversion surface.
 | `into_usj` | direct via `convert::into_usj` or `convert::usfm_content_to_usj` | indirect via `usx -> usfm -> parse -> into_usj` | direct parse + identity-ish decode path | indirect via `convert::into_usj_from_tokens` |
 | `into_usx` | direct via `convert::into_usx` or `convert::usfm_content_to_usx` | direct parse + identity-ish decode path | indirect via `usj -> usfm -> parse -> into_usx` | indirect via `convert::into_usx_from_tokens` |
 | `into_vref` | direct via `convert::into_vref` | indirect via `usx -> usfm -> parse -> into_vref` | indirect via `usj -> usfm -> parse -> into_vref` | indirect via `convert::into_vref_from_tokens` |
-| `into_usj_lossless` | direct via `convert::into_usj_lossless` | indirect via `usx -> usfm -> parse -> into_usj_lossless` | indirect via `usj -> usfm -> parse -> into_usj_lossless` | indirect via `convert::into_usj_lossless_from_tokens` |
-| `into_usx_lossless` | direct via `convert::into_usx_lossless` | not exposed as a distinct first-class direct intake path | not exposed as a distinct first-class direct intake path | indirect via `convert::into_usx_lossless_from_tokens` |
 
-## Lossless vs Lossy USJ and USX
-
-This crate uses "lossless" in a very specific way.
+## Semantic Exports vs Round-Trip-Preserving Layers
 
 ### Regular USJ
 
@@ -181,20 +177,6 @@ Use it when:
 - you want to inspect structure or feed another system
 - exact source reproduction is not the payload itself
 
-### Lossless USJ
-
-`convert::into_usj_lossless` produces the same semantic shape, but adds round-trip metadata carrying the original USFM source and a fingerprint.
-
-In practice:
-
-- typed `UsjDocument` gets a `roundtrip` payload
-- raw JSON form gets a `_lossless_roundtrip` object
-
-Use it when:
-
-- you need structured JSON plus exact-source round-trip context
-- a downstream system may need to reconstruct or verify the original source
-
 ### Regular USX
 
 `convert::into_usx` produces the XML serialization of the parsed document.
@@ -206,21 +188,27 @@ Use it when:
 - you want normal USX output
 - you need XML interchange
 
-### Lossless USX
+### editorTree
 
-`convert::into_usx_lossless` produces normal USX plus an embedded XML comment containing the original USFM source in encoded form.
-
-This is how the crate preserves exact source round-trip material for XML output.
+`convert::into_editor_tree` is the structured editor-load projection.
 
 Use it when:
 
-- you need USX as the outer format
-- you still need exact original USFM source preserved alongside it
+- you want a non-mutating editor load model
+- you want explicit linebreak and source-adjacent structure in a typed tree
+- you want to open/project content without silently formatting or rewriting it
 
-Short version:
+Loading `editorTree` is projection, not normalization. Walking it yourself does not apply fixes or formatting.
 
-- regular USJ/USX: semantic interchange
-- lossless USJ/USX: semantic interchange plus exact-source round-trip material
+### Tokens and the internal document tree
+
+If you care about round-trip preservation, the real fidelity layer is:
+
+- the parsed `ParseHandle`
+- projected flat tokens
+- exact reconstruction via `parse::into_usfm_from_tokens`
+
+That is the layer that preserves the information needed for faithful USFM reconstruction. USJ and USX are semantic exports, not the primary round-trip-preserving representation.
 
 ## Parsing
 
@@ -436,9 +424,7 @@ Main conversion entrypoints:
 - `convert::from_usj`
 - `convert::from_usx`
 - `convert::into_usj`
-- `convert::into_usj_lossless`
 - `convert::into_usx`
-- `convert::into_usx_lossless`
 - `convert::into_html`
 - `convert::into_editor_tree`
 - `convert::into_vref`
@@ -533,9 +519,7 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 | lint usfm | 771.4ms | 231.3ms | 3.33x |
 | format usfm | 481.2ms | 120.0ms | 4.01x |
 | usfm -> usj | 379.5ms | 115.0ms | 3.30x |
-| usfm -> usj lossless | 597.3ms | 149.5ms | 4.00x |
 | usfm -> usx | 387.8ms | 93.5ms | 4.15x |
-| usfm -> usx lossless | 426.9ms | 129.1ms | 3.31x |
 | usfm -> html | 486.8ms | 123.5ms | 3.94x |
 | usfm -> vref | 100.0ms | 26.6ms | 3.76x |
 | usj -> usfm | 58.1ms | 15.0ms | 3.87x |
@@ -554,9 +538,7 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 | lint usfm | 62.8ms | 15.4ms | 4.08x |
 | format usfm | 49.2ms | 16.9ms | 2.92x |
 | usfm -> usj | 49.3ms | 12.9ms | 3.82x |
-| usfm -> usj lossless | 80.4ms | 23.4ms | 3.43x |
 | usfm -> usx | 51.0ms | 13.4ms | 3.81x |
-| usfm -> usx lossless | 55.4ms | 13.0ms | 4.27x |
 | usfm -> html | 59.5ms | 22.4ms | 2.66x |
 | usfm -> vref | 14.0ms | 3.3ms | 4.21x |
 | usj -> usfm | 5.7ms | 2.2ms | 2.58x |
@@ -575,9 +557,7 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 | lint usfm | 8.24s | 1.52s | 5.44x |
 | format usfm | 7.94s | 2.72s | 2.92x |
 | usfm -> usj | 7.84s | 1.54s | 5.10x |
-| usfm -> usj lossless | 12.12s | 2.88s | 4.21x |
 | usfm -> usx | 4.97s | 976.1ms | 5.09x |
-| usfm -> usx lossless | 5.19s | 1.40s | 3.71x |
 | usfm -> html | 10.34s | 2.22s | 4.65x |
 | usfm -> vref | 1.25s | 276.0ms | 4.54x |
 | usj -> usfm | 1.63s | 424.9ms | 3.83x |
@@ -590,6 +570,84 @@ Notes:
 - Parallel timings are file-level parallelism, not intra-file parser parallelism.
 - Reverse conversion timings (`usj -> usfm`, `usx -> usfm`) are measured from precomputed corpora generated from the same USFM sources.
 - Treat the table as a practical throughput snapshot, not a cross-machine guarantee.
+
+## WASM Timing Snapshot
+
+The following table uses the web-target WASM package in Node after module initialization. It is useful as a comparison point against the native numbers above, especially for downstream JS consumers.
+
+Run it locally with:
+
+```bash
+node benches/wasm_corpus_matrix.mjs --iterations 3 --markdown
+```
+
+<!-- wasm-corpus-bench:begin -->
+_Local release measurements of the web-target WASM package in Node, median wall-clock over 3 runs, after module initialization._
+
+### `examples.bsb`
+
+- USFM files: 66
+- Total files in corpus directory: 74
+- Total USFM source size: 4.51 MiB
+
+| Operation | WASM |
+| --- | ---: |
+| parse usfm | 173.2ms |
+| project tokens | 868.3ms |
+| lint usfm | 1.04s |
+| format usfm | 1.22s |
+| usfm -> usj | 610.0ms |
+| usfm -> usx | 590.3ms |
+| usfm -> html | 722.5ms |
+| usfm -> vref | 423.2ms |
+| usj -> usfm | 101.6ms |
+| usx -> usfm | 107.3ms |
+
+### `bdf_reg`
+
+- USFM files: 27
+- Total files in corpus directory: 33
+- Total USFM source size: 1.13 MiB
+
+| Operation | WASM |
+| --- | ---: |
+| parse usfm | 25.8ms |
+| project tokens | 108.4ms |
+| lint usfm | 112.0ms |
+| format usfm | 159.1ms |
+| usfm -> usj | 84.0ms |
+| usfm -> usx | 80.2ms |
+| usfm -> html | 96.7ms |
+| usfm -> vref | 69.2ms |
+| usj -> usfm | 14.1ms |
+| usx -> usfm | 46.2ms |
+
+### `en_ult`
+
+- USFM files: 67
+- Total files in corpus directory: 78
+- Total USFM source size: 98.43 MiB
+
+| Operation | WASM |
+| --- | ---: |
+| parse usfm | 4.26s |
+| project tokens | 23.23s |
+| lint usfm | 15.52s |
+| format usfm | 26.14s |
+| usfm -> usj | 16.72s |
+| usfm -> usx | 9.33s |
+| usfm -> html | 14.84s |
+| usfm -> vref | 8.14s |
+| usj -> usfm | 3.72s |
+| usx -> usfm | 2.83s |
+
+<!-- wasm-corpus-bench:end -->
+
+Takeaways:
+
+- WASM is still usable for smaller corpora, especially for direct format-to-format conversion.
+- Native Rust remains much faster for corpus-scale token work and formatting.
+- Native parallel execution is in a different throughput class entirely on large aligned corpora like `en_ult`.
 
 ## CLI
 

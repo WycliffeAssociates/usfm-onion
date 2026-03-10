@@ -10,33 +10,15 @@ export type Value =
 | { [key: string]: Value };
 
 
-export interface EditorTreeDocument {
-    type: string;
-    version: string;
-    content: EditorTreeNode[];
-}
-
-export interface UsjDocument {
-    type: string;
-    version: string;
-    content: UsjNode[];
-    _lossless_roundtrip?: UsjRoundtrip;
-}
-
-export interface UsjRoundtrip {
-    source: string;
-    fingerprint: string;
-}
-
 export interface WebApplyRevertsByBlockIdRequest {
     diffBlockIds: string[];
-    baselineTokens: WebFlatToken[];
-    currentTokens: WebFlatToken[];
+    baselineTokens: WebToken[];
+    currentTokens: WebToken[];
     buildOptions?: WebBuildSidBlocksOptions | null;
 }
 
 export interface WebApplyTokenFixesRequest {
-    tokens: WebFlatToken[];
+    tokens: WebToken[];
     fixes: WebTokenFix[];
 }
 
@@ -49,7 +31,7 @@ export interface WebBuildSidBlocksOptions {
 }
 
 export interface WebBuildSidBlocksRequest {
-    tokens: WebFlatToken[];
+    tokens: WebToken[];
     buildOptions?: WebBuildSidBlocksOptions | null;
 }
 
@@ -77,8 +59,8 @@ export interface WebChapterTokenDiff {
     currentTextOnly: string;
     isWhitespaceChange: boolean;
     isUsfmStructureChange: boolean;
-    originalTokens: WebFlatToken[];
-    currentTokens: WebFlatToken[];
+    originalTokens: WebToken[];
+    currentTokens: WebToken[];
     originalAlignment: WebTokenAlignment[];
     currentAlignment: WebTokenAlignment[];
     undoSide: string;
@@ -91,8 +73,8 @@ export interface WebContentRequest {
 }
 
 export interface WebDiffChapterTokenStreamsRequest {
-    baselineTokens: WebFlatToken[];
-    currentTokens: WebFlatToken[];
+    baselineTokens: WebToken[];
+    currentTokens: WebToken[];
     buildOptions?: WebBuildSidBlocksOptions | null;
 }
 
@@ -111,8 +93,8 @@ export interface WebDiffSidBlocksRequest {
 }
 
 export interface WebDiffTokensRequest {
-    baselineTokens: WebFlatToken[];
-    currentTokens: WebFlatToken[];
+    baselineTokens: WebToken[];
+    currentTokens: WebToken[];
     buildOptions?: WebBuildSidBlocksOptions | null;
 }
 
@@ -121,15 +103,6 @@ export interface WebDiffUsfmRequest {
     currentUsfm: string;
     tokenView?: WebTokenViewOptions | null;
     buildOptions?: WebBuildSidBlocksOptions | null;
-}
-
-export interface WebFlatToken {
-    id: string;
-    kind: string;
-    span: WebSpan;
-    sid: string | null;
-    marker: string | null;
-    text: string;
 }
 
 export interface WebFormatContentRequest {
@@ -147,17 +120,6 @@ export interface WebFormatContentsRequest {
     batchOptions?: WebBatchExecutionOptions | null;
 }
 
-export interface WebFormatFlatTokenBatchesRequest {
-    tokenBatches: WebFlatToken[][];
-    formatOptions?: WebFormatOptions | null;
-    batchOptions?: WebBatchExecutionOptions | null;
-}
-
-export interface WebFormatFlatTokensRequest {
-    tokens: WebFlatToken[];
-    formatOptions?: WebFormatOptions | null;
-}
-
 export interface WebFormatOptions {
     recoverMalformedMarkers?: boolean;
     collapseWhitespaceInText?: boolean;
@@ -173,6 +135,17 @@ export interface WebFormatOptions {
     insertStructuralLinebreaks?: boolean;
     collapseConsecutiveLinebreaks?: boolean;
     normalizeMarkerWhitespaceAtLineStart?: boolean;
+}
+
+export interface WebFormatTokenBatchesRequest {
+    tokenBatches: WebToken[][];
+    formatOptions?: WebFormatOptions | null;
+    batchOptions?: WebBatchExecutionOptions | null;
+}
+
+export interface WebFormatTokensRequest {
+    tokens: WebToken[];
+    formatOptions?: WebFormatOptions | null;
 }
 
 export interface WebHtmlOptions {
@@ -248,17 +221,6 @@ export interface WebLintDocumentRequest {
     options?: WebLintOptions | null;
 }
 
-export interface WebLintFlatTokenBatchesRequest {
-    tokenBatches: WebFlatToken[][];
-    options?: WebTokenLintOptions | null;
-    batchOptions?: WebBatchExecutionOptions | null;
-}
-
-export interface WebLintFlatTokensRequest {
-    tokens: WebFlatToken[];
-    options?: WebTokenLintOptions | null;
-}
-
 export interface WebLintIssue {
     code: string;
     severity: string;
@@ -285,8 +247,18 @@ export interface WebLintOptions {
 
 export interface WebLintSuppression {
     code: string;
-    spanStart: number;
-    spanEnd: number;
+    sid: string;
+}
+
+export interface WebLintTokenBatchesRequest {
+    tokenBatches: WebToken[][];
+    options?: WebTokenLintOptions | null;
+    batchOptions?: WebBatchExecutionOptions | null;
+}
+
+export interface WebLintTokensRequest {
+    tokens: WebToken[];
+    options?: WebTokenLintOptions | null;
 }
 
 export interface WebParseContentRequest {
@@ -347,8 +319,8 @@ export interface WebProjectedOpResult {
 }
 
 export interface WebProjectedUsfmDocument {
-    tokens: WebFlatToken[];
-    editorTree: EditorTreeDocument;
+    tokens: WebToken[];
+    documentTree: DocumentTreeDocument;
     lintIssues: WebLintIssue[] | null;
 }
 
@@ -366,8 +338,8 @@ export interface WebReplaceManyChapterDiffsInMapRequest {
 
 export interface WebRevertDiffBlockRequest {
     blockId: string;
-    baselineTokens: WebFlatToken[];
-    currentTokens: WebFlatToken[];
+    baselineTokens: WebToken[];
+    currentTokens: WebToken[];
     buildOptions?: WebBuildSidBlocksOptions | null;
 }
 
@@ -421,13 +393,22 @@ export interface WebStringOpResult {
     error: string | null;
 }
 
+export interface WebToken {
+    id: string;
+    kind: string;
+    span: WebSpan;
+    sid: string | null;
+    marker: string | null;
+    text: string;
+}
+
 export interface WebTokenAlignment {
     change: string;
     counterpartIndex: number | null;
 }
 
 export interface WebTokenBatch {
-    tokens: WebFlatToken[];
+    tokens: WebToken[];
 }
 
 export interface WebTokenLintOptions {
@@ -450,7 +431,7 @@ export interface WebTokenTransformChange {
 }
 
 export interface WebTokenTransformResult {
-    tokens: WebFlatToken[];
+    tokens: WebToken[];
     appliedChanges: WebTokenTransformChange[];
     skippedChanges: WebSkippedTokenTransform[];
 }
@@ -460,7 +441,7 @@ export interface WebTokenViewOptions {
 }
 
 export interface WebTokensOpResult {
-    value: WebFlatToken[] | null;
+    value: WebToken[] | null;
     error: string | null;
 }
 
@@ -473,14 +454,6 @@ export interface WebVrefEntry {
     reference: string;
     text: string;
 }
-
-export type EditorTreeElement = ({ type: "book" } & { marker: string; code: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "chapter" } & { marker: string; number: string } & Record<string, Value>) | ({ type: "verse" } & { marker: string; number: string } & Record<string, Value>) | ({ type: "para" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "char" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "note" } & { marker: string; caller: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "ms" } & { marker: string } & Record<string, Value>) | ({ type: "figure" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "sidebar" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "periph" } & { content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "table" } & { content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "table:row" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "table:cell" } & { marker: string; align: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "ref" } & { content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "unknown" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | ({ type: "unmatched" } & { marker: string; content?: EditorTreeNode[] } & Record<string, Value>) | { type: "optbreak" } | { type: "linebreak" };
-
-export type EditorTreeNode = string | EditorTreeElement;
-
-export type UsjElement = ({ type: "book" } & { marker: string; code: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "chapter" } & { marker: string; number: string } & Record<string, Value>) | ({ type: "verse" } & { marker: string; number: string } & Record<string, Value>) | ({ type: "para" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "char" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "note" } & { marker: string; caller: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "ms" } & { marker: string } & Record<string, Value>) | ({ type: "figure" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "sidebar" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "periph" } & { content?: UsjNode[] } & Record<string, Value>) | ({ type: "table" } & { content?: UsjNode[] } & Record<string, Value>) | ({ type: "table:row" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "table:cell" } & { marker: string; align: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "ref" } & { content?: UsjNode[] } & Record<string, Value>) | ({ type: "unknown" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | ({ type: "unmatched" } & { marker: string; content?: UsjNode[] } & Record<string, Value>) | { type: "optbreak" };
-
-export type UsjNode = string | UsjElement;
 
 export type WebDocumentFormat = "usfm" | "usj" | "usx";
 
@@ -497,9 +470,9 @@ export type WebTokenFix = { type: "replaceToken"; label: string; targetTokenId: 
 export type WebWhitespacePolicy = "preserve" | "mergeToVisible";
 
 
-export function applyRevertByBlockId(request: WebRevertDiffBlockRequest): WebFlatToken[];
+export function applyRevertByBlockId(request: WebRevertDiffBlockRequest): WebToken[];
 
-export function applyRevertsByBlockId(request: WebApplyRevertsByBlockIdRequest): WebFlatToken[];
+export function applyRevertsByBlockId(request: WebApplyRevertsByBlockIdRequest): WebToken[];
 
 export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTransformResult;
 
@@ -509,10 +482,23 @@ export function convertContent(request: WebContentRequest): string;
 
 export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsRequest): WebChapterTokenDiff[];
 
+/**
+ * Parse both sources, project canonical flat tokens, then diff.
+ *
+ * If you already have canonical flat tokens, prefer `diffFlatTokens(...)`.
+ */
 export function diffContent(request: WebDiffContentRequest): WebChapterTokenDiff[];
+
+/**
+ * Diff canonical flat token streams without reparsing source content.
+ */
+export function diffFlatTokens(request: WebDiffTokensRequest): WebChapterTokenDiff[];
 
 export function diffSidBlocks(request: WebDiffSidBlocksRequest): WebSidBlockDiff[];
 
+/**
+ * Diff canonical flat token streams without reparsing source content.
+ */
 export function diffTokens(request: WebDiffTokensRequest): WebChapterTokenDiff[];
 
 export function diffUsfm(request: WebDiffUsfmRequest): WebChapterTokenDiff[];
@@ -525,54 +511,87 @@ export function diffUsfmSourcesByChapter(request: WebDiffUsfmRequest): WebChapte
 
 export function flattenDiffMap(groups: WebChapterDiffGroup[]): WebChapterTokenDiff[];
 
+/**
+ * Parse content, project tokens, then run the formatter.
+ *
+ * If you already have canonical flat tokens, prefer `formatFlatTokens(...)`.
+ */
 export function formatContent(request: WebFormatContentRequest): WebTokenTransformResult;
 
 export function formatContents(request: WebFormatContentsRequest): WebTransformOpResult[];
 
-export function formatFlatTokenBatches(request: WebFormatFlatTokenBatchesRequest): WebTokenTransformResult[];
+/**
+ * Format canonical flat tokens without reparsing source content.
+ */
+export function formatFlatTokens(request: WebFormatTokensRequest): WebTokenTransformResult;
 
-export function formatFlatTokens(request: WebFormatFlatTokensRequest): WebTokenTransformResult;
+/**
+ * Format batches of canonical flat token streams without reparsing source content.
+ */
+export function formatTokenBatches(request: WebFormatTokenBatchesRequest): WebTokenTransformResult[];
 
-export function fromUsj(document: UsjDocument): string;
+/**
+ * Format canonical flat tokens without reparsing source content.
+ */
+export function formatTokens(request: WebFormatTokensRequest): WebTokenTransformResult;
+
+export function fromUsj(document: any): string;
 
 export function fromUsx(content: string): string;
 
-export function intoEditorTree(document: WebParsedDocument): EditorTreeDocument;
+/**
+ * Project a parsed document into the canonical document tree.
+ */
+export function intoDocumentTree(document: WebParsedDocument): any;
+
+/**
+ * Project a parsed document into the canonical document tree.
+ *
+ * `intoDocumentTree` is the preferred name. `intoEditorTree` remains as a
+ * compatibility alias for older consumers.
+ */
+export function intoEditorTree(document: WebParsedDocument): any;
 
 export function intoHtml(document: WebParsedDocument, options?: WebHtmlOptions | null): string;
 
-export function intoTokens(request: WebIntoTokensRequest): WebFlatToken[];
+/**
+ * Project a previously parsed document into canonical flat tokens.
+ */
+export function intoTokens(request: WebIntoTokensRequest): WebToken[];
 
 export function intoTokensBatch(request: WebIntoTokensBatchRequest): WebTokenBatch[];
 
-export function intoTokensFromContent(request: WebIntoTokensFromContentRequest): WebFlatToken[];
+/**
+ * Parse raw content and immediately project flat tokens.
+ *
+ * Prefer `parseContent(...)` plus `intoTokens(...)` when you will also lint,
+ * format, diff, or project other views from the same source.
+ */
+export function intoTokensFromContent(request: WebIntoTokensFromContentRequest): WebToken[];
 
 export function intoTokensFromContents(request: WebIntoTokensFromContentsRequest): WebTokensOpResult[];
 
-export function intoUsfmFromTokens(tokens: WebFlatToken[]): string;
+export function intoUsfmFromTokens(tokens: WebToken[]): string;
 
-export function intoUsj(document: WebParsedDocument): UsjDocument;
+export function intoUsj(document: WebParsedDocument): any;
 
-export function intoUsjFromTokens(tokens: WebFlatToken[]): UsjDocument;
-
-export function intoUsjLossless(document: WebParsedDocument): UsjDocument;
-
-export function intoUsjLosslessFromTokens(tokens: WebFlatToken[]): UsjDocument;
+export function intoUsjFromTokens(tokens: WebToken[]): any;
 
 export function intoUsx(request: WebIntoUsxRequest): string;
 
-export function intoUsxFromTokens(tokens: WebFlatToken[]): string;
-
-export function intoUsxLossless(request: WebIntoUsxRequest): string;
-
-export function intoUsxLosslessFromTokens(tokens: WebFlatToken[]): string;
+export function intoUsxFromTokens(tokens: WebToken[]): string;
 
 export function intoVref(document: WebParsedDocument): WebVrefEntry[];
 
-export function intoVrefFromTokens(tokens: WebFlatToken[]): WebVrefEntry[];
+export function intoVrefFromTokens(tokens: WebToken[]): WebVrefEntry[];
 
 export function lexSources(request: WebLexSourcesRequest): WebScanResult[];
 
+/**
+ * Parse content, project tokens, then lint.
+ *
+ * If you already have canonical flat tokens, prefer `lintFlatTokens(...)`.
+ */
 export function lintContent(request: WebLintContentRequest): WebLintIssue[];
 
 export function lintContents(request: WebLintContentsRequest): WebLintOpResult[];
@@ -581,12 +600,27 @@ export function lintDocument(request: WebLintDocumentRequest): WebLintIssue[];
 
 export function lintDocumentBatch(request: WebLintDocumentBatchRequest): WebLintBatch[];
 
-export function lintFlatTokenBatches(request: WebLintFlatTokenBatchesRequest): WebLintBatch[];
+/**
+ * Lint canonical flat tokens without reparsing source content.
+ */
+export function lintFlatTokens(request: WebLintTokensRequest): WebLintIssue[];
 
-export function lintFlatTokens(request: WebLintFlatTokensRequest): WebLintIssue[];
+/**
+ * Lint batches of canonical flat token streams without reparsing source content.
+ */
+export function lintTokenBatches(request: WebLintTokenBatchesRequest): WebLintBatch[];
+
+/**
+ * Lint canonical flat tokens without reparsing source content.
+ */
+export function lintTokens(request: WebLintTokensRequest): WebLintIssue[];
 
 export function packageVersion(): string;
 
+/**
+ * Parse raw content once and keep the returned document if you plan to project
+ * multiple views from it.
+ */
 export function parseContent(request: WebParseContentRequest): WebParsedDocument;
 
 export function parseContents(request: WebParseContentsRequest): WebParsedOpResult[];
@@ -601,15 +635,15 @@ export function projectDocument(request: WebProjectDocumentRequest): WebProjecte
 
 export function projectUsfmBatch(request: WebProjectContentsRequest): WebProjectedUsfmDocument[];
 
-export function pushWhitespace(tokens: WebFlatToken[]): WebFlatToken[];
+export function pushWhitespace(tokens: WebToken[]): WebToken[];
 
 export function replaceChapterDiffsInMap(request: WebReplaceChapterDiffsInMapRequest): WebChapterDiffGroup[];
 
 export function replaceManyChapterDiffsInMap(request: WebReplaceManyChapterDiffsInMapRequest): WebChapterDiffGroup[];
 
-export function revertDiffBlock(request: WebRevertDiffBlockRequest): WebFlatToken[];
+export function revertDiffBlock(request: WebRevertDiffBlockRequest): WebToken[];
 
-export function revertDiffBlocks(request: WebApplyRevertsByBlockIdRequest): WebFlatToken[];
+export function revertDiffBlocks(request: WebApplyRevertsByBlockIdRequest): WebToken[];
 
 export function usfmToHtml(content: string, options?: WebHtmlOptions | null): string;
 

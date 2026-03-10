@@ -1,40 +1,35 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use crate::model::token::Token;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
-#[cfg(target_arch = "wasm32")]
-use tsify::Tsify;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
-pub struct EditorTreeDocument {
+pub struct DocumentTreeDocument {
     #[serde(rename = "type")]
     pub doc_type: String,
     pub version: String,
-    pub content: Vec<EditorTreeNode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tokens: Vec<Token>,
+    pub content: Vec<DocumentTreeNode>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DocumentTreeNode {
+    Element(DocumentTreeElement),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
-#[serde(untagged)]
-pub enum EditorTreeNode {
-    Text(String),
-    Element(EditorTreeElement),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(tag = "type")]
-pub enum EditorTreeElement {
+pub enum DocumentTreeElement {
+    #[serde(rename = "text")]
+    Text { value: String },
     #[serde(rename = "book")]
     Book {
         marker: String,
         code: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -56,7 +51,7 @@ pub enum EditorTreeElement {
     Para {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -64,7 +59,7 @@ pub enum EditorTreeElement {
     Char {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -73,7 +68,7 @@ pub enum EditorTreeElement {
         marker: String,
         caller: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -87,7 +82,7 @@ pub enum EditorTreeElement {
     Figure {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -95,21 +90,21 @@ pub enum EditorTreeElement {
     Sidebar {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
     #[serde(rename = "periph")]
     Periph {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
     #[serde(rename = "table")]
     Table {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -117,7 +112,7 @@ pub enum EditorTreeElement {
     TableRow {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -126,14 +121,14 @@ pub enum EditorTreeElement {
         marker: String,
         align: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
     #[serde(rename = "ref")]
     Ref {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -141,7 +136,7 @@ pub enum EditorTreeElement {
     Unknown {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
@@ -149,12 +144,38 @@ pub enum EditorTreeElement {
     Unmatched {
         marker: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        content: Vec<EditorTreeNode>,
+        content: Vec<DocumentTreeNode>,
         #[serde(flatten)]
         extra: BTreeMap<String, Value>,
     },
     #[serde(rename = "optbreak")]
     OptBreak {},
     #[serde(rename = "linebreak")]
-    LineBreak {},
+    LineBreak { value: String },
+}
+
+impl Serialize for DocumentTreeNode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Element(element) => element.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DocumentTreeNode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::String(text) => Ok(Self::Element(DocumentTreeElement::Text { value: text })),
+            other => serde_json::from_value::<DocumentTreeElement>(other)
+                .map(Self::Element)
+                .map_err(serde::de::Error::custom),
+        }
+    }
 }

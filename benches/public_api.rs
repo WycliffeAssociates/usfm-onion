@@ -4,22 +4,22 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
 use usfm_onion::{
-    BuildSidBlocksOptions,
     convert::{
-        convert_content, convert_path, into_usj, into_usj_from_tokens, into_usj_lossless,
-        into_usj_lossless_from_tokens, into_usx, into_usx_from_tokens, into_usx_lossless,
-        into_usx_lossless_from_tokens, into_vref, into_vref_from_tokens,
+        HtmlOptions, convert_path, from_usj_str, from_usx_str, tokens_to_html, tokens_to_usj,
+        tokens_to_usx, tokens_to_vref, usfm_to_html, usfm_to_usj, usfm_to_usx, usfm_to_vref,
     },
-    diff::{diff_content, diff_paths, diff_tokens},
-    format::{format_content, format_contents, format_flat_tokens, format_path},
-    lint::{
-        LintOptions, TokenLintOptions, lint_content, lint_contents, lint_flat_tokens, lint_path,
+    diff::{BuildSidBlocksOptions, diff_content, diff_paths, diff_tokens},
+    document_tree::{
+        document_tree_to_tokens, read_usfm_to_document_tree, read_usj_to_document_tree,
+        read_usx_to_document_tree, tokens_to_document_tree, usfm_to_document_tree,
+        usj_to_document_tree, usx_to_document_tree,
     },
-    model::{BatchExecutionOptions, DocumentFormat, FlatToken, TokenKind, TokenViewOptions},
-    parse::{
-        IntoTokensOptions, into_tokens, into_tokens_from_content, into_tokens_from_contents,
-        into_tokens_from_path, into_usfm_from_tokens, parse, parse_content, parse_contents,
-        parse_path,
+    format::{IntoTokensOptions, format_content, format_flat_tokens, format_path},
+    lint::{LintOptions, TokenLintOptions, lint_content, lint_flat_tokens, lint_path},
+    model::{DocumentFormat, Token, TokenKind},
+    tokens::{
+        TokenViewOptions, read_usfm_to_tokens, read_usj_to_tokens, read_usx_to_tokens,
+        tokens_to_usfm, usfm_to_tokens, usj_to_tokens, usx_to_tokens,
     },
 };
 
@@ -34,255 +34,112 @@ struct BenchCase {
     usx_path: PathBuf,
     modified_usfm: String,
     modified_usfm_path: PathBuf,
-    tokens: Vec<FlatToken>,
-    modified_tokens: Vec<FlatToken>,
-}
-
-struct CorpusCase {
-    sources: Vec<String>,
-    total_bytes: usize,
+    tokens: Vec<Token>,
+    modified_tokens: Vec<Token>,
 }
 
 fn benchmark_public_api(c: &mut Criterion) {
     let short = load_case("2jn_short", "en_ulb/64-2JN.usfm");
     let medium = load_case("luk_medium", "en_ulb/43-LUK.usfm");
     let large = load_case("psa_large", "en_ulb/19-PSA.usfm");
-    let corpus = load_corpus("en_ulb");
-
     let cases = [short, medium, large];
 
     bench_intake_output_content(c, &cases);
     bench_intake_output_path(c, &cases);
     bench_lint_format_diff_tokens(c, &cases);
     bench_lint_format_diff_content(c, &cases);
-    bench_corpus_parallel_file_level(c, &corpus);
 }
 
 fn bench_intake_output_content(c: &mut Criterion, cases: &[BenchCase]) {
-    let mut group = c.benchmark_group("quick_api/intake_output_content");
+    let mut group = c.benchmark_group("public_api/intake_output_content");
     for case in cases {
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
         group.bench_with_input(BenchmarkId::new("surface", case.label), case, |b, case| {
-            b.iter(|| {
-                black_box(run_intake_output_content_surface(case));
-            });
+            b.iter(|| black_box(run_intake_output_content_surface(case)));
         });
     }
     group.finish();
 }
 
 fn bench_intake_output_path(c: &mut Criterion, cases: &[BenchCase]) {
-    let mut group = c.benchmark_group("quick_api/intake_output_path");
+    let mut group = c.benchmark_group("public_api/intake_output_path");
     for case in cases {
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
         group.bench_with_input(BenchmarkId::new("surface", case.label), case, |b, case| {
-            b.iter(|| {
-                black_box(run_intake_output_path_surface(case));
-            });
+            b.iter(|| black_box(run_intake_output_path_surface(case)));
         });
     }
     group.finish();
 }
 
 fn bench_lint_format_diff_tokens(c: &mut Criterion, cases: &[BenchCase]) {
-    let mut group = c.benchmark_group("quick_api/lint_format_diff_tokens");
+    let mut group = c.benchmark_group("public_api/lint_format_diff_tokens");
     for case in cases {
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
         group.bench_with_input(BenchmarkId::new("surface", case.label), case, |b, case| {
-            b.iter(|| {
-                black_box(run_token_ops(case));
-            });
+            b.iter(|| black_box(run_token_ops(case)));
         });
     }
     group.finish();
 }
 
 fn bench_lint_format_diff_content(c: &mut Criterion, cases: &[BenchCase]) {
-    let mut group = c.benchmark_group("quick_api/lint_format_diff_content");
+    let mut group = c.benchmark_group("public_api/lint_format_diff_content");
     for case in cases {
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
         group.bench_with_input(BenchmarkId::new("surface", case.label), case, |b, case| {
-            b.iter(|| {
-                black_box(run_content_ops(case));
-            });
+            b.iter(|| black_box(run_content_ops(case)));
         });
     }
-    group.finish();
-}
-
-fn bench_corpus_parallel_file_level(c: &mut Criterion, corpus: &CorpusCase) {
-    let mut group = c.benchmark_group("quick_api/corpus_parallel_file_level");
-    group.throughput(Throughput::Bytes(corpus.total_bytes as u64));
-
-    group.bench_function(BenchmarkId::new("parse_contents", "serial"), |b| {
-        b.iter(|| {
-            black_box(parse_contents(
-                corpus.sources.as_slice(),
-                DocumentFormat::Usfm,
-                BatchExecutionOptions { parallel: false },
-            ));
-        });
-    });
-
-    group.bench_function(BenchmarkId::new("parse_contents", "parallel"), |b| {
-        b.iter(|| {
-            black_box(parse_contents(
-                corpus.sources.as_slice(),
-                DocumentFormat::Usfm,
-                BatchExecutionOptions { parallel: true },
-            ));
-        });
-    });
-
-    group.bench_function(
-        BenchmarkId::new("into_tokens_from_contents", "serial"),
-        |b| {
-            b.iter(|| {
-                black_box(into_tokens_from_contents(
-                    corpus.sources.as_slice(),
-                    DocumentFormat::Usfm,
-                    IntoTokensOptions::default(),
-                    BatchExecutionOptions { parallel: false },
-                ));
-            });
-        },
-    );
-
-    group.bench_function(
-        BenchmarkId::new("into_tokens_from_contents", "parallel"),
-        |b| {
-            b.iter(|| {
-                black_box(into_tokens_from_contents(
-                    corpus.sources.as_slice(),
-                    DocumentFormat::Usfm,
-                    IntoTokensOptions::default(),
-                    BatchExecutionOptions { parallel: true },
-                ));
-            });
-        },
-    );
-
-    group.bench_function(BenchmarkId::new("lint_contents", "serial"), |b| {
-        b.iter(|| {
-            black_box(lint_contents(
-                corpus.sources.as_slice(),
-                DocumentFormat::Usfm,
-                LintOptions::default(),
-                BatchExecutionOptions { parallel: false },
-            ));
-        });
-    });
-
-    group.bench_function(BenchmarkId::new("lint_contents", "parallel"), |b| {
-        b.iter(|| {
-            black_box(lint_contents(
-                corpus.sources.as_slice(),
-                DocumentFormat::Usfm,
-                LintOptions::default(),
-                BatchExecutionOptions { parallel: true },
-            ));
-        });
-    });
-
-    group.bench_function(BenchmarkId::new("format_contents", "serial"), |b| {
-        b.iter(|| {
-            black_box(format_contents(
-                corpus.sources.as_slice(),
-                DocumentFormat::Usfm,
-                IntoTokensOptions::default(),
-                BatchExecutionOptions { parallel: false },
-            ));
-        });
-    });
-
-    group.bench_function(BenchmarkId::new("format_contents", "parallel"), |b| {
-        b.iter(|| {
-            black_box(format_contents(
-                corpus.sources.as_slice(),
-                DocumentFormat::Usfm,
-                IntoTokensOptions::default(),
-                BatchExecutionOptions { parallel: true },
-            ));
-        });
-    });
-
     group.finish();
 }
 
 fn run_intake_output_content_surface(case: &BenchCase) -> usize {
     let mut score = 0usize;
 
-    let usfm_tokens = into_tokens_from_content(
-        case.usfm.as_str(),
-        DocumentFormat::Usfm,
-        IntoTokensOptions::default(),
-    )
-    .expect("USFM content should tokenize");
-    let usx_tokens = into_tokens_from_content(
-        case.usx.as_str(),
-        DocumentFormat::Usx,
-        IntoTokensOptions::default(),
-    )
-    .expect("USX content should tokenize");
-    let usj_tokens = into_tokens_from_content(
-        case.usj.as_str(),
-        DocumentFormat::Usj,
-        IntoTokensOptions::default(),
-    )
-    .expect("USJ content should tokenize");
-
+    let usfm_tokens = usfm_to_tokens(case.usfm.as_str());
+    let usx_tokens = usx_to_tokens(case.usx.as_str()).expect("USX content should tokenize");
+    let usj_tokens = usj_to_tokens(case.usj.as_str()).expect("USJ content should tokenize");
     score += usfm_tokens.len() + usx_tokens.len() + usj_tokens.len();
 
-    let usfm_from_usx =
-        convert_content(case.usx.as_str(), DocumentFormat::Usx, DocumentFormat::Usfm)
-            .expect("USX should convert to USFM");
-    let usfm_from_usj =
-        convert_content(case.usj.as_str(), DocumentFormat::Usj, DocumentFormat::Usfm)
-            .expect("USJ should convert to USFM");
-    let usx_from_usfm = convert_content(
-        case.usfm.as_str(),
-        DocumentFormat::Usfm,
-        DocumentFormat::Usx,
-    )
-    .expect("USFM should convert to USX");
-    let usj_from_usfm = convert_content(
-        case.usfm.as_str(),
-        DocumentFormat::Usfm,
-        DocumentFormat::Usj,
-    )
-    .expect("USFM should convert to USJ");
+    let usfm_tree = usfm_to_document_tree(case.usfm.as_str());
+    let usx_tree = usx_to_document_tree(case.usx.as_str()).expect("USX content should project");
+    let usj_tree = usj_to_document_tree(case.usj.as_str()).expect("USJ content should project");
+    score += usfm_tree.content.len() + usx_tree.content.len() + usj_tree.content.len();
 
-    score += usfm_from_usx.len() + usfm_from_usj.len() + usx_from_usfm.len() + usj_from_usfm.len();
+    let usfm_from_usx = from_usx_str(case.usx.as_str()).expect("USX should convert to USFM");
+    let usfm_from_usj = from_usj_str(case.usj.as_str()).expect("USJ should convert to USFM");
+    let usx_from_usfm = usfm_to_usx(case.usfm.as_str()).expect("USFM should convert to USX");
+    let usj_from_usfm = usfm_to_usj(case.usfm.as_str()).expect("USFM should convert to USJ");
+    let html_from_usfm =
+        usfm_to_html(case.usfm.as_str(), HtmlOptions::default()).expect("USFM should render HTML");
+    let vref_from_usfm = usfm_to_vref(case.usfm.as_str()).expect("USFM should project VREF");
 
-    let handle =
-        parse_content(case.usfm.as_str(), DocumentFormat::Usfm).expect("USFM content should parse");
-    let usj = into_usj(&handle);
-    let usx = into_usx(&handle).expect("USX should serialize");
-    let vref = into_vref(&handle);
-    let usj_lossless = into_usj_lossless(&handle);
-    let usx_lossless = into_usx_lossless(&handle).expect("lossless USX should serialize");
+    score += usfm_from_usx.len()
+        + usfm_from_usj.len()
+        + usx_from_usfm.len()
+        + usj_from_usfm.content.len()
+        + html_from_usfm.len()
+        + vref_from_usfm.len();
 
-    score += usj.content.len();
-    score += usx.len();
-    score += vref.len();
-    score += usj_lossless.content.len();
-    score += usx_lossless.len();
+    let usfm_from_tokens = tokens_to_usfm(case.tokens.as_slice());
+    let tree_from_tokens = tokens_to_document_tree(case.tokens.as_slice());
+    let tokens_from_tree =
+        document_tree_to_tokens(&tree_from_tokens).expect("document tree should flatten");
+    let usj_from_tokens = tokens_to_usj(case.tokens.as_slice()).expect("tokens should project USJ");
+    let usx_from_tokens = tokens_to_usx(case.tokens.as_slice()).expect("tokens should project USX");
+    let html_from_tokens = tokens_to_html(case.tokens.as_slice(), HtmlOptions::default())
+        .expect("tokens should render HTML");
+    let vref_from_tokens =
+        tokens_to_vref(case.tokens.as_slice()).expect("tokens should project VREF");
 
-    let usfm_from_tokens = into_usfm_from_tokens(case.tokens.as_slice());
-    let usj_from_tokens = into_usj_from_tokens(case.tokens.as_slice());
-    let usx_from_tokens =
-        into_usx_from_tokens(case.tokens.as_slice()).expect("USX should serialize");
-    let vref_from_tokens = into_vref_from_tokens(case.tokens.as_slice());
-    let usj_lossless_from_tokens = into_usj_lossless_from_tokens(case.tokens.as_slice());
-    let usx_lossless_from_tokens =
-        into_usx_lossless_from_tokens(case.tokens.as_slice()).expect("USX should serialize");
-
-    score += usfm_from_tokens.len();
-    score += usj_from_tokens.content.len();
-    score += usx_from_tokens.len();
-    score += vref_from_tokens.len();
-    score += usj_lossless_from_tokens.content.len();
-    score += usx_lossless_from_tokens.len();
+    score += usfm_from_tokens.len()
+        + tree_from_tokens.content.len()
+        + tokens_from_tree.len()
+        + usj_from_tokens.content.len()
+        + usx_from_tokens.len()
+        + html_from_tokens.len()
+        + vref_from_tokens.len();
 
     score
 }
@@ -290,35 +147,19 @@ fn run_intake_output_content_surface(case: &BenchCase) -> usize {
 fn run_intake_output_path_surface(case: &BenchCase) -> usize {
     let mut score = 0usize;
 
-    let usfm_handle =
-        parse_path(case.usfm_path.as_path(), DocumentFormat::Usfm).expect("USFM path should parse");
-    let usx_handle =
-        parse_path(case.usx_path.as_path(), DocumentFormat::Usx).expect("USX path should parse");
-    let usj_handle =
-        parse_path(case.usj_path.as_path(), DocumentFormat::Usj).expect("USJ path should parse");
-    score += into_vref(&usfm_handle).len();
-    score += into_vref(&usx_handle).len();
-    score += into_vref(&usj_handle).len();
-
-    let usfm_tokens = into_tokens_from_path(
-        case.usfm_path.as_path(),
-        DocumentFormat::Usfm,
-        IntoTokensOptions::default(),
-    )
-    .expect("USFM path should tokenize");
-    let usx_tokens = into_tokens_from_path(
-        case.usx_path.as_path(),
-        DocumentFormat::Usx,
-        IntoTokensOptions::default(),
-    )
-    .expect("USX path should tokenize");
-    let usj_tokens = into_tokens_from_path(
-        case.usj_path.as_path(),
-        DocumentFormat::Usj,
-        IntoTokensOptions::default(),
-    )
-    .expect("USJ path should tokenize");
+    let usfm_tokens =
+        read_usfm_to_tokens(case.usfm_path.as_path()).expect("USFM path should tokenize");
+    let usx_tokens = read_usx_to_tokens(case.usx_path.as_path()).expect("USX path should tokenize");
+    let usj_tokens = read_usj_to_tokens(case.usj_path.as_path()).expect("USJ path should tokenize");
     score += usfm_tokens.len() + usx_tokens.len() + usj_tokens.len();
+
+    let usfm_tree = read_usfm_to_document_tree(case.usfm_path.as_path())
+        .expect("USFM path should project document tree");
+    let usx_tree = read_usx_to_document_tree(case.usx_path.as_path())
+        .expect("USX path should project document tree");
+    let usj_tree = read_usj_to_document_tree(case.usj_path.as_path())
+        .expect("USJ path should project document tree");
+    score += usfm_tree.content.len() + usx_tree.content.len() + usj_tree.content.len();
 
     let usfm_from_usx = convert_path(
         case.usx_path.as_path(),
@@ -421,14 +262,13 @@ fn load_case(label: &'static str, relative_path: &str) -> BenchCase {
     let usfm = fs::read_to_string(&usfm_path)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
 
-    let handle = parse(&usfm);
-    let tokens = into_tokens(&handle, IntoTokensOptions::default());
-    let usj = serde_json::to_string(&into_usj(&handle)).expect("USJ should serialize");
-    let usx = into_usx(&handle).expect("USX should serialize");
+    let tokens = usfm_to_tokens(&usfm);
+    let usj = serde_json::to_string(&usfm_to_usj(&usfm).expect("USJ should serialize"))
+        .expect("USJ JSON should serialize");
+    let usx = usfm_to_usx(&usfm).expect("USX should serialize");
 
     let modified_usfm = mutate_usfm_source(&usfm, tokens.as_slice());
-    let modified_handle = parse(&modified_usfm);
-    let modified_tokens = into_tokens(&modified_handle, IntoTokensOptions::default());
+    let modified_tokens = usfm_to_tokens(&modified_usfm);
 
     let usj_path = write_temp_file(label, "json", usj.as_str());
     let usx_path = write_temp_file(label, "xml", usx.as_str());
@@ -449,30 +289,6 @@ fn load_case(label: &'static str, relative_path: &str) -> BenchCase {
     }
 }
 
-fn load_corpus(relative_dir: &str) -> CorpusCase {
-    let root = manifest_dir().join(relative_dir);
-    let mut paths = fs::read_dir(&root)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", root.display()))
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("usfm"))
-        .collect::<Vec<_>>();
-    paths.sort();
-
-    let sources = paths
-        .iter()
-        .map(|path| {
-            fs::read_to_string(path)
-                .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
-        })
-        .collect::<Vec<_>>();
-    let total_bytes = sources.iter().map(String::len).sum();
-
-    CorpusCase {
-        sources,
-        total_bytes,
-    }
-}
-
 fn write_temp_file(stem: &str, ext: &str, content: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("usfm_onion_public_api_bench");
     fs::create_dir_all(&dir)
@@ -484,7 +300,7 @@ fn write_temp_file(stem: &str, ext: &str, content: &str) -> PathBuf {
     path
 }
 
-fn mutate_usfm_source(usfm: &str, tokens: &[FlatToken]) -> String {
+fn mutate_usfm_source(usfm: &str, tokens: &[Token]) -> String {
     let mut candidates = tokens
         .iter()
         .filter(|token| matches!(token.kind, TokenKind::Text | TokenKind::BookCode))
@@ -498,12 +314,14 @@ fn mutate_usfm_source(usfm: &str, tokens: &[FlatToken]) -> String {
     candidates.rotate_left(start);
 
     for token in candidates {
-        if token.span.end <= usfm.len()
+        if token.span.end <= usfm.chars().count()
             && token.span.start < token.span.end
             && let Some(replacement) = mutate_text_preserving_length(token.text.as_str())
         {
             let mut out = usfm.to_string();
-            out.replace_range(token.span.clone(), replacement.as_str());
+            let start = char_offset_to_byte_index(usfm, token.span.start);
+            let end = char_offset_to_byte_index(usfm, token.span.end);
+            out.replace_range(start..end, replacement.as_str());
             return out;
         }
     }
@@ -524,16 +342,21 @@ fn mutate_text_preserving_length(text: &str) -> Option<String> {
     Some(chars.into_iter().collect())
 }
 
+fn char_offset_to_byte_index(source: &str, char_offset: usize) -> usize {
+    if char_offset == source.chars().count() {
+        return source.len();
+    }
+
+    source
+        .char_indices()
+        .nth(char_offset)
+        .map(|(index, _)| index)
+        .unwrap_or(source.len())
+}
+
 fn manifest_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
-criterion_group!(
-    name = benches;
-    config = Criterion::default()
-        .sample_size(10)
-        .warm_up_time(std::time::Duration::from_millis(400))
-        .measurement_time(std::time::Duration::from_secs(1));
-    targets = benchmark_public_api
-);
+criterion_group!(benches, benchmark_public_api);
 criterion_main!(benches);

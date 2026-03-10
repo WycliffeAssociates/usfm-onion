@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use crate::internal::usj::to_editor_tree_document;
-use crate::model::editor_tree::{EditorTreeDocument, EditorTreeElement, EditorTreeNode};
+use crate::internal::usj::to_document_tree_document;
+use crate::model::document_tree::{DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode};
 use crate::parse::handle::ParseHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,8 +48,8 @@ impl Default for HtmlOptions {
 }
 
 pub fn into_html(handle: &ParseHandle, options: HtmlOptions) -> String {
-    let tree = to_editor_tree_document(handle);
-    from_editor_tree(&tree, options)
+    let tree = to_document_tree_document(handle);
+    render_document_tree(&tree, options)
 }
 
 pub fn usfm_content_to_html(source: &str, options: HtmlOptions) -> String {
@@ -57,7 +57,7 @@ pub fn usfm_content_to_html(source: &str, options: HtmlOptions) -> String {
     into_html(&handle, options)
 }
 
-fn from_editor_tree(tree: &EditorTreeDocument, options: HtmlOptions) -> String {
+pub fn render_document_tree(tree: &DocumentTreeDocument, options: HtmlOptions) -> String {
     let mut renderer = HtmlRenderer::new(options);
     renderer.render_nodes(tree.content.as_slice(), false);
     let body = renderer.finish();
@@ -116,27 +116,29 @@ impl HtmlRenderer {
         self.output
     }
 
-    fn render_nodes(&mut self, nodes: &[EditorTreeNode], in_note_body: bool) {
+    fn render_nodes(&mut self, nodes: &[DocumentTreeNode], in_note_body: bool) {
         for node in nodes {
             self.render_node(node, in_note_body);
         }
     }
 
-    fn render_node(&mut self, node: &EditorTreeNode, in_note_body: bool) {
+    fn render_node(&mut self, node: &DocumentTreeNode, in_note_body: bool) {
         match node {
-            EditorTreeNode::Text(text) => self.output.push_str(escape_html(text).as_str()),
-            EditorTreeNode::Element(element) => self.render_element(element, in_note_body),
+            DocumentTreeNode::Element(element) => self.render_element(element, in_note_body),
         }
     }
 
-    fn render_element(&mut self, element: &EditorTreeElement, in_note_body: bool) {
+    fn render_element(&mut self, element: &DocumentTreeElement, in_note_body: bool) {
         match element {
-            EditorTreeElement::Verse { number, .. } => {
+            DocumentTreeElement::Text { value } => {
+                self.output.push_str(escape_html(value).as_str());
+            }
+            DocumentTreeElement::Verse { number, .. } => {
                 self.current_verse = Some(number.clone());
                 self.note_count_in_verse = 0;
                 self.render_wrapped("span", element, &[]);
             }
-            EditorTreeElement::Note {
+            DocumentTreeElement::Note {
                 marker,
                 caller,
                 content,
@@ -196,8 +198,8 @@ impl HtmlRenderer {
                     NoteKind::Crossref => self.crossrefs.push(note_html),
                 }
             }
-            EditorTreeElement::OptBreak {} => self.output.push_str("<wbr>"),
-            EditorTreeElement::LineBreak {} => self.output.push_str("<br>"),
+            DocumentTreeElement::OptBreak {} => self.output.push_str("<wbr>"),
+            DocumentTreeElement::LineBreak { .. } => self.output.push_str("<br>"),
             _ => {
                 let tag = tag_name(element, self.options.prefer_native_elements);
                 let children = element_children(element);
@@ -218,7 +220,7 @@ impl HtmlRenderer {
     fn render_wrapped(
         &mut self,
         tag: &str,
-        element: &EditorTreeElement,
+        element: &DocumentTreeElement,
         extra_attrs: &[(&str, &str)],
     ) {
         self.output.push('<');
@@ -237,7 +239,7 @@ impl HtmlRenderer {
         marker: &str,
         source_caller: &str,
         label: &str,
-        content: &[EditorTreeNode],
+        content: &[DocumentTreeNode],
     ) {
         self.output.push_str("<span");
         push_attr(&mut self.output, "data-usfm-type", "note");
@@ -259,7 +261,7 @@ impl HtmlRenderer {
         label: &str,
         call_id: &str,
         note_id: &str,
-        content: &[EditorTreeNode],
+        content: &[DocumentTreeNode],
         extra: &std::collections::BTreeMap<String, Value>,
     ) -> String {
         let mut nested = HtmlRenderer::new(self.options);
@@ -335,57 +337,60 @@ fn note_kind(marker: &str) -> NoteKind {
     }
 }
 
-fn tag_name(element: &EditorTreeElement, prefer_native_elements: bool) -> &'static str {
+fn tag_name(element: &DocumentTreeElement, prefer_native_elements: bool) -> &'static str {
     match element {
-        EditorTreeElement::Book { .. } if prefer_native_elements => "section",
-        EditorTreeElement::Figure { .. } if prefer_native_elements => "figure",
-        EditorTreeElement::Table { .. } => "table",
-        EditorTreeElement::TableRow { .. } => "tr",
-        EditorTreeElement::TableCell { .. } => "td",
-        EditorTreeElement::Book { .. }
-        | EditorTreeElement::Para { .. }
-        | EditorTreeElement::Sidebar { .. }
-        | EditorTreeElement::Periph { .. }
-        | EditorTreeElement::Unknown { .. }
-        | EditorTreeElement::Unmatched { .. }
-        | EditorTreeElement::Figure { .. } => "div",
-        EditorTreeElement::Char { .. }
-        | EditorTreeElement::Ref { .. }
-        | EditorTreeElement::Chapter { .. }
-        | EditorTreeElement::Verse { .. }
-        | EditorTreeElement::Milestone { .. }
-        | EditorTreeElement::Note { .. } => "span",
-        EditorTreeElement::OptBreak {} => "wbr",
-        EditorTreeElement::LineBreak {} => "br",
+        DocumentTreeElement::Text { .. } => "span",
+        DocumentTreeElement::Book { .. } if prefer_native_elements => "section",
+        DocumentTreeElement::Figure { .. } if prefer_native_elements => "figure",
+        DocumentTreeElement::Table { .. } => "table",
+        DocumentTreeElement::TableRow { .. } => "tr",
+        DocumentTreeElement::TableCell { .. } => "td",
+        DocumentTreeElement::Book { .. }
+        | DocumentTreeElement::Para { .. }
+        | DocumentTreeElement::Sidebar { .. }
+        | DocumentTreeElement::Periph { .. }
+        | DocumentTreeElement::Unknown { .. }
+        | DocumentTreeElement::Unmatched { .. }
+        | DocumentTreeElement::Figure { .. } => "div",
+        DocumentTreeElement::Char { .. }
+        | DocumentTreeElement::Ref { .. }
+        | DocumentTreeElement::Chapter { .. }
+        | DocumentTreeElement::Verse { .. }
+        | DocumentTreeElement::Milestone { .. }
+        | DocumentTreeElement::Note { .. } => "span",
+        DocumentTreeElement::OptBreak {} => "wbr",
+        DocumentTreeElement::LineBreak { .. } => "br",
     }
 }
 
-fn element_children(element: &EditorTreeElement) -> Option<&[EditorTreeNode]> {
+fn element_children(element: &DocumentTreeElement) -> Option<&[DocumentTreeNode]> {
     match element {
-        EditorTreeElement::Book { content, .. }
-        | EditorTreeElement::Para { content, .. }
-        | EditorTreeElement::Char { content, .. }
-        | EditorTreeElement::Note { content, .. }
-        | EditorTreeElement::Figure { content, .. }
-        | EditorTreeElement::Sidebar { content, .. }
-        | EditorTreeElement::Periph { content, .. }
-        | EditorTreeElement::Table { content, .. }
-        | EditorTreeElement::TableRow { content, .. }
-        | EditorTreeElement::TableCell { content, .. }
-        | EditorTreeElement::Ref { content, .. }
-        | EditorTreeElement::Unknown { content, .. }
-        | EditorTreeElement::Unmatched { content, .. } => Some(content.as_slice()),
-        EditorTreeElement::Chapter { .. }
-        | EditorTreeElement::Verse { .. }
-        | EditorTreeElement::Milestone { .. }
-        | EditorTreeElement::OptBreak {}
-        | EditorTreeElement::LineBreak {} => None,
+        DocumentTreeElement::Book { content, .. }
+        | DocumentTreeElement::Para { content, .. }
+        | DocumentTreeElement::Char { content, .. }
+        | DocumentTreeElement::Note { content, .. }
+        | DocumentTreeElement::Figure { content, .. }
+        | DocumentTreeElement::Sidebar { content, .. }
+        | DocumentTreeElement::Periph { content, .. }
+        | DocumentTreeElement::Table { content, .. }
+        | DocumentTreeElement::TableRow { content, .. }
+        | DocumentTreeElement::TableCell { content, .. }
+        | DocumentTreeElement::Ref { content, .. }
+        | DocumentTreeElement::Unknown { content, .. }
+        | DocumentTreeElement::Unmatched { content, .. } => Some(content.as_slice()),
+        DocumentTreeElement::Text { .. }
+        | DocumentTreeElement::Chapter { .. }
+        | DocumentTreeElement::Verse { .. }
+        | DocumentTreeElement::Milestone { .. }
+        | DocumentTreeElement::OptBreak {}
+        | DocumentTreeElement::LineBreak { .. } => None,
     }
 }
 
-fn push_common_element_attrs(out: &mut String, element: &EditorTreeElement) {
+fn push_common_element_attrs(out: &mut String, element: &DocumentTreeElement) {
     match element {
-        EditorTreeElement::Book {
+        DocumentTreeElement::Text { .. } => {}
+        DocumentTreeElement::Book {
             marker,
             code,
             extra,
@@ -396,7 +401,7 @@ fn push_common_element_attrs(out: &mut String, element: &EditorTreeElement) {
             push_attr(out, "data-usfm-code", code.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Chapter {
+        DocumentTreeElement::Chapter {
             marker,
             number,
             extra,
@@ -406,7 +411,7 @@ fn push_common_element_attrs(out: &mut String, element: &EditorTreeElement) {
             push_attr(out, "data-usfm-number", number.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Verse {
+        DocumentTreeElement::Verse {
             marker,
             number,
             extra,
@@ -416,17 +421,17 @@ fn push_common_element_attrs(out: &mut String, element: &EditorTreeElement) {
             push_attr(out, "data-usfm-number", number.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Para { marker, extra, .. } => {
+        DocumentTreeElement::Para { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "para");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Char { marker, extra, .. } => {
+        DocumentTreeElement::Char { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "char");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Note {
+        DocumentTreeElement::Note {
             marker,
             caller,
             extra,
@@ -437,35 +442,35 @@ fn push_common_element_attrs(out: &mut String, element: &EditorTreeElement) {
             push_attr(out, "data-usfm-source-caller", caller.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Milestone { marker, extra } => {
+        DocumentTreeElement::Milestone { marker, extra } => {
             push_attr(out, "data-usfm-type", "ms");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Figure { marker, extra, .. } => {
+        DocumentTreeElement::Figure { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "figure");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Sidebar { marker, extra, .. } => {
+        DocumentTreeElement::Sidebar { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "sidebar");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Periph { extra, .. } => {
+        DocumentTreeElement::Periph { extra, .. } => {
             push_attr(out, "data-usfm-type", "periph");
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Table { extra, .. } => {
+        DocumentTreeElement::Table { extra, .. } => {
             push_attr(out, "data-usfm-type", "table");
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::TableRow { marker, extra, .. } => {
+        DocumentTreeElement::TableRow { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "table:row");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::TableCell {
+        DocumentTreeElement::TableCell {
             marker,
             align,
             extra,
@@ -476,24 +481,24 @@ fn push_common_element_attrs(out: &mut String, element: &EditorTreeElement) {
             push_attr(out, "data-usfm-align", align.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Ref { extra, .. } => {
+        DocumentTreeElement::Ref { extra, .. } => {
             push_attr(out, "data-usfm-type", "ref");
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Unknown { marker, extra, .. } => {
+        DocumentTreeElement::Unknown { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "unknown");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::Unmatched { marker, extra, .. } => {
+        DocumentTreeElement::Unmatched { marker, extra, .. } => {
             push_attr(out, "data-usfm-type", "unmatched");
             push_attr(out, "data-usfm-marker", marker.as_str());
             push_extra_attrs(out, extra);
         }
-        EditorTreeElement::OptBreak {} => {
+        DocumentTreeElement::OptBreak {} => {
             push_attr(out, "data-usfm-type", "optbreak");
         }
-        EditorTreeElement::LineBreak {} => {
+        DocumentTreeElement::LineBreak { .. } => {
             push_attr(out, "data-usfm-type", "linebreak");
         }
     }

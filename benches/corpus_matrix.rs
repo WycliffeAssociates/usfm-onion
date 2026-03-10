@@ -7,13 +7,14 @@ use std::time::{Duration, Instant};
 
 use usfm_onion::{
     convert::{
-        HtmlOptions, convert_content, into_usj_lossless, into_usx_lossless, into_vref,
-        usfm_content_to_html,
+        HtmlOptions, convert_content, from_usj_str, from_usx_str, usfm_to_html, usfm_to_usx,
+        usfm_to_vref,
     },
-    format::{FormatOptions, format_contents_with_options},
-    lint::{LintOptions, lint_contents},
-    model::{BatchExecutionOptions, DocumentFormat},
-    parse::{IntoTokensOptions, into_tokens_from_contents, parse_content, parse_contents},
+    document_tree::usfm_to_document_tree,
+    format::format_content,
+    lint::{LintOptions, lint_content},
+    model::DocumentFormat,
+    tokens::usfm_to_tokens,
 };
 
 #[derive(Clone)]
@@ -36,15 +37,6 @@ struct CorpusSpec {
 enum Mode {
     Serial,
     Parallel,
-}
-
-impl Mode {
-    fn batch_options(self) -> BatchExecutionOptions {
-        match self {
-            Self::Serial => BatchExecutionOptions::sequential(),
-            Self::Parallel => BatchExecutionOptions::parallel(),
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -84,11 +76,11 @@ const CORPORA: &[CorpusSpec] = &[
 
 const OPERATIONS: &[Operation] = &[
     Operation {
-        label: "parse usfm",
-        run: bench_parse_usfm,
+        label: "usfm -> document_tree",
+        run: bench_into_document_tree,
     },
     Operation {
-        label: "project tokens",
+        label: "usfm -> tokens",
         run: bench_into_tokens,
     },
     Operation {
@@ -104,16 +96,8 @@ const OPERATIONS: &[Operation] = &[
         run: bench_usfm_to_usj,
     },
     Operation {
-        label: "usfm -> usj lossless",
-        run: bench_usfm_to_usj_lossless,
-    },
-    Operation {
         label: "usfm -> usx",
         run: bench_usfm_to_usx,
-    },
-    Operation {
-        label: "usfm -> usx lossless",
-        run: bench_usfm_to_usx_lossless,
     },
     Operation {
         label: "usfm -> html",
@@ -311,10 +295,7 @@ fn load_corpus(spec: &CorpusSpec) -> Corpus {
 
     let usx_sources = usfm_sources
         .iter()
-        .map(|source| {
-            convert_content(source, DocumentFormat::Usfm, DocumentFormat::Usx)
-                .expect("failed to precompute USX corpus")
-        })
+        .map(|source| usfm_to_usx(source).expect("failed to precompute USX corpus"))
         .collect::<Vec<_>>();
 
     Corpus {
@@ -367,51 +348,44 @@ fn total_file_count(root: &Path) -> usize {
     count
 }
 
-fn bench_parse_usfm(corpus: &Corpus, mode: Mode) -> usize {
-    parse_contents(
-        corpus.usfm_sources.as_slice(),
-        DocumentFormat::Usfm,
-        mode.batch_options(),
-    )
+fn bench_into_document_tree(corpus: &Corpus, mode: Mode) -> usize {
+    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
+        usfm_to_document_tree(source).content.len()
+    })
     .into_iter()
-    .map(|handle| handle.expect("parse corpus failed").source().len())
     .sum()
 }
 
 fn bench_into_tokens(corpus: &Corpus, mode: Mode) -> usize {
-    into_tokens_from_contents(
-        corpus.usfm_sources.as_slice(),
-        DocumentFormat::Usfm,
-        IntoTokensOptions::default(),
-        mode.batch_options(),
-    )
+    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
+        usfm_to_tokens(source).len()
+    })
     .into_iter()
-    .map(|tokens| tokens.expect("tokenize corpus failed").len())
     .sum()
 }
 
 fn bench_lint_usfm(corpus: &Corpus, mode: Mode) -> usize {
-    lint_contents(
-        corpus.usfm_sources.as_slice(),
-        DocumentFormat::Usfm,
-        LintOptions::default(),
-        mode.batch_options(),
-    )
+    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
+        lint_content(source, DocumentFormat::Usfm, LintOptions::default())
+            .expect("lint corpus failed")
+            .len()
+    })
     .into_iter()
-    .map(|result| result.expect("lint corpus failed").len())
     .sum()
 }
 
 fn bench_format_usfm(corpus: &Corpus, mode: Mode) -> usize {
-    format_contents_with_options(
-        corpus.usfm_sources.as_slice(),
-        DocumentFormat::Usfm,
-        IntoTokensOptions::default(),
-        FormatOptions::default(),
-        mode.batch_options(),
-    )
+    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
+        format_content(
+            source,
+            DocumentFormat::Usfm,
+            usfm_onion::format::IntoTokensOptions::default(),
+        )
+        .expect("format corpus failed")
+        .tokens
+        .len()
+    })
     .into_iter()
-    .map(|result| result.expect("format corpus failed").tokens.len())
     .sum()
 }
 
@@ -419,19 +393,6 @@ fn bench_usfm_to_usj(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
         convert_content(source, DocumentFormat::Usfm, DocumentFormat::Usj)
             .expect("USFM -> USJ failed")
-            .len()
-    })
-    .into_iter()
-    .sum()
-}
-
-fn bench_usfm_to_usj_lossless(corpus: &Corpus, mode: Mode) -> usize {
-    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
-        let handle =
-            parse_content(source, DocumentFormat::Usfm).expect("parse for lossless USJ failed");
-        let document = into_usj_lossless(&handle);
-        serde_json::to_vec(&document)
-            .expect("serialize lossless USJ failed")
             .len()
     })
     .into_iter()
@@ -448,21 +409,11 @@ fn bench_usfm_to_usx(corpus: &Corpus, mode: Mode) -> usize {
     .sum()
 }
 
-fn bench_usfm_to_usx_lossless(corpus: &Corpus, mode: Mode) -> usize {
-    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
-        let handle =
-            parse_content(source, DocumentFormat::Usfm).expect("parse for lossless USX failed");
-        into_usx_lossless(&handle)
-            .expect("serialize lossless USX failed")
-            .len()
-    })
-    .into_iter()
-    .sum()
-}
-
 fn bench_usfm_to_html(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
-        usfm_content_to_html(source, HtmlOptions::default()).len()
+        usfm_to_html(source, HtmlOptions::default())
+            .expect("USFM -> HTML failed")
+            .len()
     })
     .into_iter()
     .sum()
@@ -470,8 +421,7 @@ fn bench_usfm_to_html(corpus: &Corpus, mode: Mode) -> usize {
 
 fn bench_usfm_to_vref(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
-        let handle = parse_content(source, DocumentFormat::Usfm).expect("parse for VREF failed");
-        into_vref(&handle).len()
+        usfm_to_vref(source).expect("USFM -> VREF failed").len()
     })
     .into_iter()
     .sum()
@@ -479,9 +429,7 @@ fn bench_usfm_to_vref(corpus: &Corpus, mode: Mode) -> usize {
 
 fn bench_usj_to_usfm(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usj_sources.as_slice(), mode, |source| {
-        convert_content(source, DocumentFormat::Usj, DocumentFormat::Usfm)
-            .expect("USJ -> USFM failed")
-            .len()
+        from_usj_str(source).expect("USJ -> USFM failed").len()
     })
     .into_iter()
     .sum()
@@ -489,9 +437,7 @@ fn bench_usj_to_usfm(corpus: &Corpus, mode: Mode) -> usize {
 
 fn bench_usx_to_usfm(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usx_sources.as_slice(), mode, |source| {
-        convert_content(source, DocumentFormat::Usx, DocumentFormat::Usfm)
-            .expect("USX -> USFM failed")
-            .len()
+        from_usx_str(source).expect("USX -> USFM failed").len()
     })
     .into_iter()
     .sum()

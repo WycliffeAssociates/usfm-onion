@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_imports)]
+
 pub(crate) mod api;
 pub(crate) mod diff;
 pub(crate) mod format;
@@ -19,7 +21,5 @@ pub(crate) mod usj_walk;
 pub(crate) mod usx;
 pub(crate) mod usx_to_usfm;
 pub(crate) mod vref;
-#[cfg(target_arch = "wasm32")]
-pub(crate) mod wasm;
 pub(crate) mod write_exact;
 pub(crate) mod xml;

@@ -1,4 +1,4 @@
-pub(crate) mod handle;
+pub mod handle;
 
 pub use handle::{ParseHandle, recoveries, tokens};
 

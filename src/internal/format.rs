@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::internal::markers::{MarkerKind, lookup_marker};
-use crate::model::token::{FlatToken, Span, TokenKind, normalized_marker_name};
+use crate::model::token::{Span, Token, TokenKind, normalized_marker_name};
 
 const POETRY_MARKERS: &[&str] = &[
     "q", "q1", "q2", "q3", "q4", "q5", "qc", "qa", "qm", "qm1", "qm2", "qm3", "qd",
@@ -213,7 +213,7 @@ pub struct FormatProfile {
     pub total: Duration,
 }
 
-pub trait FormattableFlatToken: Clone {
+pub trait FormattableToken: Clone {
     fn id(&self) -> Option<&str> {
         None
     }
@@ -238,7 +238,7 @@ pub trait FormattableFlatToken: Clone {
     ) -> Self;
 }
 
-impl FormattableFlatToken for FlatToken {
+impl FormattableToken for Token {
     fn id(&self) -> Option<&str> {
         Some(&self.id)
     }
@@ -309,7 +309,7 @@ impl FormattableFlatToken for FlatToken {
 ///
 /// Implement this when built-in `FormatRule`s are not enough for a downstream
 /// policy. Passes are ordered and mutate a working token buffer in place.
-pub trait TokenFormatPass<T: FormattableFlatToken> {
+pub trait TokenFormatPass<T: FormattableToken> {
     fn label(&self) -> &str;
     fn apply(&self, tokens: &mut Vec<T>);
 }
@@ -317,15 +317,15 @@ pub trait TokenFormatPass<T: FormattableFlatToken> {
 /// Boxed formatter pass object.
 pub type BoxedTokenFormatPass<T> = Box<dyn TokenFormatPass<T>>;
 
-pub fn prettify_tokens<T: FormattableFlatToken>(tokens: &[T], options: FormatOptions) -> Vec<T> {
+pub fn prettify_tokens<T: FormattableToken>(tokens: &[T], options: FormatOptions) -> Vec<T> {
     format_tokens(tokens, options)
 }
 
-pub fn format<T: FormattableFlatToken>(tokens: &[T]) -> Vec<T> {
+pub fn format<T: FormattableToken>(tokens: &[T]) -> Vec<T> {
     format_tokens(tokens, FormatOptions::default())
 }
 
-pub fn format_with_passes<T: FormattableFlatToken>(
+pub fn format_with_passes<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
     passes: &[BoxedTokenFormatPass<T>],
@@ -335,12 +335,12 @@ pub fn format_with_passes<T: FormattableFlatToken>(
     working
 }
 
-pub fn format_mut<T: FormattableFlatToken>(tokens: &mut Vec<T>) {
+pub fn format_mut<T: FormattableToken>(tokens: &mut Vec<T>) {
     let formatted = format(tokens.as_slice());
     *tokens = formatted;
 }
 
-pub fn format_mut_with_passes<T: FormattableFlatToken>(
+pub fn format_mut_with_passes<T: FormattableToken>(
     tokens: &mut Vec<T>,
     options: FormatOptions,
     passes: &[BoxedTokenFormatPass<T>],
@@ -349,11 +349,11 @@ pub fn format_mut_with_passes<T: FormattableFlatToken>(
     *tokens = formatted;
 }
 
-pub fn format_tokens<T: FormattableFlatToken>(tokens: &[T], options: FormatOptions) -> Vec<T> {
+pub fn format_tokens<T: FormattableToken>(tokens: &[T], options: FormatOptions) -> Vec<T> {
     format_tokens_profile(tokens, options).0
 }
 
-pub fn format_tokens_profile<T: FormattableFlatToken>(
+pub fn format_tokens_profile<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
 ) -> (Vec<T>, FormatProfile) {
@@ -377,14 +377,18 @@ pub fn format_tokens_profile<T: FormattableFlatToken>(
     if options.move_chapter_label_after_chapter_marker
         || options.insert_default_paragraph_after_chapter_intro
     {
-        if options.move_chapter_label_after_chapter_marker {
+        if options.move_chapter_label_after_chapter_marker
+            && has_movable_chapter_label(working.as_slice())
+        {
             rewrite_tokens(
                 &mut working,
                 &mut scratch,
                 move_chapter_labels_after_chapter_into,
             );
         }
-        if options.insert_default_paragraph_after_chapter_intro {
+        if options.insert_default_paragraph_after_chapter_intro
+            && needs_default_paragraph_after_chapter_intro(working.as_slice())
+        {
             rewrite_tokens(
                 &mut working,
                 &mut scratch,
@@ -412,7 +416,7 @@ pub fn format_tokens_profile<T: FormattableFlatToken>(
     (working, profile)
 }
 
-fn apply_custom_passes<T: FormattableFlatToken>(
+fn apply_custom_passes<T: FormattableToken>(
     working: &mut Vec<T>,
     passes: &[BoxedTokenFormatPass<T>],
 ) {
@@ -421,7 +425,7 @@ fn apply_custom_passes<T: FormattableFlatToken>(
     }
 }
 
-fn normalize_tokens<T: FormattableFlatToken>(tokens: &[T], options: FormatOptions) -> Vec<T> {
+fn normalize_tokens<T: FormattableToken>(tokens: &[T], options: FormatOptions) -> Vec<T> {
     let mut out = Vec::with_capacity(tokens.len());
 
     let mut index = 0usize;
@@ -473,7 +477,7 @@ fn normalize_tokens<T: FormattableFlatToken>(tokens: &[T], options: FormatOption
     out
 }
 
-fn push_token_merging_text<T: FormattableFlatToken>(tokens: &mut Vec<T>, token: T) {
+fn push_token_merging_text<T: FormattableToken>(tokens: &mut Vec<T>, token: T) {
     if let Some(last) = tokens.last_mut()
         && token.kind() == &TokenKind::Text
         && last.kind() == &TokenKind::Text
@@ -492,7 +496,7 @@ fn push_token_merging_text<T: FormattableFlatToken>(tokens: &mut Vec<T>, token: 
 
 fn rewrite_tokens<T, F>(tokens: &mut Vec<T>, scratch: &mut Vec<T>, mut rewrite: F)
 where
-    T: FormattableFlatToken,
+    T: FormattableToken,
     F: FnMut(&[T], &mut Vec<T>),
 {
     std::mem::swap(tokens, scratch);
@@ -502,7 +506,7 @@ where
     scratch.clear();
 }
 
-fn recover_malformed_markers<T: FormattableFlatToken>(token: &T) -> Option<Vec<T>> {
+fn recover_malformed_markers<T: FormattableToken>(token: &T) -> Option<Vec<T>> {
     if token.kind() != &TokenKind::Text {
         return None;
     }
@@ -557,7 +561,7 @@ fn recover_malformed_markers<T: FormattableFlatToken>(token: &T) -> Option<Vec<T
     Some(out)
 }
 
-fn ensure_space_between_nodes<T: FormattableFlatToken>(mut token: T, prev: Option<&T>) -> T {
+fn ensure_space_between_nodes<T: FormattableToken>(mut token: T, prev: Option<&T>) -> T {
     if token.kind() == &TokenKind::Newline {
         return token;
     }
@@ -583,10 +587,15 @@ fn ensure_space_between_nodes<T: FormattableFlatToken>(mut token: T, prev: Optio
     token
 }
 
-fn collapse_whitespace_in_text_node<T: FormattableFlatToken>(mut token: T) -> T {
-    let mut collapsed = String::with_capacity(token.text().len());
+fn collapse_whitespace_in_text_node<T: FormattableToken>(mut token: T) -> T {
+    if !needs_horizontal_whitespace_collapse(token.text()) {
+        return token;
+    }
+
+    let text = token.text();
+    let mut collapsed = String::with_capacity(text.len());
     let mut previous_was_horizontal_ws = false;
-    for ch in token.text().chars() {
+    for ch in text.chars() {
         if matches!(ch, ' ' | '\t') {
             if !previous_was_horizontal_ws {
                 collapsed.push(' ');
@@ -597,13 +606,28 @@ fn collapse_whitespace_in_text_node<T: FormattableFlatToken>(mut token: T) -> T 
             collapsed.push(ch);
         }
     }
-    if collapsed != token.text() {
-        token.set_text(collapsed);
-    }
+    token.set_text(collapsed);
     token
 }
 
-fn remove_duplicate_verse_numbers<T: FormattableFlatToken>(
+fn needs_horizontal_whitespace_collapse(text: &str) -> bool {
+    let mut previous_was_space = false;
+    for ch in text.chars() {
+        match ch {
+            '\t' => return true,
+            ' ' => {
+                if previous_was_space {
+                    return true;
+                }
+                previous_was_space = true;
+            }
+            _ => previous_was_space = false,
+        }
+    }
+    false
+}
+
+fn remove_duplicate_verse_numbers<T: FormattableToken>(
     mut token: T,
     prev: Option<&T>,
     cleaned: &[T],
@@ -635,7 +659,7 @@ fn remove_duplicate_verse_numbers<T: FormattableFlatToken>(
     token
 }
 
-fn normalize_spacing_after_paragraph_markers<T: FormattableFlatToken>(
+fn normalize_spacing_after_paragraph_markers<T: FormattableToken>(
     mut token: T,
     prev: Option<&T>,
 ) -> T {
@@ -662,7 +686,7 @@ fn normalize_spacing_after_paragraph_markers<T: FormattableFlatToken>(
     token
 }
 
-fn should_remove_unwanted_linebreak<T: FormattableFlatToken>(
+fn should_remove_unwanted_linebreak<T: FormattableToken>(
     prev: Option<&T>,
     next: Option<&T>,
     cleaned: &[T],
@@ -703,7 +727,7 @@ fn should_remove_unwanted_linebreak<T: FormattableFlatToken>(
     false
 }
 
-fn normalize_verse_sequences_in_place<T: FormattableFlatToken>(
+fn normalize_verse_sequences_in_place<T: FormattableToken>(
     tokens: &mut Vec<T>,
     enable_bridge: bool,
     enable_orphan_cleanup: bool,
@@ -738,7 +762,7 @@ fn normalize_verse_sequences_in_place<T: FormattableFlatToken>(
     }
 }
 
-fn is_immediate_verse_pair<T: FormattableFlatToken>(tokens: &[T], index: usize) -> bool {
+fn is_immediate_verse_pair<T: FormattableToken>(tokens: &[T], index: usize) -> bool {
     tokens
         .get(index)
         .is_some_and(|token| token.kind() == &TokenKind::Marker && token.marker() == Some("v"))
@@ -747,7 +771,7 @@ fn is_immediate_verse_pair<T: FormattableFlatToken>(tokens: &[T], index: usize) 
             .is_some_and(|token| token.kind() == &TokenKind::Number)
 }
 
-fn bridge_verse_run<T: FormattableFlatToken>(tokens: &mut Vec<T>, index: usize) -> bool {
+fn bridge_verse_run<T: FormattableToken>(tokens: &mut Vec<T>, index: usize) -> bool {
     let Some(first_verse) = tokens
         .get(index + 1)
         .and_then(|token| parse_plain_verse(token.text()))
@@ -796,7 +820,7 @@ fn bridge_verse_run<T: FormattableFlatToken>(tokens: &mut Vec<T>, index: usize) 
     true
 }
 
-fn orphan_next_marker_index<T: FormattableFlatToken>(tokens: &[T], index: usize) -> Option<usize> {
+fn orphan_next_marker_index<T: FormattableToken>(tokens: &[T], index: usize) -> Option<usize> {
     let mut next_marker_index = index + 2;
     while next_marker_index < tokens.len()
         && tokens[next_marker_index].kind() == &TokenKind::Text
@@ -817,7 +841,7 @@ fn orphan_next_marker_index<T: FormattableFlatToken>(tokens: &[T], index: usize)
     }
 }
 
-fn cleanup_bridge_enumerator_at<T: FormattableFlatToken>(tokens: &mut [T], index: usize) {
+fn cleanup_bridge_enumerator_at<T: FormattableToken>(tokens: &mut [T], index: usize) {
     if !is_immediate_verse_pair(tokens, index) {
         return;
     }
@@ -839,7 +863,7 @@ fn cleanup_bridge_enumerator_at<T: FormattableFlatToken>(tokens: &mut [T], index
     }
 }
 
-fn insert_default_paragraph_after_chapter_intro_into<T: FormattableFlatToken>(
+fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(
     tokens: &[T],
     out: &mut Vec<T>,
 ) {
@@ -902,7 +926,84 @@ fn insert_default_paragraph_after_chapter_intro_into<T: FormattableFlatToken>(
     }
 }
 
-fn move_chapter_labels_after_chapter_into<T: FormattableFlatToken>(tokens: &[T], out: &mut Vec<T>) {
+fn has_movable_chapter_label<T: FormattableToken>(tokens: &[T]) -> bool {
+    let mut index = 0usize;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        if token.kind() != &TokenKind::Marker || token.marker() != Some("cl") {
+            index += 1;
+            continue;
+        }
+
+        let mut chapter_marker_index = index + 1;
+        while chapter_marker_index < tokens.len() {
+            let probe = &tokens[chapter_marker_index];
+            match probe.kind() {
+                TokenKind::Newline | TokenKind::Text => {
+                    chapter_marker_index += 1;
+                }
+                TokenKind::Marker if probe.marker() == Some("c") => return true,
+                _ => break,
+            }
+        }
+
+        index += 1;
+    }
+
+    false
+}
+
+fn needs_default_paragraph_after_chapter_intro<T: FormattableToken>(tokens: &[T]) -> bool {
+    let mut saw_chapter_marker = false;
+    let mut saw_chapter_number = false;
+    let mut in_chapter_intro = false;
+    let mut saw_para_marker_in_intro = false;
+
+    for token in tokens {
+        let is_chapter_marker = token.kind() == &TokenKind::Marker && token.marker() == Some("c");
+        let is_verse_marker = token.kind() == &TokenKind::Marker && token.marker() == Some("v");
+        let is_paragraph_marker = token.kind() == &TokenKind::Marker
+            && token
+                .marker()
+                .is_some_and(is_valid_paragraph_or_heading_marker);
+
+        if is_chapter_marker {
+            saw_chapter_marker = true;
+            saw_chapter_number = false;
+            in_chapter_intro = false;
+            saw_para_marker_in_intro = false;
+            continue;
+        }
+
+        if saw_chapter_marker && !saw_chapter_number {
+            if token.kind() == &TokenKind::Number {
+                saw_chapter_number = true;
+            }
+            continue;
+        }
+
+        if saw_chapter_marker && saw_chapter_number && !in_chapter_intro {
+            in_chapter_intro = true;
+        }
+
+        if !in_chapter_intro {
+            continue;
+        }
+
+        if is_paragraph_marker {
+            saw_para_marker_in_intro = true;
+            continue;
+        }
+
+        if is_verse_marker {
+            return !saw_para_marker_in_intro;
+        }
+    }
+
+    false
+}
+
+fn move_chapter_labels_after_chapter_into<T: FormattableToken>(tokens: &[T], out: &mut Vec<T>) {
     let mut index = 0usize;
     while index < tokens.len() {
         let token = &tokens[index];
@@ -918,7 +1019,7 @@ fn move_chapter_labels_after_chapter_into<T: FormattableFlatToken>(tokens: &[T],
         while chapter_marker_index < tokens.len() {
             let probe = &tokens[chapter_marker_index];
             match probe.kind() {
-                TokenKind::Whitespace | TokenKind::Newline | TokenKind::Text => {
+                TokenKind::Newline | TokenKind::Text => {
                     chapter_marker_index += 1;
                 }
                 TokenKind::Marker if probe.marker() == Some("c") => {
@@ -941,7 +1042,6 @@ fn move_chapter_labels_after_chapter_into<T: FormattableFlatToken>(tokens: &[T],
         while chapter_block_end < tokens.len() {
             let probe = &tokens[chapter_block_end];
             match probe.kind() {
-                TokenKind::Whitespace => chapter_block_end += 1,
                 TokenKind::Number => {
                     chapter_block_end += 1;
                     break;
@@ -960,7 +1060,7 @@ fn move_chapter_labels_after_chapter_into<T: FormattableFlatToken>(tokens: &[T],
     }
 }
 
-fn insert_structural_linebreaks_into<T: FormattableFlatToken>(tokens: &[T], out: &mut Vec<T>) {
+fn insert_structural_linebreaks_into<T: FormattableToken>(tokens: &[T], out: &mut Vec<T>) {
     for (index, token) in tokens.iter().enumerate() {
         let prev_out = out.last();
         let next_in = tokens.get(index + 1);
@@ -1003,7 +1103,7 @@ fn insert_structural_linebreaks_into<T: FormattableFlatToken>(tokens: &[T], out:
     }
 }
 
-fn collapse_consecutive_linebreaks_in_place<T: FormattableFlatToken>(tokens: &mut Vec<T>) {
+fn collapse_consecutive_linebreaks_in_place<T: FormattableToken>(tokens: &mut Vec<T>) {
     let mut write = 0usize;
     let mut previous_was_linebreak = false;
 
@@ -1022,7 +1122,7 @@ fn collapse_consecutive_linebreaks_in_place<T: FormattableFlatToken>(tokens: &mu
     tokens.truncate(write);
 }
 
-fn normalize_marker_whitespace_at_line_start_in_place<T: FormattableFlatToken>(tokens: &mut [T]) {
+fn normalize_marker_whitespace_at_line_start_in_place<T: FormattableToken>(tokens: &mut [T]) {
     for index in 0..tokens.len() {
         if tokens[index].kind() != &TokenKind::Marker {
             continue;
@@ -1039,7 +1139,7 @@ fn normalize_marker_whitespace_at_line_start_in_place<T: FormattableFlatToken>(t
     }
 }
 
-fn new_newline_like<T: FormattableFlatToken>(anchor: &T) -> T {
+fn new_newline_like<T: FormattableToken>(anchor: &T) -> T {
     T::synthetic_like(
         Some(anchor),
         TokenKind::Newline,
@@ -1056,11 +1156,11 @@ fn is_text_like(kind: &TokenKind) -> bool {
     )
 }
 
-fn is_protected_whitespace_boundary<T: FormattableFlatToken>(prev: &T, curr: &T) -> bool {
+fn is_protected_whitespace_boundary<T: FormattableToken>(prev: &T, curr: &T) -> bool {
     is_char_or_note_markerish(prev) || is_char_or_note_markerish(curr)
 }
 
-fn is_char_or_note_markerish<T: FormattableFlatToken>(token: &T) -> bool {
+fn is_char_or_note_markerish<T: FormattableToken>(token: &T) -> bool {
     if !matches!(
         token.kind(),
         TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone | TokenKind::MilestoneEnd
@@ -1239,11 +1339,7 @@ fn is_enumerator_punctuation(ch: char) -> bool {
     )
 }
 
-fn number_belongs_to_marker<T: FormattableFlatToken>(
-    tokens: &[T],
-    index: usize,
-    marker: &str,
-) -> bool {
+fn number_belongs_to_marker<T: FormattableToken>(tokens: &[T], index: usize, marker: &str) -> bool {
     if index == 0 {
         return false;
     }
@@ -1251,7 +1347,7 @@ fn number_belongs_to_marker<T: FormattableFlatToken>(
     while cursor > 0 {
         cursor -= 1;
         match tokens[cursor].kind() {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             TokenKind::Marker => return tokens[cursor].marker() == Some(marker),
             _ => return false,
         }
@@ -1281,7 +1377,7 @@ mod tests {
         lane: u8,
     }
 
-    impl FormattableFlatToken for EditorToken {
+    impl FormattableToken for EditorToken {
         fn id(&self) -> Option<&str> {
             Some(&self.id)
         }
@@ -1464,12 +1560,10 @@ mod tests {
             token(TokenKind::Text, " Chapter label", None),
             token(TokenKind::Newline, "\n", None),
             token(TokenKind::Marker, "\\c", Some("c")),
-            token(TokenKind::Whitespace, " ", None),
-            token(TokenKind::Number, "1", None),
+            token(TokenKind::Number, " 1", None),
             token(TokenKind::Newline, "\n", None),
             token(TokenKind::Marker, "\\v", Some("v")),
-            token(TokenKind::Whitespace, " ", None),
-            token(TokenKind::Number, "1", None),
+            token(TokenKind::Number, " 1", None),
             token(TokenKind::Text, " text", None),
         ];
 
@@ -1497,8 +1591,7 @@ mod tests {
         let tokens = vec![
             token(TokenKind::Marker, "\\s5", Some("s5")),
             token(TokenKind::Marker, "\\c", Some("c")),
-            token(TokenKind::Whitespace, " ", None),
-            token(TokenKind::Number, "1", None),
+            token(TokenKind::Number, " 1", None),
         ];
 
         let result = format(&tokens);

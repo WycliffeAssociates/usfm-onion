@@ -3,26 +3,16 @@ use crate::internal::api::types::{
     ProjectedUsfmDocument,
 };
 use crate::internal::lexer::lex;
-use crate::model::token::{FlatToken, SourceTokenText, TokenViewOptions, WhitespacePolicy};
+use crate::model::token::{SourceTokenText, Token, TokenViewOptions};
 use crate::parse::handle::{ParseHandle, tokens};
 
-pub fn push_whitespace(tokens: &[FlatToken]) -> Vec<FlatToken> {
-    let mut merged = tokens.to_vec();
-    merge_horizontal_whitespace(&mut merged);
-    merged
+pub fn push_whitespace(tokens: &[Token]) -> Vec<Token> {
+    tokens.to_vec()
 }
 
-pub fn into_tokens(handle: &ParseHandle, options: IntoTokensOptions) -> Vec<FlatToken> {
-    tokens(
-        handle,
-        TokenViewOptions {
-            whitespace_policy: if options.merge_horizontal_whitespace {
-                WhitespacePolicy::MergeToVisible
-            } else {
-                WhitespacePolicy::Preserve
-            },
-        },
-    )
+pub fn into_tokens(handle: &ParseHandle, options: IntoTokensOptions) -> Vec<Token> {
+    let _ = options;
+    tokens(handle, TokenViewOptions::default())
 }
 
 pub fn into_usfm_from_tokens<T: SourceTokenText>(tokens: &[T]) -> String {
@@ -39,14 +29,14 @@ pub fn project_document(
     options: ProjectUsfmOptions,
 ) -> ProjectedUsfmDocument {
     let tokens = into_tokens(handle, options.token_options);
-    let editor_tree = super::convert::into_editor_tree(handle);
+    let document_tree = super::convert::into_document_tree(handle);
     let lint_issues = options
         .lint_options
         .map(|lint_options| super::ops::lint_document(handle, lint_options));
 
     ProjectedUsfmDocument {
         tokens,
-        editor_tree,
+        document_tree,
         lint_issues,
     }
 }
@@ -124,7 +114,7 @@ pub fn into_tokens_from_content(
     source: &str,
     format: DocumentFormat,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     let handle = parse_content(source, format)?;
     Ok(into_tokens(&handle, options))
 }
@@ -132,21 +122,21 @@ pub fn into_tokens_from_content(
 pub fn into_tokens_from_usfm_content(
     source: &str,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     into_tokens_from_content(source, DocumentFormat::Usfm, options)
 }
 
 pub fn into_tokens_from_usj_content(
     source: &str,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     into_tokens_from_content(source, DocumentFormat::Usj, options)
 }
 
 pub fn into_tokens_from_usx_content(
     source: &str,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     into_tokens_from_content(source, DocumentFormat::Usx, options)
 }
 
@@ -154,7 +144,7 @@ pub fn into_tokens_from_path(
     path: impl AsRef<std::path::Path>,
     format: DocumentFormat,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     let handle = parse_path(path, format)?;
     Ok(into_tokens(&handle, options))
 }
@@ -162,21 +152,21 @@ pub fn into_tokens_from_path(
 pub fn into_tokens_from_usfm_path(
     path: impl AsRef<std::path::Path>,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     into_tokens_from_path(path, DocumentFormat::Usfm, options)
 }
 
 pub fn into_tokens_from_usj_path(
     path: impl AsRef<std::path::Path>,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     into_tokens_from_path(path, DocumentFormat::Usj, options)
 }
 
 pub fn into_tokens_from_usx_path(
     path: impl AsRef<std::path::Path>,
     options: IntoTokensOptions,
-) -> Result<Vec<FlatToken>, DocumentError> {
+) -> Result<Vec<Token>, DocumentError> {
     into_tokens_from_path(path, DocumentFormat::Usx, options)
 }
 
@@ -185,7 +175,7 @@ pub fn into_tokens_from_contents<S: AsRef<str> + Sync>(
     format: DocumentFormat,
     options: IntoTokensOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Result<Vec<FlatToken>, DocumentError>> {
+) -> Vec<Result<Vec<Token>, DocumentError>> {
     super::map_with_batch(sources, batch_options, |source| {
         into_tokens_from_content(source.as_ref(), format, options)
     })
@@ -196,7 +186,7 @@ pub fn into_tokens_from_paths<P: AsRef<std::path::Path> + Sync>(
     format: DocumentFormat,
     options: IntoTokensOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Result<Vec<FlatToken>, DocumentError>> {
+) -> Vec<Result<Vec<Token>, DocumentError>> {
     super::map_with_batch(paths, batch_options, |path| {
         into_tokens_from_path(path.as_ref(), format, options)
     })
@@ -282,7 +272,7 @@ pub fn into_tokens_batch(
     handles: &[ParseHandle],
     options: IntoTokensOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Vec<FlatToken>> {
+) -> Vec<Vec<Token>> {
     super::map_with_batch(handles, batch_options, |handle| {
         into_tokens(handle, options)
     })
@@ -296,34 +286,4 @@ pub fn project_usfm_batch<S: AsRef<str> + Sync>(
     super::map_with_batch(sources, batch_options, |source| {
         project_usfm(source.as_ref(), options.clone())
     })
-}
-
-fn merge_horizontal_whitespace(tokens: &mut Vec<FlatToken>) {
-    let mut index = 0usize;
-    while index < tokens.len() {
-        if tokens[index].kind != crate::model::TokenKind::Whitespace {
-            index += 1;
-            continue;
-        }
-
-        let ws = tokens[index].clone();
-        if let Some(next) = tokens.get_mut(index + 1)
-            && next.kind != crate::model::TokenKind::Newline
-        {
-            next.text = format!("{}{}", ws.text, next.text);
-            next.span = ws.span.start..next.span.end;
-            tokens.remove(index);
-            continue;
-        }
-
-        if index > 0 {
-            let prev = &mut tokens[index - 1];
-            prev.text.push_str(&ws.text);
-            prev.span = prev.span.start..ws.span.end;
-            tokens.remove(index);
-            continue;
-        }
-
-        index += 1;
-    }
 }

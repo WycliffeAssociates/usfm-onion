@@ -1,11 +1,6 @@
-use crate::internal::usx::try_extract_lossless_usfm_source;
 use crate::internal::xml::{XmlElement, XmlError, XmlNode, parse_xml_document};
 
 pub fn from_usx_string(input: &str) -> Result<String, UsxToUsfmError> {
-    if let Some(source) = try_extract_lossless_usfm_source(input) {
-        return Ok(source);
-    }
-
     let document = parse_xml_document(input)?;
     if document.root.name != "usx" {
         return Err(UsxToUsfmError::UnexpectedElement {
@@ -471,16 +466,5 @@ mod tests {
         let xml = r#"<usx version="3.1"><book code="GEN" style="id"/><chapter number="1" style="c" sid="GEN 1"/><para style="p"><verse number="1" style="v" sid="GEN 1:1"/>Text <note caller="+" style="f"><char style="fr">1.1: </char><char style="ft">tail</char></note><verse eid="GEN 1:1"/></para></usx>"#;
         let usfm = from_usx_string(xml).expect("USX should import");
         assert!(usfm.contains("\\f + \\fr 1.1: \\fr*\\ft tail\\ft*\\f*"));
-    }
-
-    #[test]
-    fn lossless_embedded_source_short_circuits_import() {
-        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\n";
-        let xml = crate::internal::usx::embed_lossless_usfm_source(
-            r#"<?xml version="1.0" encoding="utf-8"?><usx version="3.1"></usx>"#,
-            source,
-        );
-        let usfm = from_usx_string(xml.as_str()).expect("USX should import");
-        assert_eq!(usfm, source);
     }
 }

@@ -2,35 +2,16 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(target_arch = "wasm32")]
-use tsify::Tsify;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct UsjDocument {
     #[serde(rename = "type")]
     pub doc_type: String,
     pub version: String,
     pub content: Vec<UsjNode>,
-    #[serde(
-        rename = "_lossless_roundtrip",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub roundtrip: Option<UsjRoundtrip>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
-pub struct UsjRoundtrip {
-    pub source: String,
-    pub fingerprint: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(untagged)]
 pub enum UsjNode {
     Text(String),
@@ -38,8 +19,6 @@ pub enum UsjNode {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(target_arch = "wasm32", derive(Tsify))]
-#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(tag = "type")]
 pub enum UsjElement {
     #[serde(rename = "book")]

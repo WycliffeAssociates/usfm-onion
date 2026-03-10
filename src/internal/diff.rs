@@ -1,4 +1,4 @@
-use crate::model::token::{FlatToken, TokenKind, TokenViewOptions};
+use crate::model::token::{Token, TokenKind, TokenViewOptions};
 use crate::parse::handle::tokens;
 use crate::parse::parse;
 #[cfg(feature = "rayon")]
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-pub trait DiffableFlatToken: Clone {
+pub trait DiffableToken: Clone {
     fn sid(&self) -> Option<&str>;
     fn text(&self) -> &str;
     fn id(&self) -> Option<&str>;
@@ -19,7 +19,7 @@ pub trait DiffableFlatToken: Clone {
     }
 }
 
-impl DiffableFlatToken for FlatToken {
+impl DiffableToken for Token {
     fn sid(&self) -> Option<&str> {
         self.sid.as_deref()
     }
@@ -129,7 +129,7 @@ impl Default for BuildSidBlocksOptions {
 
 pub type DiffsByChapterMap<TDiff> = BTreeMap<String, BTreeMap<u32, Vec<TDiff>>>;
 
-pub fn build_sid_blocks<T: DiffableFlatToken>(
+pub fn build_sid_blocks<T: DiffableToken>(
     tokens: &[T],
     options: &BuildSidBlocksOptions,
 ) -> Vec<SidBlock> {
@@ -291,7 +291,7 @@ pub fn diff_sid_blocks(
     coalesce_delete_add_pairs(out)
 }
 
-pub fn diff_chapter_token_streams<T: DiffableFlatToken>(
+pub fn diff_chapter_token_streams<T: DiffableToken>(
     baseline_tokens: &[T],
     current_tokens: &[T],
     options: &BuildSidBlocksOptions,
@@ -306,7 +306,7 @@ pub fn diff_chapter_token_streams<T: DiffableFlatToken>(
         .collect()
 }
 
-fn build_chapter_token_diff<T: DiffableFlatToken>(
+fn build_chapter_token_diff<T: DiffableToken>(
     diff: SidBlockDiff,
     baseline_tokens: &[T],
     current_tokens: &[T],
@@ -344,7 +344,7 @@ fn build_chapter_token_diff<T: DiffableFlatToken>(
     }
 }
 
-fn align_token_sequences<T: DiffableFlatToken>(
+fn align_token_sequences<T: DiffableToken>(
     original_tokens: &[T],
     current_tokens: &[T],
 ) -> (Vec<TokenAlignment>, Vec<TokenAlignment>) {
@@ -459,7 +459,7 @@ fn align_token_sequences<T: DiffableFlatToken>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn align_removed_added_chunk<T: DiffableFlatToken>(
+fn align_removed_added_chunk<T: DiffableToken>(
     original_tokens: &[T],
     current_tokens: &[T],
     original_start: usize,
@@ -553,7 +553,7 @@ fn align_removed_added_chunk<T: DiffableFlatToken>(
     }
 }
 
-fn token_shape_key<T: DiffableFlatToken>(token: &T) -> String {
+fn token_shape_key<T: DiffableToken>(token: &T) -> String {
     if token_is_linebreak(token) {
         return "linebreak".to_string();
     }
@@ -564,7 +564,7 @@ fn token_shape_key<T: DiffableFlatToken>(token: &T) -> String {
     )
 }
 
-fn token_comparable_key<T: DiffableFlatToken>(token: &T) -> String {
+fn token_comparable_key<T: DiffableToken>(token: &T) -> String {
     if token_is_linebreak(token) {
         return "linebreak".to_string();
     }
@@ -578,7 +578,7 @@ fn token_comparable_key<T: DiffableFlatToken>(token: &T) -> String {
     format!("{kind}|{marker}|{comparable_text}")
 }
 
-fn can_pair_as_modified<T: DiffableFlatToken>(original: &T, current: &T) -> bool {
+fn can_pair_as_modified<T: DiffableToken>(original: &T, current: &T) -> bool {
     if token_is_linebreak(original) || token_is_linebreak(current) {
         return false;
     }
@@ -595,7 +595,7 @@ fn can_pair_as_modified<T: DiffableFlatToken>(original: &T, current: &T) -> bool
     original.marker_key().unwrap_or_default() == current.marker_key().unwrap_or_default()
 }
 
-fn token_is_linebreak<T: DiffableFlatToken>(token: &T) -> bool {
+fn token_is_linebreak<T: DiffableToken>(token: &T) -> bool {
     matches!(token.kind_key(), Some("verticalWhitespace"))
 }
 
@@ -608,7 +608,6 @@ fn diff_undo_side(status: DiffStatus) -> DiffUndoSide {
 
 fn token_kind_key(kind: &TokenKind) -> &'static str {
     match kind {
-        TokenKind::Whitespace => "whitespace",
         TokenKind::Newline => "newline",
         TokenKind::OptBreak => "optBreak",
         TokenKind::Marker => "marker",
@@ -622,7 +621,7 @@ fn token_kind_key(kind: &TokenKind) -> &'static str {
     }
 }
 
-pub fn apply_revert_by_block_id<T: DiffableFlatToken>(
+pub fn apply_revert_by_block_id<T: DiffableToken>(
     diff_block_id: &str,
     baseline_tokens: &[T],
     current_tokens: &[T],
@@ -677,7 +676,7 @@ pub fn apply_revert_by_block_id<T: DiffableFlatToken>(
     }
 }
 
-pub fn apply_reverts_by_block_id<T: DiffableFlatToken>(
+pub fn apply_reverts_by_block_id<T: DiffableToken>(
     diff_block_ids: &[String],
     baseline_tokens: &[T],
     current_tokens: &[T],
@@ -742,7 +741,7 @@ pub fn diff_usfm_sources(
     current_usfm: &str,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> Vec<ChapterTokenDiff<FlatToken>> {
+) -> Vec<ChapterTokenDiff<Token>> {
     let baseline = parse(baseline_usfm);
     let current = parse(current_usfm);
     let baseline_tokens = tokens(&baseline, *token_view);
@@ -756,7 +755,7 @@ pub fn diff_usfm_sources_parallel(
     current_usfm: &str,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> Vec<ChapterTokenDiff<FlatToken>> {
+) -> Vec<ChapterTokenDiff<Token>> {
     let baseline = parse(baseline_usfm);
     let current = parse(current_usfm);
     let baseline_tokens = tokens(&baseline, *token_view);
@@ -777,7 +776,7 @@ pub fn diff_usfm_sources_by_chapter(
     current_usfm: &str,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> DiffsByChapterMap<ChapterTokenDiff<FlatToken>> {
+) -> DiffsByChapterMap<ChapterTokenDiff<Token>> {
     let baseline = parse(baseline_usfm);
     let current = parse(current_usfm);
     let baseline_tokens = tokens(&baseline, *token_view);
@@ -830,7 +829,7 @@ pub fn diff_usfm_sources_by_chapter_parallel(
     current_usfm: &str,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> DiffsByChapterMap<ChapterTokenDiff<FlatToken>> {
+) -> DiffsByChapterMap<ChapterTokenDiff<Token>> {
     let baseline = parse(baseline_usfm);
     let current = parse(current_usfm);
     let baseline_tokens = tokens(&baseline, *token_view);
@@ -884,15 +883,15 @@ struct SequenceChange {
     ids: Vec<String>,
 }
 
-fn token_included<T: DiffableFlatToken>(token: &T, options: &BuildSidBlocksOptions) -> bool {
+fn token_included<T: DiffableToken>(token: &T, options: &BuildSidBlocksOptions) -> bool {
     options.allow_empty_sid || !normalized_sid(token).is_empty()
 }
 
-fn normalized_sid<T: DiffableFlatToken>(token: &T) -> String {
+fn normalized_sid<T: DiffableToken>(token: &T) -> String {
     token.sid().unwrap_or_default().to_string()
 }
 
-fn next_block_start<T: DiffableFlatToken>(
+fn next_block_start<T: DiffableToken>(
     tokens: &[T],
     start: usize,
     options: &BuildSidBlocksOptions,
@@ -1141,7 +1140,7 @@ fn find_insertion_index(
     0
 }
 
-fn group_tokens_by_book_and_chapter<T: DiffableFlatToken>(
+fn group_tokens_by_book_and_chapter<T: DiffableToken>(
     tokens: &[T],
     default_book_code: &str,
 ) -> BTreeMap<String, BTreeMap<u32, Vec<T>>> {
@@ -1182,7 +1181,7 @@ fn sid_chapter_num(sid: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::token::{FlatToken, TokenKind, WhitespacePolicy};
+    use crate::model::token::{Token, TokenKind, WhitespacePolicy};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct TestToken {
@@ -1191,7 +1190,7 @@ mod tests {
         id: Option<String>,
     }
 
-    impl DiffableFlatToken for TestToken {
+    impl DiffableToken for TestToken {
         fn sid(&self) -> Option<&str> {
             self.sid.as_deref()
         }
@@ -1213,8 +1212,8 @@ mod tests {
         }
     }
 
-    fn ft(sid: &str, id: &str, kind: TokenKind, marker: Option<&str>, text: &str) -> FlatToken {
-        FlatToken {
+    fn ft(sid: &str, id: &str, kind: TokenKind, marker: Option<&str>, text: &str) -> Token {
+        Token {
             id: id.to_string(),
             kind,
             span: 0..text.len(),

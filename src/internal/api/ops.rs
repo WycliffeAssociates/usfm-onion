@@ -1,9 +1,9 @@
 use crate::diff::{
-    BuildSidBlocksOptions, ChapterTokenDiff, DiffableFlatToken, DiffsByChapterMap,
+    BuildSidBlocksOptions, ChapterTokenDiff, DiffableToken, DiffsByChapterMap,
     diff_chapter_token_streams, diff_usfm_sources, diff_usfm_sources_by_chapter,
 };
 use crate::format::{
-    BoxedTokenFormatPass, FormatOptions, FormattableFlatToken, format_mut, format_mut_with_passes,
+    BoxedTokenFormatPass, FormatOptions, FormattableToken, format_mut, format_mut_with_passes,
 };
 use crate::internal::api::intake::{
     into_tokens, into_tokens_batch, parse_content, parse_path, parse_sources,
@@ -15,8 +15,8 @@ use crate::internal::transform::{
     TokenFix, TokenTransformResult, apply_fixes, format_tokens_result,
     format_tokens_result_with_passes,
 };
-use crate::lint::{LintIssue, LintOptions, LintableFlatToken, TokenLintOptions, lint_tokens};
-use crate::model::token::{FlatToken, TokenViewOptions};
+use crate::lint::{LintIssue, LintOptions, LintableToken, TokenLintOptions, lint_tokens};
+use crate::model::token::{Token, TokenViewOptions};
 use crate::parse::handle::{ParseHandle, tokens as project_tokens};
 
 pub fn lint_content(
@@ -105,7 +105,7 @@ pub fn format_content(
     source: &str,
     format: DocumentFormat,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     let handle = parse_content(source, format)?;
     let token_batch = into_tokens(&handle, token_options);
     Ok(format_flat_tokens(token_batch.as_slice()))
@@ -114,21 +114,21 @@ pub fn format_content(
 pub fn format_usfm_content(
     source: &str,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_content(source, DocumentFormat::Usfm, token_options)
 }
 
 pub fn format_usj_content(
     source: &str,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_content(source, DocumentFormat::Usj, token_options)
 }
 
 pub fn format_usx_content(
     source: &str,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_content(source, DocumentFormat::Usx, token_options)
 }
 
@@ -137,7 +137,7 @@ pub fn format_content_with_options(
     format: DocumentFormat,
     token_options: IntoTokensOptions,
     format_options: FormatOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     let handle = parse_content(source, format)?;
     let token_batch = into_tokens(&handle, token_options);
     Ok(format_flat_tokens_with_options(
@@ -151,8 +151,8 @@ pub fn format_content_with_passes(
     format: DocumentFormat,
     token_options: IntoTokensOptions,
     options: FormatOptions,
-    passes: &[BoxedTokenFormatPass<FlatToken>],
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+    passes: &[BoxedTokenFormatPass<Token>],
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     let handle = parse_content(source, format)?;
     let token_batch = into_tokens(&handle, token_options);
     Ok(format_flat_tokens_with_passes(
@@ -166,8 +166,8 @@ pub fn format_usfm_content_with_passes(
     source: &str,
     token_options: IntoTokensOptions,
     options: FormatOptions,
-    passes: &[BoxedTokenFormatPass<FlatToken>],
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+    passes: &[BoxedTokenFormatPass<Token>],
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_content_with_passes(source, DocumentFormat::Usfm, token_options, options, passes)
 }
 
@@ -175,8 +175,8 @@ pub fn format_usj_content_with_passes(
     source: &str,
     token_options: IntoTokensOptions,
     options: FormatOptions,
-    passes: &[BoxedTokenFormatPass<FlatToken>],
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+    passes: &[BoxedTokenFormatPass<Token>],
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_content_with_passes(source, DocumentFormat::Usj, token_options, options, passes)
 }
 
@@ -184,8 +184,8 @@ pub fn format_usx_content_with_passes(
     source: &str,
     token_options: IntoTokensOptions,
     options: FormatOptions,
-    passes: &[BoxedTokenFormatPass<FlatToken>],
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+    passes: &[BoxedTokenFormatPass<Token>],
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_content_with_passes(source, DocumentFormat::Usx, token_options, options, passes)
 }
 
@@ -194,7 +194,7 @@ pub fn format_contents<S: AsRef<str> + Sync>(
     format: DocumentFormat,
     token_options: IntoTokensOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Result<TokenTransformResult<FlatToken>, DocumentError>> {
+) -> Vec<Result<TokenTransformResult<Token>, DocumentError>> {
     super::map_with_batch(sources, batch_options, |source| {
         format_content(source.as_ref(), format, token_options)
     })
@@ -206,7 +206,7 @@ pub fn format_contents_with_options<S: AsRef<str> + Sync>(
     token_options: IntoTokensOptions,
     format_options: FormatOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Result<TokenTransformResult<FlatToken>, DocumentError>> {
+) -> Vec<Result<TokenTransformResult<Token>, DocumentError>> {
     super::map_with_batch(sources, batch_options, |source| {
         format_content_with_options(source.as_ref(), format, token_options, format_options)
     })
@@ -216,7 +216,7 @@ pub fn format_path(
     path: impl AsRef<std::path::Path>,
     format: DocumentFormat,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     let source = super::intake::read_document(path, format)?;
     format_content(&source, format, token_options)
 }
@@ -224,21 +224,21 @@ pub fn format_path(
 pub fn format_usfm_path(
     path: impl AsRef<std::path::Path>,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_path(path, DocumentFormat::Usfm, token_options)
 }
 
 pub fn format_usj_path(
     path: impl AsRef<std::path::Path>,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_path(path, DocumentFormat::Usj, token_options)
 }
 
 pub fn format_usx_path(
     path: impl AsRef<std::path::Path>,
     token_options: IntoTokensOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     format_path(path, DocumentFormat::Usx, token_options)
 }
 
@@ -247,7 +247,7 @@ pub fn format_path_with_options(
     format: DocumentFormat,
     token_options: IntoTokensOptions,
     format_options: FormatOptions,
-) -> Result<TokenTransformResult<FlatToken>, DocumentError> {
+) -> Result<TokenTransformResult<Token>, DocumentError> {
     let source = super::intake::read_document(path, format)?;
     format_content_with_options(&source, format, token_options, format_options)
 }
@@ -257,7 +257,7 @@ pub fn format_paths<P: AsRef<std::path::Path> + Sync>(
     format: DocumentFormat,
     token_options: IntoTokensOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Result<TokenTransformResult<FlatToken>, DocumentError>> {
+) -> Vec<Result<TokenTransformResult<Token>, DocumentError>> {
     super::map_with_batch(paths, batch_options, |path| {
         format_path(path.as_ref(), format, token_options)
     })
@@ -269,7 +269,7 @@ pub fn format_paths_with_options<P: AsRef<std::path::Path> + Sync>(
     token_options: IntoTokensOptions,
     format_options: FormatOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<Result<TokenTransformResult<FlatToken>, DocumentError>> {
+) -> Vec<Result<TokenTransformResult<Token>, DocumentError>> {
     super::map_with_batch(paths, batch_options, |path| {
         format_path_with_options(path.as_ref(), format, token_options, format_options)
     })
@@ -282,7 +282,7 @@ pub fn diff_content(
     current_format: DocumentFormat,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> Result<Vec<ChapterTokenDiff<FlatToken>>, DocumentError> {
+) -> Result<Vec<ChapterTokenDiff<Token>>, DocumentError> {
     let baseline_usfm = super::convert::decode_to_usfm(baseline_source, baseline_format)?;
     let current_usfm = super::convert::decode_to_usfm(current_source, current_format)?;
     Ok(diff_usfm(
@@ -300,7 +300,7 @@ pub fn diff_paths(
     current_format: DocumentFormat,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> Result<Vec<ChapterTokenDiff<FlatToken>>, DocumentError> {
+) -> Result<Vec<ChapterTokenDiff<Token>>, DocumentError> {
     let baseline_source = super::intake::read_document(baseline_path, baseline_format)?;
     let current_source = super::intake::read_document(current_path, current_format)?;
     diff_content(
@@ -337,14 +337,14 @@ pub fn lint_usfm_sources<S: AsRef<str> + Sync>(
     lint_document_batch(&handles, options, batch_options)
 }
 
-pub fn lint_flat_tokens<T: LintableFlatToken>(
+pub fn lint_flat_tokens<T: LintableToken>(
     tokens: &[T],
     options: TokenLintOptions,
 ) -> Vec<LintIssue> {
     lint_tokens(tokens, options)
 }
 
-pub fn lint_flat_token_batches<T: LintableFlatToken + Sync>(
+pub fn lint_flat_token_batches<T: LintableToken + Sync>(
     token_batches: &[Vec<T>],
     options: TokenLintOptions,
     batch_options: BatchExecutionOptions,
@@ -354,18 +354,18 @@ pub fn lint_flat_token_batches<T: LintableFlatToken + Sync>(
     })
 }
 
-pub fn format_flat_tokens<T: FormattableFlatToken>(tokens: &[T]) -> TokenTransformResult<T> {
+pub fn format_flat_tokens<T: FormattableToken>(tokens: &[T]) -> TokenTransformResult<T> {
     format_tokens_result(tokens, FormatOptions::default())
 }
 
-pub fn format_flat_tokens_with_options<T: FormattableFlatToken>(
+pub fn format_flat_tokens_with_options<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
 ) -> TokenTransformResult<T> {
     format_tokens_result(tokens, options)
 }
 
-pub fn format_flat_tokens_with_passes<T: FormattableFlatToken>(
+pub fn format_flat_tokens_with_passes<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
     passes: &[BoxedTokenFormatPass<T>],
@@ -373,11 +373,11 @@ pub fn format_flat_tokens_with_passes<T: FormattableFlatToken>(
     format_tokens_result_with_passes(tokens, options, passes)
 }
 
-pub fn format_flat_tokens_mut<T: FormattableFlatToken>(tokens: &mut Vec<T>) {
+pub fn format_flat_tokens_mut<T: FormattableToken>(tokens: &mut Vec<T>) {
     format_mut(tokens);
 }
 
-pub fn format_flat_tokens_mut_with_passes<T: FormattableFlatToken>(
+pub fn format_flat_tokens_mut_with_passes<T: FormattableToken>(
     tokens: &mut Vec<T>,
     options: FormatOptions,
     passes: &[BoxedTokenFormatPass<T>],
@@ -385,7 +385,7 @@ pub fn format_flat_tokens_mut_with_passes<T: FormattableFlatToken>(
     format_mut_with_passes(tokens, options, passes);
 }
 
-pub fn format_flat_token_batches<T: FormattableFlatToken + Sync + Send>(
+pub fn format_flat_token_batches<T: FormattableToken + Sync + Send>(
     token_batches: &[Vec<T>],
     batch_options: BatchExecutionOptions,
 ) -> Vec<TokenTransformResult<T>> {
@@ -394,7 +394,7 @@ pub fn format_flat_token_batches<T: FormattableFlatToken + Sync + Send>(
     })
 }
 
-pub fn format_flat_token_batches_with_options<T: FormattableFlatToken + Sync + Send>(
+pub fn format_flat_token_batches_with_options<T: FormattableToken + Sync + Send>(
     token_batches: &[Vec<T>],
     options: FormatOptions,
     batch_options: BatchExecutionOptions,
@@ -408,7 +408,7 @@ pub fn format_usfm_sources<S: AsRef<str> + Sync>(
     sources: &[S],
     token_options: IntoTokensOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<TokenTransformResult<FlatToken>> {
+) -> Vec<TokenTransformResult<Token>> {
     let handles = parse_sources(sources, batch_options);
     let token_batches = into_tokens_batch(&handles, token_options, batch_options);
     format_flat_token_batches(&token_batches, batch_options)
@@ -419,20 +419,20 @@ pub fn format_usfm_sources_with_options<S: AsRef<str> + Sync>(
     token_options: IntoTokensOptions,
     format_options: FormatOptions,
     batch_options: BatchExecutionOptions,
-) -> Vec<TokenTransformResult<FlatToken>> {
+) -> Vec<TokenTransformResult<Token>> {
     let handles = parse_sources(sources, batch_options);
     let token_batches = into_tokens_batch(&handles, token_options, batch_options);
     format_flat_token_batches_with_options(&token_batches, format_options, batch_options)
 }
 
-pub fn apply_token_fixes<T: Clone + FormattableFlatToken>(
+pub fn apply_token_fixes<T: Clone + FormattableToken>(
     tokens: &[T],
     fixes: &[TokenFix],
 ) -> TokenTransformResult<T> {
     apply_fixes(tokens, fixes)
 }
 
-pub fn diff_tokens<T: DiffableFlatToken>(
+pub fn diff_tokens<T: DiffableToken>(
     baseline_tokens: &[T],
     current_tokens: &[T],
     options: &BuildSidBlocksOptions,
@@ -445,7 +445,7 @@ pub fn diff_usfm(
     current_usfm: &str,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> Vec<ChapterTokenDiff<FlatToken>> {
+) -> Vec<ChapterTokenDiff<Token>> {
     diff_usfm_sources(baseline_usfm, current_usfm, token_view, build_options)
 }
 
@@ -454,6 +454,6 @@ pub fn diff_usfm_by_chapter(
     current_usfm: &str,
     token_view: &TokenViewOptions,
     build_options: &BuildSidBlocksOptions,
-) -> DiffsByChapterMap<ChapterTokenDiff<FlatToken>> {
+) -> DiffsByChapterMap<ChapterTokenDiff<Token>> {
     diff_usfm_sources_by_chapter(baseline_usfm, current_usfm, token_view, build_options)
 }

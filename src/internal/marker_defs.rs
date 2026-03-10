@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 use crate::internal::markers::MarkerKind;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarkerId(&'static str);
@@ -214,6 +216,27 @@ mod marker_defs_data;
 
 pub(crate) use marker_defs_data::MARKER_SPECS;
 
+fn exact_spec_index() -> &'static HashMap<&'static str, &'static MarkerSpec> {
+    static INDEX: OnceLock<HashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        MARKER_SPECS
+            .iter()
+            .map(|spec| (spec.marker, spec))
+            .collect::<HashMap<_, _>>()
+    })
+}
+
+fn table_cell_spec_index() -> &'static HashMap<&'static str, &'static MarkerSpec> {
+    static INDEX: OnceLock<HashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        MARKER_SPECS
+            .iter()
+            .filter(|spec| spec.kind == SpecMarkerKind::TableCell)
+            .map(|spec| (spec.marker, spec))
+            .collect::<HashMap<_, _>>()
+    })
+}
+
 pub fn normalized_marker(marker: &str) -> Option<NormalizedMarkerRef<'_>> {
     let nested = marker.starts_with('+');
     let normalized = marker.strip_prefix('+').unwrap_or(marker);
@@ -230,7 +253,7 @@ pub fn normalized_marker(marker: &str) -> Option<NormalizedMarkerRef<'_>> {
 pub fn lookup_spec_marker(marker: &str) -> Option<&'static MarkerSpec> {
     let normalized = marker.strip_prefix('+').unwrap_or(marker);
 
-    if let Some(spec) = MARKER_SPECS.iter().find(|spec| spec.marker == normalized) {
+    if let Some(spec) = exact_spec_index().get(normalized).copied() {
         return Some(spec);
     }
 
@@ -239,32 +262,25 @@ pub fn lookup_spec_marker(marker: &str) -> Option<&'static MarkerSpec> {
         .or_else(|| normalized.strip_suffix("-e"))
     {
         let milestone_base = base.trim_end_matches(|ch: char| ch.is_ascii_digit());
-        if let Some(spec) = MARKER_SPECS
-            .iter()
-            .find(|spec| spec.marker == milestone_base)
+        if let Some(spec) = exact_spec_index().get(milestone_base).copied()
             && spec.kind == SpecMarkerKind::Milestone
         {
             return Some(spec);
         }
     }
 
-    if table_cell_base(normalized).is_some()
-        && let Some(spec) = MARKER_SPECS.iter().find(|spec| {
-            spec.kind == SpecMarkerKind::TableCell
-                && spec.marker == table_cell_base(normalized).unwrap_or("")
-        })
+    if let Some(table_cell_base) = table_cell_base(normalized)
+        && let Some(spec) = table_cell_spec_index().get(table_cell_base).copied()
     {
         return Some(spec);
     }
 
     if normalized == "esbe" {
-        return MARKER_SPECS
-            .iter()
-            .find(|spec| spec.kind == SpecMarkerKind::Sidebar && spec.marker == "esb");
+        return exact_spec_index().get("esb").copied();
     }
 
     if let Some(base) = numbered_marker_base(normalized) {
-        return MARKER_SPECS.iter().find(|spec| spec.marker == base);
+        return exact_spec_index().get(base).copied();
     }
 
     None
@@ -295,7 +311,7 @@ pub fn lookup_marker_def(marker: &str) -> Option<MarkerDef> {
 }
 
 pub fn lookup_marker_id(marker: &str) -> Option<MarkerId> {
-    lookup_marker_def(marker).map(|def| def.id)
+    normalized_marker(marker).map(|normalized| MarkerId::new(normalized.canonical))
 }
 
 pub fn spec_marker_kind(marker: &str) -> Option<MarkerKind> {

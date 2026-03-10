@@ -1,33 +1,17 @@
 # usfm_onion
 
-Rust-first USFM parsing, linting, formatting, conversion, diffing, and round-trippable projection.
+Rust-first USFM parsing, token operations, structural projection, semantic export, and corpus tooling.
 
-`usfm_onion` is meant to be a reusable engine crate, not an editor runtime. The public API is organized around first-class workflows:
+`usfm_onion` is organized around four ideas:
 
-- `parse`: parse, inspect, recover, and project
-- `lint`: lint parsed content or flat token streams
-- `format`: normalize flat token streams with built-in rules and optional custom passes
-- `convert`: convert between USFM, USJ, USX, HTML, editor tree, and VREF views
-- `diff`: semantic diffing over tokenized USFM content
-- `model`: shared public types such as `DocumentFormat`, `FlatToken`, `UsjDocument`, and `VrefMap`
+- `tokens`: the canonical flat working representation
+- `document_tree`: the canonical structural interchange format
+- semantic exports: `USJ`, `USX`, `HTML`, and `VREF`
+- explicit mutation only: lint, format, diff, and fix application never happen implicitly on open
 
-WebAssembly bindings still exist, but the crate is documented here from the native Rust perspective first. JS/browser packaging notes live in [`pkg-web/README.md`](pkg-web/README.md).
+The crate is meant to be a reusable engine crate. It is not an editor runtime, and it does not silently normalize content when you ingest it.
 
-## What This Crate Optimizes For
-
-- Native USFM fidelity first
-- Token streams as a first-class public surface
-- Explicit mutation boundaries
-- Practical batch APIs for multi-file workflows
-- Clear separation between reusable engine logic and downstream app policy
-
-What that means in practice:
-
-- Parsing does not silently rewrite your source.
-- Formatting is an explicit mutation step.
-- Linting can operate on either a parsed document or already-projected flat tokens.
-- Conversions are explicit and named.
-- Lossless interchange forms exist when you need to carry exact round-trip material forward.
+WebAssembly bindings still exist, but they now live in the separate wrapper crate at [`crates/usfm_onion_wasm/Cargo.toml`](/Users/willkelly/Documents/Work/Code/usfm_onion/crates/usfm_onion_wasm/Cargo.toml). This README documents the native Rust API first.
 
 ## Install
 
@@ -49,473 +33,457 @@ During development:
 cargo run --bin usfm-onion -- --help
 ```
 
-## Read This API In One Minute
-
-The main mental model is:
-
-- `ParseHandle` is the rich parsed document
-- `FlatToken` streams are the first-class linear working representation
-- format/lint/diff work naturally on flat tokens
-- conversion APIs can start from a `ParseHandle` or from flat tokens
-
-Minimal example:
-
-```rust
-use usfm_onion::{
-    DocumentFormat,
-    convert,
-    format,
-    lint,
-    parse,
-};
-
-let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning";
-
-let handle = parse::parse_content(source, DocumentFormat::Usfm)?;
-let tokens = parse::into_tokens(&handle, parse::IntoTokensOptions::default());
-
-let issues = lint::lint_flat_tokens(&tokens, lint::TokenLintOptions::default());
-
-let result = format::format_flat_tokens_with_options(
-    &tokens,
-    format::FormatOptions::default(),
-);
-let formatted_usfm = parse::into_usfm_from_tokens(&result.tokens);
-
-let usj = convert::into_usj(&handle);
-let usx = convert::into_usx(&handle)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-## Module Map
+## Public Modules
 
 Use the crate like this:
 
 ```rust
-use usfm_onion::{parse, lint, format, diff, convert, model};
+use usfm_onion::{convert, diff, document_tree, format, lint, tokens};
 ```
 
-The modules are intentionally capability-shaped:
+Top-level public modules:
 
-- `parse`: parse source, inspect recoveries, lex, project, and materialize flat tokens
-- `lint`: built-in structural/content lint rules over parsed documents or flat tokens
-- `format`: built-in normalization rules plus custom token passes
-- `diff`: semantic diffing and chapter/block helpers
-- `convert`: USFM/USJ/USX/HTML/editor-tree/VREF conversion helpers
-- `model`: public shared types and USJ walkers
+- `tokens`: tokenization, token reconstruction, and token/file intake helpers
+- `document_tree`: structural tree projection and tree/token conversion
+- `lint`: token-first linting plus content/path batch helpers
+- `format`: token-first formatting plus content/path batch helpers
+- `diff`: token-based diffing and revert helpers
+- `convert`: semantic export and cross-format conversion helpers
+- `model`: shared public types such as `DocumentFormat`, `Token`, and `UsjDocument`
 
-`src/internal/` exists for implementation details. It is not the intended user-facing map.
+`src/internal/` exists for implementation details only.
 
-## First-Class Citizens
+## The Core Model
 
-These are the workflows the crate treats as primary:
+### `tokens`
 
-| Concern | Primary entrypoints | Notes |
-| --- | --- | --- |
-| Parse | `parse::parse_content`, `parse::parse_path`, `parse::parse_usfm_content` | Produces a `ParseHandle` |
-| Token projection | `parse::into_tokens`, `parse::into_tokens_from_content`, `parse::into_usfm_from_tokens` | Token streams are first-class |
-| Lint | `lint::lint_document`, `lint::lint_content`, `lint::lint_flat_tokens`, `lint::lint_tokens` | Parsed and token-first both supported |
-| Format | `format::format_content_with_options`, `format::format_flat_tokens_with_options`, `format::format_flat_tokens_with_passes` | Built-in rules plus custom passes |
-| Diff | `diff::diff_content`, `diff::diff_tokens`, `diff::diff_usfm_by_chapter` | Token-semantic diffing |
-| Convert | `convert::into_usj`, `convert::into_usx`, `convert::from_usj`, `convert::from_usx`, `convert::convert_content` | Explicit representation changes |
+`Token` is the canonical flat representation for operations.
 
-## Handle vs Tokens
+Use tokens for:
 
-`ParseHandle` and flat tokens are related but not interchangeable.
+- lint
+- format
+- diff
+- fixes
+- token-stream transforms
+- exact USFM reconstruction
 
-Use `ParseHandle` when you need:
-
-- recoveries
-- document structure
-- chapter/book metadata
-- conversion to USJ, USX, HTML, editor tree, or VREF from parsed content
-
-Use flat tokens when you need:
-
-- token-first linting
-- formatting
-- token-level transforms
-- diffing
-- token-to-USFM reconstruction
-
-In code:
+The main entrypoints are:
 
 ```rust
-use usfm_onion::{DocumentFormat, parse};
+use usfm_onion::tokens;
 
-let handle = parse::parse_content(source, DocumentFormat::Usfm)?;
-let tokens = parse::into_tokens(&handle, parse::IntoTokensOptions::default());
-let roundtrip_usfm = parse::into_usfm_from_tokens(&tokens);
+let tokens = tokens::usfm_to_tokens(source);
+let usfm = tokens::tokens_to_usfm(&tokens);
+```
+
+Token guarantees:
+
+- newline is explicit
+- token spans are char offsets
+- token ids are stable only within one invocation
+- horizontal whitespace is preserved in token text
+- tokenization is designed to accept malformed content rather than hard-fail on it
+
+### `document_tree`
+
+`DocumentTreeDocument` is the structural interchange format.
+
+It follows USFM nesting semantics for things like:
+
+- book
+- chapter
+- verse
+- para
+- char
+- note
+- milestone
+- figure
+- sidebar
+- periph
+- table / row / cell
+- ref
+- unknown / unmatched
+
+Unlike the older scalar-text shape, text is now also an element in the discriminated union:
+
+```rust
+use usfm_onion::DocumentTreeElement;
+
+let text = DocumentTreeElement::Text {
+    value: "In the beginning".to_string(),
+};
+```
+
+The key property is:
+
+- `document_tree` is structured
+- opening/projecting into it does not mutate content
+- it can flatten back to tokens
+
+In plain language, `document_tree` is the thing you use when you want:
+
+- a real tree you can traverse and edit structurally
+- the current closest thing to a structured editor tree for USFM
+- one canonical intermediate form before projecting to `USJ`, `USX`, `HTML`, or `VREF`
+
+Current implementation note:
+
+- `DocumentTreeDocument.content` now has its own reconstruction path back to USFM / tokens
+- the normal USFM -> `document_tree` projection path no longer populates a backing `tokens` vector
+- exact round-trip from tree content alone is still incomplete across the full fixture corpus, so this area is still under active refactor
+
+Why that still differs from `USJ` or `USX`:
+
+- `document_tree.content` keeps more editor-oriented structural distinctions than semantic exports do
+- `USJ` and `USX` are semantic formats, not exact source reconstruction formats
+
+Examples of source details `document_tree` preserves for USFM-originated content:
+
+- explicit linebreak nodes
+- exact marker text for things like book / chapter / verse markers
+- spaces after marker numbers or book codes
+- repeated spaces inside text nodes
+- explicit unmatched / unknown nodes
+- explicit note / char closure distinctions that matter for exact token reconstruction
+
+What it does not currently expose as first-class tree metadata:
+
+- parse recoveries are not stored as a separate `recoveries` field on `DocumentTreeDocument`
+- if recovery details matter to your workflow, keep the `ParseHandle` / parser output around as well
+
+So the practical split is:
+
+- use `document_tree` when you want a structured editor/interchange tree
+- use `USJ` / `USX` when you want semantic interchange formats
+- use `tokens` when you want the lowest-level exact working form for lint / format / diff / fix application
+
+Intended future direction:
+
+- `document_tree.content` should eventually be sufficient for faithful reconstruction on its own
+- at that point `document.tokens` should no longer be required as a parallel backing store
+
+Typical use:
+
+```rust
+use usfm_onion::{document_tree, tokens};
+
+let tokens = tokens::usfm_to_tokens(source);
+let tree = document_tree::tokens_to_document_tree(&tokens);
+let roundtrip_tokens = document_tree::document_tree_to_tokens(&tree)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The handle is the richer parse result. The tokens are a projected linear view derived from it.
+### Semantic exports
 
-## Intake -> Output Matrix
+`USJ`, `USX`, `HTML`, and `VREF` are narrower projections built from the canonical pipeline:
 
-This is the current core conversion surface.
+- input -> tokens -> document_tree -> output
 
-| Output | usfm intake | usx intake | usj intake | tokens intake |
-| --- | --- | --- | --- | --- |
-| `into_tokens` | direct via `parse::into_tokens_from_usfm_content/path` or `parse::into_tokens_from_content/path` | indirect via `usx -> usfm -> parse -> tokens` | indirect via `usj -> usfm -> parse -> tokens` | n/a |
-| `into_usfm` | direct from original source or `parse::into_usfm_from_tokens` | direct via `convert::from_usx` or `convert::usx_content_to_usfm` | direct via `convert::from_usj` or `convert::usj_content_to_usfm` | direct via `parse::into_usfm_from_tokens` |
-| `into_usj` | direct via `convert::into_usj` or `convert::usfm_content_to_usj` | indirect via `usx -> usfm -> parse -> into_usj` | direct parse + identity-ish decode path | indirect via `convert::into_usj_from_tokens` |
-| `into_usx` | direct via `convert::into_usx` or `convert::usfm_content_to_usx` | direct parse + identity-ish decode path | indirect via `usj -> usfm -> parse -> into_usx` | indirect via `convert::into_usx_from_tokens` |
-| `into_vref` | direct via `convert::into_vref` | indirect via `usx -> usfm -> parse -> into_vref` | indirect via `usj -> usfm -> parse -> into_vref` | indirect via `convert::into_vref_from_tokens` |
-| `into_usj_lossless` | direct via `convert::into_usj_lossless` | indirect via `usx -> usfm -> parse -> into_usj_lossless` | indirect via `usj -> usfm -> parse -> into_usj_lossless` | indirect via `convert::into_usj_lossless_from_tokens` |
-| `into_usx_lossless` | direct via `convert::into_usx_lossless` | not exposed as a distinct first-class direct intake path | not exposed as a distinct first-class direct intake path | indirect via `convert::into_usx_lossless_from_tokens` |
+Use them when you want semantic interchange or rendering, not when you want the highest-fidelity working form.
 
-## Lossless vs Lossy USJ and USX
+Another plain-language way to say it:
 
-This crate uses "lossless" in a very specific way.
+- `document_tree` is an editor/interchange tree with lossless USFM backing tokens
+- `USJ` and `USX` are semantic export formats
 
-### Regular USJ
+That means `USJ` / `USX` may preserve the meaning and structure of a passage while dropping distinctions that only matter if you are trying to reconstruct the original token stream exactly.
 
-`convert::into_usj` produces a semantic JSON document suitable for interchange and downstream structured processing.
+## Round-Trip Semantics
 
-It preserves the document structure and content, but it does not try to embed the entire original USFM source verbatim.
+This crate makes a hard distinction between structural fidelity and semantic export.
 
-Use it when:
+### Exact USFM round-trip
 
-- you want a typed JSON document
-- you want to inspect structure or feed another system
-- exact source reproduction is not the payload itself
+For USFM-originated content, the exact round-trip-preserving layer is:
 
-### Lossless USJ
+- `tokens`
+- `document_tree`
+- `tokens::tokens_to_usfm`
 
-`convert::into_usj_lossless` produces the same semantic shape, but adds round-trip metadata carrying the original USFM source and a fingerprint.
+`document_tree` is included in that list as an architectural target, but the tree-content-only reconstruction path is not yet exact across the full fixture corpus.
 
-In practice:
+That is the path to use if exact original USFM matters.
 
-- typed `UsjDocument` gets a `roundtrip` payload
-- raw JSON form gets a `_lossless_roundtrip` object
+### Semantic USJ / USX round-trip
 
-Use it when:
+`USJ` and `USX` are semantic forms.
 
-- you need structured JSON plus exact-source round-trip context
-- a downstream system may need to reconstruct or verify the original source
+That means:
 
-### Regular USX
+- `USFM -> USJ -> USFM` is semantically meaningful, not an attempt to preserve every original byte of source formatting
+- `USFM -> USX -> USFM` is likewise semantic
+- `USJ` and `USX` input are treated as semantic input, not byte-faithful source containers
 
-`convert::into_usx` produces the XML serialization of the parsed document.
+So the guarantee is:
 
-It is an interchange/rendering form, not an "embed every byte of the original USFM source" container.
+- USFM-originated `tokens` / `document_tree` round-trip exactly to USFM
+- USJ / USX round-trip semantically, not byte-for-byte to original JSON/XML formatting
 
-Use it when:
+Put differently:
 
-- you want normal USX output
-- you need XML interchange
+- current `document_tree` answers: "give me a structured tree, and attempt reconstruction from tree content alone"
+- `USJ` / `USX` answer: "give me a portable semantic document format"
 
-### Lossless USX
+## Quick Start
 
-`convert::into_usx_lossless` produces normal USX plus an embedded XML comment containing the original USFM source in encoded form.
-
-This is how the crate preserves exact source round-trip material for XML output.
-
-Use it when:
-
-- you need USX as the outer format
-- you still need exact original USFM source preserved alongside it
-
-Short version:
-
-- regular USJ/USX: semantic interchange
-- lossless USJ/USX: semantic interchange plus exact-source round-trip material
-
-## Parsing
-
-Common parse entrypoints:
-
-- `parse::parse_content`
-- `parse::parse_path`
-- `parse::parse_usfm_content`
-- `parse::parse_usj_content`
-- `parse::parse_usx_content`
-- `parse::lex`
-- `parse::recoveries`
-- `parse::debug_dump`
-
-Example:
+### USFM -> tokens -> lint / format / diff
 
 ```rust
-use usfm_onion::{DocumentFormat, parse};
+use usfm_onion::{
+    diff::{self, BuildSidBlocksOptions},
+    format,
+    lint,
+    tokens,
+};
 
-let handle = parse::parse_content(source, DocumentFormat::Usfm)?;
-let recoveries = parse::recoveries(&handle);
-let dump = parse::debug_dump(&handle, parse::DebugDumpOptions::default());
+let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning";
+
+let tokens = tokens::usfm_to_tokens(source);
+
+let issues = lint::lint_flat_tokens(&tokens, lint::TokenLintOptions::default());
+
+let formatted = format::format_flat_tokens(&tokens);
+let formatted_usfm = tokens::tokens_to_usfm(&formatted.tokens);
+
+let diff = diff::diff_tokens(
+    &tokens,
+    &tokens::usfm_to_tokens(&formatted_usfm),
+    &BuildSidBlocksOptions::default(),
+);
+```
+
+If you already have a chapter flattened back into canonical tokens, stay on the
+token APIs:
+
+- `lint::lint_flat_tokens`
+- `format::format_flat_tokens`
+- `diff::diff_tokens`
+
+The `*_content` helpers are convenience wrappers that parse and project first.
+
+### USFM -> document_tree -> semantic outputs
+
+```rust
+use usfm_onion::{convert, document_tree};
+
+let tree = document_tree::usfm_to_document_tree(source);
+let usj = convert::document_tree_to_usj(&tree)?;
+let usx = convert::document_tree_to_usx(&tree)?;
+let html = convert::document_tree_to_html(&tree, convert::HtmlOptions::default())?;
+let vref = convert::document_tree_to_vref(&tree)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-`parse::IntoTokensOptions` controls projection behavior such as horizontal whitespace merging.
-
-## Linting
-
-There are two public lint styles:
-
-- parsed-document linting via `lint::lint_document` and `lint::lint_content`
-- token-first linting via `lint::lint_flat_tokens` and `lint::lint_tokens`
-
-### Parsed-document linting
-
-Use this when you want parse recoveries and projected token views folded into one flow:
+### USJ / USX intake
 
 ```rust
-use usfm_onion::{DocumentFormat, lint};
+use usfm_onion::{document_tree, tokens};
 
-let issues = lint::lint_content(
-    source,
-    DocumentFormat::Usfm,
-    lint::LintOptions::default(),
-)?;
+let usj_tokens = tokens::usj_to_tokens(usj_json)?;
+let usx_tree = document_tree::usx_to_document_tree(usx_xml)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-### Token-first linting
+## Input / Output Matrix
 
-Use this when you already have a flat token stream and want linting to stay token-native:
+| Input | Tokens | Document tree | USFM | USJ | USX | HTML | VREF |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| USFM | `tokens::usfm_to_tokens` | `document_tree::usfm_to_document_tree` | original or `tokens::tokens_to_usfm` | `convert::usfm_to_usj` | `convert::usfm_to_usx` | `convert::usfm_to_html` | `convert::usfm_to_vref` |
+| USJ | `tokens::usj_to_tokens` | `document_tree::usj_to_document_tree` | `convert::from_usj_str` | semantic input | `convert::usj_to_usx` | via tree/tokens | via tree/tokens |
+| USX | `tokens::usx_to_tokens` | `document_tree::usx_to_document_tree` | `convert::from_usx_str` | `convert::usx_to_usj` | semantic input | via tree/tokens | via tree/tokens |
+| tokens | already there | `document_tree::tokens_to_document_tree` | `tokens::tokens_to_usfm` | `convert::tokens_to_usj` | `convert::tokens_to_usx` | `convert::tokens_to_html` | `convert::tokens_to_vref` |
+| document tree | `document_tree::document_tree_to_tokens` | already there | through tokens | `convert::document_tree_to_usj` | `convert::document_tree_to_usx` | `convert::document_tree_to_html` | `convert::document_tree_to_vref` |
+
+## Lint
+
+Lint is token-first.
+
+The core low-level API is:
 
 ```rust
-use usfm_onion::{lint, parse};
+use usfm_onion::{lint, tokens};
 
-let tokens = parse::into_tokens(&handle, parse::IntoTokensOptions::default());
+let tokens = tokens::usfm_to_tokens(source);
 let issues = lint::lint_flat_tokens(&tokens, lint::TokenLintOptions::default());
 ```
 
-### What You Can Ignore
+You can also lint raw content or paths:
 
-The linter currently supports two control surfaces:
+- `lint::lint_content`
+- `lint::lint_path`
+- `lint::lint_contents`
+- `lint::lint_paths`
 
-- `disabled_rules: Vec<LintCode>`
-- `suppressions: Vec<LintSuppression>`
+### Suppressions
 
-Example:
+Suppressions are currently exact `(code, sid)` matches:
 
 ```rust
 use usfm_onion::lint::{LintCode, LintSuppression, TokenLintOptions};
 
 let options = TokenLintOptions {
-    disabled_rules: vec![LintCode::MissingSeparatorAfterMarker],
-    suppressions: vec![
-        LintSuppression {
-            code: LintCode::VerseOutsideExplicitParagraph,
-            span: 120..128,
-        }
-    ],
-    allow_implicit_chapter_content_verse: false,
+    suppressions: vec![LintSuppression {
+        code: LintCode::VerseOutsideExplicitParagraph,
+        sid: "GEN 1:1".to_string(),
+    }],
+    ..TokenLintOptions::default()
 };
 ```
 
-Important limits:
+What you can do today:
 
-- `disabled_rules` disables a built-in lint code everywhere for that run
-- `suppressions` only suppress exact `(code, span)` matches
-- suppressions are brittle across edits because spans move
-- there is no public custom lint plugin/pass API yet
-- there is no concept of "ignore this by SID instead of span" yet
+- disable built-in rules with `disabled_rules`
+- suppress exact `(code, sid)` findings
+- run token lint directly or via content/path helpers
 
-If you need downstream project-specific lint policy, the current approach is:
+What you cannot do today:
 
-- run built-in lint
-- filter or post-process findings in your own crate
+- register custom lint passes through a public plugin API
+- suppress by moving spans
+- assume token ids remain stable across separate invocations
 
-## Formatting
+### Fixes
 
-Formatting is rule-based.
+`LintIssue` may carry a serializable token-stream fix:
 
-Default behavior enables all built-in formatter rules:
-
-```rust
-use usfm_onion::format::FormatOptions;
-
-let options = FormatOptions::default();
-```
-
-If you want only a narrow set of rules:
-
-```rust
-use usfm_onion::format::{FormatOptions, FormatRule};
-
-let options = FormatOptions::only(&[
-    FormatRule::CollapseWhitespaceInText,
-    FormatRule::NormalizeSpacingAfterParagraphMarkers,
-]);
-```
-
-If you want the default ruleset minus a few:
-
-```rust
-use usfm_onion::format::{FormatOptions, FormatRule};
-
-let options = FormatOptions::excluding(&[
-    FormatRule::RecoverMalformedMarkers,
-    FormatRule::RemoveDuplicateVerseNumbers,
-]);
-```
-
-### Built-In Rule Examples
-
-Some of the more important built-in rules:
-
-- `RecoverMalformedMarkers`
-  - before: `text \zzbad`
-  - after: `text \zz bad`
-- `BridgeConsecutiveVerseMarkers`
-  - before: `\v 1 ... \v 2 ... \v 3 ...`
-  - after: `\v 1-3 ...`
-- `RemoveBridgeVerseEnumerators`
-  - before: `\v 1-3 1. James ... 2. Count it ... 3. because ...`
-  - after: `\v 1-3 James ... Count it ... because ...`
-- `MoveChapterLabelAfterChapterMarker`
-  - before: `\cl Chapter 1 \c 1`
-  - after: `\c 1 \cl Chapter 1`
-- `InsertDefaultParagraphAfterChapterIntro`
-  - before: chapter intro content reaches verse text with no paragraph marker
-  - after: a default paragraph marker is inserted before verse-bearing content
-
-### Custom Format Passes
-
-The formatter does have a plugin-like extension point.
-
-Built-in rules run first. Then any custom `TokenFormatPass` implementations run in order against the working token buffer.
-
-Example:
-
-```rust
-use usfm_onion::format::{
-    BoxedTokenFormatPass, FormatOptions, TokenFormatPass, format_flat_tokens_with_passes,
-};
-use usfm_onion::model::FlatToken;
-
-struct ReplaceDoubleSpacePass;
-
-impl TokenFormatPass<FlatToken> for ReplaceDoubleSpacePass {
-    fn label(&self) -> &str {
-        "replace-double-space"
-    }
-
-    fn apply(&self, tokens: &mut Vec<FlatToken>) {
-        for token in tokens {
-            if token.kind == usfm_onion::TokenKind::Text {
-                token.text = token.text.replace("  ", " ");
-            }
-        }
-    }
-}
-
-let passes: Vec<BoxedTokenFormatPass<FlatToken>> = vec![Box::new(ReplaceDoubleSpacePass)];
-let result = format_flat_tokens_with_passes(
-    &tokens,
-    FormatOptions::default(),
-    &passes,
-);
-```
-
-What custom passes can do:
-
-- inspect and mutate the token vector
-- add, remove, or replace tokens
-- implement downstream house style or cleanup policy
-
-What custom passes do not get:
-
-- direct parse tree access
-- built-in incremental fix targeting by lint code
-- a separate plugin registry system
-
-If you need parse-tree-aware custom formatting, the usual pattern is:
-
-- parse and project first
-- inspect the `ParseHandle` yourself
-- then run token formatting with custom passes
-
-## Conversion
-
-Main conversion entrypoints:
-
-- `convert::convert_content`
-- `convert::from_usj`
-- `convert::from_usx`
-- `convert::into_usj`
-- `convert::into_usj_lossless`
-- `convert::into_usx`
-- `convert::into_usx_lossless`
-- `convert::into_html`
-- `convert::into_editor_tree`
-- `convert::into_vref`
-
-Examples:
-
-```rust
-use usfm_onion::{DocumentFormat, convert, parse};
-
-let usfm = convert::from_usj(&usj_document)?;
-let xml = convert::usfm_content_to_usx(source)?;
-
-let handle = parse::parse_content(source, DocumentFormat::Usfm)?;
-let html = convert::into_html(&handle, convert::HtmlOptions::default());
-let vref = convert::into_vref(&handle);
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-HTML is part of `convert` because it is an output representation, not a parser/linter concern.
-
-## Diffing
-
-Common diff entrypoints:
-
-- `diff::diff_content`
-- `diff::diff_tokens`
-- `diff::diff_usfm_by_chapter`
-
-Example:
-
-```rust
-use usfm_onion::{DocumentFormat, diff};
-use usfm_onion::model::TokenViewOptions;
-use usfm_onion::diff::BuildSidBlocksOptions;
-
-let changes = diff::diff_content(
-    baseline,
-    DocumentFormat::Usfm,
-    current,
-    DocumentFormat::Usfm,
-    &TokenViewOptions::default(),
-    &BuildSidBlocksOptions::default(),
-)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-## Batch APIs and Parallelism
-
-Many content/path batch APIs accept `BatchExecutionOptions`.
+- anchored to the current invocation’s token ids
+- intended to be handed back to the same token stream
 
 Use:
 
-```rust
-use usfm_onion::model::BatchExecutionOptions;
+- `format::apply_token_fixes`
+- `format::apply_fixes`
 
-let batch = BatchExecutionOptions::parallel();
+depending on whether you are applying one or many edits through the format/transform layer.
+
+## Format
+
+Format is also token-first.
+
+The low-level entrypoints are:
+
+- `format::format_flat_tokens`
+- `format::format_flat_tokens_with_options`
+- `format::format_flat_tokens_with_passes`
+- `format::format_flat_tokens_mut`
+- `format::format_flat_tokens_mut_with_passes`
+
+The default is “all built-in rules enabled.”
+
+Use `FormatOptions` to selectively include or exclude rules.
+
+### Custom passes
+
+The formatter exposes a public pass API. You can supply your own token pass functions through:
+
+- `format::format_flat_tokens_with_passes`
+- `format::format_content_with_passes`
+
+Relevant public types:
+
+- `format::TokenFormatPass`
+- `format::BoxedTokenFormatPass`
+- `format::TokenTransformResult`
+- `format::TokenFix`
+- `format::TokenTemplate`
+
+This is the extension story today:
+
+- built-in rules for general normalization
+- custom token passes for repo- or workflow-specific rewrite policy
+
+## Diff
+
+Diff is token-based.
+
+Core entrypoints:
+
+- `diff::diff_tokens`
+- `diff::diff_content`
+- `diff::diff_paths`
+- `diff::diff_usfm_by_chapter`
+
+Revert helpers and SID block helpers live in the `diff` module as well.
+
+## WebAssembly / JS
+
+The npm package exports both bundler and browser builds:
+
+```ts
+import init, {
+  parseContent,
+  intoTokens,
+  intoDocumentTree,
+  lintFlatTokens,
+  formatFlatTokens,
+  diffFlatTokens,
+} from "usfm-onion-web";
 ```
 
-This is intended for file-level parallelism. It is not an intra-file parser scheduler.
+Token-first JS/WASM usage mirrors the Rust API:
 
-The CLI uses parallel batch execution where it makes sense for multi-path workflows.
+```ts
+const parsed = parseContent({
+  source,
+  format: "usfm",
+});
 
-## Corpus Timing Snapshot
+const tokens = intoTokens({ document: parsed });
 
-The table below is meant to answer a practical question: "what does this feel like on a whole corpus, not a toy file?"
+const issues = lintFlatTokens({ tokens });
+const formatted = formatFlatTokens({ tokens });
+const diffs = diffFlatTokens({
+  baselineTokens: tokens,
+  currentTokens: formatted.tokens,
+});
 
-It is generated from [benches/corpus_matrix.rs](/Users/willkelly/Documents/Work/Code/usfm_onion/benches/corpus_matrix.rs), using these corpora:
+const tree = intoDocumentTree(parsed);
+```
 
-- `example-corpora/examples.bsb`: full Bible, typical unaligned corpus
-- `example-corpora/bdf_reg`: smaller NT-only corpus
-- `example-corpora/en_ult`: aligned corpus with heavier token/conversion load
+Use the content helpers only when you do not already have tokens:
 
-Run it locally with:
+- `lintContent`
+- `formatContent`
+- `diffContent`
+
+Compatibility notes:
+
+- `intoEditorTree` still exists in the wasm package as a compatibility alias, but `intoDocumentTree` is the preferred name.
+- `lintTokens` / `formatTokens` / `diffTokens` still exist, and `lintFlatTokens` / `formatFlatTokens` / `diffFlatTokens` are clearer aliases for the same flat-token operations.
+
+## CLI
+
+The CLI mirrors the same operation-oriented model:
+
+- `parse`-style hidden parser internals are not the public story anymore
+- commands are about converting, linting, formatting, diffing, and inspection
+
+Check:
+
+```bash
+cargo run --bin usfm-onion -- --help
+```
+
+## Benchmarks
+
+Bench utilities live in [benches/README.md](benches/README.md).
+
+The practical corpus sweep is:
 
 ```bash
 cargo bench --bench corpus_matrix --features rayon -- --iterations 3 --markdown
 ```
+
+The smaller Criterion API benchmark is:
+
+```bash
+cargo bench --bench public_api
+```
+
+## Corpus Timing Snapshot
+
+This table should be refreshed from the current native benchmark after major API or pipeline changes.
 
 <!-- corpus-bench:begin -->
 _Local release measurements, median wall-clock over 3 runs, file-level parallelism via the `rayon` feature._
@@ -528,18 +496,16 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 
 | Operation | Serial | Parallel | Speedup |
 | --- | ---: | ---: | ---: |
-| parse usfm | 91.7ms | 30.6ms | 3.00x |
-| project tokens | 155.4ms | 52.9ms | 2.94x |
-| lint usfm | 771.4ms | 231.3ms | 3.33x |
-| format usfm | 481.2ms | 120.0ms | 4.01x |
-| usfm -> usj | 379.5ms | 115.0ms | 3.30x |
-| usfm -> usj lossless | 597.3ms | 149.5ms | 4.00x |
-| usfm -> usx | 387.8ms | 93.5ms | 4.15x |
-| usfm -> usx lossless | 426.9ms | 129.1ms | 3.31x |
-| usfm -> html | 486.8ms | 123.5ms | 3.94x |
-| usfm -> vref | 100.0ms | 26.6ms | 3.76x |
-| usj -> usfm | 58.1ms | 15.0ms | 3.87x |
-| usx -> usfm | 60.6ms | 18.7ms | 3.23x |
+| usfm -> document_tree | 821.4ms | 193.6ms | 4.24x |
+| usfm -> tokens | 382.6ms | 92.8ms | 4.12x |
+| lint usfm | 3.38s | 637.9ms | 5.30x |
+| format usfm | 930.2ms | 189.0ms | 4.92x |
+| usfm -> usj | 730.1ms | 162.6ms | 4.49x |
+| usfm -> usx | 893.8ms | 167.6ms | 5.33x |
+| usfm -> html | 1.86s | 410.4ms | 4.52x |
+| usfm -> vref | 1.18s | 312.3ms | 3.79x |
+| usj -> usfm | 125.5ms | 48.2ms | 2.61x |
+| usx -> usfm | 259.0ms | 31.4ms | 8.24x |
 
 ### `bdf_reg`
 
@@ -549,18 +515,16 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 
 | Operation | Serial | Parallel | Speedup |
 | --- | ---: | ---: | ---: |
-| parse usfm | 11.6ms | 3.5ms | 3.36x |
-| project tokens | 21.5ms | 6.4ms | 3.37x |
-| lint usfm | 62.8ms | 15.4ms | 4.08x |
-| format usfm | 49.2ms | 16.9ms | 2.92x |
-| usfm -> usj | 49.3ms | 12.9ms | 3.82x |
-| usfm -> usj lossless | 80.4ms | 23.4ms | 3.43x |
-| usfm -> usx | 51.0ms | 13.4ms | 3.81x |
-| usfm -> usx lossless | 55.4ms | 13.0ms | 4.27x |
-| usfm -> html | 59.5ms | 22.4ms | 2.66x |
-| usfm -> vref | 14.0ms | 3.3ms | 4.21x |
-| usj -> usfm | 5.7ms | 2.2ms | 2.58x |
-| usx -> usfm | 9.2ms | 2.8ms | 3.29x |
+| usfm -> document_tree | 123.0ms | 43.4ms | 2.84x |
+| usfm -> tokens | 114.2ms | 26.2ms | 4.36x |
+| lint usfm | 581.3ms | 71.3ms | 8.16x |
+| format usfm | 393.6ms | 55.7ms | 7.07x |
+| usfm -> usj | 117.1ms | 29.7ms | 3.95x |
+| usfm -> usx | 127.9ms | 66.0ms | 1.94x |
+| usfm -> html | 486.2ms | 106.2ms | 4.58x |
+| usfm -> vref | 156.3ms | 40.3ms | 3.88x |
+| usj -> usfm | 9.2ms | 2.7ms | 3.42x |
+| usx -> usfm | 12.8ms | 3.6ms | 3.57x |
 
 ### `en_ult`
 
@@ -570,147 +534,14 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 
 | Operation | Serial | Parallel | Speedup |
 | --- | ---: | ---: | ---: |
-| parse usfm | 1.08s | 432.9ms | 2.49x |
-| project tokens | 2.77s | 903.7ms | 3.06x |
-| lint usfm | 8.24s | 1.52s | 5.44x |
-| format usfm | 7.94s | 2.72s | 2.92x |
-| usfm -> usj | 7.84s | 1.54s | 5.10x |
-| usfm -> usj lossless | 12.12s | 2.88s | 4.21x |
-| usfm -> usx | 4.97s | 976.1ms | 5.09x |
-| usfm -> usx lossless | 5.19s | 1.40s | 3.71x |
-| usfm -> html | 10.34s | 2.22s | 4.65x |
-| usfm -> vref | 1.25s | 276.0ms | 4.54x |
-| usj -> usfm | 1.63s | 424.9ms | 3.83x |
-| usx -> usfm | 2.02s | 441.2ms | 4.57x |
+| usfm -> document_tree | 19.32s | 4.88s | 3.96x |
+| usfm -> tokens | 10.65s | 1.32s | 8.04x |
+| lint usfm | 36.17s | 7.06s | 5.13x |
+| format usfm | 13.16s | 3.74s | 3.52x |
+| usfm -> usj | 15.76s | 3.54s | 4.46x |
+| usfm -> usx | 13.14s | 2.39s | 5.49x |
+| usfm -> html | 40.05s | 8.99s | 4.46x |
+| usfm -> vref | 22.34s | 4.99s | 4.48x |
+| usj -> usfm | 2.42s | 543.9ms | 4.44x |
+| usx -> usfm | 2.81s | 603.5ms | 4.66x |
 <!-- corpus-bench:end -->
-
-Notes:
-
-- These are corpus-wide wall-clock timings, not single-file microbenchmarks.
-- Parallel timings are file-level parallelism, not intra-file parser parallelism.
-- Reverse conversion timings (`usj -> usfm`, `usx -> usfm`) are measured from precomputed corpora generated from the same USFM sources.
-- Treat the table as a practical throughput snapshot, not a cross-machine guarantee.
-
-## CLI
-
-The install surface is one binary:
-
-```bash
-usfm-onion --help
-```
-
-### Parse
-
-```bash
-usfm-onion parse example-corpora/en_ult/01-GEN.usfm
-usfm-onion parse --json example-corpora/en_ult/01-GEN.usfm
-```
-
-### Lint
-
-```bash
-usfm-onion lint example-corpora/en_ult/01-GEN.usfm
-usfm-onion lint --json example-corpora/en_ult/01-GEN.usfm
-usfm-onion lint --from usj doc.json
-```
-
-### Format
-
-Default behavior enables every built-in formatter rule:
-
-```bash
-usfm-onion format example-corpora/en_ult/01-GEN.usfm
-```
-
-Format in place:
-
-```bash
-usfm-onion format --in-place example-corpora/en_ult/01-GEN.usfm
-```
-
-Check mode:
-
-```bash
-usfm-onion format --check example-corpora/en_ult/01-GEN.usfm
-```
-
-Only specific rules:
-
-```bash
-usfm-onion format \
-  --include collapse-whitespace-in-text,normalize-spacing-after-paragraph-markers \
-  example-corpora/en_ult/01-GEN.usfm
-```
-
-Default rules except a few:
-
-```bash
-usfm-onion format \
-  --exclude recover-malformed-markers,remove-duplicate-verse-numbers \
-  example-corpora/en_ult/01-GEN.usfm
-```
-
-### Convert
-
-```bash
-usfm-onion convert --to usj example-corpora/en_ult/01-GEN.usfm
-usfm-onion convert --to usx example-corpora/en_ult/01-GEN.usfm
-usfm-onion convert --to html example-corpora/en_ult/01-GEN.usfm
-usfm-onion convert --to editor-tree example-corpora/en_ult/01-GEN.usfm
-usfm-onion convert --to vref example-corpora/en_ult/01-GEN.usfm
-```
-
-### Diff
-
-```bash
-usfm-onion diff old.usfm new.usfm
-usfm-onion diff --by-chapter old.usfm new.usfm
-usfm-onion diff --json old.usfm new.usfm
-```
-
-### Inspect
-
-```bash
-usfm-onion inspect --recoveries example-corpora/en_ult/01-GEN.usfm
-usfm-onion inspect --projected --lint example-corpora/en_ult/01-GEN.usfm
-```
-
-## Public Shared Types
-
-Frequently-used root re-exports:
-
-- `DocumentFormat`
-- `FlatToken`
-- `TokenKind`
-- `ParseHandle`
-- `FormatOptions`
-- `FormatRule`
-- `LintOptions`
-- `LintIssue`
-
-And under `model`:
-
-- `UsjDocument`
-- `UsjNode`
-- `UsjVisit`
-- `walk_usj_document_depth_first`
-- `walk_usj_node_depth_first`
-- `EditorTreeDocument`
-- `VrefMap`
-
-## Repo Layout
-
-- `src/lib.rs`: thin public facade
-- `src/parse/`: public parse/projection API
-- `src/lint/`: public lint API
-- `src/format/`: public formatter API
-- `src/diff/`: public diff API
-- `src/convert/`: public conversion API
-- `src/model/`: public shared types
-- `src/internal/`: implementation details
-- `src/bin/usfm-onion.rs`: CLI
-- `examples/dev/`: old one-off development utilities kept out of the install surface
-
-## Status
-
-The README is intended to describe the current native Rust API surface. If README and code disagree, the code should be treated as authoritative and README should be updated.

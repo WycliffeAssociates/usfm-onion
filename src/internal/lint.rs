@@ -1,18 +1,18 @@
 use crate::internal::marker_defs::{
-    InlineContext, MARKER_ID, MARKER_PERIPH, SpecContext, lookup_marker_id, lookup_spec_marker,
-    marker_allows_effective_context, marker_inline_context, marker_is_note_container,
-    marker_note_context,
+    InlineContext, MARKER_ID, MARKER_PERIPH, MarkerSpec, SpecContext, lookup_marker_id,
+    lookup_spec_marker, marker_allows_effective_context, marker_inline_context,
+    marker_is_note_container, marker_note_context, marker_note_subkind,
 };
 use crate::internal::markers::{MarkerKind, lookup_marker};
 use crate::internal::transform::{TokenFix, TokenTemplate};
-use crate::model::token::{FlatToken, Span, TokenKind, TokenViewOptions, normalized_marker_name};
+use crate::model::token::{Span, Token, TokenKind, TokenViewOptions, normalized_marker_name};
 use crate::parse::handle::{ParseHandle, tokens};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 
 type ChapterLabelEntry = (Span, Option<String>, Option<String>);
 
-pub trait LintableFlatToken {
+pub trait LintableToken {
     fn kind(&self) -> &TokenKind;
     fn span(&self) -> &Span;
     fn text(&self) -> &str;
@@ -25,7 +25,7 @@ pub trait LintableFlatToken {
     }
 }
 
-impl LintableFlatToken for FlatToken {
+impl LintableToken for Token {
     fn kind(&self) -> &TokenKind {
         &self.kind
     }
@@ -165,17 +165,10 @@ fn default_severity(_code: LintCode) -> LintSeverity {
     LintSeverity::Error
 }
 
-/// Span-based suppression for one specific lint code.
-///
-/// This is exact-match suppression only: the issue is suppressed only when both
-/// the lint code and primary span match. This is useful for generated or
-/// reviewed content, but it is brittle across edits because spans move when the
-/// source text changes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-// todo: this would need to be SID + CODE INSTEAD.  SPANS WILL CHANGE IF YOU CHANGE EVEN 1 CHAR IN A DOC.
 pub struct LintSuppression {
     pub code: LintCode,
-    pub span: Span,
+    pub sid: String,
 }
 
 /// Linting options for parsed content.
@@ -193,7 +186,7 @@ pub struct LintOptions {
 ///
 /// There is no custom lint-pass plugin API yet. Today you can:
 /// - disable built-in rules entirely with `disabled_rules`
-/// - suppress exact findings with `suppressions`
+/// - suppress exact `(code, sid)` findings with `suppressions`
 /// - opt into a small amount of permissive structural handling with
 ///   `allow_implicit_chapter_content_verse`
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -218,10 +211,7 @@ pub fn lint(handle: &ParseHandle, options: LintOptions) -> Vec<LintIssue> {
     lint_tokens(&projected, options.token_rules)
 }
 
-pub fn lint_tokens<T: LintableFlatToken>(
-    tokens: &[T],
-    options: TokenLintOptions,
-) -> Vec<LintIssue> {
+pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: TokenLintOptions) -> Vec<LintIssue> {
     let mut issues = Vec::new();
     let enabled = EnabledRules::new(&options.disabled_rules);
 
@@ -285,7 +275,7 @@ pub fn lint_tokens<T: LintableFlatToken>(
     dedupe_and_filter_issues(issues, &options.suppressions)
 }
 
-fn lint_expectation_and_unknown_token_rules<T: LintableFlatToken>(
+fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
     tokens: &[T],
     enabled: &EnabledRules,
     issues: &mut Vec<LintIssue>,
@@ -353,7 +343,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableFlatToken>(
     }
 }
 
-fn lint_structure_rules<T: LintableFlatToken>(
+fn lint_structure_rules<T: LintableToken>(
     tokens: &[T],
     options: &TokenLintOptions,
     enabled: &EnabledRules,
@@ -366,7 +356,7 @@ fn lint_structure_rules<T: LintableFlatToken>(
 
     for (index, token) in tokens.iter().enumerate() {
         match token.kind() {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             _ => {}
         }
 
@@ -375,7 +365,7 @@ fn lint_structure_rules<T: LintableFlatToken>(
                 .marker()
                 .map(normalized_marker_name)
                 .unwrap_or_default();
-            let info = lookup_marker(marker);
+            let resolved = ResolvedContextMarker::new(marker);
 
             if enabled.has(LintCode::IdMarkerNotAtFileStart) && marker == "id" && saw_content {
                 issues.push(simple_issue(
@@ -395,18 +385,23 @@ fn lint_structure_rules<T: LintableFlatToken>(
                 id_seen = true;
             }
 
-            let prospective_state = if lookup_marker(marker).kind == MarkerKind::Note {
-                document_state.current_validation_context(marker)
-            } else {
-                let mut next_state = document_state.clone();
-                next_state.apply_marker(tokens, index, marker);
-                next_state.current_root_context()
-            };
+            let prospective_state =
+                if resolved.is_some_and(|resolved| resolved.kind == MarkerKind::Note) {
+                    resolved.map_or(document_state.current_root_context(), |resolved| {
+                        document_state.current_validation_context(resolved)
+                    })
+                } else {
+                    let mut next_state = document_state.clone();
+                    if let Some(resolved) = resolved {
+                        next_state.apply_marker(tokens, index, resolved);
+                    }
+                    next_state.current_root_context()
+                };
 
             if enabled.has(LintCode::ParagraphBeforeFirstChapter)
                 && !document_state.saw_chapter
                 && document_state.kind == DocumentKind::Scripture
-                && info.kind == MarkerKind::Paragraph
+                && resolved.is_some_and(|resolved| resolved.kind == MarkerKind::Paragraph)
                 && is_body_paragraph_marker(marker)
                 && prospective_state == SpecContext::ChapterContent
             {
@@ -448,7 +443,7 @@ fn lint_structure_rules<T: LintableFlatToken>(
             }
 
             if enabled.has(LintCode::NoteSubmarkerOutsideNote)
-                && info.valid_in_note
+                && resolved.is_some_and(|resolved| resolved.valid_in_note)
                 && note_stack.is_empty()
             {
                 issues.push(simple_issue(
@@ -480,11 +475,13 @@ fn lint_structure_rules<T: LintableFlatToken>(
                 ));
             }
 
-            if info.kind == MarkerKind::Note {
+            if resolved.is_some_and(|resolved| resolved.kind == MarkerKind::Note) {
                 note_stack.push(marker.to_string());
             }
 
-            document_state.apply_marker(tokens, index, marker);
+            if let Some(resolved) = resolved {
+                document_state.apply_marker(tokens, index, resolved);
+            }
 
             saw_content = true;
             continue;
@@ -513,7 +510,7 @@ fn lint_structure_rules<T: LintableFlatToken>(
 
 #[derive(Default)]
 struct EnabledRules {
-    disabled: BTreeSet<LintCode>,
+    disabled: HashSet<LintCode>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -540,6 +537,46 @@ struct DocumentLintState {
     saw_chapter: bool,
     block_context: Option<SpecContext>,
     note_stack: Vec<SpecContext>,
+}
+
+#[derive(Clone, Copy)]
+struct ResolvedContextMarker<'a> {
+    marker: &'a str,
+    spec: &'static MarkerSpec,
+    kind: MarkerKind,
+    inline_context: Option<InlineContext>,
+    note_context: Option<SpecContext>,
+    valid_in_note: bool,
+}
+
+impl<'a> ResolvedContextMarker<'a> {
+    fn new(marker: &'a str) -> Option<Self> {
+        let spec = lookup_spec_marker(marker)?;
+        Some(Self {
+            marker,
+            spec,
+            kind: spec.kind.to_marker_kind(marker),
+            inline_context: marker_inline_context(marker),
+            note_context: marker_note_context(marker),
+            valid_in_note: marker_note_subkind(marker).is_some(),
+        })
+    }
+
+    fn id(self) -> crate::internal::marker_defs::MarkerId {
+        crate::internal::marker_defs::MarkerId::new(self.spec.marker)
+    }
+
+    fn allows_effective_context(self, context: SpecContext) -> bool {
+        marker_spec_allows_effective_context(self.spec, self.kind, context)
+    }
+
+    fn paragraph_block_context(self) -> SpecContext {
+        paragraph_block_context_from_inline(self.inline_context)
+    }
+
+    fn note_context(self) -> SpecContext {
+        self.note_context.unwrap_or(SpecContext::Footnote)
+    }
 }
 
 impl Default for DocumentLintState {
@@ -577,18 +614,18 @@ impl DocumentLintState {
         self.note_stack.last().copied()
     }
 
-    fn current_validation_context(&self, marker: &str) -> SpecContext {
+    fn current_validation_context(&self, marker: ResolvedContextMarker<'_>) -> SpecContext {
         let root_context = self.current_root_context();
         marker_validation_context(
-            marker,
+            marker.kind,
             root_context,
             self.block_context,
             self.current_note_context(),
         )
     }
 
-    fn select_top_level_slot(&self, marker: &str) -> TopLevelSlot {
-        if lookup_marker_id(marker) == Some(MARKER_PERIPH) {
+    fn select_top_level_slot(&self, marker: ResolvedContextMarker<'_>) -> TopLevelSlot {
+        if marker.id() == MARKER_PERIPH {
             return TopLevelSlot::AwaitDivision;
         }
 
@@ -599,15 +636,20 @@ impl DocumentLintState {
             .iter()
             .copied()
             .skip(start)
-            .find(|(_, context)| marker_allows_effective_context(marker, *context))
+            .find(|(_, context)| marker.allows_effective_context(*context))
             .map(|(slot, _)| slot)
             .unwrap_or(self.slot)
     }
 
-    fn apply_marker<T: LintableFlatToken>(&mut self, tokens: &[T], index: usize, marker: &str) {
-        match lookup_marker(marker).kind {
+    fn apply_marker<T: LintableToken>(
+        &mut self,
+        tokens: &[T],
+        index: usize,
+        marker: ResolvedContextMarker<'_>,
+    ) {
+        match marker.kind {
             MarkerKind::Header => {
-                if lookup_marker_id(marker) == Some(MARKER_ID)
+                if marker.id() == MARKER_ID
                     && let Some(book_code) = next_book_code_after_marker(tokens, index)
                 {
                     self.kind = infer_document_kind(book_code);
@@ -629,11 +671,11 @@ impl DocumentLintState {
                 if self.current_note_context().is_none() {
                     self.slot = self.select_top_level_slot(marker);
                 }
-                self.block_context = Some(paragraph_block_context(marker));
+                self.block_context = Some(marker.paragraph_block_context());
             }
             MarkerKind::Meta => {}
             MarkerKind::Note => {
-                self.note_stack.push(note_context_for_marker(marker));
+                self.note_stack.push(marker.note_context());
             }
             MarkerKind::Periph => {
                 self.kind = DocumentKind::PeripheralDivided;
@@ -706,7 +748,7 @@ fn infer_document_kind(book_code: &str) -> DocumentKind {
     }
 }
 
-fn next_book_code_after_marker<T: LintableFlatToken>(
+fn next_book_code_after_marker<T: LintableToken>(
     tokens: &[T],
     marker_index: usize,
 ) -> Option<&str> {
@@ -730,7 +772,7 @@ impl EnabledRules {
     }
 }
 
-fn lint_missing_separator_after_marker<T: LintableFlatToken>(
+fn lint_missing_separator_after_marker<T: LintableToken>(
     tokens: &[T],
     issues: &mut Vec<LintIssue>,
 ) {
@@ -788,7 +830,7 @@ fn lint_missing_separator_after_marker<T: LintableFlatToken>(
     }
 }
 
-fn lint_unknown_markers<T: LintableFlatToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
+fn lint_unknown_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
     for token in tokens {
         if token.kind() != &TokenKind::Marker {
             continue;
@@ -807,7 +849,7 @@ fn lint_unknown_markers<T: LintableFlatToken>(tokens: &[T], issues: &mut Vec<Lin
     }
 }
 
-fn lint_unknown_close_markers<T: LintableFlatToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
+fn lint_unknown_close_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
     for token in tokens {
         if token.kind() != &TokenKind::EndMarker {
             continue;
@@ -826,12 +868,12 @@ fn lint_unknown_close_markers<T: LintableFlatToken>(tokens: &[T], issues: &mut V
     }
 }
 
-fn lint_chapter_rules<T: LintableFlatToken>(
+fn lint_chapter_rules<T: LintableToken>(
     tokens: &[T],
     enabled: &EnabledRules,
     issues: &mut Vec<LintIssue>,
 ) {
-    let mut seen_chapters = BTreeSet::new();
+    let mut seen_chapters = HashSet::new();
     let mut last_chapter: Option<u32> = None;
     let mut labels: BTreeMap<String, Vec<ChapterLabelEntry>> = BTreeMap::new();
 
@@ -932,7 +974,7 @@ fn lint_chapter_rules<T: LintableFlatToken>(
     }
 }
 
-fn lint_number_and_verse_rules<T: LintableFlatToken>(
+fn lint_number_and_verse_rules<T: LintableToken>(
     tokens: &[T],
     enabled: &EnabledRules,
     issues: &mut Vec<LintIssue>,
@@ -1074,7 +1116,7 @@ struct VerseState {
     last: u32,
 }
 
-fn lint_number_predecessor<T: LintableFlatToken>(
+fn lint_number_predecessor<T: LintableToken>(
     tokens: &[T],
     index: usize,
     issues: &mut Vec<LintIssue>,
@@ -1106,7 +1148,7 @@ fn lint_number_predecessor<T: LintableFlatToken>(
     ));
 }
 
-fn simple_issue<T: LintableFlatToken>(code: LintCode, message: String, token: &T) -> LintIssue {
+fn simple_issue<T: LintableToken>(code: LintCode, message: String, token: &T) -> LintIssue {
     LintIssue {
         code,
         severity: default_severity(code),
@@ -1124,7 +1166,7 @@ fn simple_issue<T: LintableFlatToken>(code: LintCode, message: String, token: &T
     }
 }
 
-fn build_set_number_fix<T: LintableFlatToken>(token: &T, value: u32) -> Option<TokenFix> {
+fn build_set_number_fix<T: LintableToken>(token: &T, value: u32) -> Option<TokenFix> {
     let id = token.id()?;
     Some(TokenFix::ReplaceToken {
         label: format!("change number to {value}"),
@@ -1239,7 +1281,7 @@ fn parse_sid_chapter(sid: Option<&str>) -> Option<u32> {
     chapter.parse().ok()
 }
 
-fn lint_unknown_token_like<T: LintableFlatToken>(token: &T) -> Option<LintIssue> {
+fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
     let text = token.text();
     let slash_index = text.find('\\')?;
     let remainder = &text[slash_index + 1..];
@@ -1293,13 +1335,12 @@ fn lint_unknown_token_like<T: LintableFlatToken>(token: &T) -> Option<LintIssue>
     })
 }
 
-fn verse_has_text_or_note<T: LintableFlatToken>(tokens: &[T], start: usize) -> bool {
+fn verse_has_text_or_note<T: LintableToken>(tokens: &[T], start: usize) -> bool {
     let mut index = start;
     while index < tokens.len() {
         let token = &tokens[index];
         match token.kind() {
-            TokenKind::Whitespace
-            | TokenKind::Newline
+            TokenKind::Newline
             | TokenKind::Attributes
             | TokenKind::Milestone
             | TokenKind::MilestoneEnd => {
@@ -1372,26 +1413,23 @@ fn verse_has_text_or_note<T: LintableFlatToken>(tokens: &[T], start: usize) -> b
     false
 }
 
-fn previous_significant_token_index<T: LintableFlatToken>(
-    tokens: &[T],
-    start: usize,
-) -> Option<usize> {
+fn previous_significant_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
     if start == 0 {
         return None;
     }
     for index in (0..start).rev() {
         match tokens[index].kind() {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             _ => return Some(index),
         }
     }
     None
 }
 
-fn next_number_token_index<T: LintableFlatToken>(tokens: &[T], start: usize) -> Option<usize> {
+fn next_number_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
     for (index, token) in tokens.iter().enumerate().skip(start) {
         match token.kind() {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             TokenKind::Number => return Some(index),
             _ => return None,
         }
@@ -1399,10 +1437,10 @@ fn next_number_token_index<T: LintableFlatToken>(tokens: &[T], start: usize) -> 
     None
 }
 
-fn next_text_token_index<T: LintableFlatToken>(tokens: &[T], start: usize) -> Option<usize> {
+fn next_text_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
     for (index, token) in tokens.iter().enumerate().skip(start) {
         match token.kind() {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             TokenKind::Text => return Some(index),
             _ => return None,
         }
@@ -1410,17 +1448,17 @@ fn next_text_token_index<T: LintableFlatToken>(tokens: &[T], start: usize) -> Op
     None
 }
 
-fn next_significant_token_index<T: LintableFlatToken>(tokens: &[T], start: usize) -> Option<usize> {
+fn next_significant_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
     for (index, token) in tokens.iter().enumerate().skip(start) {
         match token.kind() {
-            TokenKind::Whitespace | TokenKind::Newline => continue,
+            TokenKind::Newline => continue,
             _ => return Some(index),
         }
     }
     None
 }
 
-fn lint_marker_context_rules<T: LintableFlatToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
+fn lint_marker_context_rules<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
     let mut document_state = DocumentLintState::default();
 
     for (index, token) in tokens.iter().enumerate() {
@@ -1434,10 +1472,11 @@ fn lint_marker_context_rules<T: LintableFlatToken>(tokens: &[T], issues: &mut Ve
         let Some(marker) = marker else {
             continue;
         };
+        let resolved = ResolvedContextMarker::new(marker);
 
         match token.kind() {
             TokenKind::EndMarker => {
-                if lookup_marker(marker).kind == MarkerKind::Note {
+                if resolved.is_some_and(|resolved| resolved.kind == MarkerKind::Note) {
                     let _ = document_state.note_stack.pop();
                 }
                 continue;
@@ -1446,31 +1485,30 @@ fn lint_marker_context_rules<T: LintableFlatToken>(tokens: &[T], issues: &mut Ve
             _ => {}
         }
 
-        if lookup_spec_marker(marker).is_none() {
+        let Some(resolved) = resolved else {
             continue;
-        }
+        };
 
-        let marker_kind = lookup_marker(marker).kind;
-        let validation_context = if lookup_marker_id(marker) == Some(MARKER_PERIPH) {
+        let validation_context = if resolved.id() == MARKER_PERIPH {
             SpecContext::Peripheral
-        } else if marker_kind == MarkerKind::Chapter {
+        } else if resolved.kind == MarkerKind::Chapter {
             top_level_root_context(document_state.kind, TopLevelSlot::Content)
         } else if document_state.current_note_context().is_none()
             && matches!(
-                marker_kind,
+                resolved.kind,
                 MarkerKind::Paragraph
                     | MarkerKind::Header
                     | MarkerKind::SidebarStart
                     | MarkerKind::TableRow
             )
         {
-            let next_slot = document_state.select_top_level_slot(marker);
+            let next_slot = document_state.select_top_level_slot(resolved);
             top_level_root_context(document_state.kind, next_slot)
         } else {
-            document_state.current_validation_context(marker)
+            document_state.current_validation_context(resolved)
         };
-        validate_context_marker_for_token(marker, validation_context, token, issues);
-        document_state.apply_marker(tokens, index, marker);
+        validate_context_marker_for_token(resolved, validation_context, token, issues);
+        document_state.apply_marker(tokens, index, resolved);
     }
 }
 
@@ -1483,7 +1521,7 @@ struct OpenMarkerFrame {
     kind: MarkerKind,
 }
 
-fn lint_marker_balance_rules<T: LintableFlatToken>(
+fn lint_marker_balance_rules<T: LintableToken>(
     tokens: &[T],
     enabled: &EnabledRules,
     issues: &mut Vec<LintIssue>,
@@ -1545,7 +1583,7 @@ fn closes_inline_stack_at_boundary(kind: MarkerKind) -> bool {
     )
 }
 
-fn close_open_frames_for_boundary<T: LintableFlatToken>(
+fn close_open_frames_for_boundary<T: LintableToken>(
     boundary: &T,
     stack: &mut Vec<OpenMarkerFrame>,
     enabled: &EnabledRules,
@@ -1568,7 +1606,7 @@ fn close_open_frames_for_boundary<T: LintableFlatToken>(
     }
 }
 
-fn handle_close_marker<T: LintableFlatToken>(
+fn handle_close_marker<T: LintableToken>(
     token: &T,
     marker: &str,
     stack: &mut Vec<OpenMarkerFrame>,
@@ -1629,7 +1667,7 @@ fn is_note_close_marker(marker: &str) -> bool {
     marker_is_note_container(marker)
 }
 
-fn unclosed_marker_issue<T: LintableFlatToken>(
+fn unclosed_marker_issue<T: LintableToken>(
     frame: &OpenMarkerFrame,
     anchor: &T,
     at_eof: bool,
@@ -1685,13 +1723,13 @@ fn unclosed_marker_issue<T: LintableFlatToken>(
 }
 
 fn marker_validation_context(
-    marker: &str,
+    marker_kind: MarkerKind,
     root_context: SpecContext,
     block_context: Option<SpecContext>,
     note_context: Option<SpecContext>,
 ) -> SpecContext {
     let effective = note_context.or(block_context).unwrap_or(root_context);
-    match lookup_marker(marker).kind {
+    match marker_kind {
         MarkerKind::Character | MarkerKind::TableCell => effective,
         MarkerKind::Verse => root_context,
         MarkerKind::Meta => effective,
@@ -1708,22 +1746,23 @@ fn marker_validation_context(
     }
 }
 
-fn validate_context_marker_for_token<T: LintableFlatToken>(
-    marker: &str,
+fn validate_context_marker_for_token<T: LintableToken>(
+    marker: ResolvedContextMarker<'_>,
     context: SpecContext,
     token: &T,
     issues: &mut Vec<LintIssue>,
 ) {
-    if marker_allows_effective_context(marker, context) {
+    if marker.allows_effective_context(context) {
         return;
     }
 
     issues.push(LintIssue {
         code: LintCode::MarkerNotValidInContext,
         severity: default_severity(LintCode::MarkerNotValidInContext),
-        marker: Some(marker.to_string()),
+        marker: Some(marker.marker.to_string()),
         message: format!(
-            "marker \\{marker} is not valid in {}",
+            "marker \\{} is not valid in {}",
+            marker.marker,
             spec_context_name(context)
         ),
         span: token.span().clone(),
@@ -1735,7 +1774,36 @@ fn validate_context_marker_for_token<T: LintableFlatToken>(
     });
 }
 
-fn matches_previous_marker_and_number<T: LintableFlatToken>(
+fn marker_spec_allows_effective_context(
+    spec: &MarkerSpec,
+    kind: MarkerKind,
+    context: SpecContext,
+) -> bool {
+    spec.contexts.contains(&context)
+        || (context == SpecContext::PeripheralContent
+            && spec.contexts.contains(&SpecContext::ChapterContent))
+        || marker_spec_allows_embedded_char_context(spec, kind, context)
+}
+
+fn marker_spec_allows_embedded_char_context(
+    spec: &MarkerSpec,
+    kind: MarkerKind,
+    context: SpecContext,
+) -> bool {
+    if !matches!(context, SpecContext::Footnote | SpecContext::CrossReference) {
+        return false;
+    }
+
+    kind == MarkerKind::Character
+        && spec.contexts.iter().any(|ctx| {
+            matches!(
+                ctx,
+                SpecContext::Section | SpecContext::Para | SpecContext::List | SpecContext::Table
+            )
+        })
+}
+
+fn matches_previous_marker_and_number<T: LintableToken>(
     tokens: &[T],
     marker_index: usize,
     expected_marker: &str,
@@ -1765,7 +1833,11 @@ fn top_level_root_context(kind: DocumentKind, slot: TopLevelSlot) -> SpecContext
 }
 
 fn paragraph_block_context(marker: &str) -> SpecContext {
-    match marker_inline_context(marker).unwrap_or(InlineContext::Para) {
+    paragraph_block_context_from_inline(marker_inline_context(marker))
+}
+
+fn paragraph_block_context_from_inline(inline_context: Option<InlineContext>) -> SpecContext {
+    match inline_context.unwrap_or(InlineContext::Para) {
         InlineContext::Para => SpecContext::Para,
         InlineContext::Section => SpecContext::Section,
         InlineContext::List => SpecContext::List,
@@ -1806,13 +1878,18 @@ fn dedupe_and_filter_issues(
     issues: Vec<LintIssue>,
     suppressions: &[LintSuppression],
 ) -> Vec<LintIssue> {
-    let mut seen = BTreeSet::new();
+    let suppression_keys = suppressions
+        .iter()
+        .map(|suppression| (suppression.code, suppression.sid.as_str()))
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::new();
     let mut deduped = Vec::new();
 
     for issue in issues {
-        if suppressions
-            .iter()
-            .any(|suppression| suppression.code == issue.code && suppression.span == issue.span)
+        if issue
+            .sid
+            .as_deref()
+            .is_some_and(|sid| suppression_keys.contains(&(issue.code, sid)))
         {
             continue;
         }
@@ -1852,7 +1929,7 @@ mod tests {
         lane: u8,
     }
 
-    impl LintableFlatToken for EditorToken {
+    impl LintableToken for EditorToken {
         fn kind(&self) -> &TokenKind {
             &self.token_kind
         }
@@ -1945,12 +2022,7 @@ mod tests {
     #[test]
     fn missing_separator_rule_allows_separator_on_marker_token() {
         let handle = parse("\\id REV\n\\c 19\n\\m (for fine linen)\n");
-        let projected = tokens(
-            &handle,
-            TokenViewOptions {
-                whitespace_policy: WhitespacePolicy::Preserve,
-            },
-        );
+        let projected = tokens(&handle, TokenViewOptions::default());
 
         let issues = lint_tokens(&projected, TokenLintOptions::default());
 
@@ -1976,14 +2048,14 @@ mod tests {
     }
 
     #[test]
-    fn suppressions_match_by_span_and_rule() {
+    fn suppressions_match_by_sid_and_rule() {
         let handle = parse("\\id REV\n\\c 19\n\\m(for fine linen)\n");
         let projected = tokens(&handle, TokenViewOptions::default());
-        let target_span = projected
+        let target_sid = projected
             .iter()
             .find(|token| token.kind == TokenKind::Marker && token.marker.as_deref() == Some("m"))
-            .map(|token| token.span.clone())
-            .expect("expected marker span");
+            .and_then(|token| token.sid.clone())
+            .expect("expected marker sid");
 
         let issues = lint_tokens(
             &projected,
@@ -1991,7 +2063,7 @@ mod tests {
                 disabled_rules: Vec::new(),
                 suppressions: vec![LintSuppression {
                     code: LintCode::MissingSeparatorAfterMarker,
-                    span: target_span,
+                    sid: target_sid,
                 }],
                 allow_implicit_chapter_content_verse: false,
             },

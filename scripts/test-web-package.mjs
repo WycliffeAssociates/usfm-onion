@@ -31,6 +31,9 @@ assert.match(html, /<article|<main|<section|<p/);
 const usj = pkg.intoUsj(parsed);
 assert.equal(usj.type, "USJ");
 
+const tree = pkg.intoDocumentTree(parsed);
+assert.ok(Array.isArray(tree.content));
+
 const usx = pkg.intoUsx({ document: parsed });
 assert.match(usx, /<usx/);
 
@@ -39,6 +42,11 @@ const issues = pkg.lintContent({
   format: "usfm",
 });
 assert.ok(Array.isArray(issues));
+
+const tokenIssues = pkg.lintFlatTokens({
+  tokens: pkg.intoTokens({ document: parsed }),
+});
+assert.ok(Array.isArray(tokenIssues));
 
 const fixableIssues = pkg.lintContent({
   source: "\\\\id GEN\\n\\\\c 1\\n\\\\ptext\\n",
@@ -54,11 +62,25 @@ const formatted = pkg.formatContent({
 });
 assert.ok(formatted.tokens.length > 0);
 
+const formattedTokens = pkg.formatFlatTokens({
+  tokens: pkg.intoTokens({ document: parsed }),
+});
+assert.ok(formattedTokens.tokens.length > 0);
+
 const diffs = pkg.diffUsfm({
   baselineUsfm: source,
   currentUsfm: `${source}God created\\n`,
 });
 assert.ok(Array.isArray(diffs));
+
+const tokenDiffs = pkg.diffFlatTokens({
+  baselineTokens: pkg.intoTokensFromContent({ source, format: "usfm" }),
+  currentTokens: pkg.intoTokensFromContent({
+    source: `${source}God created\\n`,
+    format: "usfm",
+  }),
+});
+assert.ok(Array.isArray(tokenDiffs));
 
 const reverted = pkg.revertDiffBlock({
   blockId: diffs[0]?.blockId ?? "GEN 1:1",

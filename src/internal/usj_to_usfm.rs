@@ -1,6 +1,5 @@
 use serde_json::{Map, Value};
 
-use crate::internal::usj::roundtrip_fingerprint;
 use crate::model::usj::UsjDocument;
 
 pub fn from_usj_value(value: &Value) -> Result<String, UsjToUsfmError> {
@@ -14,10 +13,6 @@ pub fn from_usj_value(value: &Value) -> Result<String, UsjToUsfmError> {
             expected: "USJ",
             actual: doc_type.to_string(),
         });
-    }
-
-    if let Some(source) = extract_roundtrip_source(root, value) {
-        return Ok(source);
     }
 
     let content = get_required_array(root, "content", "root")?;
@@ -489,29 +484,10 @@ fn is_note_markerish(value: &Value) -> bool {
         .is_some_and(|node_type| matches!(node_type, "char" | "ref"))
 }
 
-fn extract_roundtrip_source(root: &Map<String, Value>, value: &Value) -> Option<String> {
-    let metadata = root.get("_lossless_roundtrip")?.as_object()?;
-    let source = metadata.get("source")?.as_str()?;
-    let expected_fingerprint = metadata.get("fingerprint")?.as_str()?;
-
-    let mut sanitized = value.clone();
-    let Value::Object(map) = &mut sanitized else {
-        return None;
-    };
-    map.remove("_lossless_roundtrip");
-
-    let actual_fingerprint = format!("{:016x}", roundtrip_fingerprint(&sanitized));
-    if actual_fingerprint == expected_fingerprint {
-        Some(source.to_string())
-    } else {
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::advanced::{to_usj_lossless_value, to_usj_value};
+    use crate::internal::usj::to_usj_value;
     use crate::parse::parse;
     use serde_json::json;
 
@@ -547,25 +523,5 @@ mod tests {
         let reparsed = parse(&usfm);
         let reparsed_usj = to_usj_value(&reparsed);
         assert_eq!(usj, reparsed_usj);
-    }
-
-    #[test]
-    fn roundtrip_metadata_restores_exact_source() {
-        let source = "\\id GEN Genesis\r\n\\c 1\r\n\\p\r\n\\v 1 In the beginning\r\n";
-        let handle = parse(source);
-        let usj = to_usj_lossless_value(&handle);
-        let usfm = from_usj_value(&usj).expect("roundtrip metadata should restore source");
-        assert_eq!(usfm, source);
-    }
-
-    #[test]
-    fn modified_roundtrip_usj_falls_back_to_synthesized_writer() {
-        let source = "\\id GEN Genesis\n\\c 1\n\\p\n\\v 1 In the beginning\n";
-        let handle = parse(source);
-        let mut usj = to_usj_lossless_value(&handle);
-        usj["content"][0]["code"] = Value::String("EXO".to_string());
-        let usfm = from_usj_value(&usj).expect("modified roundtrip metadata should fall back");
-        assert!(usfm.starts_with("\\id EXO "));
-        assert_ne!(usfm, source);
     }
 }

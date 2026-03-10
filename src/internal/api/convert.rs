@@ -3,12 +3,12 @@ use crate::internal::api::types::{DocumentError, DocumentFormat};
 use crate::internal::html::{
     HtmlOptions, into_html as render_html, usfm_content_to_html as render_usfm_html,
 };
-use crate::internal::usj::{to_editor_tree_document, to_usj_document, to_usj_lossless_document};
+use crate::internal::usj::{to_document_tree_document, to_usj_document};
 use crate::internal::usj_to_usfm::{UsjToUsfmError, from_usj_document, from_usj_value};
-use crate::internal::usx::{UsxError, to_usx_lossless_string, to_usx_string};
+use crate::internal::usx::{UsxError, to_usx_string};
 use crate::internal::usx_to_usfm::{UsxToUsfmError, from_usx_string};
 use crate::internal::vref::{VrefMap, to_vref_map};
-use crate::model::editor_tree::EditorTreeDocument;
+use crate::model::document_tree::DocumentTreeDocument;
 use crate::model::token::SourceTokenText;
 use crate::model::usj::UsjDocument;
 use crate::parse::handle::ParseHandle;
@@ -17,20 +17,12 @@ pub fn into_usj(handle: &ParseHandle) -> UsjDocument {
     to_usj_document(handle)
 }
 
-pub fn into_usj_lossless(handle: &ParseHandle) -> UsjDocument {
-    to_usj_lossless_document(handle)
-}
-
-pub fn into_editor_tree(handle: &ParseHandle) -> EditorTreeDocument {
-    to_editor_tree_document(handle)
+pub fn into_document_tree(handle: &ParseHandle) -> DocumentTreeDocument {
+    to_document_tree_document(handle)
 }
 
 pub fn into_usx(handle: &ParseHandle) -> Result<String, UsxError> {
     to_usx_string(handle)
-}
-
-pub fn into_usx_lossless(handle: &ParseHandle) -> Result<String, UsxError> {
-    to_usx_lossless_string(handle)
 }
 
 pub fn into_vref(handle: &ParseHandle) -> VrefMap {
@@ -47,22 +39,10 @@ pub fn into_usj_from_tokens<T: SourceTokenText>(tokens: &[T]) -> UsjDocument {
     into_usj(&handle)
 }
 
-pub fn into_usj_lossless_from_tokens<T: SourceTokenText>(tokens: &[T]) -> UsjDocument {
-    let usfm = into_usfm_from_tokens(tokens);
-    let handle = crate::parse::parse(&usfm);
-    into_usj_lossless(&handle)
-}
-
 pub fn into_usx_from_tokens<T: SourceTokenText>(tokens: &[T]) -> Result<String, UsxError> {
     let usfm = into_usfm_from_tokens(tokens);
     let handle = crate::parse::parse(&usfm);
     into_usx(&handle)
-}
-
-pub fn into_usx_lossless_from_tokens<T: SourceTokenText>(tokens: &[T]) -> Result<String, UsxError> {
-    let usfm = into_usfm_from_tokens(tokens);
-    let handle = crate::parse::parse(&usfm);
-    into_usx_lossless(&handle)
 }
 
 pub fn into_vref_from_tokens<T: SourceTokenText>(tokens: &[T]) -> VrefMap {

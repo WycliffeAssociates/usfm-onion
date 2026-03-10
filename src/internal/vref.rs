@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::internal::syntax::{ContainerKind, Node};
+use crate::model::document_tree::{DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode};
 use crate::parse::handle::ParseHandle;
 
 pub type VrefMap = BTreeMap<String, String>;
@@ -46,6 +47,14 @@ pub fn to_vref_json_string(handle: &ParseHandle) -> String {
 
     out.push_str("\n}");
     out
+}
+
+pub fn document_tree_to_vref_map(document: &DocumentTreeDocument) -> VrefMap {
+    let mut map = VrefMap::new();
+    let mut state = VrefState::default();
+    collect_tree_nodes(document.content.as_slice(), &mut state, &mut map);
+    flush_current(&mut state, &mut map);
+    map
 }
 
 fn collect_nodes(nodes: &[Node], source: &str, state: &mut VrefState, map: &mut VrefMap) {
@@ -99,6 +108,84 @@ fn collect_nodes(nodes: &[Node], source: &str, state: &mut VrefState, map: &mut 
             Node::Milestone { .. } => {}
             _ => {}
         }
+    }
+}
+
+fn collect_tree_nodes(nodes: &[DocumentTreeNode], state: &mut VrefState, map: &mut VrefMap) {
+    for node in nodes {
+        let DocumentTreeNode::Element(element) = node;
+        match element {
+            DocumentTreeElement::Book { code, content, .. } => {
+                state.book = code.clone();
+                collect_tree_nodes(content.as_slice(), state, map);
+            }
+            DocumentTreeElement::Chapter { number, .. } => {
+                state.chapter = number.trim().to_string();
+            }
+            DocumentTreeElement::Verse { number, .. } => {
+                flush_current(state, map);
+                let verse = number.trim();
+                if state.book.is_empty() || state.chapter.is_empty() || verse.is_empty() {
+                    state.current_ref.clear();
+                    state.current_text.clear();
+                    continue;
+                }
+                state.current_ref = format!("{} {}:{}", state.book, state.chapter, verse);
+                state.current_text.clear();
+            }
+            DocumentTreeElement::Para {
+                marker, content, ..
+            } if is_verse_paragraph(marker) => {
+                collect_tree_paragraph_children(content.as_slice(), state, map);
+            }
+            DocumentTreeElement::Char { content, .. }
+            | DocumentTreeElement::Unknown { content, .. }
+            | DocumentTreeElement::Unmatched { content, .. } => {
+                if !state.current_ref.is_empty() {
+                    collect_tree_nodes(content.as_slice(), state, map);
+                }
+            }
+            DocumentTreeElement::Text { value } => {
+                if !state.current_ref.is_empty() {
+                    state.current_text.push_str(value);
+                }
+            }
+            DocumentTreeElement::OptBreak {}
+            | DocumentTreeElement::LineBreak { .. }
+            | DocumentTreeElement::Note { .. }
+            | DocumentTreeElement::Milestone { .. }
+            | DocumentTreeElement::Figure { .. }
+            | DocumentTreeElement::Sidebar { .. }
+            | DocumentTreeElement::Periph { .. }
+            | DocumentTreeElement::Table { .. }
+            | DocumentTreeElement::TableRow { .. }
+            | DocumentTreeElement::TableCell { .. }
+            | DocumentTreeElement::Ref { .. }
+            | DocumentTreeElement::Para { .. } => {}
+        }
+    }
+}
+
+fn collect_tree_paragraph_children(
+    nodes: &[DocumentTreeNode],
+    state: &mut VrefState,
+    map: &mut VrefMap,
+) {
+    let mut seen_meaningful_child = false;
+
+    for node in nodes {
+        let DocumentTreeNode::Element(element) = node;
+        if !seen_meaningful_child
+            && matches!(
+                element,
+                DocumentTreeElement::LineBreak { .. } | DocumentTreeElement::OptBreak {}
+            )
+        {
+            continue;
+        }
+
+        seen_meaningful_child = true;
+        collect_tree_nodes(std::slice::from_ref(node), state, map);
     }
 }
 

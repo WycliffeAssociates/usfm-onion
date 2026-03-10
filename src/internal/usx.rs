@@ -1,22 +1,23 @@
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use serde_json::Value;
 use std::io::Cursor;
 
-use crate::ParseHandle;
 use crate::internal::marker_defs::{
     marker_default_attribute, marker_forbidden_in_note_context, marker_is_heading_bridge,
 };
 use crate::internal::markers::lookup_marker;
 use crate::internal::recovery::{ParseRecovery, RecoveryCode, RecoveryPayload};
 use crate::internal::syntax::{ContainerKind, ContainerNode, LeafKind, Node};
+use crate::model::document_tree::{DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode};
+use crate::parse::ParseHandle;
 
 pub fn to_usx_string(handle: &ParseHandle) -> Result<String, UsxError> {
     UsxSerializer::new(handle).write()
 }
 
-pub fn to_usx_lossless_string(handle: &ParseHandle) -> Result<String, UsxError> {
-    let xml = to_usx_string(handle)?;
-    Ok(embed_lossless_usfm_source(&xml, handle.source()))
+pub fn document_tree_to_usx_string(document: &DocumentTreeDocument) -> Result<String, UsxError> {
+    DocumentTreeUsxSerializer::new(document).write()
 }
 
 #[derive(Debug)]
@@ -47,81 +48,6 @@ impl std::fmt::Display for UsxError {
 }
 
 impl std::error::Error for UsxError {}
-
-const LOSSLESS_USX_COMMENT_PREFIX: &str = "<!--usfm_onion_lossless:v1:";
-
-pub(crate) fn embed_lossless_usfm_source(xml: &str, source: &str) -> String {
-    let payload = format!(
-        "{LOSSLESS_USX_COMMENT_PREFIX}source_hex={}-->",
-        hex_encode(source.as_bytes())
-    );
-
-    if let Some(index) = xml.find("?>") {
-        let split = index + 2;
-        let mut out = String::with_capacity(xml.len() + payload.len() + 2);
-        out.push_str(&xml[..split]);
-        out.push('\n');
-        out.push_str(&payload);
-        out.push('\n');
-        out.push_str(&xml[split..]);
-        return out;
-    }
-
-    let mut out = String::with_capacity(xml.len() + payload.len() + 1);
-    out.push_str(&payload);
-    out.push('\n');
-    out.push_str(xml);
-    out
-}
-
-pub(crate) fn try_extract_lossless_usfm_source(input: &str) -> Option<String> {
-    let marker_start = input.find(LOSSLESS_USX_COMMENT_PREFIX)?;
-    let payload_start = marker_start + LOSSLESS_USX_COMMENT_PREFIX.len();
-    let payload_tail = &input[payload_start..];
-    let payload_end = payload_tail.find("-->")?;
-    let payload = &payload_tail[..payload_end];
-    let source_hex = payload
-        .split(':')
-        .find_map(|part| part.strip_prefix("source_hex="))?;
-    hex_decode_utf8(source_hex)
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push(HEX[(byte >> 4) as usize] as char);
-        out.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    out
-}
-
-fn hex_decode_utf8(value: &str) -> Option<String> {
-    if !value.len().is_multiple_of(2) {
-        return None;
-    }
-
-    let mut bytes = Vec::with_capacity(value.len() / 2);
-    let chars = value.as_bytes();
-    let mut index = 0usize;
-    while index < chars.len() {
-        let high = hex_nibble(chars[index])?;
-        let low = hex_nibble(chars[index + 1])?;
-        bytes.push((high << 4) | low);
-        index += 2;
-    }
-
-    String::from_utf8(bytes).ok()
-}
-
-fn hex_nibble(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
-}
 
 #[derive(Clone, Copy)]
 struct ContentTrim {
@@ -167,6 +93,345 @@ struct UsxSerializer<'a> {
     last_text_ends_with_whitespace: bool,
     preserve_next_leading_space: bool,
     writer: Writer<Cursor<Vec<u8>>>,
+}
+
+struct DocumentTreeUsxSerializer<'a> {
+    document: &'a DocumentTreeDocument,
+    book_code: String,
+    current_chapter: String,
+    current_chapter_sid: Option<String>,
+    current_verse_sid: Option<String>,
+    writer: Writer<Cursor<Vec<u8>>>,
+}
+
+impl<'a> DocumentTreeUsxSerializer<'a> {
+    fn new(document: &'a DocumentTreeDocument) -> Self {
+        Self {
+            document,
+            book_code: String::new(),
+            current_chapter: String::new(),
+            current_chapter_sid: None,
+            current_verse_sid: None,
+            writer: Writer::new(Cursor::new(Vec::new())),
+        }
+    }
+
+    fn write(mut self) -> Result<String, UsxError> {
+        self.writer
+            .write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
+
+        let mut root = BytesStart::new("usx");
+        root.push_attribute(("version", self.document.version.as_str()));
+        self.writer.write_event(Event::Start(root))?;
+
+        self.write_nodes(self.document.content.as_slice())?;
+        self.close_verse()?;
+        self.close_chapter()?;
+        self.writer.write_event(Event::End(BytesEnd::new("usx")))?;
+
+        let bytes = self.writer.into_inner().into_inner();
+        Ok(String::from_utf8(bytes).expect("writer should emit utf-8"))
+    }
+
+    fn write_nodes(&mut self, nodes: &[DocumentTreeNode]) -> Result<(), UsxError> {
+        for node in nodes {
+            let DocumentTreeNode::Element(element) = node;
+            self.write_element(element)?;
+        }
+        Ok(())
+    }
+
+    fn write_element(&mut self, element: &DocumentTreeElement) -> Result<(), UsxError> {
+        match element {
+            DocumentTreeElement::Text { value } => {
+                self.writer
+                    .write_event(Event::Text(BytesText::new(value)))?;
+            }
+            DocumentTreeElement::OptBreak {} => {
+                self.writer
+                    .write_event(Event::Empty(BytesStart::new("optbreak")))?;
+            }
+            DocumentTreeElement::LineBreak { .. } => {}
+            DocumentTreeElement::Book {
+                marker,
+                code,
+                content,
+                ..
+            } => {
+                self.book_code = code.to_ascii_uppercase();
+                let mut elem = BytesStart::new("book");
+                elem.push_attribute(("code", code.as_str()));
+                elem.push_attribute(("style", marker.as_str()));
+                if content.is_empty() {
+                    self.writer.write_event(Event::Empty(elem))?;
+                } else {
+                    self.writer.write_event(Event::Start(elem))?;
+                    self.write_nodes(content.as_slice())?;
+                    self.writer.write_event(Event::End(BytesEnd::new("book")))?;
+                }
+            }
+            DocumentTreeElement::Chapter {
+                marker,
+                number,
+                extra,
+            } => {
+                self.close_verse()?;
+                self.close_chapter()?;
+
+                self.current_chapter = number.clone();
+                let sid = string_extra(extra, "sid").unwrap_or_else(|| {
+                    if self.book_code.is_empty() || number.trim().is_empty() {
+                        String::new()
+                    } else {
+                        format!("{} {}", self.book_code, strip_leading_zeros(number))
+                    }
+                });
+
+                let mut elem = BytesStart::new("chapter");
+                elem.push_attribute(("number", number.as_str()));
+                elem.push_attribute(("style", marker.as_str()));
+                if !sid.is_empty() {
+                    elem.push_attribute(("sid", sid.as_str()));
+                    self.current_chapter_sid = Some(sid);
+                }
+                push_optional_attr(&mut elem, "altnumber", string_extra(extra, "altnumber"));
+                push_optional_attr(&mut elem, "pubnumber", string_extra(extra, "pubnumber"));
+                self.writer.write_event(Event::Empty(elem))?;
+            }
+            DocumentTreeElement::Verse {
+                marker,
+                number,
+                extra,
+            } => {
+                self.close_verse()?;
+
+                let sid = string_extra(extra, "sid").unwrap_or_else(|| {
+                    if self.book_code.is_empty()
+                        || self.current_chapter.trim().is_empty()
+                        || number.trim().is_empty()
+                    {
+                        String::new()
+                    } else {
+                        format!(
+                            "{} {}:{}",
+                            self.book_code,
+                            strip_leading_zeros(self.current_chapter.as_str()),
+                            strip_leading_zeros(number)
+                        )
+                    }
+                });
+
+                let mut elem = BytesStart::new("verse");
+                elem.push_attribute(("number", number.as_str()));
+                elem.push_attribute(("style", marker.as_str()));
+                if !sid.is_empty() {
+                    elem.push_attribute(("sid", sid.as_str()));
+                    self.current_verse_sid = Some(sid);
+                }
+                push_optional_attr(&mut elem, "altnumber", string_extra(extra, "altnumber"));
+                push_optional_attr(&mut elem, "pubnumber", string_extra(extra, "pubnumber"));
+                self.writer.write_event(Event::Empty(elem))?;
+            }
+            DocumentTreeElement::Para {
+                marker,
+                content,
+                extra,
+            } => {
+                let mut elem = BytesStart::new("para");
+                elem.push_attribute(("style", marker.as_str()));
+                if matches!(string_extra(extra, "status").as_deref(), Some("unknown")) {
+                    elem.push_attribute(("status", "unknown"));
+                }
+                if content.is_empty() {
+                    self.writer.write_event(Event::Empty(elem))?;
+                } else {
+                    self.writer.write_event(Event::Start(elem))?;
+                    self.write_nodes(content.as_slice())?;
+                    self.close_verse()?;
+                    self.writer.write_event(Event::End(BytesEnd::new("para")))?;
+                }
+            }
+            DocumentTreeElement::Char {
+                marker,
+                content,
+                extra,
+            } => self.write_container_with_attrs("char", "style", marker, content, extra)?,
+            DocumentTreeElement::Note {
+                marker,
+                caller,
+                content,
+                extra,
+            } => {
+                let mut elem = BytesStart::new("note");
+                elem.push_attribute(("style", marker.as_str()));
+                elem.push_attribute(("caller", caller.as_str()));
+                push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+                if content.is_empty() {
+                    self.writer.write_event(Event::Empty(elem))?;
+                } else {
+                    self.writer.write_event(Event::Start(elem))?;
+                    self.write_nodes(content.as_slice())?;
+                    self.writer.write_event(Event::End(BytesEnd::new("note")))?;
+                }
+            }
+            DocumentTreeElement::Milestone { marker, extra } => {
+                let mut elem = BytesStart::new("ms");
+                elem.push_attribute(("style", marker.as_str()));
+                push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+                self.writer.write_event(Event::Empty(elem))?;
+            }
+            DocumentTreeElement::Figure {
+                marker,
+                content,
+                extra,
+            } => self.write_container_with_attrs("figure", "style", marker, content, extra)?,
+            DocumentTreeElement::Sidebar {
+                marker,
+                content,
+                extra,
+            } => {
+                let saved_verse_sid = self.current_verse_sid.take();
+                let mut elem = BytesStart::new("sidebar");
+                elem.push_attribute(("style", marker.as_str()));
+                push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+                if content.is_empty() {
+                    self.writer.write_event(Event::Empty(elem))?;
+                } else {
+                    self.writer.write_event(Event::Start(elem))?;
+                    self.write_nodes(content.as_slice())?;
+                    self.close_verse()?;
+                    self.writer
+                        .write_event(Event::End(BytesEnd::new("sidebar")))?;
+                }
+                self.current_verse_sid = saved_verse_sid;
+            }
+            DocumentTreeElement::Periph { content, extra } => {
+                let mut elem = BytesStart::new("periph");
+                push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+                if content.is_empty() {
+                    self.writer.write_event(Event::Empty(elem))?;
+                } else {
+                    self.writer.write_event(Event::Start(elem))?;
+                    self.write_nodes(content.as_slice())?;
+                    self.writer
+                        .write_event(Event::End(BytesEnd::new("periph")))?;
+                }
+            }
+            DocumentTreeElement::Table { content, .. } => {
+                self.writer
+                    .write_event(Event::Start(BytesStart::new("table")))?;
+                self.write_nodes(content.as_slice())?;
+                self.close_verse()?;
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("table")))?;
+            }
+            DocumentTreeElement::TableRow {
+                marker,
+                content,
+                extra,
+            } => {
+                self.write_named_container("row", Some(("style", marker.as_str())), content, extra)?
+            }
+            DocumentTreeElement::TableCell {
+                marker,
+                content,
+                extra,
+                ..
+            } => self.write_named_container(
+                "cell",
+                Some(("style", marker.as_str())),
+                content,
+                extra,
+            )?,
+            DocumentTreeElement::Ref { content, extra } => {
+                self.write_named_container("ref", None, content, extra)?
+            }
+            DocumentTreeElement::Unknown {
+                marker,
+                content,
+                extra,
+            } => {
+                let mut merged_extra = extra.clone();
+                merged_extra
+                    .entry("status".to_string())
+                    .or_insert_with(|| Value::String("unknown".to_string()));
+                self.write_named_container(
+                    "para",
+                    Some(("style", marker.as_str())),
+                    content,
+                    &merged_extra,
+                )?;
+            }
+            DocumentTreeElement::Unmatched { marker, extra, .. } => {
+                let mut elem = BytesStart::new("unmatched");
+                elem.push_attribute(("marker", marker.as_str()));
+                push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+                self.writer.write_event(Event::Empty(elem))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_named_container(
+        &mut self,
+        name: &str,
+        fixed_attr: Option<(&str, &str)>,
+        content: &[DocumentTreeNode],
+        extra: &std::collections::BTreeMap<String, Value>,
+    ) -> Result<(), UsxError> {
+        let mut elem = BytesStart::new(name);
+        if let Some((key, value)) = fixed_attr {
+            elem.push_attribute((key, value));
+        }
+        push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+        if content.is_empty() {
+            self.writer.write_event(Event::Empty(elem))?;
+        } else {
+            self.writer.write_event(Event::Start(elem))?;
+            self.write_nodes(content)?;
+            self.writer.write_event(Event::End(BytesEnd::new(name)))?;
+        }
+        Ok(())
+    }
+
+    fn write_container_with_attrs(
+        &mut self,
+        name: &str,
+        style_attr: &str,
+        marker: &str,
+        content: &[DocumentTreeNode],
+        extra: &std::collections::BTreeMap<String, Value>,
+    ) -> Result<(), UsxError> {
+        let mut elem = BytesStart::new(name);
+        elem.push_attribute((style_attr, marker));
+        push_all_extra_attrs(&mut elem, extra, &["markerText", "closed"]);
+        if content.is_empty() {
+            self.writer.write_event(Event::Empty(elem))?;
+        } else {
+            self.writer.write_event(Event::Start(elem))?;
+            self.write_nodes(content)?;
+            self.writer.write_event(Event::End(BytesEnd::new(name)))?;
+        }
+        Ok(())
+    }
+
+    fn close_verse(&mut self) -> Result<(), UsxError> {
+        if let Some(sid) = self.current_verse_sid.take() {
+            let mut elem = BytesStart::new("verse");
+            elem.push_attribute(("eid", sid.as_str()));
+            self.writer.write_event(Event::Empty(elem))?;
+        }
+        Ok(())
+    }
+
+    fn close_chapter(&mut self) -> Result<(), UsxError> {
+        if let Some(sid) = self.current_chapter_sid.take() {
+            let mut elem = BytesStart::new("chapter");
+            elem.push_attribute(("eid", sid.as_str()));
+            self.writer.write_event(Event::Empty(elem))?;
+        }
+        Ok(())
+    }
 }
 
 impl<'a> UsxSerializer<'a> {
@@ -1766,6 +2031,54 @@ fn strip_leading_zeros(value: &str) -> String {
         .parse::<u64>()
         .map(|number| number.to_string())
         .unwrap_or_else(|_| value.to_string())
+}
+
+fn string_extra(extra: &std::collections::BTreeMap<String, Value>, key: &str) -> Option<String> {
+    extra
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn push_optional_attr(elem: &mut BytesStart<'_>, key: &'static str, value: Option<String>) {
+    if let Some(value) = value {
+        elem.push_attribute((key, value.as_str()));
+    }
+}
+
+fn push_all_extra_attrs(
+    elem: &mut BytesStart<'_>,
+    extra: &std::collections::BTreeMap<String, Value>,
+    excluded: &[&str],
+) {
+    for (key, value) in extra {
+        if excluded
+            .iter()
+            .any(|excluded_key| excluded_key == &key.as_str())
+        {
+            continue;
+        }
+
+        match value {
+            Value::Null => {}
+            Value::Bool(value) => elem.push_attribute((key.as_str(), bool_attr(value).as_str())),
+            Value::Number(value) => elem.push_attribute((key.as_str(), value.to_string().as_str())),
+            Value::String(value) => elem.push_attribute((key.as_str(), value.as_str())),
+            Value::Array(_) | Value::Object(_) => {
+                let encoded = serde_json::to_string(value)
+                    .expect("serde_json::Value should serialize for XML attrs");
+                elem.push_attribute((key.as_str(), encoded.as_str()));
+            }
+        }
+    }
+}
+
+fn bool_attr(value: &bool) -> String {
+    if *value {
+        "true".to_string()
+    } else {
+        "false".to_string()
+    }
 }
 
 fn total_attribute_count(parsed_spans: &[(&str, Vec<(String, String)>)]) -> usize {

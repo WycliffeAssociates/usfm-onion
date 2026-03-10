@@ -1,7 +1,7 @@
 {
-  "name": "usfm_onion",
+  "name": "usfm_onion_wasm",
   "type": "module",
-  "description": "Rust-first USFM parsing, linting, formatting, conversion, and diffing",
+  "description": "WASM bindings for usfm_onion",
   "version": "0.1.0",
   "license": "MIT",
   "files": [
@@ -15,12 +15,5 @@
   "sideEffects": [
     "./usfm_onion_web.js",
     "./snippets/*"
-  ],
-  "keywords": [
-    "usfm",
-    "parser",
-    "formatter",
-    "bible",
-    "text"
   ]
 }
