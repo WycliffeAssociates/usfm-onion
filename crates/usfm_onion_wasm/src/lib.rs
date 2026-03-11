@@ -1191,17 +1191,33 @@ pub fn wasm_into_usj(document: WebParsedDocument) -> Result<JsValue, JsError> {
 
 #[wasm_bindgen(js_name = intoDocumentTree)]
 /// Project a parsed document into the canonical document tree.
+///
+/// Important: in the wasm package this is currently exposed as runtime JSON,
+/// not a polished TypeScript discriminated union. The generated `.d.ts`
+/// surface treats document-tree values as opaque `any`, so downstream code
+/// should validate/narrow the returned shape explicitly instead of assuming a
+/// strongly typed TS contract.
 pub fn wasm_into_document_tree(document: WebParsedDocument) -> Result<JsValue, JsError> {
     let handle = rehydrate_parse_handle(&document);
     to_js_value(&into_document_tree(&handle)).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = usfmToDocumentTree)]
+/// Project USFM directly into document-tree runtime JSON.
+///
+/// Important: the wasm package does not currently export a rich TypeScript
+/// type for the recursive tree. Treat the return value as runtime data and
+/// validate/narrow it in downstream code.
 pub fn wasm_usfm_to_document_tree(content: &str) -> Result<JsValue, JsError> {
     to_js_value(&usfm_to_document_tree(content)).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = usjToDocumentTree)]
+/// Project USJ directly into document-tree runtime JSON.
+///
+/// Important: the wasm package does not currently export a rich TypeScript
+/// type for the recursive tree. Treat the return value as runtime data and
+/// validate/narrow it in downstream code.
 pub fn wasm_usj_to_document_tree(content: &str) -> Result<JsValue, JsError> {
     usj_to_document_tree(content)
         .map_err(js_error)
@@ -1209,6 +1225,11 @@ pub fn wasm_usj_to_document_tree(content: &str) -> Result<JsValue, JsError> {
 }
 
 #[wasm_bindgen(js_name = usxToDocumentTree)]
+/// Project USX directly into document-tree runtime JSON.
+///
+/// Important: the wasm package does not currently export a rich TypeScript
+/// type for the recursive tree. Treat the return value as runtime data and
+/// validate/narrow it in downstream code.
 pub fn wasm_usx_to_document_tree(content: &str) -> Result<JsValue, JsError> {
     usx_to_document_tree(content)
         .map_err(js_error)
@@ -1216,6 +1237,11 @@ pub fn wasm_usx_to_document_tree(content: &str) -> Result<JsValue, JsError> {
 }
 
 #[wasm_bindgen(js_name = tokensToDocumentTree)]
+/// Project canonical flat tokens into document-tree runtime JSON.
+///
+/// Important: the wasm package does not currently export a rich TypeScript
+/// type for the recursive tree. Treat the return value as runtime data and
+/// validate/narrow it in downstream code.
 pub fn wasm_tokens_to_document_tree(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
     let native = tokens
         .into_iter()
@@ -1225,6 +1251,12 @@ pub fn wasm_tokens_to_document_tree(tokens: Vec<WebToken>) -> Result<JsValue, Js
 }
 
 #[wasm_bindgen(js_name = documentTreeToTokens)]
+/// Flatten document-tree runtime JSON back into canonical flat tokens.
+///
+/// The input is accepted as generic `JsValue` because the wasm package does
+/// not currently publish a precise TypeScript contract for the recursive tree
+/// shape. Downstream callers should only pass values they obtained from the
+/// document-tree APIs above, or values they have validated themselves.
 pub fn wasm_document_tree_to_tokens(document: JsValue) -> Result<Vec<WebToken>, JsError> {
     let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
     document_tree_to_tokens(&document)
@@ -1294,6 +1326,10 @@ pub fn wasm_tokens_to_vref(tokens: Vec<WebToken>) -> Result<Vec<WebVrefEntry>, J
 }
 
 #[wasm_bindgen(js_name = documentTreeToUsj)]
+/// Convert document-tree runtime JSON into typed USJ output.
+///
+/// The input tree is currently an opaque runtime JSON value at the TS layer,
+/// not a polished generated tree type.
 pub fn wasm_document_tree_to_usj(document: JsValue) -> Result<JsValue, JsError> {
     let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
     document_tree_to_usj(&document)
@@ -1302,12 +1338,20 @@ pub fn wasm_document_tree_to_usj(document: JsValue) -> Result<JsValue, JsError> 
 }
 
 #[wasm_bindgen(js_name = documentTreeToUsx)]
+/// Convert document-tree runtime JSON into USX output.
+///
+/// The input tree is currently an opaque runtime JSON value at the TS layer,
+/// not a polished generated tree type.
 pub fn wasm_document_tree_to_usx(document: JsValue) -> Result<String, JsError> {
     let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
     document_tree_to_usx(&document).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = documentTreeToHtml)]
+/// Convert document-tree runtime JSON into HTML output.
+///
+/// The input tree is currently an opaque runtime JSON value at the TS layer,
+/// not a polished generated tree type.
 pub fn wasm_document_tree_to_html(
     document: JsValue,
     options: Option<WebHtmlOptions>,
@@ -1317,6 +1361,10 @@ pub fn wasm_document_tree_to_html(
 }
 
 #[wasm_bindgen(js_name = documentTreeToVref)]
+/// Convert document-tree runtime JSON into VREF output.
+///
+/// The input tree is currently an opaque runtime JSON value at the TS layer,
+/// not a polished generated tree type.
 pub fn wasm_document_tree_to_vref(document: JsValue) -> Result<Vec<WebVrefEntry>, JsError> {
     let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
     document_tree_to_vref(&document)

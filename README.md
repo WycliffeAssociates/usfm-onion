@@ -479,6 +479,12 @@ Use the content helpers only when you do not already have tokens:
 - `formatContent`
 - `diffContent`
 
+Current wasm `documentTree` contract:
+
+- tree values are real runtime JSON objects
+- the generated `.d.ts` does not currently expose a polished recursive TypeScript union for that tree
+- downstream code should narrow/validate tree nodes explicitly instead of assuming compile-time exhaustiveness from the package typings
+
 Canonical JS names now follow the Rust modules more closely:
 
 - `usfmToTokens` / `usjToTokens` / `usxToTokens`

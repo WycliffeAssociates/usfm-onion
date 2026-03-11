@@ -1,2 +1,12 @@
+# Intentionally checked in: downstream consumes these generated artifacts.
+# wasm-pack rewrites this file during build, so restore it after each package build.
+
 node_modules
 .DS_Store
+
+!.gitignore
+!README.md
+!package.json
+!*.d.ts
+!*.js
+!*.wasm

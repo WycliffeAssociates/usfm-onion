@@ -13,6 +13,21 @@ Rust-first USFM parsing, linting, formatting, conversion, diffing, and round-tri
 
 WebAssembly bindings still exist, but the crate is documented here from the native Rust perspective first. JS/browser packaging notes live in [`pkg-web/README.md`](pkg-web/README.md).
 
+## Document Tree Typing
+
+The wasm package returns document-tree values as runtime JSON objects.
+
+Important current limitation:
+
+- the generated TypeScript declarations do not yet expose a polished recursive discriminated union for the document tree
+- tree-oriented functions therefore appear as `any` in the generated `.d.ts`
+
+Practical guidance for downstream code:
+
+- treat document-tree values as runtime data
+- validate or narrow node shapes explicitly
+- do not assume the package typings alone provide exhaustive compile-time coverage of every tree node shape
+
 ## What This Crate Optimizes For
 
 - Native USFM fidelity first
