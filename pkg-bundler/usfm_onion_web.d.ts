@@ -467,6 +467,8 @@ export type WebRecoveryPayload = { type: "marker"; marker: string } | { type: "c
 
 export type WebTokenFix = { type: "replaceToken"; label: string; targetTokenId: string; replacements: WebTokenTemplate[] } | { type: "insertAfter"; label: string; targetTokenId: string; insert: WebTokenTemplate[] };
 
+export type WebTokenVariant = { type: "newline"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "optBreak"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "marker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "endMarker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestone"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestoneEnd"; id: string; span: WebSpan; sid: string | null; marker: string | null; text: string } | { type: "attributes"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "bookCode"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "number"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "text"; id: string; span: WebSpan; sid: string | null; text: string };
+
 export type WebWhitespacePolicy = "preserve" | "mergeToVisible";
 
 
@@ -478,6 +480,8 @@ export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTra
 
 export function buildSidBlocks(request: WebBuildSidBlocksRequest): WebSidBlock[];
 
+export function classifyTokens(tokens: WebToken[]): WebTokenVariant[];
+
 export function convertContent(request: WebContentRequest): string;
 
 export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsRequest): WebChapterTokenDiff[];
@@ -485,14 +489,9 @@ export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsReque
 /**
  * Parse both sources, project canonical flat tokens, then diff.
  *
- * If you already have canonical flat tokens, prefer `diffFlatTokens(...)`.
+ * If you already have canonical flat tokens, prefer `diffTokens(...)`.
  */
 export function diffContent(request: WebDiffContentRequest): WebChapterTokenDiff[];
-
-/**
- * Diff canonical flat token streams without reparsing source content.
- */
-export function diffFlatTokens(request: WebDiffTokensRequest): WebChapterTokenDiff[];
 
 export function diffSidBlocks(request: WebDiffSidBlocksRequest): WebSidBlockDiff[];
 
@@ -508,6 +507,16 @@ export function diffUsfmByChapter(request: WebDiffUsfmRequest): WebChapterDiffGr
 export function diffUsfmSources(request: WebDiffUsfmRequest): WebChapterTokenDiff[];
 
 export function diffUsfmSourcesByChapter(request: WebDiffUsfmRequest): WebChapterDiffGroup[];
+
+export function documentTreeToHtml(document: any, options?: WebHtmlOptions | null): string;
+
+export function documentTreeToTokens(document: any): WebToken[];
+
+export function documentTreeToUsj(document: any): any;
+
+export function documentTreeToUsx(document: any): string;
+
+export function documentTreeToVref(document: any): WebVrefEntry[];
 
 export function flattenDiffMap(groups: WebChapterDiffGroup[]): WebChapterTokenDiff[];
 
@@ -530,11 +539,6 @@ export function formatFlatTokens(request: WebFormatTokensRequest): WebTokenTrans
  */
 export function formatTokenBatches(request: WebFormatTokenBatchesRequest): WebTokenTransformResult[];
 
-/**
- * Format canonical flat tokens without reparsing source content.
- */
-export function formatTokens(request: WebFormatTokensRequest): WebTokenTransformResult;
-
 export function fromUsj(document: any): string;
 
 export function fromUsx(content: string): string;
@@ -543,14 +547,6 @@ export function fromUsx(content: string): string;
  * Project a parsed document into the canonical document tree.
  */
 export function intoDocumentTree(document: WebParsedDocument): any;
-
-/**
- * Project a parsed document into the canonical document tree.
- *
- * `intoDocumentTree` is the preferred name. `intoEditorTree` remains as a
- * compatibility alias for older consumers.
- */
-export function intoEditorTree(document: WebParsedDocument): any;
 
 export function intoHtml(document: WebParsedDocument, options?: WebHtmlOptions | null): string;
 
@@ -571,19 +567,11 @@ export function intoTokensFromContent(request: WebIntoTokensFromContentRequest):
 
 export function intoTokensFromContents(request: WebIntoTokensFromContentsRequest): WebTokensOpResult[];
 
-export function intoUsfmFromTokens(tokens: WebToken[]): string;
-
 export function intoUsj(document: WebParsedDocument): any;
-
-export function intoUsjFromTokens(tokens: WebToken[]): any;
 
 export function intoUsx(request: WebIntoUsxRequest): string;
 
-export function intoUsxFromTokens(tokens: WebToken[]): string;
-
 export function intoVref(document: WebParsedDocument): WebVrefEntry[];
-
-export function intoVrefFromTokens(tokens: WebToken[]): WebVrefEntry[];
 
 export function lexSources(request: WebLexSourcesRequest): WebScanResult[];
 
@@ -609,11 +597,6 @@ export function lintFlatTokens(request: WebLintTokensRequest): WebLintIssue[];
  * Lint batches of canonical flat token streams without reparsing source content.
  */
 export function lintTokenBatches(request: WebLintTokenBatchesRequest): WebLintBatch[];
-
-/**
- * Lint canonical flat tokens without reparsing source content.
- */
-export function lintTokens(request: WebLintTokensRequest): WebLintIssue[];
 
 export function packageVersion(): string;
 
@@ -645,12 +628,40 @@ export function revertDiffBlock(request: WebRevertDiffBlockRequest): WebToken[];
 
 export function revertDiffBlocks(request: WebApplyRevertsByBlockIdRequest): WebToken[];
 
+export function tokensToDocumentTree(tokens: WebToken[]): any;
+
+export function tokensToHtml(tokens: WebToken[], options?: WebHtmlOptions | null): string;
+
+export function tokensToUsfm(tokens: WebToken[]): string;
+
+export function tokensToUsj(tokens: WebToken[]): any;
+
+export function tokensToUsx(tokens: WebToken[]): string;
+
+export function tokensToVref(tokens: WebToken[]): WebVrefEntry[];
+
+export function usfmToDocumentTree(content: string): any;
+
 export function usfmToHtml(content: string, options?: WebHtmlOptions | null): string;
 
-export function usfmToUsj(content: string): string;
+export function usfmToTokenVariants(content: string): WebTokenVariant[];
+
+export function usfmToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
+
+export function usfmToUsj(content: string): any;
 
 export function usfmToUsx(content: string): string;
 
+export function usfmToVref(content: string): WebVrefEntry[];
+
+export function usjToDocumentTree(content: string): any;
+
+export function usjToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
+
 export function usjToUsfm(content: string): string;
+
+export function usxToDocumentTree(content: string): any;
+
+export function usxToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 
 export function usxToUsfm(content: string): string;

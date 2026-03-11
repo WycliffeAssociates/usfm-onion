@@ -10,5 +10,6 @@ pub mod tokens;
 
 pub use convert::DocumentFormat;
 pub use model::{
-    DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode, Token, TokenKind, UsjDocument,
+    DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode, Token, TokenKind, TokenVariant,
+    UsjDocument,
 };

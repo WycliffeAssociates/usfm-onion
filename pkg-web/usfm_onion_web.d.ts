@@ -467,6 +467,8 @@ export type WebRecoveryPayload = { type: "marker"; marker: string } | { type: "c
 
 export type WebTokenFix = { type: "replaceToken"; label: string; targetTokenId: string; replacements: WebTokenTemplate[] } | { type: "insertAfter"; label: string; targetTokenId: string; insert: WebTokenTemplate[] };
 
+export type WebTokenVariant = { type: "newline"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "optBreak"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "marker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "endMarker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestone"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestoneEnd"; id: string; span: WebSpan; sid: string | null; marker: string | null; text: string } | { type: "attributes"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "bookCode"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "number"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "text"; id: string; span: WebSpan; sid: string | null; text: string };
+
 export type WebWhitespacePolicy = "preserve" | "mergeToVisible";
 
 
@@ -478,6 +480,8 @@ export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTra
 
 export function buildSidBlocks(request: WebBuildSidBlocksRequest): WebSidBlock[];
 
+export function classifyTokens(tokens: WebToken[]): WebTokenVariant[];
+
 export function convertContent(request: WebContentRequest): string;
 
 export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsRequest): WebChapterTokenDiff[];
@@ -485,14 +489,9 @@ export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsReque
 /**
  * Parse both sources, project canonical flat tokens, then diff.
  *
- * If you already have canonical flat tokens, prefer `diffFlatTokens(...)`.
+ * If you already have canonical flat tokens, prefer `diffTokens(...)`.
  */
 export function diffContent(request: WebDiffContentRequest): WebChapterTokenDiff[];
-
-/**
- * Diff canonical flat token streams without reparsing source content.
- */
-export function diffFlatTokens(request: WebDiffTokensRequest): WebChapterTokenDiff[];
 
 export function diffSidBlocks(request: WebDiffSidBlocksRequest): WebSidBlockDiff[];
 
@@ -508,6 +507,16 @@ export function diffUsfmByChapter(request: WebDiffUsfmRequest): WebChapterDiffGr
 export function diffUsfmSources(request: WebDiffUsfmRequest): WebChapterTokenDiff[];
 
 export function diffUsfmSourcesByChapter(request: WebDiffUsfmRequest): WebChapterDiffGroup[];
+
+export function documentTreeToHtml(document: any, options?: WebHtmlOptions | null): string;
+
+export function documentTreeToTokens(document: any): WebToken[];
+
+export function documentTreeToUsj(document: any): any;
+
+export function documentTreeToUsx(document: any): string;
+
+export function documentTreeToVref(document: any): WebVrefEntry[];
 
 export function flattenDiffMap(groups: WebChapterDiffGroup[]): WebChapterTokenDiff[];
 
@@ -530,11 +539,6 @@ export function formatFlatTokens(request: WebFormatTokensRequest): WebTokenTrans
  */
 export function formatTokenBatches(request: WebFormatTokenBatchesRequest): WebTokenTransformResult[];
 
-/**
- * Format canonical flat tokens without reparsing source content.
- */
-export function formatTokens(request: WebFormatTokensRequest): WebTokenTransformResult;
-
 export function fromUsj(document: any): string;
 
 export function fromUsx(content: string): string;
@@ -543,14 +547,6 @@ export function fromUsx(content: string): string;
  * Project a parsed document into the canonical document tree.
  */
 export function intoDocumentTree(document: WebParsedDocument): any;
-
-/**
- * Project a parsed document into the canonical document tree.
- *
- * `intoDocumentTree` is the preferred name. `intoEditorTree` remains as a
- * compatibility alias for older consumers.
- */
-export function intoEditorTree(document: WebParsedDocument): any;
 
 export function intoHtml(document: WebParsedDocument, options?: WebHtmlOptions | null): string;
 
@@ -571,19 +567,11 @@ export function intoTokensFromContent(request: WebIntoTokensFromContentRequest):
 
 export function intoTokensFromContents(request: WebIntoTokensFromContentsRequest): WebTokensOpResult[];
 
-export function intoUsfmFromTokens(tokens: WebToken[]): string;
-
 export function intoUsj(document: WebParsedDocument): any;
-
-export function intoUsjFromTokens(tokens: WebToken[]): any;
 
 export function intoUsx(request: WebIntoUsxRequest): string;
 
-export function intoUsxFromTokens(tokens: WebToken[]): string;
-
 export function intoVref(document: WebParsedDocument): WebVrefEntry[];
-
-export function intoVrefFromTokens(tokens: WebToken[]): WebVrefEntry[];
 
 export function lexSources(request: WebLexSourcesRequest): WebScanResult[];
 
@@ -609,11 +597,6 @@ export function lintFlatTokens(request: WebLintTokensRequest): WebLintIssue[];
  * Lint batches of canonical flat token streams without reparsing source content.
  */
 export function lintTokenBatches(request: WebLintTokenBatchesRequest): WebLintBatch[];
-
-/**
- * Lint canonical flat tokens without reparsing source content.
- */
-export function lintTokens(request: WebLintTokensRequest): WebLintIssue[];
 
 export function packageVersion(): string;
 
@@ -645,13 +628,41 @@ export function revertDiffBlock(request: WebRevertDiffBlockRequest): WebToken[];
 
 export function revertDiffBlocks(request: WebApplyRevertsByBlockIdRequest): WebToken[];
 
+export function tokensToDocumentTree(tokens: WebToken[]): any;
+
+export function tokensToHtml(tokens: WebToken[], options?: WebHtmlOptions | null): string;
+
+export function tokensToUsfm(tokens: WebToken[]): string;
+
+export function tokensToUsj(tokens: WebToken[]): any;
+
+export function tokensToUsx(tokens: WebToken[]): string;
+
+export function tokensToVref(tokens: WebToken[]): WebVrefEntry[];
+
+export function usfmToDocumentTree(content: string): any;
+
 export function usfmToHtml(content: string, options?: WebHtmlOptions | null): string;
 
-export function usfmToUsj(content: string): string;
+export function usfmToTokenVariants(content: string): WebTokenVariant[];
+
+export function usfmToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
+
+export function usfmToUsj(content: string): any;
 
 export function usfmToUsx(content: string): string;
 
+export function usfmToVref(content: string): WebVrefEntry[];
+
+export function usjToDocumentTree(content: string): any;
+
+export function usjToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
+
 export function usjToUsfm(content: string): string;
+
+export function usxToDocumentTree(content: string): any;
+
+export function usxToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 
 export function usxToUsfm(content: string): string;
 
@@ -663,38 +674,37 @@ export interface InitOutput {
     readonly applyRevertsByBlockId: (a: any) => [number, number];
     readonly applyTokenFixes: (a: any) => any;
     readonly buildSidBlocks: (a: any) => [number, number];
+    readonly classifyTokens: (a: number, b: number) => [number, number];
     readonly convertContent: (a: any) => [number, number, number, number];
     readonly diffChapterTokenStreams: (a: any) => [number, number];
     readonly diffContent: (a: any) => [number, number, number, number];
-    readonly diffFlatTokens: (a: any) => [number, number];
     readonly diffSidBlocks: (a: any) => [number, number];
     readonly diffTokens: (a: any) => [number, number];
     readonly diffUsfm: (a: any) => [number, number];
     readonly diffUsfmByChapter: (a: any) => [number, number];
     readonly diffUsfmSources: (a: any) => [number, number];
     readonly diffUsfmSourcesByChapter: (a: any) => [number, number];
+    readonly documentTreeToHtml: (a: any, b: number) => [number, number, number, number];
+    readonly documentTreeToTokens: (a: any) => [number, number, number, number];
+    readonly documentTreeToUsj: (a: any) => [number, number, number];
+    readonly documentTreeToUsx: (a: any) => [number, number, number, number];
+    readonly documentTreeToVref: (a: any) => [number, number, number, number];
     readonly flattenDiffMap: (a: number, b: number) => [number, number];
     readonly formatContent: (a: any) => [number, number, number];
     readonly formatContents: (a: any) => [number, number];
     readonly formatFlatTokens: (a: any) => any;
     readonly formatTokenBatches: (a: any) => [number, number];
-    readonly formatTokens: (a: any) => any;
     readonly fromUsj: (a: any) => [number, number, number, number];
     readonly fromUsx: (a: number, b: number) => [number, number, number, number];
     readonly intoDocumentTree: (a: any) => [number, number, number];
-    readonly intoEditorTree: (a: any) => [number, number, number];
     readonly intoHtml: (a: any, b: number) => [number, number];
     readonly intoTokens: (a: any) => [number, number];
     readonly intoTokensBatch: (a: any) => [number, number];
     readonly intoTokensFromContent: (a: any) => [number, number, number, number];
     readonly intoTokensFromContents: (a: any) => [number, number];
-    readonly intoUsfmFromTokens: (a: number, b: number) => [number, number];
     readonly intoUsj: (a: any) => [number, number, number];
-    readonly intoUsjFromTokens: (a: number, b: number) => [number, number, number];
     readonly intoUsx: (a: any) => [number, number, number, number];
-    readonly intoUsxFromTokens: (a: number, b: number) => [number, number, number, number];
     readonly intoVref: (a: any) => [number, number];
-    readonly intoVrefFromTokens: (a: number, b: number) => [number, number];
     readonly lexSources: (a: any) => [number, number];
     readonly lintContent: (a: any) => [number, number, number, number];
     readonly lintContents: (a: any) => [number, number];
@@ -702,7 +712,6 @@ export interface InitOutput {
     readonly lintDocumentBatch: (a: any) => [number, number];
     readonly lintFlatTokens: (a: any) => [number, number];
     readonly lintTokenBatches: (a: any) => [number, number];
-    readonly lintTokens: (a: any) => [number, number];
     readonly packageVersion: () => [number, number];
     readonly parseContent: (a: any) => [number, number, number];
     readonly parseContents: (a: any) => [number, number];
@@ -714,13 +723,27 @@ export interface InitOutput {
     readonly pushWhitespace: (a: number, b: number) => [number, number];
     readonly replaceChapterDiffsInMap: (a: any) => [number, number];
     readonly replaceManyChapterDiffsInMap: (a: any) => [number, number];
+    readonly tokensToDocumentTree: (a: number, b: number) => [number, number, number];
+    readonly tokensToHtml: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly tokensToUsfm: (a: number, b: number) => [number, number];
+    readonly tokensToUsj: (a: number, b: number) => [number, number, number];
+    readonly tokensToUsx: (a: number, b: number) => [number, number, number, number];
+    readonly tokensToVref: (a: number, b: number) => [number, number, number, number];
+    readonly usfmToDocumentTree: (a: number, b: number) => [number, number, number];
+    readonly usfmToHtml: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly usfmToTokenVariants: (a: number, b: number) => [number, number];
+    readonly usfmToTokens: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly usfmToUsj: (a: number, b: number) => [number, number, number];
+    readonly usfmToUsx: (a: number, b: number) => [number, number, number, number];
+    readonly usfmToVref: (a: number, b: number) => [number, number, number, number];
+    readonly usjToDocumentTree: (a: number, b: number) => [number, number, number];
+    readonly usjToTokens: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly usjToUsfm: (a: number, b: number) => [number, number, number, number];
+    readonly usxToDocumentTree: (a: number, b: number) => [number, number, number];
+    readonly usxToTokens: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly usxToUsfm: (a: number, b: number) => [number, number, number, number];
     readonly revertDiffBlock: (a: any) => [number, number];
     readonly revertDiffBlocks: (a: any) => [number, number];
-    readonly usfmToHtml: (a: number, b: number, c: number) => [number, number];
-    readonly usfmToUsj: (a: number, b: number) => [number, number, number, number];
-    readonly usfmToUsx: (a: number, b: number) => [number, number, number, number];
-    readonly usjToUsfm: (a: number, b: number) => [number, number, number, number];
-    readonly usxToUsfm: (a: number, b: number) => [number, number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

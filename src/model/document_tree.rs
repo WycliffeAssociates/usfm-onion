@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use crate::model::token::Token;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -9,8 +8,6 @@ pub struct DocumentTreeDocument {
     #[serde(rename = "type")]
     pub doc_type: String,
     pub version: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tokens: Vec<Token>,
     pub content: Vec<DocumentTreeNode>,
 }
 

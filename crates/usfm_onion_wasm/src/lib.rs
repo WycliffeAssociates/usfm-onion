@@ -5,9 +5,11 @@ use wasm_bindgen::prelude::*;
 
 use usfm_onion::{
     convert::{
-        HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, convert_content, from_usj,
-        from_usx, into_document_tree, into_html, into_usj, into_usj_from_tokens, into_usx,
-        into_usx_from_tokens, into_vref, into_vref_from_tokens, usfm_content_to_html,
+        HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, convert_content,
+        document_tree_to_html, document_tree_to_usj, document_tree_to_usx, document_tree_to_vref,
+        from_usj, from_usx, into_document_tree, into_html, into_usj, into_usx, into_vref,
+        tokens_to_html, tokens_to_usj, tokens_to_usx, tokens_to_vref, usfm_to_html, usfm_to_usj,
+        usfm_to_usx, usfm_to_vref,
     },
     diff::{
         BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
@@ -31,7 +33,11 @@ use usfm_onion::{
     },
     model::{
         DocumentFormat, DocumentTreeDocument, ScanResult, ScanToken, ScanTokenKind, Span, Token,
-        TokenKind, TokenViewOptions, UsjDocument, VrefMap, WhitespacePolicy,
+        TokenKind, TokenVariant, TokenViewOptions, UsjDocument, VrefMap, WhitespacePolicy,
+    },
+    document_tree::{
+        document_tree_to_tokens, tokens_to_document_tree, usfm_to_document_tree,
+        usj_to_document_tree, usx_to_document_tree,
     },
     parse::{
         self, IntoTokensOptions, ParseHandle, ParseRecovery, ProjectUsfmOptions,
@@ -40,6 +46,7 @@ use usfm_onion::{
         parse_contents, parse_sources, project_content, project_document, project_usfm_batch,
         push_whitespace, recoveries,
     },
+    tokens::{classify_tokens, usfm_to_token_variants},
 };
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -240,6 +247,76 @@ pub struct WebToken {
     pub sid: Option<String>,
     pub marker: Option<String>,
     pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub enum WebTokenVariant {
+    Newline {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        text: String,
+    },
+    OptBreak {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        text: String,
+    },
+    Marker {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        marker: String,
+        text: String,
+    },
+    EndMarker {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        marker: String,
+        text: String,
+    },
+    Milestone {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        marker: String,
+        text: String,
+    },
+    MilestoneEnd {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        marker: Option<String>,
+        text: String,
+    },
+    Attributes {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        text: String,
+    },
+    BookCode {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        text: String,
+    },
+    Number {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        text: String,
+    },
+    Text {
+        id: String,
+        span: WebSpan,
+        sid: Option<String>,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -976,13 +1053,63 @@ pub fn wasm_into_tokens_batch(request: WebIntoTokensBatchRequest) -> Vec<WebToke
     .collect()
 }
 
-#[wasm_bindgen(js_name = intoUsfmFromTokens)]
-pub fn wasm_into_usfm_from_tokens(tokens: Vec<WebToken>) -> String {
+#[wasm_bindgen(js_name = tokensToUsfm)]
+pub fn wasm_tokens_to_usfm(tokens: Vec<WebToken>) -> String {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
     into_usfm_from_tokens(native.as_slice())
+}
+
+#[wasm_bindgen(js_name = usfmToTokens)]
+pub fn wasm_usfm_to_tokens(
+    content: &str,
+    token_options: Option<WebIntoTokensOptions>,
+) -> Result<Vec<WebToken>, JsError> {
+    into_tokens_from_content(content, DocumentFormat::Usfm, into_tokens_options(token_options))
+        .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
+        .map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = usjToTokens)]
+pub fn wasm_usj_to_tokens(
+    content: &str,
+    token_options: Option<WebIntoTokensOptions>,
+) -> Result<Vec<WebToken>, JsError> {
+    into_tokens_from_content(content, DocumentFormat::Usj, into_tokens_options(token_options))
+        .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
+        .map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = usxToTokens)]
+pub fn wasm_usx_to_tokens(
+    content: &str,
+    token_options: Option<WebIntoTokensOptions>,
+) -> Result<Vec<WebToken>, JsError> {
+    into_tokens_from_content(content, DocumentFormat::Usx, into_tokens_options(token_options))
+        .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
+        .map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = classifyTokens)]
+pub fn wasm_classify_tokens(tokens: Vec<WebToken>) -> Vec<WebTokenVariant> {
+    let native = tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    classify_tokens(native.as_slice())
+        .into_iter()
+        .map(map_token_variant)
+        .collect()
+}
+
+#[wasm_bindgen(js_name = usfmToTokenVariants)]
+pub fn wasm_usfm_to_token_variants(content: &str) -> Vec<WebTokenVariant> {
+    usfm_to_token_variants(content)
+        .into_iter()
+        .map(map_token_variant)
+        .collect()
 }
 
 #[wasm_bindgen(js_name = pushWhitespace)]
@@ -1062,20 +1189,47 @@ pub fn wasm_into_usj(document: WebParsedDocument) -> Result<JsValue, JsError> {
     to_js_value(&into_usj(&handle)).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = intoEditorTree)]
+#[wasm_bindgen(js_name = intoDocumentTree)]
 /// Project a parsed document into the canonical document tree.
-///
-/// `intoDocumentTree` is the preferred name. `intoEditorTree` remains as a
-/// compatibility alias for older consumers.
 pub fn wasm_into_document_tree(document: WebParsedDocument) -> Result<JsValue, JsError> {
     let handle = rehydrate_parse_handle(&document);
     to_js_value(&into_document_tree(&handle)).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = intoDocumentTree)]
-/// Project a parsed document into the canonical document tree.
-pub fn wasm_into_document_tree_alias(document: WebParsedDocument) -> Result<JsValue, JsError> {
-    wasm_into_document_tree(document)
+#[wasm_bindgen(js_name = usfmToDocumentTree)]
+pub fn wasm_usfm_to_document_tree(content: &str) -> Result<JsValue, JsError> {
+    to_js_value(&usfm_to_document_tree(content)).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = usjToDocumentTree)]
+pub fn wasm_usj_to_document_tree(content: &str) -> Result<JsValue, JsError> {
+    usj_to_document_tree(content)
+        .map_err(js_error)
+        .and_then(|tree| to_js_value(&tree).map_err(js_error_from_serde))
+}
+
+#[wasm_bindgen(js_name = usxToDocumentTree)]
+pub fn wasm_usx_to_document_tree(content: &str) -> Result<JsValue, JsError> {
+    usx_to_document_tree(content)
+        .map_err(js_error)
+        .and_then(|tree| to_js_value(&tree).map_err(js_error_from_serde))
+}
+
+#[wasm_bindgen(js_name = tokensToDocumentTree)]
+pub fn wasm_tokens_to_document_tree(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
+    let native = tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    to_js_value(&tokens_to_document_tree(native.as_slice())).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = documentTreeToTokens)]
+pub fn wasm_document_tree_to_tokens(document: JsValue) -> Result<Vec<WebToken>, JsError> {
+    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
+    document_tree_to_tokens(&document)
+        .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
+        .map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = intoHtml)]
@@ -1096,31 +1250,78 @@ pub fn wasm_into_vref(document: WebParsedDocument) -> Vec<WebVrefEntry> {
     map_vref_map(into_vref(&handle))
 }
 
-#[wasm_bindgen(js_name = intoUsjFromTokens)]
-pub fn wasm_into_usj_from_tokens(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
+#[wasm_bindgen(js_name = tokensToUsj)]
+pub fn wasm_tokens_to_usj(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
-    to_js_value(&into_usj_from_tokens(native.as_slice())).map_err(js_error)
+    tokens_to_usj(native.as_slice())
+        .map_err(js_error)
+        .and_then(|document| to_js_value(&document).map_err(js_error_from_serde))
 }
 
-#[wasm_bindgen(js_name = intoUsxFromTokens)]
-pub fn wasm_into_usx_from_tokens(tokens: Vec<WebToken>) -> Result<String, JsError> {
+#[wasm_bindgen(js_name = tokensToUsx)]
+pub fn wasm_tokens_to_usx(tokens: Vec<WebToken>) -> Result<String, JsError> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
-    into_usx_from_tokens(native.as_slice()).map_err(js_error)
+    tokens_to_usx(native.as_slice()).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = intoVrefFromTokens)]
-pub fn wasm_into_vref_from_tokens(tokens: Vec<WebToken>) -> Vec<WebVrefEntry> {
+#[wasm_bindgen(js_name = tokensToHtml)]
+pub fn wasm_tokens_to_html(
+    tokens: Vec<WebToken>,
+    options: Option<WebHtmlOptions>,
+) -> Result<String, JsError> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
-    map_vref_map(into_vref_from_tokens(native.as_slice()))
+    tokens_to_html(native.as_slice(), html_options(options)).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = tokensToVref)]
+pub fn wasm_tokens_to_vref(tokens: Vec<WebToken>) -> Result<Vec<WebVrefEntry>, JsError> {
+    let native = tokens
+        .into_iter()
+        .map(from_web_flat_token)
+        .collect::<Vec<_>>();
+    tokens_to_vref(native.as_slice())
+        .map(map_vref_map)
+        .map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = documentTreeToUsj)]
+pub fn wasm_document_tree_to_usj(document: JsValue) -> Result<JsValue, JsError> {
+    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
+    document_tree_to_usj(&document)
+        .map_err(js_error)
+        .and_then(|usj| to_js_value(&usj).map_err(js_error_from_serde))
+}
+
+#[wasm_bindgen(js_name = documentTreeToUsx)]
+pub fn wasm_document_tree_to_usx(document: JsValue) -> Result<String, JsError> {
+    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
+    document_tree_to_usx(&document).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = documentTreeToHtml)]
+pub fn wasm_document_tree_to_html(
+    document: JsValue,
+    options: Option<WebHtmlOptions>,
+) -> Result<String, JsError> {
+    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
+    document_tree_to_html(&document, html_options(options)).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = documentTreeToVref)]
+pub fn wasm_document_tree_to_vref(document: JsValue) -> Result<Vec<WebVrefEntry>, JsError> {
+    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
+    document_tree_to_vref(&document)
+        .map(map_vref_map)
+        .map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = fromUsj)]
@@ -1145,26 +1346,25 @@ pub fn wasm_convert_content(request: WebContentRequest) -> Result<String, JsErro
 }
 
 #[wasm_bindgen(js_name = usfmToUsj)]
-pub fn wasm_usfm_to_usj(content: &str) -> Result<String, JsError> {
-    wasm_convert_content(WebContentRequest {
-        source: content.to_string(),
-        source_format: WebDocumentFormat::Usfm,
-        target_format: WebDocumentFormat::Usj,
-    })
+pub fn wasm_usfm_to_usj(content: &str) -> Result<JsValue, JsError> {
+    usfm_to_usj(content)
+        .map_err(js_error)
+        .and_then(|document| to_js_value(&document).map_err(js_error_from_serde))
 }
 
 #[wasm_bindgen(js_name = usfmToUsx)]
 pub fn wasm_usfm_to_usx(content: &str) -> Result<String, JsError> {
-    wasm_convert_content(WebContentRequest {
-        source: content.to_string(),
-        source_format: WebDocumentFormat::Usfm,
-        target_format: WebDocumentFormat::Usx,
-    })
+    usfm_to_usx(content).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = usfmToHtml)]
-pub fn wasm_usfm_to_html(content: &str, options: Option<WebHtmlOptions>) -> String {
-    usfm_content_to_html(content, html_options(options))
+pub fn wasm_usfm_to_html(content: &str, options: Option<WebHtmlOptions>) -> Result<String, JsError> {
+    usfm_to_html(content, html_options(options)).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = usfmToVref)]
+pub fn wasm_usfm_to_vref(content: &str) -> Result<Vec<WebVrefEntry>, JsError> {
+    usfm_to_vref(content).map(map_vref_map).map_err(js_error)
 }
 
 #[wasm_bindgen(js_name = usjToUsfm)]
@@ -1249,7 +1449,7 @@ pub fn wasm_lint_document_batch(request: WebLintDocumentBatchRequest) -> Vec<Web
     .collect()
 }
 
-#[wasm_bindgen(js_name = lintTokens)]
+#[wasm_bindgen(js_name = lintFlatTokens)]
 /// Lint canonical flat tokens without reparsing source content.
 pub fn wasm_lint_flat_tokens(request: WebLintTokensRequest) -> Vec<WebLintIssue> {
     let tokens = request
@@ -1261,12 +1461,6 @@ pub fn wasm_lint_flat_tokens(request: WebLintTokensRequest) -> Vec<WebLintIssue>
         .into_iter()
         .map(map_lint_issue)
         .collect()
-}
-
-#[wasm_bindgen(js_name = lintFlatTokens)]
-/// Lint canonical flat tokens without reparsing source content.
-pub fn wasm_lint_flat_tokens_alias(request: WebLintTokensRequest) -> Vec<WebLintIssue> {
-    wasm_lint_flat_tokens(request)
 }
 
 #[wasm_bindgen(js_name = lintTokenBatches)]
@@ -1334,7 +1528,7 @@ pub fn wasm_format_contents(request: WebFormatContentsRequest) -> Vec<WebTransfo
     .collect()
 }
 
-#[wasm_bindgen(js_name = formatTokens)]
+#[wasm_bindgen(js_name = formatFlatTokens)]
 /// Format canonical flat tokens without reparsing source content.
 pub fn wasm_format_flat_tokens(request: WebFormatTokensRequest) -> WebTokenTransformResult {
     let tokens = request
@@ -1349,12 +1543,6 @@ pub fn wasm_format_flat_tokens(request: WebFormatTokensRequest) -> WebTokenTrans
         None => format_flat_tokens(tokens.as_slice()),
     };
     map_transform_result(result)
-}
-
-#[wasm_bindgen(js_name = formatFlatTokens)]
-/// Format canonical flat tokens without reparsing source content.
-pub fn wasm_format_flat_tokens_alias(request: WebFormatTokensRequest) -> WebTokenTransformResult {
-    wasm_format_flat_tokens(request)
 }
 
 #[wasm_bindgen(js_name = formatTokenBatches)]
@@ -1401,7 +1589,7 @@ pub fn wasm_apply_token_fixes(request: WebApplyTokenFixesRequest) -> WebTokenTra
 #[wasm_bindgen(js_name = diffContent)]
 /// Parse both sources, project canonical flat tokens, then diff.
 ///
-/// If you already have canonical flat tokens, prefer `diffFlatTokens(...)`.
+/// If you already have canonical flat tokens, prefer `diffTokens(...)`.
 pub fn wasm_diff_content(
     request: WebDiffContentRequest,
 ) -> Result<Vec<WebChapterTokenDiff>, JsError> {
@@ -1440,11 +1628,6 @@ pub fn wasm_diff_tokens(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDif
     .collect()
 }
 
-#[wasm_bindgen(js_name = diffFlatTokens)]
-/// Diff canonical flat token streams without reparsing source content.
-pub fn wasm_diff_flat_tokens_alias(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDiff> {
-    wasm_diff_tokens(request)
-}
 
 #[wasm_bindgen(js_name = buildSidBlocks)]
 pub fn wasm_build_sid_blocks(request: WebBuildSidBlocksRequest) -> Vec<WebSidBlock> {
@@ -1713,6 +1896,99 @@ fn map_flat_token(token: Token) -> WebToken {
         sid: token.sid,
         marker: token.marker,
         text: token.text,
+    }
+}
+
+fn map_token_variant(token: TokenVariant) -> WebTokenVariant {
+    match token {
+        TokenVariant::Newline { id, span, sid, text } => WebTokenVariant::Newline {
+            id,
+            span: map_span(span),
+            sid,
+            text,
+        },
+        TokenVariant::OptBreak { id, span, sid, text } => WebTokenVariant::OptBreak {
+            id,
+            span: map_span(span),
+            sid,
+            text,
+        },
+        TokenVariant::Marker {
+            id,
+            span,
+            sid,
+            marker,
+            text,
+        } => WebTokenVariant::Marker {
+            id,
+            span: map_span(span),
+            sid,
+            marker,
+            text,
+        },
+        TokenVariant::EndMarker {
+            id,
+            span,
+            sid,
+            marker,
+            text,
+        } => WebTokenVariant::EndMarker {
+            id,
+            span: map_span(span),
+            sid,
+            marker,
+            text,
+        },
+        TokenVariant::Milestone {
+            id,
+            span,
+            sid,
+            marker,
+            text,
+        } => WebTokenVariant::Milestone {
+            id,
+            span: map_span(span),
+            sid,
+            marker,
+            text,
+        },
+        TokenVariant::MilestoneEnd {
+            id,
+            span,
+            sid,
+            marker,
+            text,
+        } => WebTokenVariant::MilestoneEnd {
+            id,
+            span: map_span(span),
+            sid,
+            marker,
+            text,
+        },
+        TokenVariant::Attributes { id, span, sid, text } => WebTokenVariant::Attributes {
+            id,
+            span: map_span(span),
+            sid,
+            text,
+        },
+        TokenVariant::BookCode { id, span, sid, text } => WebTokenVariant::BookCode {
+            id,
+            span: map_span(span),
+            sid,
+            text,
+        },
+        TokenVariant::Number { id, span, sid, text } => WebTokenVariant::Number {
+            id,
+            span: map_span(span),
+            sid,
+            text,
+        },
+        TokenVariant::Text { id, span, sid, text } => WebTokenVariant::Text {
+            id,
+            span: map_span(span),
+            sid,
+            text,
+        },
     }
 }
 
@@ -2341,6 +2617,10 @@ fn parse_lint_code(code: &str) -> Option<LintCode> {
 }
 
 fn js_error(error: impl std::fmt::Display) -> JsError {
+    JsError::new(&error.to_string())
+}
+
+fn js_error_from_serde(error: serde_wasm_bindgen::Error) -> JsError {
     JsError::new(&error.to_string())
 }
 

@@ -19,8 +19,8 @@ const corpora = [
 ];
 
 const operations = [
-  { label: "parse usfm", run: benchParseUsfm },
-  { label: "project tokens", run: benchIntoTokens },
+  { label: "usfm -> document_tree", run: benchIntoDocumentTree },
+  { label: "usfm -> tokens", run: benchIntoTokens },
   { label: "lint usfm", run: benchLintUsfm },
   { label: "format usfm", run: benchFormatUsfm },
   { label: "usfm -> usj", run: benchUsfmToUsj },
@@ -170,24 +170,15 @@ function measure(run, corpus, iterations, warmup) {
   return samples[Math.floor(samples.length / 2)];
 }
 
-function benchParseUsfm(corpus) {
-  return pkg
-    .parseContents({
-      sources: corpus.usfmSources,
-      format: "usfm",
-      batchOptions: { parallel: false },
-    })
-    .reduce((sum, row) => sum + (row.error ? 0 : row.value.sourceUsfm.length), 0);
+function benchIntoDocumentTree(corpus) {
+  return corpus.usfmSources.reduce(
+    (sum, source) => sum + pkg.usfmToDocumentTree(source).content.length,
+    0,
+  );
 }
 
 function benchIntoTokens(corpus) {
-  return pkg
-    .intoTokensFromContents({
-      sources: corpus.usfmSources,
-      format: "usfm",
-      batchOptions: { parallel: false },
-    })
-    .reduce((sum, row) => sum + (row.error ? 0 : row.value.length), 0);
+  return corpus.usfmSources.reduce((sum, source) => sum + pkg.usfmToTokens(source).length, 0);
 }
 
 function benchLintUsfm(corpus) {
@@ -211,7 +202,10 @@ function benchFormatUsfm(corpus) {
 }
 
 function benchUsfmToUsj(corpus) {
-  return corpus.usfmSources.reduce((sum, source) => sum + pkg.usfmToUsj(source).length, 0);
+  return corpus.usfmSources.reduce(
+    (sum, source) => sum + JSON.stringify(pkg.usfmToUsj(source)).length,
+    0,
+  );
 }
 
 function benchUsfmToUsx(corpus) {
@@ -223,14 +217,11 @@ function benchUsfmToHtml(corpus) {
 }
 
 function benchUsfmToVref(corpus) {
-  return corpus.usfmSources.reduce((sum, source) => {
-    const document = pkg.parseContent({ source, format: "usfm" });
-    return sum + pkg.intoVref(document).length;
-  }, 0);
+  return corpus.usfmSources.reduce((sum, source) => sum + pkg.usfmToVref(source).length, 0);
 }
 
 function benchUsjToUsfm(corpus) {
-  return corpus.usjSources.reduce((sum, source) => sum + pkg.usjToUsfm(source).length, 0);
+  return corpus.usjSources.reduce((sum, source) => sum + pkg.fromUsj(source).length, 0);
 }
 
 function benchUsxToUsfm(corpus) {

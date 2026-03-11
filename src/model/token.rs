@@ -85,6 +85,151 @@ impl SourceTokenText for Token {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum TokenVariant {
+    Newline {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        text: String,
+    },
+    OptBreak {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        text: String,
+    },
+    Marker {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        marker: String,
+        text: String,
+    },
+    EndMarker {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        marker: String,
+        text: String,
+    },
+    Milestone {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        marker: String,
+        text: String,
+    },
+    MilestoneEnd {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        marker: Option<String>,
+        text: String,
+    },
+    Attributes {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        text: String,
+    },
+    BookCode {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        text: String,
+    },
+    Number {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        text: String,
+    },
+    Text {
+        id: String,
+        span: Span,
+        sid: Option<String>,
+        text: String,
+    },
+}
+
+impl Token {
+    pub fn variant(&self) -> TokenVariant {
+        let id = self.id.clone();
+        let span = self.span.clone();
+        let sid = self.sid.clone();
+        let text = self.text.clone();
+
+        match self.kind {
+            TokenKind::Newline => TokenVariant::Newline {
+                id,
+                span,
+                sid,
+                text,
+            },
+            TokenKind::OptBreak => TokenVariant::OptBreak {
+                id,
+                span,
+                sid,
+                text,
+            },
+            TokenKind::Marker => TokenVariant::Marker {
+                id,
+                span,
+                sid,
+                marker: self.marker.clone().unwrap_or_default(),
+                text,
+            },
+            TokenKind::EndMarker => TokenVariant::EndMarker {
+                id,
+                span,
+                sid,
+                marker: self.marker.clone().unwrap_or_default(),
+                text,
+            },
+            TokenKind::Milestone => TokenVariant::Milestone {
+                id,
+                span,
+                sid,
+                marker: self.marker.clone().unwrap_or_default(),
+                text,
+            },
+            TokenKind::MilestoneEnd => TokenVariant::MilestoneEnd {
+                id,
+                span,
+                sid,
+                marker: self.marker.clone(),
+                text,
+            },
+            TokenKind::Attributes => TokenVariant::Attributes {
+                id,
+                span,
+                sid,
+                text,
+            },
+            TokenKind::BookCode => TokenVariant::BookCode {
+                id,
+                span,
+                sid,
+                text,
+            },
+            TokenKind::Number => TokenVariant::Number {
+                id,
+                span,
+                sid,
+                text,
+            },
+            TokenKind::Text => TokenVariant::Text {
+                id,
+                span,
+                sid,
+                text,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum WhitespacePolicy {
     #[default]

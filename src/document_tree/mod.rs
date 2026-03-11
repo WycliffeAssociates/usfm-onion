@@ -53,10 +53,6 @@ pub fn tokens_to_document_tree(tokens: &[Token]) -> DocumentTreeDocument {
 pub fn document_tree_to_tokens(
     document: &DocumentTreeDocument,
 ) -> Result<Vec<Token>, DocumentError> {
-    if !document.tokens.is_empty() {
-        return Ok(document.tokens.clone());
-    }
-
     Ok(crate::tokens::usfm_to_tokens(&document_tree_to_usfm(
         document,
     )?))

@@ -1,4 +1,6 @@
-use usfm_onion::{DocumentFormat, convert, diff, document_tree, format, lint, tokens};
+use usfm_onion::{
+    DocumentFormat, TokenVariant, convert, diff, document_tree, format, lint, tokens,
+};
 
 #[test]
 fn public_modules_support_happy_path_usage() {
@@ -6,6 +8,9 @@ fn public_modules_support_happy_path_usage() {
 
     let token_list = tokens::usfm_to_tokens(source);
     assert!(!token_list.is_empty(), "expected projected tokens");
+    let variants = tokens::classify_tokens(&token_list);
+    assert!(!variants.is_empty(), "expected token variants");
+    assert!(matches!(variants[0], TokenVariant::Marker { .. }));
 
     let tree = document_tree::usfm_to_document_tree(source);
     assert!(!tree.content.is_empty(), "expected document tree content");

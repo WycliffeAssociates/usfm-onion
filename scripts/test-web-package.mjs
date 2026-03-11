@@ -34,8 +34,25 @@ assert.equal(usj.type, "USJ");
 const tree = pkg.intoDocumentTree(parsed);
 assert.ok(Array.isArray(tree.content));
 
+const directTree = pkg.usfmToDocumentTree(source);
+assert.ok(Array.isArray(directTree.content));
+
 const usx = pkg.intoUsx({ document: parsed });
 assert.match(usx, /<usx/);
+
+const tokenList = pkg.usfmToTokens(source);
+assert.ok(Array.isArray(tokenList));
+assert.equal(pkg.tokensToUsfm(tokenList), source);
+
+const variants = pkg.classifyTokens(tokenList);
+assert.ok(Array.isArray(variants));
+assert.ok(variants.some((variant) => variant.type === "marker"));
+
+const tokenTree = pkg.tokensToDocumentTree(tokenList);
+assert.ok(Array.isArray(tokenTree.content));
+
+const flattenedTreeTokens = pkg.documentTreeToTokens(tokenTree);
+assert.ok(Array.isArray(flattenedTreeTokens));
 
 const issues = pkg.lintContent({
   source,
@@ -44,7 +61,7 @@ const issues = pkg.lintContent({
 assert.ok(Array.isArray(issues));
 
 const tokenIssues = pkg.lintFlatTokens({
-  tokens: pkg.intoTokens({ document: parsed }),
+  tokens: tokenList,
 });
 assert.ok(Array.isArray(tokenIssues));
 
@@ -63,7 +80,7 @@ const formatted = pkg.formatContent({
 assert.ok(formatted.tokens.length > 0);
 
 const formattedTokens = pkg.formatFlatTokens({
-  tokens: pkg.intoTokens({ document: parsed }),
+  tokens: tokenList,
 });
 assert.ok(formattedTokens.tokens.length > 0);
 
@@ -73,22 +90,16 @@ const diffs = pkg.diffUsfm({
 });
 assert.ok(Array.isArray(diffs));
 
-const tokenDiffs = pkg.diffFlatTokens({
-  baselineTokens: pkg.intoTokensFromContent({ source, format: "usfm" }),
-  currentTokens: pkg.intoTokensFromContent({
-    source: `${source}God created\\n`,
-    format: "usfm",
-  }),
+const tokenDiffs = pkg.diffTokens({
+  baselineTokens: tokenList,
+  currentTokens: pkg.usfmToTokens(`${source}God created\\n`),
 });
 assert.ok(Array.isArray(tokenDiffs));
 
 const reverted = pkg.revertDiffBlock({
   blockId: diffs[0]?.blockId ?? "GEN 1:1",
-  baselineTokens: pkg.intoTokensFromContent({ source, format: "usfm" }),
-  currentTokens: pkg.intoTokensFromContent({
-    source: `${source}God created\\n`,
-    format: "usfm",
-  }),
+  baselineTokens: tokenList,
+  currentTokens: pkg.usfmToTokens(`${source}God created\\n`),
 });
 assert.ok(Array.isArray(reverted));
 

@@ -7,10 +7,8 @@ use crate::internal::markers::lookup_marker;
 use crate::internal::recovery::{ParseRecovery, RecoveryCode, RecoveryPayload};
 use crate::internal::syntax::{ContainerKind, ContainerNode, LeafKind, Node};
 use crate::model::document_tree::{DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode};
-use crate::model::token::TokenViewOptions;
 use crate::model::usj::{UsjDocument, UsjElement, UsjNode};
 use crate::parse::handle::ParseHandle;
-use crate::parse::handle::tokens;
 
 pub fn to_usj_value(handle: &ParseHandle) -> Value {
     to_usj_value_with_options(handle, UsjSerializerOptions::for_usj(handle))
@@ -49,7 +47,6 @@ pub fn to_document_tree_document(handle: &ParseHandle) -> DocumentTreeDocument {
     DocumentTreeDocument {
         doc_type: "USJ".to_string(),
         version: usj_version(handle.source()).to_string(),
-        tokens: tokens(handle, TokenViewOptions::default()),
         content,
     }
 }
@@ -80,7 +77,6 @@ fn document_tree_document_from_value(value: Value) -> DocumentTreeDocument {
     DocumentTreeDocument {
         doc_type: take_string(&mut object, "type"),
         version: take_string(&mut object, "version"),
-        tokens: Vec::new(),
         content: take_content(&mut object),
     }
 }

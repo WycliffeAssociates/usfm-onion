@@ -55,6 +55,16 @@ Top-level public modules:
 
 ## The Core Model
 
+### Pipeline
+
+The native USFM pipeline is:
+
+- lex: raw source -> scan tokens
+- parse: scan tokens -> `ParseHandle` syntax/analysis
+- project: `ParseHandle` -> public `tokens`, `document_tree`, or semantic exports
+
+So lex and parse are two distinct steps. Public `tokens::usfm_to_tokens(...)` is a convenience that parses first and then projects canonical public tokens.
+
 ### `tokens`
 
 `Token` is the canonical flat representation for operations.
@@ -84,6 +94,34 @@ Token guarantees:
 - token ids are stable only within one invocation
 - horizontal whitespace is preserved in token text
 - tokenization is designed to accept malformed content rather than hard-fail on it
+- exact USFM round-trip is guaranteed at the token layer
+
+If you want an exhaustively matchable token API instead of `TokenKind + fields`, use `TokenVariant`:
+
+```rust
+use usfm_onion::{TokenVariant, tokens};
+
+for token in tokens::usfm_to_token_variants(source) {
+    match token {
+        TokenVariant::Marker { marker, text, .. } => {
+            let _ = (marker, text);
+        }
+        TokenVariant::EndMarker { marker, .. } => {
+            let _ = marker;
+        }
+        TokenVariant::Text { text, .. } => {
+            let _ = text;
+        }
+        TokenVariant::Newline { .. }
+        | TokenVariant::OptBreak { .. }
+        | TokenVariant::Milestone { .. }
+        | TokenVariant::MilestoneEnd { .. }
+        | TokenVariant::Attributes { .. }
+        | TokenVariant::BookCode { .. }
+        | TokenVariant::Number { .. } => {}
+    }
+}
+```
 
 ### `document_tree`
 
@@ -119,7 +157,7 @@ The key property is:
 
 - `document_tree` is structured
 - opening/projecting into it does not mutate content
-- it can flatten back to tokens
+- it can be projected back into tokens / USFM
 
 In plain language, `document_tree` is the thing you use when you want:
 
@@ -127,18 +165,17 @@ In plain language, `document_tree` is the thing you use when you want:
 - the current closest thing to a structured editor tree for USFM
 - one canonical intermediate form before projecting to `USJ`, `USX`, `HTML`, or `VREF`
 
-Current implementation note:
+What `document_tree` is not:
 
-- `DocumentTreeDocument.content` now has its own reconstruction path back to USFM / tokens
-- the normal USFM -> `document_tree` projection path no longer populates a backing `tokens` vector
-- exact round-trip from tree content alone is still incomplete across the full fixture corpus, so this area is still under active refactor
+- it is not the exact-lossless source of truth
+- it should not be treated as the byte-faithful round-trip layer for arbitrary USFM
 
-Why that still differs from `USJ` or `USX`:
+Why it still differs from `USJ` or `USX`:
 
 - `document_tree.content` keeps more editor-oriented structural distinctions than semantic exports do
 - `USJ` and `USX` are semantic formats, not exact source reconstruction formats
 
-Examples of source details `document_tree` preserves for USFM-originated content:
+Examples of source details `document_tree` may preserve for editor use:
 
 - explicit linebreak nodes
 - exact marker text for things like book / chapter / verse markers
@@ -156,12 +193,7 @@ So the practical split is:
 
 - use `document_tree` when you want a structured editor/interchange tree
 - use `USJ` / `USX` when you want semantic interchange formats
-- use `tokens` when you want the lowest-level exact working form for lint / format / diff / fix application
-
-Intended future direction:
-
-- `document_tree.content` should eventually be sufficient for faithful reconstruction on its own
-- at that point `document.tokens` should no longer be required as a parallel backing store
+- use `tokens` when you want the exact working form for lint / format / diff / fix application
 
 Typical use:
 
@@ -184,8 +216,9 @@ Use them when you want semantic interchange or rendering, not when you want the 
 
 Another plain-language way to say it:
 
-- `document_tree` is an editor/interchange tree with lossless USFM backing tokens
+- `document_tree` is an editor/interchange tree
 - `USJ` and `USX` are semantic export formats
+- `tokens` are the lossless source-faithful layer
 
 That means `USJ` / `USX` may preserve the meaning and structure of a passage while dropping distinctions that only matter if you are trying to reconstruct the original token stream exactly.
 
@@ -198,12 +231,9 @@ This crate makes a hard distinction between structural fidelity and semantic exp
 For USFM-originated content, the exact round-trip-preserving layer is:
 
 - `tokens`
-- `document_tree`
 - `tokens::tokens_to_usfm`
 
-`document_tree` is included in that list as an architectural target, but the tree-content-only reconstruction path is not yet exact across the full fixture corpus.
-
-That is the path to use if exact original USFM matters.
+If exact original USFM matters, keep tokens.
 
 ### Semantic USJ / USX round-trip
 
@@ -217,7 +247,7 @@ That means:
 
 So the guarantee is:
 
-- USFM-originated `tokens` / `document_tree` round-trip exactly to USFM
+- USFM-originated `tokens` round-trip exactly to USFM
 - USJ / USX round-trip semantically, not byte-for-byte to original JSON/XML formatting
 
 Put differently:
@@ -414,10 +444,11 @@ The npm package exports both bundler and browser builds:
 import init, {
   parseContent,
   intoTokens,
+  usfmToTokens,
   intoDocumentTree,
   lintFlatTokens,
   formatFlatTokens,
-  diffFlatTokens,
+  diffTokens,
 } from "usfm-onion-web";
 ```
 
@@ -430,10 +461,11 @@ const parsed = parseContent({
 });
 
 const tokens = intoTokens({ document: parsed });
+const sameTokens = usfmToTokens(source);
 
 const issues = lintFlatTokens({ tokens });
 const formatted = formatFlatTokens({ tokens });
-const diffs = diffFlatTokens({
+const diffs = diffTokens({
   baselineTokens: tokens,
   currentTokens: formatted.tokens,
 });
@@ -447,10 +479,13 @@ Use the content helpers only when you do not already have tokens:
 - `formatContent`
 - `diffContent`
 
-Compatibility notes:
+Canonical JS names now follow the Rust modules more closely:
 
-- `intoEditorTree` still exists in the wasm package as a compatibility alias, but `intoDocumentTree` is the preferred name.
-- `lintTokens` / `formatTokens` / `diffTokens` still exist, and `lintFlatTokens` / `formatFlatTokens` / `diffFlatTokens` are clearer aliases for the same flat-token operations.
+- `usfmToTokens` / `usjToTokens` / `usxToTokens`
+- `tokensToUsfm`
+- `usfmToDocumentTree` / `tokensToDocumentTree` / `documentTreeToTokens`
+- `tokensToUsj` / `tokensToUsx` / `tokensToHtml` / `tokensToVref`
+- `lintFlatTokens`, `formatFlatTokens`, `diffTokens`
 
 ## CLI
 

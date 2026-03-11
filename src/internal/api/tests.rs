@@ -552,33 +552,3 @@ fn push_whitespace_matches_flat_projection_policy() {
 
     assert_eq!(merged_shape, flat_shape);
 }
-
-#[test]
-fn document_tree_roundtrips_cross_reference_spacing() {
-    let source = "\\id MAT\n\\c 1\n\\p\n\\v 1 the first verse\n\\v 2 the second verse\n\\v 3 \\x - \\xo 2.23: \\xt Mrk 1.24; Luk 2.39; Jhn 1.45.\\x*and made his home in a town named Nazareth.\n";
-    let tree = document_tree::usfm_to_document_tree(source);
-    let flattened =
-        document_tree::document_tree_to_tokens(&tree).expect("document tree should flatten");
-
-    assert_eq!(tokens::tokens_to_usfm(&flattened), source);
-}
-
-#[test]
-fn document_tree_roundtrips_note_caller_spacing() {
-    let source = "\\id GEN\n\\ib\n\\ip Hi mom.\n\\c 1\n\\p \\v 1 Hi \\nd Bob\\nd*.\n\\p And\\f +\\fr 1.1 \\ft stuff\\f*\n\\b\n";
-    let tree = document_tree::usfm_to_document_tree(source);
-    let flattened =
-        document_tree::document_tree_to_tokens(&tree).expect("document tree should flatten");
-
-    assert_eq!(tokens::tokens_to_usfm(&flattened), source);
-}
-
-#[test]
-fn document_tree_roundtrips_nested_plus_prefixed_note_chars() {
-    let source = "\\id GEN\r\n\\c 1\r\n\\p\\v 1 something \\f + \\fr 1.1 \\ft \\+em \\+pn name\\+pn* stuff \\+em*\\f*\r\n";
-    let tree = document_tree::usfm_to_document_tree(source);
-    let flattened =
-        document_tree::document_tree_to_tokens(&tree).expect("document tree should flatten");
-
-    assert_eq!(tokens::tokens_to_usfm(&flattened), source);
-}

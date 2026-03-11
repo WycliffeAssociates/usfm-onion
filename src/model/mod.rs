@@ -9,7 +9,7 @@ pub use crate::model::document_tree::{
     DocumentTreeDocument, DocumentTreeElement, DocumentTreeNode,
 };
 pub use crate::model::token::{
-    ScanResult, ScanToken, ScanTokenKind, SourceTokenText, Span, Token, TokenKind,
+    ScanResult, ScanToken, ScanTokenKind, SourceTokenText, Span, Token, TokenKind, TokenVariant,
     TokenViewOptions, WhitespacePolicy,
 };
 pub use crate::model::usj::{UsjDocument, UsjElement, UsjNode};

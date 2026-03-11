@@ -2,7 +2,8 @@ pub use crate::internal::api::{
     BatchExecutionOptions, DocumentError, DocumentFormat, read_document,
 };
 pub use crate::model::token::{
-    ScanResult, ScanToken, ScanTokenKind, SourceTokenText, Span, Token, TokenKind, TokenViewOptions,
+    ScanResult, ScanToken, ScanTokenKind, SourceTokenText, Span, Token, TokenKind, TokenVariant,
+    TokenViewOptions,
 };
 
 use crate::internal::api;
@@ -44,4 +45,12 @@ pub fn read_usx_to_tokens(path: impl AsRef<Path>) -> Result<Vec<Token>, Document
 
 pub fn tokens_to_usfm<T: SourceTokenText>(tokens: &[T]) -> String {
     api::into_usfm_from_tokens(tokens)
+}
+
+pub fn classify_tokens(tokens: &[Token]) -> Vec<TokenVariant> {
+    tokens.iter().map(Token::variant).collect()
+}
+
+pub fn usfm_to_token_variants(source: &str) -> Vec<TokenVariant> {
+    classify_tokens(&usfm_to_tokens(source))
 }
