@@ -1580,6 +1580,7 @@ fn closes_inline_stack_at_boundary(kind: MarkerKind) -> bool {
             | MarkerKind::Meta
             | MarkerKind::Chapter
             | MarkerKind::Periph
+            | MarkerKind::Unknown
     )
 }
 
@@ -2407,6 +2408,29 @@ mod tests {
             issue.code == LintCode::NoteNotClosed
                 && matches!(issue.fix, Some(TokenFix::ReplaceToken { .. }))
         }));
+    }
+
+    #[test]
+    fn unclosed_note_before_unknown_marker_boundary_targets_unknown_marker() {
+        let handle = parse("\\id MRK Test\n\\c 15\n\\p\n\\v 28 text \\f + \\ft note\n\\s5\n\\p\n");
+        let issues = lint(&handle, LintOptions::default());
+
+        let issue = issues
+            .iter()
+            .find(|issue| issue.code == LintCode::NoteNotClosed)
+            .expect("note-not-closed issue");
+
+        match issue.fix.as_ref() {
+            Some(TokenFix::ReplaceToken { replacements, .. }) => {
+                assert_eq!(replacements.len(), 2);
+                assert_eq!(replacements[0].kind, TokenKind::EndMarker);
+                assert_eq!(replacements[0].text, "\\f*");
+                assert_eq!(replacements[1].kind, TokenKind::Marker);
+                assert_eq!(replacements[1].text, "\\s5");
+                assert_eq!(replacements[1].marker.as_deref(), Some("s5"));
+            }
+            other => panic!("unexpected fix payload: {other:?}"),
+        }
     }
 
     #[test]

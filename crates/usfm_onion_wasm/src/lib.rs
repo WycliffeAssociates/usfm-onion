@@ -191,33 +191,33 @@ pub struct WebHtmlOptions {
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebFormatOptions {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub recover_malformed_markers: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub collapse_whitespace_in_text: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub ensure_inline_separators: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub remove_duplicate_verse_numbers: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub normalize_spacing_after_paragraph_markers: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub remove_unwanted_linebreaks: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub bridge_consecutive_verse_markers: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub remove_orphan_empty_verse_before_contentful_verse: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub remove_bridge_verse_enumerators: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub move_chapter_label_after_chapter_marker: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub insert_default_paragraph_after_chapter_intro: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub insert_structural_linebreaks: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub collapse_consecutive_linebreaks: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub normalize_marker_whitespace_at_line_start: bool,
 }
 
@@ -2676,10 +2676,38 @@ fn default_prefer_native_true() -> bool {
     true
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_parallel_true() -> bool {
     true
 }
 
 fn default_allow_empty_sid_true() -> bool {
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WebFormatOptions, format_options};
+    use crate::format::FormatOptions;
+
+    #[test]
+    fn empty_web_format_options_use_default_enabled_rules() {
+        let web: WebFormatOptions = serde_json::from_str("{}").expect("parse web format options");
+        assert_eq!(format_options(Some(web)), FormatOptions::default());
+    }
+
+    #[test]
+    fn explicit_web_format_option_can_disable_a_single_rule() {
+        let web: WebFormatOptions = serde_json::from_str(
+            r#"{"collapseConsecutiveLinebreaks":false}"#,
+        )
+        .expect("parse web format options");
+
+        let options = format_options(Some(web));
+        assert!(options.insert_structural_linebreaks);
+        assert!(!options.collapse_consecutive_linebreaks);
+    }
 }
