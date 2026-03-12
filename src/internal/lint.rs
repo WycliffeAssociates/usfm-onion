@@ -894,6 +894,9 @@ fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIs
         if !is_body_paragraph_marker(marker) {
             continue;
         }
+        if marker_is_intentionally_empty_block(marker) {
+            continue;
+        }
         let Some(boundary_index) = empty_paragraph_boundary_index(tokens, index) else {
             continue;
         };
@@ -1355,6 +1358,10 @@ fn is_body_paragraph_marker(marker: &str) -> bool {
             | "lim2"
             | "lim3"
     )
+}
+
+fn marker_is_intentionally_empty_block(marker: &str) -> bool {
+    matches!(marker, "b")
 }
 
 fn empty_paragraph_boundary_index<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<usize> {
@@ -2235,6 +2242,17 @@ mod tests {
         let issues = lint_tokens(&projected, TokenLintOptions::default());
 
         assert!(issues.iter().all(|issue| issue.code != LintCode::EmptyParagraph));
+    }
+
+    #[test]
+    fn blank_break_marker_is_not_reported_empty() {
+        let handle = parse("\\id PSA\n\\c 2\n\\q text\n\\b\n\\q text\n");
+        let projected = tokens(&handle, TokenViewOptions::default());
+        let issues = lint_tokens(&projected, TokenLintOptions::default());
+
+        assert!(issues.iter().all(|issue| {
+            !(issue.code == LintCode::EmptyParagraph && issue.marker.as_deref() == Some("b"))
+        }));
     }
 
     #[test]

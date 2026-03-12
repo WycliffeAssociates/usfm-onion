@@ -920,8 +920,6 @@ export interface InitOutput {
     readonly pushWhitespace: (a: number, b: number) => [number, number];
     readonly replaceChapterDiffsInMap: (a: any) => [number, number];
     readonly replaceManyChapterDiffsInMap: (a: any) => [number, number];
-    readonly revertDiffBlock: (a: any) => [number, number];
-    readonly revertDiffBlocks: (a: any) => [number, number];
     readonly tokenFixCodes: () => [number, number];
     readonly tokenTransformChangeCodes: () => [number, number];
     readonly tokenTransformSkipReasonCodes: () => [number, number];
@@ -944,6 +942,8 @@ export interface InitOutput {
     readonly usxToDocumentTree: (a: number, b: number) => [number, number, number];
     readonly usxToTokens: (a: number, b: number, c: number) => [number, number, number, number];
     readonly usxToUsfm: (a: number, b: number) => [number, number, number, number];
+    readonly revertDiffBlock: (a: any) => [number, number];
+    readonly revertDiffBlocks: (a: any) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
