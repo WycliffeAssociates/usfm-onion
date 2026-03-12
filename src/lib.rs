@@ -2,6 +2,7 @@ pub mod convert;
 pub mod diff;
 pub mod document_tree;
 pub mod format;
+pub mod markers;
 mod internal;
 pub mod lint;
 pub mod model;

@@ -24,12 +24,20 @@ use usfm_onion::{
         TokenTransformKind, TokenTransformResult, TokenTransformSkipReason, apply_token_fixes,
         format_content_with_options, format_flat_token_batches,
         format_flat_token_batches_with_options, format_flat_tokens,
-        format_flat_tokens_with_options,
+        format_flat_tokens_with_options, TOKEN_FIX_CODES, TOKEN_TRANSFORM_CHANGE_CODES,
+        TOKEN_TRANSFORM_SKIP_REASON_CODES,
     },
     lint::{
         self, BatchExecutionOptions, LintCode, LintIssue, LintOptions, LintSuppression,
         TokenLintOptions, lint_content, lint_document, lint_document_batch,
         lint_flat_token_batches, lint_flat_tokens,
+    },
+    markers::{
+        MarkerCategory, MarkerInfo, MarkerInlineContext, MarkerNoteFamily, MarkerNoteSubkind,
+        all_markers, character_markers, is_body_paragraph_marker, is_character_marker,
+        is_document_marker, is_known_marker, is_note_container, is_note_submarker,
+        is_paragraph_marker, is_poetry_marker, is_regular_character_marker, marker_info,
+        note_marker_family, note_markers, note_submarkers, paragraph_markers,
     },
     model::{
         DocumentFormat, DocumentTreeDocument, ScanResult, ScanToken, ScanTokenKind, Span, Token,
@@ -60,6 +68,54 @@ export type Value =
   | { [key: string]: Value };
 "#;
 
+#[wasm_bindgen(typescript_custom_section)]
+const TS_PUBLIC_TYPE_ALIASES: &str = r#"
+export type MaybeString = string | null | undefined;
+export type Span = WebSpan;
+export type BatchExecutionOptions = WebBatchExecutionOptions;
+export type IntoTokensOptions = WebIntoTokensOptions;
+export type TokenViewOptions = WebTokenViewOptions;
+export type LintSuppression = WebLintSuppression;
+export type TokenLintOptions = WebTokenLintOptions;
+export type LintOptions = WebLintOptions;
+export type ProjectUsfmOptions = WebProjectUsfmOptions;
+export type FormatOptions = WebFormatOptions;
+export type BuildSidBlocksOptions = WebBuildSidBlocksOptions;
+export type HtmlOptions = WebHtmlOptions;
+export type Token = Omit<WebToken, "sid" | "marker"> & { sid?: MaybeString; marker?: MaybeString };
+export type TokenTemplate = Omit<WebTokenTemplate, "sid" | "marker"> & { sid?: MaybeString; marker?: MaybeString };
+export type TokenFix = WebTokenFix;
+export type LintIssue = Omit<WebLintIssue, "marker" | "tokenId" | "relatedTokenId" | "sid"> & {
+  marker?: MaybeString;
+  tokenId?: MaybeString;
+  relatedTokenId?: MaybeString;
+  sid?: MaybeString;
+};
+export type ProjectedUsfmDocument = WebProjectedUsfmDocument;
+export type TokenTransformChange = WebTokenTransformChange;
+export type SkippedTokenTransform = Omit<WebSkippedTokenTransform, "targetTokenId"> & {
+  targetTokenId?: MaybeString;
+};
+export type TokenTransformResult = WebTokenTransformResult;
+export type Diff = WebChapterTokenDiff;
+export type DiffTokenAlignment = WebTokenAlignment;
+export type SidBlock = WebSidBlock;
+export type SidBlockDiff = WebSidBlockDiff;
+export type VrefEntry = WebVrefEntry;
+export type ParseRecovery = WebParseRecovery;
+export type ParsedDocument = WebParsedDocument;
+export type DocumentFormat = WebDocumentFormat;
+export type WhitespacePolicy = WebWhitespacePolicy;
+export type HtmlNoteMode = WebHtmlNoteMode;
+export type HtmlCallerStyle = WebHtmlCallerStyle;
+export type HtmlCallerScope = WebHtmlCallerScope;
+export type MarkerCategory = WebMarkerCategory;
+export type MarkerNoteFamily = WebMarkerNoteFamily;
+export type MarkerNoteSubkind = WebMarkerNoteSubkind;
+export type MarkerInlineContext = WebMarkerInlineContext;
+export type MarkerInfo = WebMarkerInfo;
+"#;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -75,6 +131,71 @@ pub enum WebDocumentFormat {
 pub enum WebWhitespacePolicy {
     Preserve,
     MergeToVisible,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub enum WebMarkerCategory {
+    Document,
+    Paragraph,
+    Character,
+    NoteContainer,
+    NoteSubmarker,
+    Chapter,
+    Verse,
+    MilestoneStart,
+    MilestoneEnd,
+    Figure,
+    SidebarStart,
+    SidebarEnd,
+    Periph,
+    Meta,
+    TableRow,
+    TableCell,
+    Header,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub enum WebMarkerNoteFamily {
+    Footnote,
+    CrossReference,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub enum WebMarkerNoteSubkind {
+    Structural,
+    StructuralKeepsNestedCharsOpen,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub enum WebMarkerInlineContext {
+    Para,
+    Section,
+    List,
+    Table,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct WebMarkerInfo {
+    pub marker: String,
+    pub canonical: Option<String>,
+    pub known: bool,
+    pub deprecated: bool,
+    pub category: WebMarkerCategory,
+    pub note_family: Option<WebMarkerNoteFamily>,
+    pub note_subkind: Option<WebMarkerNoteSubkind>,
+    pub inline_context: Option<WebMarkerInlineContext>,
+    pub default_attribute: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -213,6 +334,8 @@ pub struct WebFormatOptions {
     pub move_chapter_label_after_chapter_marker: bool,
     #[serde(default = "default_true")]
     pub insert_default_paragraph_after_chapter_intro: bool,
+    #[serde(default)]
+    pub remove_empty_paragraphs: bool,
     #[serde(default = "default_true")]
     pub insert_structural_linebreaks: bool,
     #[serde(default = "default_true")]
@@ -370,6 +493,7 @@ pub struct WebLintIssue {
     pub severity: String,
     pub marker: Option<String>,
     pub message: String,
+    pub message_params: std::collections::BTreeMap<String, String>,
     pub span: WebSpan,
     pub related_span: Option<WebSpan>,
     pub token_id: Option<String>,
@@ -402,13 +526,24 @@ pub struct WebTokenTemplate {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum WebTokenFix {
     ReplaceToken {
+        code: String,
         label: String,
+        label_params: std::collections::BTreeMap<String, String>,
         #[serde(rename = "targetTokenId")]
         target_token_id: String,
         replacements: Vec<WebTokenTemplate>,
     },
-    InsertAfter {
+    DeleteToken {
+        code: String,
         label: String,
+        label_params: std::collections::BTreeMap<String, String>,
+        #[serde(rename = "targetTokenId")]
+        target_token_id: String,
+    },
+    InsertAfter {
+        code: String,
+        label: String,
+        label_params: std::collections::BTreeMap<String, String>,
         #[serde(rename = "targetTokenId")]
         target_token_id: String,
         insert: Vec<WebTokenTemplate>,
@@ -420,7 +555,9 @@ pub enum WebTokenFix {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebTokenTransformChange {
     pub kind: String,
+    pub code: String,
     pub label: String,
+    pub label_params: std::collections::BTreeMap<String, String>,
     pub target_token_id: Option<String>,
 }
 
@@ -429,7 +566,10 @@ pub struct WebTokenTransformChange {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebSkippedTokenTransform {
     pub kind: String,
+    pub code: String,
     pub label: String,
+    pub label_params: std::collections::BTreeMap<String, String>,
+    pub reason_code: String,
     pub target_token_id: Option<String>,
     pub reason: String,
 }
@@ -1110,6 +1250,112 @@ pub fn wasm_usfm_to_token_variants(content: &str) -> Vec<WebTokenVariant> {
         .into_iter()
         .map(map_token_variant)
         .collect()
+}
+
+#[wasm_bindgen(js_name = lintCodes)]
+pub fn wasm_lint_codes() -> Vec<String> {
+    LintCode::ALL.iter().map(|code| code.as_str().to_string()).collect()
+}
+
+#[wasm_bindgen(js_name = tokenFixCodes)]
+pub fn wasm_token_fix_codes() -> Vec<String> {
+    TOKEN_FIX_CODES.iter().map(|code| (*code).to_string()).collect()
+}
+
+#[wasm_bindgen(js_name = tokenTransformChangeCodes)]
+pub fn wasm_token_transform_change_codes() -> Vec<String> {
+    TOKEN_TRANSFORM_CHANGE_CODES
+        .iter()
+        .map(|code| (*code).to_string())
+        .collect()
+}
+
+#[wasm_bindgen(js_name = tokenTransformSkipReasonCodes)]
+pub fn wasm_token_transform_skip_reason_codes() -> Vec<String> {
+    TOKEN_TRANSFORM_SKIP_REASON_CODES
+        .iter()
+        .map(|code| (*code).to_string())
+        .collect()
+}
+
+#[wasm_bindgen(js_name = markerInfo)]
+pub fn wasm_marker_info(marker: &str) -> WebMarkerInfo {
+    map_marker_info(marker_info(marker))
+}
+
+#[wasm_bindgen(js_name = isKnownMarker)]
+pub fn wasm_is_known_marker(marker: &str) -> bool {
+    is_known_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isDocumentMarker)]
+pub fn wasm_is_document_marker(marker: &str) -> bool {
+    is_document_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isParagraphMarker)]
+pub fn wasm_is_paragraph_marker(marker: &str) -> bool {
+    is_paragraph_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isBodyParagraphMarker)]
+pub fn wasm_is_body_paragraph_marker(marker: &str) -> bool {
+    is_body_paragraph_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isPoetryMarker)]
+pub fn wasm_is_poetry_marker(marker: &str) -> bool {
+    is_poetry_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isCharacterMarker)]
+pub fn wasm_is_character_marker(marker: &str) -> bool {
+    is_character_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isRegularCharacterMarker)]
+pub fn wasm_is_regular_character_marker(marker: &str) -> bool {
+    is_regular_character_marker(marker)
+}
+
+#[wasm_bindgen(js_name = isNoteContainer)]
+pub fn wasm_is_note_container(marker: &str) -> bool {
+    is_note_container(marker)
+}
+
+#[wasm_bindgen(js_name = isNoteSubmarker)]
+pub fn wasm_is_note_submarker(marker: &str) -> bool {
+    is_note_submarker(marker)
+}
+
+#[wasm_bindgen(js_name = noteMarkerFamily)]
+pub fn wasm_note_marker_family(marker: &str) -> Option<WebMarkerNoteFamily> {
+    note_marker_family(marker).map(map_note_family_value)
+}
+
+#[wasm_bindgen(js_name = allMarkers)]
+pub fn wasm_all_markers() -> Vec<String> {
+    all_markers()
+}
+
+#[wasm_bindgen(js_name = paragraphMarkers)]
+pub fn wasm_paragraph_markers() -> Vec<String> {
+    paragraph_markers()
+}
+
+#[wasm_bindgen(js_name = noteMarkers)]
+pub fn wasm_note_markers() -> Vec<String> {
+    note_markers()
+}
+
+#[wasm_bindgen(js_name = noteSubmarkers)]
+pub fn wasm_note_submarkers() -> Vec<String> {
+    note_submarkers()
+}
+
+#[wasm_bindgen(js_name = characterMarkers)]
+pub fn wasm_character_markers() -> Vec<String> {
+    character_markers()
 }
 
 #[wasm_bindgen(js_name = pushWhitespace)]
@@ -1947,6 +2193,68 @@ fn map_flat_token(token: Token) -> WebToken {
     }
 }
 
+fn map_marker_info(info: MarkerInfo) -> WebMarkerInfo {
+    WebMarkerInfo {
+        marker: info.marker,
+        canonical: info.canonical,
+        known: info.known,
+        deprecated: info.deprecated,
+        category: map_marker_category(info.category),
+        note_family: info.note_family.map(map_note_family_value),
+        note_subkind: info.note_subkind.map(map_note_subkind_value),
+        inline_context: info.inline_context.map(map_marker_inline_context_value),
+        default_attribute: info.default_attribute,
+    }
+}
+
+fn map_marker_category(category: MarkerCategory) -> WebMarkerCategory {
+    match category {
+        MarkerCategory::Document => WebMarkerCategory::Document,
+        MarkerCategory::Paragraph => WebMarkerCategory::Paragraph,
+        MarkerCategory::Character => WebMarkerCategory::Character,
+        MarkerCategory::NoteContainer => WebMarkerCategory::NoteContainer,
+        MarkerCategory::NoteSubmarker => WebMarkerCategory::NoteSubmarker,
+        MarkerCategory::Chapter => WebMarkerCategory::Chapter,
+        MarkerCategory::Verse => WebMarkerCategory::Verse,
+        MarkerCategory::MilestoneStart => WebMarkerCategory::MilestoneStart,
+        MarkerCategory::MilestoneEnd => WebMarkerCategory::MilestoneEnd,
+        MarkerCategory::Figure => WebMarkerCategory::Figure,
+        MarkerCategory::SidebarStart => WebMarkerCategory::SidebarStart,
+        MarkerCategory::SidebarEnd => WebMarkerCategory::SidebarEnd,
+        MarkerCategory::Periph => WebMarkerCategory::Periph,
+        MarkerCategory::Meta => WebMarkerCategory::Meta,
+        MarkerCategory::TableRow => WebMarkerCategory::TableRow,
+        MarkerCategory::TableCell => WebMarkerCategory::TableCell,
+        MarkerCategory::Header => WebMarkerCategory::Header,
+        MarkerCategory::Unknown => WebMarkerCategory::Unknown,
+    }
+}
+
+fn map_note_family_value(family: MarkerNoteFamily) -> WebMarkerNoteFamily {
+    match family {
+        MarkerNoteFamily::Footnote => WebMarkerNoteFamily::Footnote,
+        MarkerNoteFamily::CrossReference => WebMarkerNoteFamily::CrossReference,
+    }
+}
+
+fn map_note_subkind_value(subkind: MarkerNoteSubkind) -> WebMarkerNoteSubkind {
+    match subkind {
+        MarkerNoteSubkind::Structural => WebMarkerNoteSubkind::Structural,
+        MarkerNoteSubkind::StructuralKeepsNestedCharsOpen => {
+            WebMarkerNoteSubkind::StructuralKeepsNestedCharsOpen
+        }
+    }
+}
+
+fn map_marker_inline_context_value(context: MarkerInlineContext) -> WebMarkerInlineContext {
+    match context {
+        MarkerInlineContext::Para => WebMarkerInlineContext::Para,
+        MarkerInlineContext::Section => WebMarkerInlineContext::Section,
+        MarkerInlineContext::List => WebMarkerInlineContext::List,
+        MarkerInlineContext::Table => WebMarkerInlineContext::Table,
+    }
+}
+
 fn map_token_variant(token: TokenVariant) -> WebTokenVariant {
     match token {
         TokenVariant::Newline { id, span, sid, text } => WebTokenVariant::Newline {
@@ -2057,6 +2365,7 @@ fn map_lint_issue(issue: LintIssue) -> WebLintIssue {
         severity: issue.severity.as_str().to_string(),
         marker: issue.marker,
         message: issue.message,
+        message_params: issue.message_params,
         span: map_span(issue.span),
         related_span: issue.related_span.map(map_span),
         token_id: issue.token_id,
@@ -2069,20 +2378,39 @@ fn map_lint_issue(issue: LintIssue) -> WebLintIssue {
 fn map_token_fix(fix: TokenFix) -> WebTokenFix {
     match fix {
         TokenFix::ReplaceToken {
+            code,
             label,
+            label_params,
             target_token_id,
             replacements,
         } => WebTokenFix::ReplaceToken {
+            code,
             label,
+            label_params,
             target_token_id,
             replacements: replacements.into_iter().map(map_token_template).collect(),
         },
-        TokenFix::InsertAfter {
+        TokenFix::DeleteToken {
+            code,
             label,
+            label_params,
+            target_token_id,
+        } => WebTokenFix::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        },
+        TokenFix::InsertAfter {
+            code,
+            label,
+            label_params,
             target_token_id,
             insert,
         } => WebTokenFix::InsertAfter {
+            code,
             label,
+            label_params,
             target_token_id,
             insert: insert.into_iter().map(map_token_template).collect(),
         },
@@ -2127,7 +2455,9 @@ fn map_transform_result(result: TokenTransformResult<Token>) -> WebTokenTransfor
 fn map_transform_change(change: TokenTransformChange) -> WebTokenTransformChange {
     WebTokenTransformChange {
         kind: transform_kind_name(&change.kind).to_string(),
+        code: change.code,
         label: change.label,
+        label_params: change.label_params,
         target_token_id: change.target_token_id,
     }
 }
@@ -2135,7 +2465,10 @@ fn map_transform_change(change: TokenTransformChange) -> WebTokenTransformChange
 fn map_skipped_transform(skip: SkippedTokenTransform) -> WebSkippedTokenTransform {
     WebSkippedTokenTransform {
         kind: transform_kind_name(&skip.kind).to_string(),
+        code: skip.code,
         label: skip.label,
+        label_params: skip.label_params,
+        reason_code: skip.reason.as_str().to_string(),
         target_token_id: skip.target_token_id,
         reason: transform_skip_reason_name(&skip.reason).to_string(),
     }
@@ -2307,23 +2640,42 @@ fn from_web_token_alignment(alignment: WebTokenAlignment) -> TokenAlignment {
 fn from_web_token_fix(fix: WebTokenFix) -> TokenFix {
     match fix {
         WebTokenFix::ReplaceToken {
+            code,
             label,
+            label_params,
             target_token_id,
             replacements,
         } => TokenFix::ReplaceToken {
+            code,
             label,
+            label_params,
             target_token_id,
             replacements: replacements
                 .into_iter()
                 .map(from_web_token_template)
                 .collect(),
         },
-        WebTokenFix::InsertAfter {
+        WebTokenFix::DeleteToken {
+            code,
             label,
+            label_params,
+            target_token_id,
+        } => TokenFix::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        },
+        WebTokenFix::InsertAfter {
+            code,
+            label,
+            label_params,
             target_token_id,
             insert,
         } => TokenFix::InsertAfter {
+            code,
             label,
+            label_params,
             target_token_id,
             insert: insert.into_iter().map(from_web_token_template).collect(),
         },
@@ -2479,6 +2831,7 @@ fn format_options(options: Option<WebFormatOptions>) -> FormatOptions {
                 .move_chapter_label_after_chapter_marker,
             insert_default_paragraph_after_chapter_intro: options
                 .insert_default_paragraph_after_chapter_intro,
+            remove_empty_paragraphs: options.remove_empty_paragraphs,
             insert_structural_linebreaks: options.insert_structural_linebreaks,
             collapse_consecutive_linebreaks: options.collapse_consecutive_linebreaks,
             normalize_marker_whitespace_at_line_start: options
@@ -2626,6 +2979,7 @@ fn parse_diff_undo_side(side: &str) -> DiffUndoSide {
 fn parse_lint_code(code: &str) -> Option<LintCode> {
     [
         LintCode::MissingSeparatorAfterMarker,
+        LintCode::EmptyParagraph,
         LintCode::NumberRangeAfterChapterMarker,
         LintCode::VerseRangeExpectedAfterVerseMarker,
         LintCode::VerseContentNotEmpty,

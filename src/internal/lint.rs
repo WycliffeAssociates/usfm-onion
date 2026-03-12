@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
 type ChapterLabelEntry = (Span, Option<String>, Option<String>);
+pub type MessageParams = BTreeMap<String, String>;
 
 pub trait LintableToken {
     fn kind(&self) -> &TokenKind;
@@ -54,6 +55,7 @@ impl LintableToken for Token {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum LintCode {
     MissingSeparatorAfterMarker,
+    EmptyParagraph,
     NumberRangeAfterChapterMarker,
     VerseRangeExpectedAfterVerseMarker,
     VerseContentNotEmpty,
@@ -105,9 +107,48 @@ impl LintSeverity {
 }
 
 impl LintCode {
+    pub const ALL: &'static [LintCode] = &[
+        LintCode::MissingSeparatorAfterMarker,
+        LintCode::EmptyParagraph,
+        LintCode::NumberRangeAfterChapterMarker,
+        LintCode::VerseRangeExpectedAfterVerseMarker,
+        LintCode::VerseContentNotEmpty,
+        LintCode::UnknownToken,
+        LintCode::CharNotClosed,
+        LintCode::NoteNotClosed,
+        LintCode::ParagraphBeforeFirstChapter,
+        LintCode::VerseBeforeFirstChapter,
+        LintCode::NoteSubmarkerOutsideNote,
+        LintCode::DuplicateIdMarker,
+        LintCode::IdMarkerNotAtFileStart,
+        LintCode::ChapterMetadataOutsideChapter,
+        LintCode::VerseMetadataOutsideVerse,
+        LintCode::MissingChapterNumber,
+        LintCode::MissingVerseNumber,
+        LintCode::MissingMilestoneSelfClose,
+        LintCode::ImplicitlyClosedMarker,
+        LintCode::StrayCloseMarker,
+        LintCode::MisnestedCloseMarker,
+        LintCode::UnclosedNote,
+        LintCode::UnclosedMarkerAtEof,
+        LintCode::DuplicateChapterNumber,
+        LintCode::ChapterExpectedIncreaseByOne,
+        LintCode::DuplicateVerseNumber,
+        LintCode::VerseExpectedIncreaseByOne,
+        LintCode::InvalidNumberRange,
+        LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
+        LintCode::VerseTextFollowsVerseRange,
+        LintCode::UnknownMarker,
+        LintCode::UnknownCloseMarker,
+        LintCode::InconsistentChapterLabel,
+        LintCode::MarkerNotValidInContext,
+        LintCode::VerseOutsideExplicitParagraph,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MissingSeparatorAfterMarker => "missing-separator-after-marker",
+            Self::EmptyParagraph => "empty-paragraph",
             Self::NumberRangeAfterChapterMarker => "number-range-after-chapter-marker",
             Self::VerseRangeExpectedAfterVerseMarker => "verse-range-expected-after-verse-marker",
             Self::VerseContentNotEmpty => "verse-content-not-empty",
@@ -153,6 +194,7 @@ pub struct LintIssue {
     pub severity: LintSeverity,
     pub marker: Option<String>,
     pub message: String,
+    pub message_params: MessageParams,
     pub span: Span,
     pub related_span: Option<Span>,
     pub token_id: Option<String>,
@@ -161,8 +203,11 @@ pub struct LintIssue {
     pub fix: Option<TokenFix>,
 }
 
-fn default_severity(_code: LintCode) -> LintSeverity {
-    LintSeverity::Error
+fn default_severity(code: LintCode) -> LintSeverity {
+    match code {
+        LintCode::EmptyParagraph => LintSeverity::Warning,
+        _ => LintSeverity::Error,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,6 +262,9 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: TokenLintOptions) ->
 
     if enabled.has(LintCode::MissingSeparatorAfterMarker) {
         lint_missing_separator_after_marker(tokens, &mut issues);
+    }
+    if enabled.has(LintCode::EmptyParagraph) {
+        lint_empty_paragraphs(tokens, &mut issues);
     }
     if enabled.has_any(&[
         LintCode::UnknownToken,
@@ -329,6 +377,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         severity: default_severity(LintCode::VerseContentNotEmpty),
                         marker: Some("v".to_string()),
                         message: "verse content expected after \\v".to_string(),
+                        message_params: MessageParams::new(),
                         span: tokens[next_index].span().clone(),
                         related_span: Some(token.span().clone()),
                         token_id: tokens[next_index].id().map(ToOwned::to_owned),
@@ -811,13 +860,16 @@ fn lint_missing_separator_after_marker<T: LintableToken>(
             severity: default_severity(LintCode::MissingSeparatorAfterMarker),
             marker: Some(marker.to_string()),
             message: format!("marker \\{marker} is immediately followed by text"),
+            message_params: MessageParams::from([("marker".to_string(), marker.to_string())]),
             span: current.span().clone(),
             related_span: Some(next.span().clone()),
             token_id: current.id().map(ToOwned::to_owned),
             related_token_id: next.id().map(ToOwned::to_owned),
             sid: current.sid().map(ToOwned::to_owned),
             fix: next.id().map(|id| TokenFix::ReplaceToken {
+                code: "insert-separator-after-marker".to_string(),
                 label: format!("insert separator after \\{marker}"),
+                label_params: MessageParams::from([("marker".to_string(), marker.to_string())]),
                 target_token_id: id.to_string(),
                 replacements: vec![TokenTemplate {
                     kind: TokenKind::Text,
@@ -825,6 +877,45 @@ fn lint_missing_separator_after_marker<T: LintableToken>(
                     marker: None,
                     sid: current.sid().map(ToOwned::to_owned),
                 }],
+            }),
+        });
+    }
+}
+
+fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
+    for index in 0..tokens.len() {
+        let token = &tokens[index];
+        if token.kind() != &TokenKind::Marker {
+            continue;
+        }
+        let Some(marker) = token.marker().map(normalized_marker_name) else {
+            continue;
+        };
+        if !is_body_paragraph_marker(marker) {
+            continue;
+        }
+        let Some(boundary_index) = empty_paragraph_boundary_index(tokens, index) else {
+            continue;
+        };
+
+        issues.push(LintIssue {
+            code: LintCode::EmptyParagraph,
+            severity: default_severity(LintCode::EmptyParagraph),
+            marker: Some(marker.to_string()),
+            message: format!(
+                "paragraph marker \\{marker} creates an empty block before the next block marker"
+            ),
+            message_params: MessageParams::from([("marker".to_string(), marker.to_string())]),
+            span: token.span().clone(),
+            related_span: Some(tokens[boundary_index].span().clone()),
+            token_id: token.id().map(ToOwned::to_owned),
+            related_token_id: tokens[boundary_index].id().map(ToOwned::to_owned),
+            sid: token.sid().map(ToOwned::to_owned),
+            fix: token.id().map(|id| TokenFix::DeleteToken {
+                code: "remove-empty-paragraph".to_string(),
+                label: format!("remove empty \\{marker} paragraph"),
+                label_params: MessageParams::from([("marker".to_string(), marker.to_string())]),
+                target_token_id: id.to_string(),
             }),
         });
     }
@@ -892,6 +983,7 @@ fn lint_chapter_rules<T: LintableToken>(
                     severity: default_severity(LintCode::DuplicateChapterNumber),
                     marker: Some("c".to_string()),
                     message: format!("duplicate chapter number {chapter}"),
+                    message_params: MessageParams::from([("chapter".to_string(), chapter.to_string())]),
                     span: tokens[number_index].span().clone(),
                     related_span: None,
                     token_id: tokens[number_index].id().map(ToOwned::to_owned),
@@ -909,6 +1001,10 @@ fn lint_chapter_rules<T: LintableToken>(
                         severity: default_severity(LintCode::ChapterExpectedIncreaseByOne),
                         marker: Some("c".to_string()),
                         message: format!("expected chapter number {expected}, found {chapter}"),
+                        message_params: MessageParams::from([
+                            ("expected".to_string(), expected.to_string()),
+                            ("found".to_string(), chapter.to_string()),
+                        ]),
                         span: tokens[number_index].span().clone(),
                         related_span: None,
                         token_id: tokens[number_index].id().map(ToOwned::to_owned),
@@ -961,6 +1057,10 @@ fn lint_chapter_rules<T: LintableToken>(
                         message: format!(
                             "inconsistent chapter label '{label}', expected the canonical label '{canonical}'"
                         ),
+                        message_params: MessageParams::from([
+                            ("label".to_string(), label.clone()),
+                            ("canonical".to_string(), canonical.clone()),
+                        ]),
                         span,
                         related_span: None,
                         token_id,
@@ -1017,6 +1117,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 severity: default_severity(LintCode::InvalidNumberRange),
                 marker: Some("v".to_string()),
                 message: format!("invalid verse range {value}"),
+                message_params: MessageParams::from([("value".to_string(), value.to_string())]),
                 span: number_token.span().clone(),
                 related_span: None,
                 token_id: number_token.id().map(ToOwned::to_owned),
@@ -1052,6 +1153,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 severity: default_severity(LintCode::DuplicateVerseNumber),
                 marker: Some("v".to_string()),
                 message: format!("duplicate verse number {value}"),
+                message_params: MessageParams::from([("value".to_string(), value.to_string())]),
                 span: number_token.span().clone(),
                 related_span: None,
                 token_id: number_token.id().map(ToOwned::to_owned),
@@ -1074,12 +1176,17 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                     } else {
                         format!("expected verse {expected} here, found {start}")
                     },
+                    message_params: MessageParams::from([
+                        ("previous".to_string(), chapter_state.last.to_string()),
+                        ("expected".to_string(), expected.to_string()),
+                        ("found".to_string(), start.to_string()),
+                    ]),
                     span: number_token.span().clone(),
                     related_span: None,
                     token_id: number_token.id().map(ToOwned::to_owned),
                     related_token_id: None,
                     sid: number_token.sid().map(ToOwned::to_owned),
-                    fix: build_set_number_fix(number_token, expected),
+                    fix: None,
                 });
             }
         }
@@ -1092,6 +1199,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 severity: default_severity(LintCode::VerseTextFollowsVerseRange),
                 marker: Some("v".to_string()),
                 message: "expected verse content after \\v".to_string(),
+                message_params: MessageParams::new(),
                 span: number_token.span().clone(),
                 related_span: None,
                 token_id: number_token.id().map(ToOwned::to_owned),
@@ -1157,6 +1265,7 @@ fn simple_issue<T: LintableToken>(code: LintCode, message: String, token: &T) ->
             .map(normalized_marker_name)
             .map(ToOwned::to_owned),
         message,
+        message_params: MessageParams::new(),
         span: token.span().clone(),
         related_span: None,
         token_id: token.id().map(ToOwned::to_owned),
@@ -1169,7 +1278,9 @@ fn simple_issue<T: LintableToken>(code: LintCode, message: String, token: &T) ->
 fn build_set_number_fix<T: LintableToken>(token: &T, value: u32) -> Option<TokenFix> {
     let id = token.id()?;
     Some(TokenFix::ReplaceToken {
+        code: "set-number".to_string(),
         label: format!("change number to {value}"),
+        label_params: MessageParams::from([("value".to_string(), value.to_string())]),
         target_token_id: id.to_string(),
         replacements: vec![TokenTemplate {
             kind: TokenKind::Number,
@@ -1246,6 +1357,44 @@ fn is_body_paragraph_marker(marker: &str) -> bool {
     )
 }
 
+fn empty_paragraph_boundary_index<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<usize> {
+    let mut index = marker_index + 1;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        match token.kind() {
+            TokenKind::Newline | TokenKind::OptBreak => {
+                index += 1;
+                continue;
+            }
+            TokenKind::Text if token.text().trim().is_empty() => {
+                index += 1;
+                continue;
+            }
+            TokenKind::Marker => {
+                let marker = token.marker().map(normalized_marker_name)?;
+                return empty_paragraph_boundary_marker(marker).then_some(index);
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn empty_paragraph_boundary_marker(marker: &str) -> bool {
+    if is_body_paragraph_marker(marker) {
+        return true;
+    }
+    matches!(
+        lookup_marker(marker).kind,
+        MarkerKind::Header
+            | MarkerKind::Chapter
+            | MarkerKind::Periph
+            | MarkerKind::SidebarStart
+            | MarkerKind::TableRow
+            | MarkerKind::Unknown
+    )
+}
+
 fn parse_primary_number(text: &str) -> Option<u32> {
     let digits = text
         .trim()
@@ -1309,13 +1458,19 @@ fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
         severity: default_severity(LintCode::UnknownToken),
         marker: Some(marker.to_string()),
         message: format!("unknown token {}", token.text()),
+        message_params: MessageParams::from([
+            ("marker".to_string(), marker.to_string()),
+            ("text".to_string(), token.text().to_string()),
+        ]),
         span: token.span().clone(),
         related_span: None,
         token_id: Some(target_id.clone()),
         related_token_id: None,
         sid: token.sid().map(ToOwned::to_owned),
         fix: Some(TokenFix::ReplaceToken {
+            code: "split-unknown-token".to_string(),
             label: format!("split into \\{marker} and text"),
+            label_params: MessageParams::from([("marker".to_string(), marker.to_string())]),
             target_token_id: target_id,
             replacements: vec![
                 TokenTemplate {
@@ -1679,7 +1834,9 @@ fn unclosed_marker_issue<T: LintableToken>(
         _ => LintCode::UnclosedMarkerAtEof,
     };
     let fix = anchor.id().map(|target_token_id| TokenFix::ReplaceToken {
+        code: "insert-close-marker".to_string(),
         label: format!("insert \\{}*", frame.marker),
+        label_params: MessageParams::from([("marker".to_string(), frame.marker.clone())]),
         target_token_id: target_token_id.to_string(),
         replacements: vec![
             TokenTemplate {
@@ -1711,6 +1868,10 @@ fn unclosed_marker_issue<T: LintableToken>(
         severity: default_severity(code),
         marker: Some(frame.marker.clone()),
         message: format!("marker \\{} was not closed {}", frame.marker, location),
+        message_params: MessageParams::from([
+            ("marker".to_string(), frame.marker.clone()),
+            ("location".to_string(), location.to_string()),
+        ]),
         span: frame.span.clone(),
         related_span: Some(anchor.span().clone()),
         token_id: frame.token_id.clone(),
@@ -1766,6 +1927,10 @@ fn validate_context_marker_for_token<T: LintableToken>(
             marker.marker,
             spec_context_name(context)
         ),
+        message_params: MessageParams::from([
+            ("marker".to_string(), marker.marker.to_string()),
+            ("context".to_string(), spec_context_name(context).to_string()),
+        ]),
         span: token.span().clone(),
         related_span: None,
         token_id: token.id().map(ToOwned::to_owned),
@@ -2041,11 +2206,35 @@ mod tests {
 
         let issues = lint_tokens(&projected, TokenLintOptions::default());
 
-        assert!(
-            issues
-                .iter()
-                .any(|issue| issue.code == LintCode::VerseExpectedIncreaseByOne)
-        );
+        let issue = issues
+            .iter()
+            .find(|issue| issue.code == LintCode::VerseExpectedIncreaseByOne)
+            .expect("expected verse continuity issue");
+
+        assert!(issue.fix.is_none());
+    }
+
+    #[test]
+    fn empty_paragraph_before_poetry_marker_is_reported_as_warning() {
+        let handle = parse("\\id PSA\n\\c 2\n\\m\n\\q\n\\v 1 text\n");
+        let projected = tokens(&handle, TokenViewOptions::default());
+
+        let issue = lint_tokens(&projected, TokenLintOptions::default())
+            .into_iter()
+            .find(|issue| issue.code == LintCode::EmptyParagraph)
+            .expect("expected empty paragraph issue");
+
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert!(matches!(issue.fix, Some(TokenFix::DeleteToken { .. })));
+    }
+
+    #[test]
+    fn paragraph_before_verse_is_not_reported_empty() {
+        let handle = parse("\\id MAT\n\\c 1\n\\p\n\\v 1 text\n");
+        let projected = tokens(&handle, TokenViewOptions::default());
+        let issues = lint_tokens(&projected, TokenLintOptions::default());
+
+        assert!(issues.iter().all(|issue| issue.code != LintCode::EmptyParagraph));
     }
 
     #[test]

@@ -1,6 +1,53 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export type MaybeString = string | null | undefined;
+export type Span = WebSpan;
+export type BatchExecutionOptions = WebBatchExecutionOptions;
+export type IntoTokensOptions = WebIntoTokensOptions;
+export type TokenViewOptions = WebTokenViewOptions;
+export type LintSuppression = WebLintSuppression;
+export type TokenLintOptions = WebTokenLintOptions;
+export type LintOptions = WebLintOptions;
+export type ProjectUsfmOptions = WebProjectUsfmOptions;
+export type FormatOptions = WebFormatOptions;
+export type BuildSidBlocksOptions = WebBuildSidBlocksOptions;
+export type HtmlOptions = WebHtmlOptions;
+export type Token = Omit<WebToken, "sid" | "marker"> & { sid?: MaybeString; marker?: MaybeString };
+export type TokenTemplate = Omit<WebTokenTemplate, "sid" | "marker"> & { sid?: MaybeString; marker?: MaybeString };
+export type TokenFix = WebTokenFix;
+export type LintIssue = Omit<WebLintIssue, "marker" | "tokenId" | "relatedTokenId" | "sid"> & {
+    marker?: MaybeString;
+    tokenId?: MaybeString;
+    relatedTokenId?: MaybeString;
+    sid?: MaybeString;
+};
+export type ProjectedUsfmDocument = WebProjectedUsfmDocument;
+export type TokenTransformChange = WebTokenTransformChange;
+export type SkippedTokenTransform = Omit<WebSkippedTokenTransform, "targetTokenId"> & {
+    targetTokenId?: MaybeString;
+};
+export type TokenTransformResult = WebTokenTransformResult;
+export type Diff = WebChapterTokenDiff;
+export type DiffTokenAlignment = WebTokenAlignment;
+export type SidBlock = WebSidBlock;
+export type SidBlockDiff = WebSidBlockDiff;
+export type VrefEntry = WebVrefEntry;
+export type ParseRecovery = WebParseRecovery;
+export type ParsedDocument = WebParsedDocument;
+export type DocumentFormat = WebDocumentFormat;
+export type WhitespacePolicy = WebWhitespacePolicy;
+export type HtmlNoteMode = WebHtmlNoteMode;
+export type HtmlCallerStyle = WebHtmlCallerStyle;
+export type HtmlCallerScope = WebHtmlCallerScope;
+export type MarkerCategory = WebMarkerCategory;
+export type MarkerNoteFamily = WebMarkerNoteFamily;
+export type MarkerNoteSubkind = WebMarkerNoteSubkind;
+export type MarkerInlineContext = WebMarkerInlineContext;
+export type MarkerInfo = WebMarkerInfo;
+
+
+
 export type Value =
 | string
 | number
@@ -132,6 +179,7 @@ export interface WebFormatOptions {
     removeBridgeVerseEnumerators?: boolean;
     moveChapterLabelAfterChapterMarker?: boolean;
     insertDefaultParagraphAfterChapterIntro?: boolean;
+    removeEmptyParagraphs?: boolean;
     insertStructuralLinebreaks?: boolean;
     collapseConsecutiveLinebreaks?: boolean;
     normalizeMarkerWhitespaceAtLineStart?: boolean;
@@ -226,6 +274,7 @@ export interface WebLintIssue {
     severity: string;
     marker: string | null;
     message: string;
+    messageParams: Record<string, string>;
     span: WebSpan;
     relatedSpan: WebSpan | null;
     tokenId: string | null;
@@ -259,6 +308,18 @@ export interface WebLintTokenBatchesRequest {
 export interface WebLintTokensRequest {
     tokens: WebToken[];
     options?: WebTokenLintOptions | null;
+}
+
+export interface WebMarkerInfo {
+    marker: string;
+    canonical: string | null;
+    known: boolean;
+    deprecated: boolean;
+    category: WebMarkerCategory;
+    noteFamily: WebMarkerNoteFamily | null;
+    noteSubkind: WebMarkerNoteSubkind | null;
+    inlineContext: WebMarkerInlineContext | null;
+    defaultAttribute: string | null;
 }
 
 export interface WebParseContentRequest {
@@ -378,7 +439,10 @@ export interface WebSidBlockDiff {
 
 export interface WebSkippedTokenTransform {
     kind: string;
+    code: string;
     label: string;
+    labelParams: Record<string, string>;
+    reasonCode: string;
     targetTokenId: string | null;
     reason: string;
 }
@@ -426,7 +490,9 @@ export interface WebTokenTemplate {
 
 export interface WebTokenTransformChange {
     kind: string;
+    code: string;
     label: string;
+    labelParams: Record<string, string>;
     targetTokenId: string | null;
 }
 
@@ -463,14 +529,24 @@ export type WebHtmlCallerStyle = "numeric" | "alphaLower" | "alphaUpper" | "roma
 
 export type WebHtmlNoteMode = "extracted" | "inline";
 
+export type WebMarkerCategory = "document" | "paragraph" | "character" | "noteContainer" | "noteSubmarker" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "figure" | "sidebarStart" | "sidebarEnd" | "periph" | "meta" | "tableRow" | "tableCell" | "header" | "unknown";
+
+export type WebMarkerInlineContext = "para" | "section" | "list" | "table";
+
+export type WebMarkerNoteFamily = "footnote" | "crossReference";
+
+export type WebMarkerNoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
+
 export type WebRecoveryPayload = { type: "marker"; marker: string } | { type: "close"; open: string; close: string };
 
-export type WebTokenFix = { type: "replaceToken"; label: string; targetTokenId: string; replacements: WebTokenTemplate[] } | { type: "insertAfter"; label: string; targetTokenId: string; insert: WebTokenTemplate[] };
+export type WebTokenFix = { type: "replaceToken"; code: string; label: string; label_params: Record<string, string>; targetTokenId: string; replacements: WebTokenTemplate[] } | { type: "deleteToken"; code: string; label: string; label_params: Record<string, string>; targetTokenId: string } | { type: "insertAfter"; code: string; label: string; label_params: Record<string, string>; targetTokenId: string; insert: WebTokenTemplate[] };
 
 export type WebTokenVariant = { type: "newline"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "optBreak"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "marker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "endMarker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestone"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestoneEnd"; id: string; span: WebSpan; sid: string | null; marker: string | null; text: string } | { type: "attributes"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "bookCode"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "number"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "text"; id: string; span: WebSpan; sid: string | null; text: string };
 
 export type WebWhitespacePolicy = "preserve" | "mergeToVisible";
 
+
+export function allMarkers(): string[];
 
 export function applyRevertByBlockId(request: WebRevertDiffBlockRequest): WebToken[];
 
@@ -479,6 +555,8 @@ export function applyRevertsByBlockId(request: WebApplyRevertsByBlockIdRequest):
 export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTransformResult;
 
 export function buildSidBlocks(request: WebBuildSidBlocksRequest): WebSidBlock[];
+
+export function characterMarkers(): string[];
 
 export function classifyTokens(tokens: WebToken[]): WebTokenVariant[];
 
@@ -611,7 +689,27 @@ export function intoUsx(request: WebIntoUsxRequest): string;
 
 export function intoVref(document: WebParsedDocument): WebVrefEntry[];
 
+export function isBodyParagraphMarker(marker: string): boolean;
+
+export function isCharacterMarker(marker: string): boolean;
+
+export function isDocumentMarker(marker: string): boolean;
+
+export function isKnownMarker(marker: string): boolean;
+
+export function isNoteContainer(marker: string): boolean;
+
+export function isNoteSubmarker(marker: string): boolean;
+
+export function isParagraphMarker(marker: string): boolean;
+
+export function isPoetryMarker(marker: string): boolean;
+
+export function isRegularCharacterMarker(marker: string): boolean;
+
 export function lexSources(request: WebLexSourcesRequest): WebScanResult[];
+
+export function lintCodes(): string[];
 
 /**
  * Parse content, project tokens, then lint.
@@ -636,7 +734,17 @@ export function lintFlatTokens(request: WebLintTokensRequest): WebLintIssue[];
  */
 export function lintTokenBatches(request: WebLintTokenBatchesRequest): WebLintBatch[];
 
+export function markerInfo(marker: string): WebMarkerInfo;
+
+export function noteMarkerFamily(marker: string): WebMarkerNoteFamily | undefined;
+
+export function noteMarkers(): string[];
+
+export function noteSubmarkers(): string[];
+
 export function packageVersion(): string;
+
+export function paragraphMarkers(): string[];
 
 /**
  * Parse raw content once and keep the returned document if you plan to project
@@ -665,6 +773,12 @@ export function replaceManyChapterDiffsInMap(request: WebReplaceManyChapterDiffs
 export function revertDiffBlock(request: WebRevertDiffBlockRequest): WebToken[];
 
 export function revertDiffBlocks(request: WebApplyRevertsByBlockIdRequest): WebToken[];
+
+export function tokenFixCodes(): string[];
+
+export function tokenTransformChangeCodes(): string[];
+
+export function tokenTransformSkipReasonCodes(): string[];
 
 /**
  * Project canonical flat tokens into document-tree runtime JSON.
@@ -736,10 +850,12 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly allMarkers: () => [number, number];
     readonly applyRevertByBlockId: (a: any) => [number, number];
     readonly applyRevertsByBlockId: (a: any) => [number, number];
     readonly applyTokenFixes: (a: any) => any;
     readonly buildSidBlocks: (a: any) => [number, number];
+    readonly characterMarkers: () => [number, number];
     readonly classifyTokens: (a: number, b: number) => [number, number];
     readonly convertContent: (a: any) => [number, number, number, number];
     readonly diffChapterTokenStreams: (a: any) => [number, number];
@@ -771,14 +887,29 @@ export interface InitOutput {
     readonly intoUsj: (a: any) => [number, number, number];
     readonly intoUsx: (a: any) => [number, number, number, number];
     readonly intoVref: (a: any) => [number, number];
+    readonly isBodyParagraphMarker: (a: number, b: number) => number;
+    readonly isCharacterMarker: (a: number, b: number) => number;
+    readonly isDocumentMarker: (a: number, b: number) => number;
+    readonly isKnownMarker: (a: number, b: number) => number;
+    readonly isNoteContainer: (a: number, b: number) => number;
+    readonly isNoteSubmarker: (a: number, b: number) => number;
+    readonly isParagraphMarker: (a: number, b: number) => number;
+    readonly isPoetryMarker: (a: number, b: number) => number;
+    readonly isRegularCharacterMarker: (a: number, b: number) => number;
     readonly lexSources: (a: any) => [number, number];
+    readonly lintCodes: () => [number, number];
     readonly lintContent: (a: any) => [number, number, number, number];
     readonly lintContents: (a: any) => [number, number];
     readonly lintDocument: (a: any) => [number, number];
     readonly lintDocumentBatch: (a: any) => [number, number];
     readonly lintFlatTokens: (a: any) => [number, number];
     readonly lintTokenBatches: (a: any) => [number, number];
+    readonly markerInfo: (a: number, b: number) => any;
+    readonly noteMarkerFamily: (a: number, b: number) => any;
+    readonly noteMarkers: () => [number, number];
+    readonly noteSubmarkers: () => [number, number];
     readonly packageVersion: () => [number, number];
+    readonly paragraphMarkers: () => [number, number];
     readonly parseContent: (a: any) => [number, number, number];
     readonly parseContents: (a: any) => [number, number];
     readonly parseSources: (a: any) => [number, number];
@@ -789,6 +920,11 @@ export interface InitOutput {
     readonly pushWhitespace: (a: number, b: number) => [number, number];
     readonly replaceChapterDiffsInMap: (a: any) => [number, number];
     readonly replaceManyChapterDiffsInMap: (a: any) => [number, number];
+    readonly revertDiffBlock: (a: any) => [number, number];
+    readonly revertDiffBlocks: (a: any) => [number, number];
+    readonly tokenFixCodes: () => [number, number];
+    readonly tokenTransformChangeCodes: () => [number, number];
+    readonly tokenTransformSkipReasonCodes: () => [number, number];
     readonly tokensToDocumentTree: (a: number, b: number) => [number, number, number];
     readonly tokensToHtml: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tokensToUsfm: (a: number, b: number) => [number, number];
@@ -808,8 +944,6 @@ export interface InitOutput {
     readonly usxToDocumentTree: (a: number, b: number) => [number, number, number];
     readonly usxToTokens: (a: number, b: number, c: number) => [number, number, number, number];
     readonly usxToUsfm: (a: number, b: number) => [number, number, number, number];
-    readonly revertDiffBlock: (a: any) => [number, number];
-    readonly revertDiffBlocks: (a: any) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

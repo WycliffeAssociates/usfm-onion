@@ -1,6 +1,7 @@
 use crate::internal::format::{
     BoxedTokenFormatPass, FormatOptions, FormattableToken, format_tokens,
 };
+use crate::internal::lint::MessageParams;
 use crate::model::token::TokenKind;
 use serde::{Deserialize, Serialize};
 
@@ -15,27 +16,58 @@ pub struct TokenTemplate {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenFix {
     ReplaceToken {
+        code: String,
         label: String,
+        label_params: MessageParams,
         target_token_id: String,
         replacements: Vec<TokenTemplate>,
     },
-    InsertAfter {
+    DeleteToken {
+        code: String,
         label: String,
+        label_params: MessageParams,
+        target_token_id: String,
+    },
+    InsertAfter {
+        code: String,
+        label: String,
+        label_params: MessageParams,
         target_token_id: String,
         insert: Vec<TokenTemplate>,
     },
 }
 
 impl TokenFix {
+    pub fn code(&self) -> &str {
+        match self {
+            TokenFix::ReplaceToken { code, .. }
+            | TokenFix::DeleteToken { code, .. }
+            | TokenFix::InsertAfter { code, .. } => code,
+        }
+    }
+
     pub fn label(&self) -> &str {
         match self {
-            TokenFix::ReplaceToken { label, .. } | TokenFix::InsertAfter { label, .. } => label,
+            TokenFix::ReplaceToken { label, .. }
+            | TokenFix::DeleteToken { label, .. }
+            | TokenFix::InsertAfter { label, .. } => label,
+        }
+    }
+
+    pub fn label_params(&self) -> &MessageParams {
+        match self {
+            TokenFix::ReplaceToken { label_params, .. }
+            | TokenFix::DeleteToken { label_params, .. }
+            | TokenFix::InsertAfter { label_params, .. } => label_params,
         }
     }
 
     pub fn target_token_id(&self) -> &str {
         match self {
             TokenFix::ReplaceToken {
+                target_token_id, ..
+            }
+            | TokenFix::DeleteToken {
                 target_token_id, ..
             }
             | TokenFix::InsertAfter {
@@ -52,10 +84,26 @@ pub enum TokenTransformKind {
     CustomFormatPass,
 }
 
+pub const TOKEN_FIX_CODES: &[&str] = &[
+    "insert-separator-after-marker",
+    "remove-empty-paragraph",
+    "set-number",
+    "split-unknown-token",
+    "insert-close-marker",
+];
+
+pub const TOKEN_TRANSFORM_CHANGE_CODES: &[&str] =
+    &["format-tokens", "custom-format-pass"];
+
+pub const TOKEN_TRANSFORM_SKIP_REASON_CODES: &[&str] =
+    &["token-not-found", "empty-replacement"];
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenTransformChange {
     pub kind: TokenTransformKind,
+    pub code: String,
     pub label: String,
+    pub label_params: MessageParams,
     pub target_token_id: Option<String>,
 }
 
@@ -65,10 +113,21 @@ pub enum TokenTransformSkipReason {
     EmptyReplacement,
 }
 
+impl TokenTransformSkipReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TokenTransformSkipReason::TokenNotFound => "token-not-found",
+            TokenTransformSkipReason::EmptyReplacement => "empty-replacement",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkippedTokenTransform {
     pub kind: TokenTransformKind,
+    pub code: String,
     pub label: String,
+    pub label_params: MessageParams,
     pub target_token_id: Option<String>,
     pub reason: TokenTransformSkipReason,
 }
@@ -95,7 +154,9 @@ pub fn apply_fixes<T: FormattableToken>(
         else {
             skipped_changes.push(SkippedTokenTransform {
                 kind: TokenTransformKind::Fix,
+                code: fix.code().to_string(),
                 label: fix.label().to_string(),
+                label_params: fix.label_params().clone(),
                 target_token_id: Some(fix.target_token_id().to_string()),
                 reason: TokenTransformSkipReason::TokenNotFound,
             });
@@ -105,14 +166,18 @@ pub fn apply_fixes<T: FormattableToken>(
         let anchor = next_tokens[index].clone();
         match fix {
             TokenFix::ReplaceToken {
+                code,
                 label,
+                label_params,
                 target_token_id,
                 replacements,
             } => {
                 if replacements.is_empty() {
                     skipped_changes.push(SkippedTokenTransform {
                         kind: TokenTransformKind::Fix,
+                        code: code.clone(),
                         label: label.clone(),
+                        label_params: label_params.clone(),
                         target_token_id: Some(target_token_id.clone()),
                         reason: TokenTransformSkipReason::EmptyReplacement,
                     });
@@ -124,19 +189,40 @@ pub fn apply_fixes<T: FormattableToken>(
                 next_tokens.splice(index..=index, replacement_tokens);
                 applied_changes.push(TokenTransformChange {
                     kind: TokenTransformKind::Fix,
+                    code: code.clone(),
                     label: label.clone(),
+                    label_params: label_params.clone(),
+                    target_token_id: Some(target_token_id.clone()),
+                });
+            }
+            TokenFix::DeleteToken {
+                code,
+                label,
+                label_params,
+                target_token_id,
+            } => {
+                next_tokens.remove(index);
+                applied_changes.push(TokenTransformChange {
+                    kind: TokenTransformKind::Fix,
+                    code: code.clone(),
+                    label: label.clone(),
+                    label_params: label_params.clone(),
                     target_token_id: Some(target_token_id.clone()),
                 });
             }
             TokenFix::InsertAfter {
+                code,
                 label,
+                label_params,
                 target_token_id,
                 insert,
             } => {
                 if insert.is_empty() {
                     skipped_changes.push(SkippedTokenTransform {
                         kind: TokenTransformKind::Fix,
+                        code: code.clone(),
                         label: label.clone(),
+                        label_params: label_params.clone(),
                         target_token_id: Some(target_token_id.clone()),
                         reason: TokenTransformSkipReason::EmptyReplacement,
                     });
@@ -148,7 +234,9 @@ pub fn apply_fixes<T: FormattableToken>(
                 next_tokens.splice(index + 1..index + 1, insert_tokens);
                 applied_changes.push(TokenTransformChange {
                     kind: TokenTransformKind::Fix,
+                    code: code.clone(),
                     label: label.clone(),
+                    label_params: label_params.clone(),
                     target_token_id: Some(target_token_id.clone()),
                 });
             }
@@ -172,7 +260,9 @@ pub fn format_tokens_result<T: FormattableToken>(
     } else {
         vec![TokenTransformChange {
             kind: TokenTransformKind::Format,
+            code: "format-tokens".to_string(),
             label: "format tokens".to_string(),
+            label_params: MessageParams::new(),
             target_token_id: None,
         }]
     };
@@ -195,7 +285,9 @@ pub fn format_tokens_result_with_passes<T: FormattableToken>(
     } else {
         vec![TokenTransformChange {
             kind: TokenTransformKind::Format,
+            code: "format-tokens".to_string(),
             label: "format tokens".to_string(),
+            label_params: MessageParams::new(),
             target_token_id: None,
         }]
     };
@@ -207,7 +299,9 @@ pub fn format_tokens_result_with_passes<T: FormattableToken>(
         if !tokens_equivalent(&before, &working) {
             applied_changes.push(TokenTransformChange {
                 kind: TokenTransformKind::CustomFormatPass,
+                code: "custom-format-pass".to_string(),
                 label,
+                label_params: MessageParams::new(),
                 target_token_id: None,
             });
         }
@@ -376,7 +470,9 @@ mod tests {
     fn apply_fixes_replaces_token_and_preserves_extra_fields() {
         let tokens = vec![token("REV-1", TokenKind::Text, "(for fine linen)", None)];
         let fixes = vec![TokenFix::ReplaceToken {
+            code: "insert-leading-space".to_string(),
             label: "insert leading space".to_string(),
+            label_params: MessageParams::new(),
             target_token_id: "REV-1".to_string(),
             replacements: vec![TokenTemplate {
                 kind: TokenKind::Text,
@@ -399,7 +495,9 @@ mod tests {
     fn apply_fixes_can_insert_after_anchor_token() {
         let tokens = vec![token("REV-1", TokenKind::Text, "note text", None)];
         let fixes = vec![TokenFix::InsertAfter {
+            code: "insert-end-marker".to_string(),
             label: "insert end marker".to_string(),
+            label_params: MessageParams::new(),
             target_token_id: "REV-1".to_string(),
             insert: vec![TokenTemplate {
                 kind: TokenKind::EndMarker,
@@ -415,6 +513,26 @@ mod tests {
         assert_eq!(result.tokens[1].text, "\\f*");
         assert_eq!(result.tokens[1].id, "REV-1+1");
         assert_eq!(result.tokens[1].lane, 4);
+    }
+
+    #[test]
+    fn apply_fixes_can_delete_anchor_token() {
+        let tokens = vec![
+            token("REV-1", TokenKind::Marker, "\\m", Some("m")),
+            token("REV-2", TokenKind::Newline, "\n", None),
+        ];
+        let fixes = vec![TokenFix::DeleteToken {
+            code: "remove-empty-paragraph".to_string(),
+            label: "remove empty paragraph".to_string(),
+            label_params: MessageParams::new(),
+            target_token_id: "REV-1".to_string(),
+        }];
+
+        let result = apply_fixes(&tokens, &fixes);
+
+        assert_eq!(result.tokens.len(), 1);
+        assert_eq!(result.tokens[0].id, "REV-2");
+        assert_eq!(result.tokens[0].kind, TokenKind::Newline);
     }
 
     #[test]

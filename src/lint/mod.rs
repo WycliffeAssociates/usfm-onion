@@ -6,5 +6,6 @@ pub use crate::internal::api::{
 };
 pub use crate::internal::lint::{
     LintCode, LintIssue, LintOptions, LintSeverity, LintSuppression, LintableToken,
+    MessageParams,
     TokenLintOptions, lint, lint_tokens,
 };

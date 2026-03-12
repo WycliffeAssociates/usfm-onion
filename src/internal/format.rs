@@ -45,6 +45,8 @@ pub enum FormatRule {
     MoveChapterLabelAfterChapterMarker,
     /// Insert a default paragraph marker before verse content after chapter intro material.
     InsertDefaultParagraphAfterChapterIntro,
+    /// Remove empty paragraph markers that only separate into another block marker.
+    RemoveEmptyParagraphs,
     /// Insert canonical structural linebreaks around structural markers.
     InsertStructuralLinebreaks,
     /// Collapse repeated structural blank lines into a single canonical break.
@@ -92,6 +94,9 @@ pub struct FormatOptions {
     /// Before: chapter intro content with no paragraph marker
     /// After: default paragraph inserted before verse-bearing content
     pub insert_default_paragraph_after_chapter_intro: bool,
+    /// Before: paragraph marker with no content before the next block marker
+    /// After: empty paragraph marker and its trailing blank whitespace are removed
+    pub remove_empty_paragraphs: bool,
     /// Before: structural markers packed together
     /// After: canonical structural linebreaks inserted
     pub insert_structural_linebreaks: bool,
@@ -123,6 +128,7 @@ impl FormatOptions {
             remove_bridge_verse_enumerators: true,
             move_chapter_label_after_chapter_marker: true,
             insert_default_paragraph_after_chapter_intro: true,
+            remove_empty_paragraphs: false,
             insert_structural_linebreaks: true,
             collapse_consecutive_linebreaks: true,
             normalize_marker_whitespace_at_line_start: true,
@@ -142,6 +148,7 @@ impl FormatOptions {
             remove_bridge_verse_enumerators: false,
             move_chapter_label_after_chapter_marker: false,
             insert_default_paragraph_after_chapter_intro: false,
+            remove_empty_paragraphs: false,
             insert_structural_linebreaks: false,
             collapse_consecutive_linebreaks: false,
             normalize_marker_whitespace_at_line_start: false,
@@ -191,6 +198,7 @@ impl FormatOptions {
             FormatRule::InsertDefaultParagraphAfterChapterIntro => {
                 self.insert_default_paragraph_after_chapter_intro = enabled
             }
+            FormatRule::RemoveEmptyParagraphs => self.remove_empty_paragraphs = enabled,
             FormatRule::InsertStructuralLinebreaks => self.insert_structural_linebreaks = enabled,
             FormatRule::CollapseConsecutiveLinebreaks => {
                 self.collapse_consecutive_linebreaks = enabled
@@ -395,6 +403,10 @@ pub fn format_tokens_profile<T: FormattableToken>(
                 insert_default_paragraph_after_chapter_intro_into,
             );
         }
+    }
+
+    if options.remove_empty_paragraphs {
+        remove_empty_paragraphs_in_place(&mut working);
     }
 
     if options.insert_structural_linebreaks {
@@ -1181,6 +1193,7 @@ fn is_char_or_note_markerish<T: FormattableToken>(token: &T) -> bool {
 
 fn linebreak_before_and_after_marker(marker: &str) -> bool {
     contains_marker(LINEBREAK_BEFORE_AND_AFTER_MARKERS, marker)
+        || unknown_marker_defaults_to_own_line(marker)
 }
 
 fn linebreak_before_if_next_marker(marker: &str) -> bool {
@@ -1195,6 +1208,141 @@ fn linebreak_before_marker(marker: &str) -> bool {
 
 fn contains_marker(markers: &[&str], marker: &str) -> bool {
     markers.contains(&marker)
+}
+
+fn is_empty_paragraph_candidate(marker: &str) -> bool {
+    matches!(
+        marker,
+        "p" | "m"
+            | "po"
+            | "pr"
+            | "cls"
+            | "pmo"
+            | "pm"
+            | "pmc"
+            | "pmr"
+            | "pi"
+            | "pi1"
+            | "pi2"
+            | "pi3"
+            | "mi"
+            | "nb"
+            | "pc"
+            | "ph"
+            | "ph1"
+            | "ph2"
+            | "ph3"
+            | "b"
+            | "pb"
+            | "q"
+            | "q1"
+            | "q2"
+            | "q3"
+            | "q4"
+            | "qr"
+            | "qc"
+            | "qa"
+            | "qm"
+            | "qm1"
+            | "qm2"
+            | "qm3"
+            | "qd"
+            | "lh"
+            | "li"
+            | "li1"
+            | "li2"
+            | "li3"
+            | "li4"
+            | "lf"
+            | "lim"
+            | "lim1"
+            | "lim2"
+            | "lim3"
+    )
+}
+
+fn is_empty_paragraph_boundary_marker(marker: &str) -> bool {
+    if is_empty_paragraph_candidate(marker) {
+        return true;
+    }
+    matches!(
+        lookup_marker(marker).kind,
+        MarkerKind::Header
+            | MarkerKind::Chapter
+            | MarkerKind::Periph
+            | MarkerKind::SidebarStart
+            | MarkerKind::TableRow
+            | MarkerKind::Unknown
+    )
+}
+
+fn remove_empty_paragraphs_in_place<T: FormattableToken>(tokens: &mut Vec<T>) {
+    let mut write = 0usize;
+    let mut read = 0usize;
+
+    while read < tokens.len() {
+        let token = &tokens[read];
+        let Some(marker) = (token.kind() == &TokenKind::Marker)
+            .then(|| token.marker())
+            .flatten()
+        else {
+            if write != read {
+                tokens.swap(write, read);
+            }
+            write += 1;
+            read += 1;
+            continue;
+        };
+
+        if !is_empty_paragraph_candidate(marker) {
+            if write != read {
+                tokens.swap(write, read);
+            }
+            write += 1;
+            read += 1;
+            continue;
+        }
+
+        let mut probe = read + 1;
+        let mut remove_until = None;
+        while probe < tokens.len() {
+            let next = &tokens[probe];
+            match next.kind() {
+                TokenKind::Newline | TokenKind::OptBreak => {
+                    probe += 1;
+                }
+                TokenKind::Text if next.text().trim().is_empty() => {
+                    probe += 1;
+                }
+                TokenKind::Marker
+                    if next
+                        .marker()
+                        .is_some_and(is_empty_paragraph_boundary_marker) =>
+                {
+                    remove_until = Some(probe);
+                    break;
+                }
+                _ => break,
+            }
+        }
+
+        if let Some(next_boundary) = remove_until {
+            read = next_boundary;
+            continue;
+        }
+
+        if write != read {
+            tokens.swap(write, read);
+        }
+        write += 1;
+        read += 1;
+    }
+
+    tokens.truncate(write);
+}
+
+fn unknown_marker_defaults_to_own_line(marker: &str) -> bool {
+    !marker.starts_with('z') && lookup_marker(marker).kind == MarkerKind::Unknown
 }
 
 fn is_valid_paragraph_or_heading_marker(marker: &str) -> bool {
@@ -1587,7 +1735,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_s5_marker_is_not_treated_as_structural_section() {
+    fn unknown_s5_marker_defaults_to_its_own_line() {
         let tokens = vec![
             token(TokenKind::Marker, "\\s5", Some("s5")),
             token(TokenKind::Marker, "\\c", Some("c")),
@@ -1600,7 +1748,70 @@ mod tests {
             .map(|token| token.text.as_str())
             .collect::<String>();
 
-        assert!(!rendered.starts_with("\\s5\n"));
+        assert!(rendered.starts_with("\\s5\n"));
+    }
+
+    #[test]
+    fn unknown_z_marker_does_not_default_to_its_own_line() {
+        let tokens = vec![
+            token(TokenKind::Text, " text", None),
+            token(TokenKind::Marker, "\\zfoo", Some("zfoo")),
+            token(TokenKind::Text, " tail", None),
+        ];
+
+        let result = format(&tokens);
+        let rendered = result
+            .iter()
+            .map(|token| token.text.as_str())
+            .collect::<String>();
+
+        assert!(!rendered.contains("\n\\zfoo"));
+    }
+
+    #[test]
+    fn remove_empty_paragraphs_option_drops_redundant_m_before_q() {
+        let tokens = vec![
+            token(TokenKind::Marker, "\\m", Some("m")),
+            token(TokenKind::Newline, "\n", None),
+            token(TokenKind::Marker, "\\q", Some("q")),
+            token(TokenKind::Newline, "\n", None),
+            token(TokenKind::Marker, "\\v", Some("v")),
+            token(TokenKind::Number, " 1", None),
+            token(TokenKind::Text, " text", None),
+        ];
+
+        let result = format_tokens(
+            &tokens,
+            FormatOptions::only(&[FormatRule::RemoveEmptyParagraphs]),
+        );
+        let rendered = result
+            .iter()
+            .map(|token| token.text.as_str())
+            .collect::<String>();
+
+        assert_eq!(rendered, "\\q\n\\v 1 text");
+    }
+
+    #[test]
+    fn remove_empty_paragraphs_option_keeps_p_before_verse_content() {
+        let tokens = vec![
+            token(TokenKind::Marker, "\\p", Some("p")),
+            token(TokenKind::Newline, "\n", None),
+            token(TokenKind::Marker, "\\v", Some("v")),
+            token(TokenKind::Number, " 1", None),
+            token(TokenKind::Text, " text", None),
+        ];
+
+        let result = format_tokens(
+            &tokens,
+            FormatOptions::only(&[FormatRule::RemoveEmptyParagraphs]),
+        );
+        let rendered = result
+            .iter()
+            .map(|token| token.text.as_str())
+            .collect::<String>();
+
+        assert_eq!(rendered, "\\p\n\\v 1 text");
     }
 
     #[test]

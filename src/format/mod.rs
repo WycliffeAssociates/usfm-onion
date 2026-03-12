@@ -17,7 +17,8 @@ pub use crate::internal::format::{
     prettify_tokens,
 };
 pub use crate::internal::transform::{
-    SkippedTokenTransform, TokenFix, TokenTemplate, TokenTransformChange, TokenTransformKind,
-    TokenTransformResult, TokenTransformSkipReason, apply_fixes, format_tokens_result,
-    format_tokens_result_with_passes,
+    SkippedTokenTransform, TOKEN_FIX_CODES, TOKEN_TRANSFORM_CHANGE_CODES,
+    TOKEN_TRANSFORM_SKIP_REASON_CODES, TokenFix, TokenTemplate, TokenTransformChange,
+    TokenTransformKind, TokenTransformResult, TokenTransformSkipReason, apply_fixes,
+    format_tokens_result, format_tokens_result_with_passes,
 };
