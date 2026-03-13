@@ -7,11 +7,11 @@ use std::time::{Duration, Instant};
 
 use usfm_onion::{
     ast::usfm_to_ast,
-    cst::parse_usfm,
     convert::{
         HtmlOptions, convert_content, from_usj_str, from_usx_str, usfm_to_html, usfm_to_usx,
         usfm_to_vref,
     },
+    cst::parse_usfm,
     format::format_content,
     lint::{LintOptions, lint_content},
     model::DocumentFormat,

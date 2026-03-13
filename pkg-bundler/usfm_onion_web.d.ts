@@ -1,6 +1,26 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export function intoAst(document: WebParsedDocument): AstDocument;
+export function usfmToAst(content: string): AstDocument;
+export function usjToAst(content: string): AstDocument;
+export function usxToAst(content: string): AstDocument;
+export function tokensToAst(tokens: WebToken[]): AstDocument;
+export function astToTokens(document: AstDocument): WebToken[];
+export function astToUsj(document: AstDocument): UsjDocument;
+export function astToUsx(document: AstDocument): string;
+export function astToHtml(document: AstDocument, options?: WebHtmlOptions | null): string;
+export function astToVref(document: AstDocument): WebVrefEntry[];
+export function intoUsj(document: WebParsedDocument): UsjDocument;
+export function tokensToUsj(tokens: WebToken[]): UsjDocument;
+export function usfmToUsj(content: string): UsjDocument;
+export function fromUsj(document: UsjDocument): string;
+export function cstToken(document: CstDocument, tokenRef: CstTokenRef): WebToken;
+export function cstTokenText(document: CstDocument, tokenRef: CstTokenRef): string;
+export function cstTokenValue(document: CstDocument, tokenRef: CstTokenRef): string;
+
+
+
 export type MaybeString = string | null | undefined;
 export type Span = WebSpan;
 export type BatchExecutionOptions = WebBatchExecutionOptions;
@@ -45,6 +65,127 @@ export type MarkerNoteFamily = WebMarkerNoteFamily;
 export type MarkerNoteSubkind = WebMarkerNoteSubkind;
 export type MarkerInlineContext = WebMarkerInlineContext;
 export type MarkerInfo = WebMarkerInfo;
+export type AstDocument = {
+    type: string;
+    version: string;
+    content: AstNode[];
+};
+export type AstNode = AstElement;
+export type AstElement =
+| ({ type: "text"; value: string } & Record<string, Value>)
+| ({ type: "book"; marker: string; code: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "chapter"; marker: string; number: string } & Record<string, Value>)
+| ({ type: "verse"; marker: string; number: string } & Record<string, Value>)
+| ({ type: "para"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "char"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "note"; marker: string; caller: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "ms"; marker: string } & Record<string, Value>)
+| ({ type: "figure"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "sidebar"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "periph"; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "table"; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "table:row"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "table:cell"; marker: string; align: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "ref"; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "unknown"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "unmatched"; marker: string; content?: AstNode[] } & Record<string, Value>)
+| ({ type: "optbreak" } & Record<string, Value>)
+| ({ type: "linebreak"; value: string } & Record<string, Value>);
+export type UsjDocument = {
+    type: string;
+    version: string;
+    content: UsjNode[];
+};
+export type UsjNode = string | UsjElement;
+export type UsjElement =
+| ({ type: "book"; marker: string; code: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "chapter"; marker: string; number: string } & Record<string, Value>)
+| ({ type: "verse"; marker: string; number: string } & Record<string, Value>)
+| ({ type: "para"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "char"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "note"; marker: string; caller: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "ms"; marker: string } & Record<string, Value>)
+| ({ type: "figure"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "sidebar"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "periph"; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "table"; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "table:row"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "table:cell"; marker: string; align: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "ref"; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "unknown"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "unmatched"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+| ({ type: "optbreak" } & Record<string, Value>);
+export type CstDocument = {
+    type: string;
+    sourceUsfm: string;
+    bookCode?: MaybeString;
+    recoveries: ParseRecovery[];
+    tokens: Token[];
+    content: CstNode[];
+};
+export type CstTokenRef = {
+    token: number;
+    span: Span;
+};
+export type CstContainerKind =
+| "book"
+| "paragraph"
+| "character"
+| "note"
+| "figure"
+| "sidebar"
+| "periph"
+| "tableRow"
+| "tableCell"
+| "header"
+| "meta"
+| "unknown";
+export type CstLeafKind =
+| "text"
+| "whitespace"
+| "newline"
+| "optBreak"
+| "attributes";
+export type CstContainer = {
+    type: "container";
+    kind: CstContainerKind;
+    marker: string;
+    markerToken?: CstTokenRef | null;
+    closeToken?: CstTokenRef | null;
+    specialToken?: CstTokenRef | null;
+    attributeTokens?: CstTokenRef[];
+    children?: CstNode[];
+};
+export type CstChapter = {
+    type: "chapter";
+    markerToken: CstTokenRef;
+    numberToken?: CstTokenRef | null;
+};
+export type CstVerse = {
+    type: "verse";
+    markerToken: CstTokenRef;
+    numberToken?: CstTokenRef | null;
+};
+export type CstMilestone = {
+    type: "milestone";
+    marker: string;
+    markerToken: CstTokenRef;
+    attributeTokens?: CstTokenRef[];
+    endToken?: CstTokenRef | null;
+    closed: boolean;
+};
+export type CstLeaf = {
+    type: "leaf";
+    kind: CstLeafKind;
+    token: CstTokenRef;
+};
+export type CstElement =
+| CstContainer
+| CstChapter
+| CstVerse
+| CstMilestone
+| CstLeaf;
+export type CstNode = CstElement;
 
 
 
@@ -543,7 +684,7 @@ export type WebTokenFix = { type: "replaceToken"; code: string; label: string; l
 
 export type WebTokenVariant = { type: "newline"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "optBreak"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "marker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "endMarker"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestone"; id: string; span: WebSpan; sid: string | null; marker: string; text: string } | { type: "milestoneEnd"; id: string; span: WebSpan; sid: string | null; marker: string | null; text: string } | { type: "attributes"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "bookCode"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "number"; id: string; span: WebSpan; sid: string | null; text: string } | { type: "text"; id: string; span: WebSpan; sid: string | null; text: string };
 
-export type WebWhitespacePolicy = "preserve" | "mergeToVisible";
+export type WebWhitespacePolicy = "mergeToVisible";
 
 
 export function allMarkers(): string[];
@@ -554,48 +695,6 @@ export function applyRevertsByBlockId(request: WebApplyRevertsByBlockIdRequest):
 
 export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTransformResult;
 
-/**
- * Convert AST runtime JSON into HTML output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function astToHtml(document: any, options?: WebHtmlOptions | null): string;
-
-/**
- * Flatten AST runtime JSON back into canonical flat tokens.
- *
- * The input is accepted as generic `JsValue` because the wasm package does
- * not currently publish a precise TypeScript contract for the recursive tree
- * shape. Downstream callers should only pass values they obtained from the
- * AST APIs above, or values they have validated themselves.
- */
-export function astToTokens(document: any): WebToken[];
-
-/**
- * Convert AST runtime JSON into typed USJ output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function astToUsj(document: any): any;
-
-/**
- * Convert AST runtime JSON into USX output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function astToUsx(document: any): string;
-
-/**
- * Convert AST runtime JSON into VREF output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function astToVref(document: any): WebVrefEntry[];
-
 export function buildSidBlocks(request: WebBuildSidBlocksRequest): WebSidBlock[];
 
 export function characterMarkers(): string[];
@@ -603,12 +702,6 @@ export function characterMarkers(): string[];
 export function classifyTokens(tokens: WebToken[]): WebTokenVariant[];
 
 export function convertContent(request: WebContentRequest): string;
-
-export function cstToken(document: any, token_ref: any): WebToken;
-
-export function cstTokenText(document: any, token_ref: any): string;
-
-export function cstTokenValue(document: any, token_ref: any): string;
 
 export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsRequest): WebChapterTokenDiff[];
 
@@ -655,20 +748,7 @@ export function formatFlatTokens(request: WebFormatTokensRequest): WebTokenTrans
  */
 export function formatTokenBatches(request: WebFormatTokenBatchesRequest): WebTokenTransformResult[];
 
-export function fromUsj(document: any): string;
-
 export function fromUsx(content: string): string;
-
-/**
- * Project a parsed document into the canonical AST.
- *
- * Important: in the wasm package this is currently exposed as runtime JSON,
- * not a polished TypeScript discriminated union. The generated `.d.ts`
- * surface treats AST values as opaque `any`, so downstream code
- * should validate/narrow the returned shape explicitly instead of assuming a
- * strongly typed TS contract.
- */
-export function intoAst(document: WebParsedDocument): any;
 
 export function intoHtml(document: WebParsedDocument, options?: WebHtmlOptions | null): string;
 
@@ -688,8 +768,6 @@ export function intoTokensBatch(request: WebIntoTokensBatchRequest): WebTokenBat
 export function intoTokensFromContent(request: WebIntoTokensFromContentRequest): WebToken[];
 
 export function intoTokensFromContents(request: WebIntoTokensFromContentsRequest): WebTokensOpResult[];
-
-export function intoUsj(document: WebParsedDocument): any;
 
 export function intoUsx(request: WebIntoUsxRequest): string;
 
@@ -786,33 +864,13 @@ export function tokenTransformChangeCodes(): string[];
 
 export function tokenTransformSkipReasonCodes(): string[];
 
-/**
- * Project canonical flat tokens into AST runtime JSON.
- *
- * Important: the wasm package does not currently export a rich TypeScript
- * type for the recursive tree. Treat the return value as runtime data and
- * validate/narrow it in downstream code.
- */
-export function tokensToAst(tokens: WebToken[]): any;
-
 export function tokensToHtml(tokens: WebToken[], options?: WebHtmlOptions | null): string;
 
 export function tokensToUsfm(tokens: WebToken[]): string;
 
-export function tokensToUsj(tokens: WebToken[]): any;
-
 export function tokensToUsx(tokens: WebToken[]): string;
 
 export function tokensToVref(tokens: WebToken[]): WebVrefEntry[];
-
-/**
- * Project USFM directly into AST runtime JSON.
- *
- * Important: the wasm package does not currently export a rich TypeScript
- * type for the recursive tree. Treat the return value as runtime data and
- * validate/narrow it in downstream code.
- */
-export function usfmToAst(content: string): any;
 
 export function usfmToHtml(content: string, options?: WebHtmlOptions | null): string;
 
@@ -820,33 +878,13 @@ export function usfmToTokenVariants(content: string): WebTokenVariant[];
 
 export function usfmToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 
-export function usfmToUsj(content: string): any;
-
 export function usfmToUsx(content: string): string;
 
 export function usfmToVref(content: string): WebVrefEntry[];
 
-/**
- * Project USJ directly into AST runtime JSON.
- *
- * Important: the wasm package does not currently export a rich TypeScript
- * type for the recursive tree. Treat the return value as runtime data and
- * validate/narrow it in downstream code.
- */
-export function usjToAst(content: string): any;
-
 export function usjToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 
 export function usjToUsfm(content: string): string;
-
-/**
- * Project USX directly into AST runtime JSON.
- *
- * Important: the wasm package does not currently export a rich TypeScript
- * type for the recursive tree. Treat the return value as runtime data and
- * validate/narrow it in downstream code.
- */
-export function usxToAst(content: string): any;
 
 export function usxToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 

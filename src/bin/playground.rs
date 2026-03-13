@@ -1,0 +1,3 @@
+// AGENT: USE THIS FILE TO TEST AND BENCHMARK CODE
+
+fn main() {}

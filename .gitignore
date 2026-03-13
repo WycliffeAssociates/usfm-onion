@@ -21,3 +21,5 @@ target
 #.idea/
 
 repos_to_compare
+
+./src/bin/playground.rs

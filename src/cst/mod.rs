@@ -157,10 +157,8 @@ fn token_ref(span: Span, tokens: &[Token]) -> Option<CstTokenRef> {
     let index = insertion_point.checked_sub(1)?;
     let token = tokens.get(index)?;
 
-    (token.span.start <= span.start && token.span.end >= span.end).then(|| CstTokenRef {
-        token: index,
-        span,
-    })
+    (token.span.start <= span.start && token.span.end >= span.end)
+        .then(|| CstTokenRef { token: index, span })
 }
 
 fn token_ref_required(span: Span, tokens: &[Token]) -> CstTokenRef {
