@@ -5,8 +5,8 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
 use usfm_onion::DocumentFormat;
+use usfm_onion::ast::usfm_to_ast;
 use usfm_onion::convert::{HtmlOptions, usfm_to_html, usfm_to_usj, usfm_to_usx, usfm_to_vref};
-use usfm_onion::document_tree::usfm_to_document_tree;
 
 #[derive(Clone)]
 struct Corpus {
@@ -50,8 +50,8 @@ const CORPORA: &[CorpusSpec] = &[
 
 const OPERATIONS: &[Operation] = &[
     Operation {
-        label: "usfm_to_document_tree",
-        run: bench_document_tree_corpus,
+        label: "usfm_to_ast",
+        run: bench_ast_corpus,
     },
     Operation {
         label: "usfm_to_usj",
@@ -74,7 +74,7 @@ const OPERATIONS: &[Operation] = &[
 fn benchmark_document_tree_corpus(c: &mut Criterion) {
     let corpora = CORPORA.iter().map(load_corpus).collect::<Vec<_>>();
     for operation in OPERATIONS {
-        let mut group = c.benchmark_group(format!("document_tree_corpus/{}", operation.label));
+        let mut group = c.benchmark_group(format!("ast_corpus/{}", operation.label));
 
         for corpus in &corpora {
             group.throughput(Throughput::Bytes(corpus.total_usfm_bytes as u64));
@@ -100,9 +100,9 @@ fn benchmark_document_tree_corpus(c: &mut Criterion) {
     }
 }
 
-fn bench_document_tree_corpus(corpus: &Corpus, mode: Mode) -> usize {
+fn bench_ast_corpus(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
-        let tree = usfm_to_document_tree(source);
+        let tree = usfm_to_ast(source);
         tree.content.len() + tree.tokens.len()
     })
     .into_iter()

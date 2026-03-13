@@ -986,7 +986,10 @@ fn lint_chapter_rules<T: LintableToken>(
                     severity: default_severity(LintCode::DuplicateChapterNumber),
                     marker: Some("c".to_string()),
                     message: format!("duplicate chapter number {chapter}"),
-                    message_params: MessageParams::from([("chapter".to_string(), chapter.to_string())]),
+                    message_params: MessageParams::from([(
+                        "chapter".to_string(),
+                        chapter.to_string(),
+                    )]),
                     span: tokens[number_index].span().clone(),
                     related_span: None,
                     token_id: tokens[number_index].id().map(ToOwned::to_owned),
@@ -1364,7 +1367,10 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
     matches!(marker, "b")
 }
 
-fn empty_paragraph_boundary_index<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<usize> {
+fn empty_paragraph_boundary_index<T: LintableToken>(
+    tokens: &[T],
+    marker_index: usize,
+) -> Option<usize> {
     let mut index = marker_index + 1;
     while index < tokens.len() {
         let token = &tokens[index];
@@ -1936,7 +1942,10 @@ fn validate_context_marker_for_token<T: LintableToken>(
         ),
         message_params: MessageParams::from([
             ("marker".to_string(), marker.marker.to_string()),
-            ("context".to_string(), spec_context_name(context).to_string()),
+            (
+                "context".to_string(),
+                spec_context_name(context).to_string(),
+            ),
         ]),
         span: token.span().clone(),
         related_span: None,
@@ -2241,7 +2250,11 @@ mod tests {
         let projected = tokens(&handle, TokenViewOptions::default());
         let issues = lint_tokens(&projected, TokenLintOptions::default());
 
-        assert!(issues.iter().all(|issue| issue.code != LintCode::EmptyParagraph));
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.code != LintCode::EmptyParagraph)
+        );
     }
 
     #[test]

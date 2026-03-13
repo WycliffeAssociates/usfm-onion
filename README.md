@@ -5,7 +5,8 @@ Rust-first USFM parsing, token operations, structural projection, semantic expor
 `usfm_onion` is organized around four ideas:
 
 - `tokens`: the canonical flat working representation
-- `document_tree`: the canonical structural interchange format
+- `cst`: the canonical source-faithful tree
+- `ast`: the canonical semantic tree and export tree
 - semantic exports: `USJ`, `USX`, `HTML`, and `VREF`
 - explicit mutation only: lint, format, diff, and fix application never happen implicitly on open
 
@@ -38,13 +39,14 @@ cargo run --bin usfm-onion -- --help
 Use the crate like this:
 
 ```rust
-use usfm_onion::{convert, diff, document_tree, format, lint, tokens};
+use usfm_onion::{ast, convert, cst, diff, format, lint, tokens};
 ```
 
 Top-level public modules:
 
 - `tokens`: tokenization, token reconstruction, and token/file intake helpers
-- `document_tree`: structural tree projection and tree/token conversion
+- `cst`: source-faithful tree projection and tree/token conversion
+- `ast`: semantic tree projection and tree/token conversion
 - `lint`: token-first linting plus content/path batch helpers
 - `format`: token-first formatting plus content/path batch helpers
 - `diff`: token-based diffing and revert helpers
@@ -60,10 +62,19 @@ Top-level public modules:
 The native USFM pipeline is:
 
 - lex: raw source -> scan tokens
-- parse: scan tokens -> `ParseHandle` syntax/analysis
-- project: `ParseHandle` -> public `tokens`, `document_tree`, or semantic exports
+- parse: scan tokens -> internal syntax/analysis state
+- project: internal parse state -> public `tokens`, `cst`, `ast`, or semantic exports
 
 So lex and parse are two distinct steps. Public `tokens::usfm_to_tokens(...)` is a convenience that parses first and then projects canonical public tokens.
+
+For USFM input, the public mental model should be:
+
+- `USFM -> tokens -> CST -> AST -> semantic exports`
+
+For semantic inputs such as `USJ` and `USX`, the important thing is different:
+
+- `USJ/USX -> AST` is the primary semantic intake path
+- `USJ/USX -> tokens` and `USJ/USX -> CST` are generated projections, not source-faithful reconstructions of the original JSON/XML bytes
 
 ### `tokens`
 
@@ -123,9 +134,60 @@ for token in tokens::usfm_to_token_variants(source) {
 }
 ```
 
-### `document_tree`
+### `cst`
 
-`DocumentTreeDocument` is the structural interchange format.
+`CstDocument` is the source-faithful tree.
+
+Use the CST when you want:
+
+- tree traversal without giving up exact source coverage
+- a structured representation that still carries canonical tokens
+- a source-faithful view of containers, leaves, and boundaries
+- the closest public representation to the parser’s internal structure
+
+The key property is:
+
+- `tokens` own the exact flat source text
+- `cst` owns structure and references canonical tokens
+- `cst::cst_to_tokens(...)` gives you the canonical tokens back exactly
+
+Typical use:
+
+```rust
+use usfm_onion::{cst, tokens};
+
+let cst = cst::parse_usfm(source);
+let tokens = cst::cst_to_tokens(&cst);
+let usfm = tokens::tokens_to_usfm(&tokens);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Why reach for the CST instead of tokens:
+
+- you want a tree, not a flat stream
+- you still care about source-faithful structure
+- you may want to inspect note / char / paragraph nesting without collapsing back to semantic export shapes
+
+Why reach for tokens instead of the CST:
+
+- lint, format, diff, and fixes are currently token-first
+- downstream workflows are often simpler if everything flattens back to one canonical stream
+- token streams are the easiest place to reason about explicit edits and exact round-trip
+
+So today the practical rule is:
+
+- use `tokens` for operations
+- use `cst` for source-faithful tree traversal
+- flatten back to tokens before running operations
+
+That choice is intentional. A future version could accept CST input for more of
+these operations because the CST can always return canonical tokens, but the
+current public API stays token-first because it is simpler for downstream
+consumers to reason about one flat working stream than to require a tree.
+
+### `ast`
+
+`AstDocument` is the semantic tree format.
 
 It follows USFM nesting semantics for things like:
 
@@ -146,36 +208,36 @@ It follows USFM nesting semantics for things like:
 Unlike the older scalar-text shape, text is now also an element in the discriminated union:
 
 ```rust
-use usfm_onion::DocumentTreeElement;
+use usfm_onion::AstElement;
 
-let text = DocumentTreeElement::Text {
+let text = AstElement::Text {
     value: "In the beginning".to_string(),
 };
 ```
 
 The key property is:
 
-- `document_tree` is structured
+- `ast` is structured
 - opening/projecting into it does not mutate content
 - it can be projected back into tokens / USFM
 
-In plain language, `document_tree` is the thing you use when you want:
+In plain language, `ast` is the thing you use when you want:
 
-- a real tree you can traverse and edit structurally
-- the current closest thing to a structured editor tree for USFM
+- a real tree you can traverse semantically
+- a normalized tree before projecting to USJ / USX / HTML / VREF
 - one canonical intermediate form before projecting to `USJ`, `USX`, `HTML`, or `VREF`
 
-What `document_tree` is not:
+What `ast` is not:
 
 - it is not the exact-lossless source of truth
 - it should not be treated as the byte-faithful round-trip layer for arbitrary USFM
 
 Why it still differs from `USJ` or `USX`:
 
-- `document_tree.content` keeps more editor-oriented structural distinctions than semantic exports do
+- `ast.content` keeps more structural distinctions than semantic exports do
 - `USJ` and `USX` are semantic formats, not exact source reconstruction formats
 
-Examples of source details `document_tree` may preserve for editor use:
+Examples of source details `ast` may preserve:
 
 - explicit linebreak nodes
 - exact marker text for things like book / chapter / verse markers
@@ -186,37 +248,51 @@ Examples of source details `document_tree` may preserve for editor use:
 
 What it does not currently expose as first-class tree metadata:
 
-- parse recoveries are not stored as a separate `recoveries` field on `DocumentTreeDocument`
-- if recovery details matter to your workflow, keep the `ParseHandle` / parser output around as well
+- parse recoveries are not stored as a separate `recoveries` field on `AstDocument`
+- if recovery details matter to your workflow, use the internal parser-facing APIs rather than relying on the public AST alone
 
 So the practical split is:
 
-- use `document_tree` when you want a structured editor/interchange tree
+- use `ast` when you want a structured semantic tree
+- use `cst` when you want a structured source-faithful tree
 - use `USJ` / `USX` when you want semantic interchange formats
 - use `tokens` when you want the exact working form for lint / format / diff / fix application
 
 Typical use:
 
 ```rust
-use usfm_onion::{document_tree, tokens};
+use usfm_onion::{ast, cst};
 
-let tokens = tokens::usfm_to_tokens(source);
-let tree = document_tree::tokens_to_document_tree(&tokens);
-let roundtrip_tokens = document_tree::document_tree_to_tokens(&tree)?;
+let cst = cst::parse_usfm(source);
+let tree = ast::cst_to_ast(&cst);
+# let roundtrip_tokens = ast::ast_to_tokens(&tree)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Why reach for the AST instead of the CST:
+
+- you want semantic normalization, not source-faithful trivia
+- you want one tree for `USJ`, `USX`, `HTML`, and `VREF`
+- you do not want each exporter to reinvent nesting separately
+
+Why reach for the CST instead of the AST:
+
+- you still care about exact source-oriented structure
+- you want to preserve a clearer connection to the original token stream
+- you are building tooling where trivia and boundary placement still matter
 
 ### Semantic exports
 
 `USJ`, `USX`, `HTML`, and `VREF` are narrower projections built from the canonical pipeline:
 
-- input -> tokens -> document_tree -> output
+- input -> tokens -> cst -> ast -> output
 
 Use them when you want semantic interchange or rendering, not when you want the highest-fidelity working form.
 
 Another plain-language way to say it:
 
-- `document_tree` is an editor/interchange tree
+- `cst` is the source-faithful tree
+- `ast` is the semantic structural tree
 - `USJ` and `USX` are semantic export formats
 - `tokens` are the lossless source-faithful layer
 
@@ -232,6 +308,7 @@ For USFM-originated content, the exact round-trip-preserving layer is:
 
 - `tokens`
 - `tokens::tokens_to_usfm`
+- optionally `cst`, because the CST carries the canonical tokens it was built from
 
 If exact original USFM matters, keep tokens.
 
@@ -252,7 +329,7 @@ So the guarantee is:
 
 Put differently:
 
-- current `document_tree` answers: "give me a structured tree, and attempt reconstruction from tree content alone"
+- current `ast` answers: "give me a structured tree, and attempt semantic export from tree content"
 - `USJ` / `USX` answer: "give me a portable semantic document format"
 
 ## Quick Start
@@ -292,38 +369,40 @@ token APIs:
 
 The `*_content` helpers are convenience wrappers that parse and project first.
 
-### USFM -> document_tree -> semantic outputs
+### USFM -> CST -> AST -> semantic outputs
 
 ```rust
-use usfm_onion::{convert, document_tree};
+use usfm_onion::{ast, convert, cst};
 
-let tree = document_tree::usfm_to_document_tree(source);
-let usj = convert::document_tree_to_usj(&tree)?;
-let usx = convert::document_tree_to_usx(&tree)?;
-let html = convert::document_tree_to_html(&tree, convert::HtmlOptions::default())?;
-let vref = convert::document_tree_to_vref(&tree)?;
+let cst = cst::parse_usfm(source);
+let ast = ast::cst_to_ast(&cst);
+let usj = convert::ast_to_usj(&ast)?;
+let usx = convert::ast_to_usx(&ast)?;
+let html = convert::ast_to_html(&ast, convert::HtmlOptions::default())?;
+let vref = convert::ast_to_vref(&ast)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ### USJ / USX intake
 
 ```rust
-use usfm_onion::{document_tree, tokens};
+use usfm_onion::{ast, tokens};
 
 let usj_tokens = tokens::usj_to_tokens(usj_json)?;
-let usx_tree = document_tree::usx_to_document_tree(usx_xml)?;
+let usx_tree = ast::usx_to_ast(usx_xml)?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## Input / Output Matrix
 
-| Input | Tokens | Document tree | USFM | USJ | USX | HTML | VREF |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| USFM | `tokens::usfm_to_tokens` | `document_tree::usfm_to_document_tree` | original or `tokens::tokens_to_usfm` | `convert::usfm_to_usj` | `convert::usfm_to_usx` | `convert::usfm_to_html` | `convert::usfm_to_vref` |
-| USJ | `tokens::usj_to_tokens` | `document_tree::usj_to_document_tree` | `convert::from_usj_str` | semantic input | `convert::usj_to_usx` | via tree/tokens | via tree/tokens |
-| USX | `tokens::usx_to_tokens` | `document_tree::usx_to_document_tree` | `convert::from_usx_str` | `convert::usx_to_usj` | semantic input | via tree/tokens | via tree/tokens |
-| tokens | already there | `document_tree::tokens_to_document_tree` | `tokens::tokens_to_usfm` | `convert::tokens_to_usj` | `convert::tokens_to_usx` | `convert::tokens_to_html` | `convert::tokens_to_vref` |
-| document tree | `document_tree::document_tree_to_tokens` | already there | through tokens | `convert::document_tree_to_usj` | `convert::document_tree_to_usx` | `convert::document_tree_to_html` | `convert::document_tree_to_vref` |
+| Input  | Tokens                   | CST                      | AST                  | USFM                                 | USJ                      | USX                      | HTML                      | VREF                      |
+| ------ | ------------------------ | ------------------------ | -------------------- | ------------------------------------ | ------------------------ | ------------------------ | ------------------------- | ------------------------- |
+| USFM   | `tokens::usfm_to_tokens` | `cst::parse_usfm`        | `ast::usfm_to_ast`   | original or `tokens::tokens_to_usfm` | `convert::usfm_to_usj`   | `convert::usfm_to_usx`   | `convert::usfm_to_html`   | `convert::usfm_to_vref`   |
+| USJ    | `tokens::usj_to_tokens`  | `cst::usj_to_cst`        | `ast::usj_to_ast`    | `convert::from_usj_str`              | semantic input           | `convert::usj_to_usx`    | via ast/tokens            | via ast/tokens            |
+| USX    | `tokens::usx_to_tokens`  | `cst::usx_to_cst`        | `ast::usx_to_ast`    | `convert::from_usx_str`              | `convert::usx_to_usj`    | semantic input           | via ast/tokens            | via ast/tokens            |
+| tokens | already there            | `cst::tokens_to_cst`     | `ast::tokens_to_ast` | `tokens::tokens_to_usfm`             | `convert::tokens_to_usj` | `convert::tokens_to_usx` | `convert::tokens_to_html` | `convert::tokens_to_vref` |
+| CST    | `cst::cst_to_tokens`     | already there            | `ast::cst_to_ast`    | through tokens                       | through AST              | through AST              | through AST               | through AST               |
+| AST    | `ast::ast_to_tokens`     | generated through tokens | already there        | through tokens                       | `convert::ast_to_usj`    | `convert::ast_to_usx`    | `convert::ast_to_html`    | `convert::ast_to_vref`    |
 
 ## Lint
 
@@ -445,7 +524,7 @@ import init, {
   parseContent,
   intoTokens,
   usfmToTokens,
-  intoDocumentTree,
+  intoAst,
   lintFlatTokens,
   formatFlatTokens,
   diffTokens,
@@ -470,7 +549,7 @@ const diffs = diffTokens({
   currentTokens: formatted.tokens,
 });
 
-const tree = intoDocumentTree(parsed);
+const tree = intoAst(parsed);
 ```
 
 Use the content helpers only when you do not already have tokens:
@@ -479,7 +558,7 @@ Use the content helpers only when you do not already have tokens:
 - `formatContent`
 - `diffContent`
 
-Current wasm `documentTree` contract:
+Current wasm `ast` contract:
 
 - tree values are real runtime JSON objects
 - the generated `.d.ts` does not currently expose a polished recursive TypeScript union for that tree
@@ -489,7 +568,7 @@ Canonical JS names now follow the Rust modules more closely:
 
 - `usfmToTokens` / `usjToTokens` / `usxToTokens`
 - `tokensToUsfm`
-- `usfmToDocumentTree` / `tokensToDocumentTree` / `documentTreeToTokens`
+- `usfmToAst` / `tokensToAst` / `astToTokens`
 - `tokensToUsj` / `tokensToUsx` / `tokensToHtml` / `tokensToVref`
 - `lintFlatTokens`, `formatFlatTokens`, `diffTokens`
 
@@ -535,18 +614,19 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 - Total files in corpus directory: 74
 - Total USFM source size: 4.51 MiB
 
-| Operation | Serial | Parallel | Speedup |
-| --- | ---: | ---: | ---: |
-| usfm -> document_tree | 821.4ms | 193.6ms | 4.24x |
-| usfm -> tokens | 382.6ms | 92.8ms | 4.12x |
-| lint usfm | 3.38s | 637.9ms | 5.30x |
-| format usfm | 930.2ms | 189.0ms | 4.92x |
-| usfm -> usj | 730.1ms | 162.6ms | 4.49x |
-| usfm -> usx | 893.8ms | 167.6ms | 5.33x |
-| usfm -> html | 1.86s | 410.4ms | 4.52x |
-| usfm -> vref | 1.18s | 312.3ms | 3.79x |
-| usj -> usfm | 125.5ms | 48.2ms | 2.61x |
-| usx -> usfm | 259.0ms | 31.4ms | 8.24x |
+| Operation      |  Serial | Parallel | Speedup |
+| -------------- | ------: | -------: | ------: |
+| usfm -> cst    | 329.7ms |   54.2ms |   6.08x |
+| usfm -> ast    | 333.1ms |  133.8ms |   2.49x |
+| usfm -> tokens | 403.0ms |   50.1ms |   8.05x |
+| lint usfm      | 544.3ms |   94.6ms |   5.76x |
+| format usfm    | 534.9ms |   92.2ms |   5.80x |
+| usfm -> usj    | 545.0ms |  110.4ms |   4.94x |
+| usfm -> usx    | 727.1ms |  152.2ms |   4.78x |
+| usfm -> html   | 461.1ms |  109.8ms |   4.20x |
+| usfm -> vref   | 349.1ms |   61.6ms |   5.67x |
+| usj -> usfm    |  78.0ms |   20.5ms |   3.80x |
+| usx -> usfm    |  82.0ms |   15.7ms |   5.22x |
 
 ### `bdf_reg`
 
@@ -554,18 +634,19 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 - Total files in corpus directory: 33
 - Total USFM source size: 1.13 MiB
 
-| Operation | Serial | Parallel | Speedup |
-| --- | ---: | ---: | ---: |
-| usfm -> document_tree | 123.0ms | 43.4ms | 2.84x |
-| usfm -> tokens | 114.2ms | 26.2ms | 4.36x |
-| lint usfm | 581.3ms | 71.3ms | 8.16x |
-| format usfm | 393.6ms | 55.7ms | 7.07x |
-| usfm -> usj | 117.1ms | 29.7ms | 3.95x |
-| usfm -> usx | 127.9ms | 66.0ms | 1.94x |
-| usfm -> html | 486.2ms | 106.2ms | 4.58x |
-| usfm -> vref | 156.3ms | 40.3ms | 3.88x |
-| usj -> usfm | 9.2ms | 2.7ms | 3.42x |
-| usx -> usfm | 12.8ms | 3.6ms | 3.57x |
+| Operation      |  Serial | Parallel | Speedup |
+| -------------- | ------: | -------: | ------: |
+| usfm -> cst    |  38.4ms |    7.5ms |   5.12x |
+| usfm -> ast    |  47.2ms |    9.2ms |   5.14x |
+| usfm -> tokens |  36.8ms |    9.4ms |   3.93x |
+| lint usfm      |  64.6ms |   13.8ms |   4.69x |
+| format usfm    |  72.1ms |   12.9ms |   5.58x |
+| usfm -> usj    |  82.0ms |   16.5ms |   4.97x |
+| usfm -> usx    | 114.1ms |   22.1ms |   5.17x |
+| usfm -> html   |  66.7ms |   11.6ms |   5.77x |
+| usfm -> vref   |  50.5ms |   10.1ms |   5.00x |
+| usj -> usfm    |   9.3ms |    2.5ms |   3.75x |
+| usx -> usfm    |  11.7ms |    2.9ms |   4.10x |
 
 ### `en_ult`
 
@@ -573,16 +654,18 @@ _Local release measurements, median wall-clock over 3 runs, file-level paralleli
 - Total files in corpus directory: 78
 - Total USFM source size: 98.43 MiB
 
-| Operation | Serial | Parallel | Speedup |
-| --- | ---: | ---: | ---: |
-| usfm -> document_tree | 19.32s | 4.88s | 3.96x |
-| usfm -> tokens | 10.65s | 1.32s | 8.04x |
-| lint usfm | 36.17s | 7.06s | 5.13x |
-| format usfm | 13.16s | 3.74s | 3.52x |
-| usfm -> usj | 15.76s | 3.54s | 4.46x |
-| usfm -> usx | 13.14s | 2.39s | 5.49x |
-| usfm -> html | 40.05s | 8.99s | 4.46x |
-| usfm -> vref | 22.34s | 4.99s | 4.48x |
-| usj -> usfm | 2.42s | 543.9ms | 4.44x |
-| usx -> usfm | 2.81s | 603.5ms | 4.66x |
+| Operation      | Serial | Parallel | Speedup |
+| -------------- | -----: | -------: | ------: |
+| usfm -> cst    |  3.71s |  643.1ms |   5.77x |
+| usfm -> ast    |  6.70s |    1.18s |   5.67x |
+| usfm -> tokens |  3.23s |  547.9ms |   5.90x |
+| lint usfm      |  8.07s |    1.22s |   6.61x |
+| format usfm    |  7.56s |    1.35s |   5.60x |
+| usfm -> usj    | 10.73s |    1.97s |   5.45x |
+| usfm -> usx    |  7.67s |    1.21s |   6.35x |
+| usfm -> html   | 11.11s |    1.92s |   5.79x |
+| usfm -> vref   |  8.30s |    1.28s |   6.50x |
+| usj -> usfm    |  2.98s |  474.8ms |   6.27x |
+| usx -> usfm    |  3.08s |  509.6ms |   6.04x |
+
 <!-- corpus-bench:end -->

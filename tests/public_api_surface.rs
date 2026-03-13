@@ -1,6 +1,4 @@
-use usfm_onion::{
-    DocumentFormat, TokenVariant, convert, diff, document_tree, format, lint, tokens,
-};
+use usfm_onion::{DocumentFormat, TokenVariant, ast, convert, cst, diff, format, lint, tokens};
 
 #[test]
 fn public_modules_support_happy_path_usage() {
@@ -12,8 +10,16 @@ fn public_modules_support_happy_path_usage() {
     assert!(!variants.is_empty(), "expected token variants");
     assert!(matches!(variants[0], TokenVariant::Marker { .. }));
 
-    let tree = document_tree::usfm_to_document_tree(source);
-    assert!(!tree.content.is_empty(), "expected document tree content");
+    let parsed = cst::parse_usfm(source);
+    assert!(!parsed.content.is_empty(), "expected CST content");
+    assert_eq!(
+        tokens::tokens_to_usfm(cst::cst_tokens(&parsed)),
+        source,
+        "expected CST tokens to round-trip"
+    );
+
+    let tree = ast::cst_to_ast(&parsed);
+    assert!(!tree.content.is_empty(), "expected AST content");
 
     let issues = lint::lint_content(source, DocumentFormat::Usfm, lint::LintOptions::default())
         .expect("lint should succeed");

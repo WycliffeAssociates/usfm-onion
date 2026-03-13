@@ -3,8 +3,8 @@ use std::fs;
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
-use usfm_onion::convert::into_document_tree;
-use usfm_onion::document_tree::usfm_to_document_tree;
+use usfm_onion::ast::usfm_to_ast;
+use usfm_onion::convert::into_ast;
 use usfm_onion::parse::{parse, tokens};
 use usfm_onion::tokens::TokenViewOptions;
 
@@ -21,8 +21,8 @@ fn benchmark_document_tree_breakdown(c: &mut Criterion) {
 
     bench_parse(c, &cases);
     bench_project_tokens(c, &cases);
-    bench_document_tree_from_handle(c, &cases);
-    bench_usfm_to_document_tree(c, &cases);
+    bench_ast_from_handle(c, &cases);
+    bench_usfm_to_ast(c, &cases);
 }
 
 fn bench_parse(c: &mut Criterion, cases: &[Case]) {
@@ -52,19 +52,19 @@ fn bench_project_tokens(c: &mut Criterion, cases: &[Case]) {
     group.finish();
 }
 
-fn bench_usfm_to_document_tree(c: &mut Criterion, cases: &[Case]) {
-    let mut group = c.benchmark_group("document_tree_breakdown/full_tree");
+fn bench_usfm_to_ast(c: &mut Criterion, cases: &[Case]) {
+    let mut group = c.benchmark_group("ast_breakdown/full_ast");
     for case in cases {
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
         group.bench_with_input(BenchmarkId::new("usfm", case.label), case, |b, case| {
-            b.iter(|| black_box(usfm_to_document_tree(black_box(case.usfm.as_str()))));
+            b.iter(|| black_box(usfm_to_ast(black_box(case.usfm.as_str()))));
         });
     }
     group.finish();
 }
 
-fn bench_document_tree_from_handle(c: &mut Criterion, cases: &[Case]) {
-    let mut group = c.benchmark_group("document_tree_breakdown/tree_from_handle");
+fn bench_ast_from_handle(c: &mut Criterion, cases: &[Case]) {
+    let mut group = c.benchmark_group("ast_breakdown/ast_from_handle");
     for case in cases {
         let handle = parse(case.usfm.as_str());
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
@@ -72,7 +72,7 @@ fn bench_document_tree_from_handle(c: &mut Criterion, cases: &[Case]) {
             BenchmarkId::new("parsed_handle", case.label),
             case,
             |b, _| {
-                b.iter(|| black_box(into_document_tree(black_box(&handle))));
+                b.iter(|| black_box(into_ast(black_box(&handle))));
             },
         );
     }

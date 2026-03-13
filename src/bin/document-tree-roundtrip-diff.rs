@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 
-use usfm_onion::document_tree::{document_tree_to_usfm, usfm_to_document_tree};
+use usfm_onion::ast::{ast_to_usfm, usfm_to_ast};
 
 fn main() {
     let args = env::args().skip(1).collect::<Vec<_>>();
@@ -11,8 +11,8 @@ fn main() {
         .find(|arg| arg.as_str() != "--dump-tree")
         .expect("usage: cargo run --bin document-tree-roundtrip-diff -- <path>");
     let source = fs::read_to_string(path).expect("fixture should be readable");
-    let tree = usfm_to_document_tree(&source);
-    let reconstructed = document_tree_to_usfm(&tree).expect("tree should serialize");
+    let tree = usfm_to_ast(&source);
+    let reconstructed = ast_to_usfm(&tree).expect("tree should serialize");
 
     if dump_tree {
         println!(

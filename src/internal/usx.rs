@@ -802,6 +802,7 @@ impl<'a> UsxSerializer<'a> {
                 marker_span,
                 attribute_spans,
                 closed,
+                ..
             } => self.serialize_milestone(marker, marker_span, attribute_spans, *closed),
             Node::Leaf { kind, span } => self.serialize_leaf(*kind, span, trim_start, trim_end),
         }

@@ -206,6 +206,7 @@ fn dump_node(out: &mut String, node: &Node, depth: usize, limit: usize, seen: &m
             marker_span,
             attribute_spans,
             closed,
+            ..
         } => {
             let _ = writeln!(
                 out,

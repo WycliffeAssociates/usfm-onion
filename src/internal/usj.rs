@@ -665,6 +665,7 @@ impl<'a> UsjSerializer<'a> {
                 marker_span,
                 attribute_spans,
                 closed,
+                ..
             } => {
                 if *closed {
                     push_value(out, self.serialize_milestone(marker, attribute_spans));
@@ -722,6 +723,7 @@ impl<'a> UsjSerializer<'a> {
                 marker_span,
                 attribute_spans,
                 closed,
+                ..
             } => {
                 if *closed {
                     push_tree_node(out, self.serialize_tree_milestone(marker, attribute_spans));

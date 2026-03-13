@@ -7,10 +7,9 @@ mod native {
     use std::path::{Path, PathBuf};
     use std::process::ExitCode;
     use usfm_onion::{
-        DocumentFormat,
+        DocumentFormat, ast,
         convert::{self, HtmlOptions},
         diff::{self, BuildSidBlocksOptions},
-        document_tree,
         format::{self, FormatOptions, FormatRule},
         lint::{self, LintIssue, TokenLintOptions},
         tokens,
@@ -122,7 +121,7 @@ mod native {
         Usj,
         Usx,
         Html,
-        DocumentTree,
+        Ast,
         Vref,
     }
 
@@ -187,7 +186,7 @@ mod native {
     struct ParseSummary {
         format: DocumentFormat,
         token_count: usize,
-        document_tree_nodes: usize,
+        ast_nodes: usize,
     }
 
     pub(super) fn main() -> ExitCode {
@@ -217,18 +216,18 @@ mod native {
             resolve_optional_format(command.from, command.input.as_deref(), DocumentFormat::Usfm)?;
         let source = read_named_or_stdin(command.input.as_deref())?;
         let token_list = tokens_from_source(&source, format)?;
-        let tree = document_tree_from_source(&source, format)?;
+        let tree = ast_from_source(&source, format)?;
         let summary = ParseSummary {
             format,
             token_count: token_list.len(),
-            document_tree_nodes: tree.content.len(),
+            ast_nodes: tree.content.len(),
         };
         if command.json {
             println!("{}", serde_json::to_string_pretty(&summary)?);
         } else {
             println!("format: {}", summary.format);
             println!("tokens: {}", summary.token_count);
-            println!("document_tree nodes: {}", summary.document_tree_nodes);
+            println!("ast nodes: {}", summary.ast_nodes);
         }
         Ok(ExitCode::SUCCESS)
     }
@@ -338,9 +337,7 @@ mod native {
             OutputArg::Html => {
                 convert::usfm_to_html(&normalize_to_usfm(&source, format)?, HtmlOptions::default())?
             }
-            OutputArg::DocumentTree => {
-                serde_json::to_string_pretty(&document_tree_from_source(&source, format)?)?
-            }
+            OutputArg::Ast => serde_json::to_string_pretty(&ast_from_source(&source, format)?)?,
             OutputArg::Vref => serde_json::to_string_pretty(&convert::usfm_to_vref(
                 &normalize_to_usfm(&source, format)?,
             )?)?,
@@ -392,11 +389,11 @@ mod native {
             resolve_optional_format(command.from, command.input.as_deref(), DocumentFormat::Usfm)?;
         let source = read_named_or_stdin(command.input.as_deref())?;
         let token_list = tokens_from_source(&source, format)?;
-        let tree = document_tree_from_source(&source, format)?;
+        let tree = ast_from_source(&source, format)?;
         let issues = lint::lint_content(&source, format, TokenLintOptions::default().into())?;
         let payload = serde_json::json!({
             "tokens": token_list,
-            "document_tree": tree,
+            "ast": tree,
             "lint_issues": issues,
         });
         if command.json {
@@ -429,14 +426,14 @@ mod native {
         })
     }
 
-    fn document_tree_from_source(
+    fn ast_from_source(
         source: &str,
         format: DocumentFormat,
-    ) -> Result<document_tree::DocumentTreeDocument, Box<dyn std::error::Error>> {
+    ) -> Result<ast::AstDocument, Box<dyn std::error::Error>> {
         Ok(match format {
-            DocumentFormat::Usfm => document_tree::usfm_to_document_tree(source),
-            DocumentFormat::Usj => document_tree::usj_to_document_tree(source)?,
-            DocumentFormat::Usx => document_tree::usx_to_document_tree(source)?,
+            DocumentFormat::Usfm => ast::usfm_to_ast(source),
+            DocumentFormat::Usj => ast::usj_to_ast(source)?,
+            DocumentFormat::Usx => ast::usx_to_ast(source)?,
         })
     }
 

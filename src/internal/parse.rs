@@ -13,6 +13,7 @@ struct OpenMarker {
     marker: String,
     kind: MarkerKind,
     span: std::ops::Range<usize>,
+    close_span: Option<std::ops::Range<usize>>,
     children: Vec<Node>,
     special_span: Option<std::ops::Range<usize>>,
     attribute_spans: Vec<std::ops::Range<usize>>,
@@ -54,6 +55,7 @@ impl ParserState {
             kind: ContainerKind::Unknown,
             marker: marker.to_string(),
             marker_span: span,
+            close_span: None,
             special_span: None,
             attribute_spans: Vec::new(),
             children: Vec::new(),
@@ -65,6 +67,7 @@ impl ParserState {
             marker: marker.to_string(),
             kind,
             span,
+            close_span: None,
             children: Vec::new(),
             special_span: None,
             attribute_spans: Vec::new(),
@@ -121,7 +124,7 @@ impl ParserState {
     fn close_pending_milestone(
         &mut self,
         closed: bool,
-        _close_span: Option<std::ops::Range<usize>>,
+        close_span: Option<std::ops::Range<usize>>,
     ) {
         if let Some(milestone) = self.pending_milestone.take() {
             if !closed {
@@ -135,6 +138,7 @@ impl ParserState {
                 marker: milestone.marker,
                 marker_span: milestone.marker_span,
                 attribute_spans: milestone.attribute_spans,
+                end_span: close_span,
                 closed,
             });
         }
@@ -514,6 +518,7 @@ fn finalize_open_marker(open: OpenMarker) -> Node {
         kind: ContainerKind::from_marker_kind(open.kind, &open.marker),
         marker: open.marker,
         marker_span: open.span,
+        close_span: open.close_span,
         special_span: open.special_span,
         attribute_spans: open.attribute_spans,
         children: open.children,
@@ -549,6 +554,9 @@ fn close_matching_marker(close_marker: &str, token: &ScanToken, state: &mut Pars
                     ));
                 }
                 state.append_finalized(top);
+            }
+            if let Some(open) = state.stack.last_mut() {
+                open.close_span = Some(token.span.clone());
             }
             state.close_and_append_top();
         }
@@ -658,6 +666,7 @@ fn close_sidebar(state: &mut ParserState, trigger_span: &std::ops::Range<usize>)
                 kind: ContainerKind::Unknown,
                 marker: "esbe".to_string(),
                 marker_span: trigger_span.clone(),
+                close_span: None,
                 special_span: None,
                 attribute_spans: Vec::new(),
                 children: Vec::new(),

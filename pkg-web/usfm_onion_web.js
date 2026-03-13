@@ -42,6 +42,115 @@ export function applyTokenFixes(request) {
 }
 
 /**
+ * Convert AST runtime JSON into HTML output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ * @param {any} document
+ * @param {WebHtmlOptions | null} [options]
+ * @returns {string}
+ */
+export function astToHtml(document, options) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.astToHtml(document, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Flatten AST runtime JSON back into canonical flat tokens.
+ *
+ * The input is accepted as generic `JsValue` because the wasm package does
+ * not currently publish a precise TypeScript contract for the recursive tree
+ * shape. Downstream callers should only pass values they obtained from the
+ * AST APIs above, or values they have validated themselves.
+ * @param {any} document
+ * @returns {WebToken[]}
+ */
+export function astToTokens(document) {
+    const ret = wasm.astToTokens(document);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
+ * Convert AST runtime JSON into typed USJ output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ * @param {any} document
+ * @returns {any}
+ */
+export function astToUsj(document) {
+    const ret = wasm.astToUsj(document);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Convert AST runtime JSON into USX output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ * @param {any} document
+ * @returns {string}
+ */
+export function astToUsx(document) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.astToUsx(document);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Convert AST runtime JSON into VREF output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ * @param {any} document
+ * @returns {WebVrefEntry[]}
+ */
+export function astToVref(document) {
+    const ret = wasm.astToVref(document);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
  * @param {WebBuildSidBlocksRequest} request
  * @returns {WebSidBlock[]}
  */
@@ -84,6 +193,67 @@ export function convertContent(request) {
     let deferred2_1;
     try {
         const ret = wasm.convertContent(request);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * @param {any} document
+ * @param {any} token_ref
+ * @returns {WebToken}
+ */
+export function cstToken(document, token_ref) {
+    const ret = wasm.cstToken(document, token_ref);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} document
+ * @param {any} token_ref
+ * @returns {string}
+ */
+export function cstTokenText(document, token_ref) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.cstTokenText(document, token_ref);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * @param {any} document
+ * @param {any} token_ref
+ * @returns {string}
+ */
+export function cstTokenValue(document, token_ref) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.cstTokenValue(document, token_ref);
         var ptr1 = ret[0];
         var len1 = ret[1];
         if (ret[3]) {
@@ -188,115 +358,6 @@ export function diffUsfmSources(request) {
  */
 export function diffUsfmSourcesByChapter(request) {
     const ret = wasm.diffUsfmSourcesByChapter(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Convert document-tree runtime JSON into HTML output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- * @param {any} document
- * @param {WebHtmlOptions | null} [options]
- * @returns {string}
- */
-export function documentTreeToHtml(document, options) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.documentTreeToHtml(document, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * Flatten document-tree runtime JSON back into canonical flat tokens.
- *
- * The input is accepted as generic `JsValue` because the wasm package does
- * not currently publish a precise TypeScript contract for the recursive tree
- * shape. Downstream callers should only pass values they obtained from the
- * document-tree APIs above, or values they have validated themselves.
- * @param {any} document
- * @returns {WebToken[]}
- */
-export function documentTreeToTokens(document) {
-    const ret = wasm.documentTreeToTokens(document);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Convert document-tree runtime JSON into typed USJ output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- * @param {any} document
- * @returns {any}
- */
-export function documentTreeToUsj(document) {
-    const ret = wasm.documentTreeToUsj(document);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * Convert document-tree runtime JSON into USX output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- * @param {any} document
- * @returns {string}
- */
-export function documentTreeToUsx(document) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.documentTreeToUsx(document);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * Convert document-tree runtime JSON into VREF output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- * @param {any} document
- * @returns {WebVrefEntry[]}
- */
-export function documentTreeToVref(document) {
-    const ret = wasm.documentTreeToVref(document);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
     var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v1;
@@ -412,18 +473,18 @@ export function fromUsx(content) {
 }
 
 /**
- * Project a parsed document into the canonical document tree.
+ * Project a parsed document into the canonical AST.
  *
  * Important: in the wasm package this is currently exposed as runtime JSON,
  * not a polished TypeScript discriminated union. The generated `.d.ts`
- * surface treats document-tree values as opaque `any`, so downstream code
+ * surface treats AST values as opaque `any`, so downstream code
  * should validate/narrow the returned shape explicitly instead of assuming a
  * strongly typed TS contract.
  * @param {WebParsedDocument} document
  * @returns {any}
  */
-export function intoDocumentTree(document) {
-    const ret = wasm.intoDocumentTree(document);
+export function intoAst(document) {
+    const ret = wasm.intoAst(document);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -975,7 +1036,7 @@ export function tokenTransformSkipReasonCodes() {
 }
 
 /**
- * Project canonical flat tokens into document-tree runtime JSON.
+ * Project canonical flat tokens into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
@@ -983,10 +1044,10 @@ export function tokenTransformSkipReasonCodes() {
  * @param {WebToken[]} tokens
  * @returns {any}
  */
-export function tokensToDocumentTree(tokens) {
+export function tokensToAst(tokens) {
     const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.tokensToDocumentTree(ptr0, len0);
+    const ret = wasm.tokensToAst(ptr0, len0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -1094,7 +1155,7 @@ export function tokensToVref(tokens) {
 }
 
 /**
- * Project USFM directly into document-tree runtime JSON.
+ * Project USFM directly into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
@@ -1102,10 +1163,10 @@ export function tokensToVref(tokens) {
  * @param {string} content
  * @returns {any}
  */
-export function usfmToDocumentTree(content) {
+export function usfmToAst(content) {
     const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usfmToDocumentTree(ptr0, len0);
+    const ret = wasm.usfmToAst(ptr0, len0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -1224,7 +1285,7 @@ export function usfmToVref(content) {
 }
 
 /**
- * Project USJ directly into document-tree runtime JSON.
+ * Project USJ directly into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
@@ -1232,10 +1293,10 @@ export function usfmToVref(content) {
  * @param {string} content
  * @returns {any}
  */
-export function usjToDocumentTree(content) {
+export function usjToAst(content) {
     const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usjToDocumentTree(ptr0, len0);
+    const ret = wasm.usjToAst(ptr0, len0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -1285,7 +1346,7 @@ export function usjToUsfm(content) {
 }
 
 /**
- * Project USX directly into document-tree runtime JSON.
+ * Project USX directly into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
@@ -1293,10 +1354,10 @@ export function usjToUsfm(content) {
  * @param {string} content
  * @returns {any}
  */
-export function usxToDocumentTree(content) {
+export function usxToAst(content) {
     const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usxToDocumentTree(ptr0, len0);
+    const ret = wasm.usxToAst(ptr0, len0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -1350,6 +1411,10 @@ function __wbg_get_imports() {
         __proto__: null,
         __wbg_Error_83742b46f01ce22d: function(arg0, arg1) {
             const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
+        __wbg_Number_a5a435bd7bbec835: function(arg0) {
+            const ret = Number(arg0);
             return ret;
         },
         __wbg_String_8564e559799eccda: function(arg0, arg1) {

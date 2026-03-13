@@ -3,7 +3,7 @@ use std::fs;
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
-use usfm_onion::document_tree::usfm_to_document_tree;
+use usfm_onion::ast::usfm_to_ast;
 
 #[derive(Clone)]
 struct ConversionCase {
@@ -22,15 +22,15 @@ fn benchmark_conversions(c: &mut Criterion) {
     let xl = load_case("xl_psa", "example-corpora/en_ult/19-PSA.usfm");
     let cases = [bsb_small, small, medium, large, xl];
 
-    bench_usfm_to_document_tree(c, &cases);
+    bench_usfm_to_ast(c, &cases);
 }
 
-fn bench_usfm_to_document_tree(c: &mut Criterion, cases: &[ConversionCase]) {
-    let mut group = c.benchmark_group("conversions/usfm_to_document_tree");
+fn bench_usfm_to_ast(c: &mut Criterion, cases: &[ConversionCase]) {
+    let mut group = c.benchmark_group("conversions/usfm_to_ast");
     for case in cases {
         group.throughput(Throughput::Bytes(case.usfm.len() as u64));
         group.bench_with_input(BenchmarkId::new("usfm", case.label), case, |b, case| {
-            b.iter(|| black_box(usfm_to_document_tree(black_box(case.usfm.as_str()))));
+            b.iter(|| black_box(usfm_to_ast(black_box(case.usfm.as_str()))));
         });
     }
     group.finish();

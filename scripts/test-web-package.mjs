@@ -31,11 +31,11 @@ assert.match(html, /<article|<main|<section|<p/);
 const usj = pkg.intoUsj(parsed);
 assert.equal(usj.type, "USJ");
 
-const tree = pkg.intoDocumentTree(parsed);
-assert.ok(Array.isArray(tree.content));
+const ast = pkg.intoAst(parsed);
+assert.ok(Array.isArray(ast.content));
 
-const directTree = pkg.usfmToDocumentTree(source);
-assert.ok(Array.isArray(directTree.content));
+const directAst = pkg.usfmToAst(source);
+assert.ok(Array.isArray(directAst.content));
 
 const usx = pkg.intoUsx({ document: parsed });
 assert.match(usx, /<usx/);
@@ -48,11 +48,11 @@ const variants = pkg.classifyTokens(tokenList);
 assert.ok(Array.isArray(variants));
 assert.ok(variants.some((variant) => variant.type === "marker"));
 
-const tokenTree = pkg.tokensToDocumentTree(tokenList);
-assert.ok(Array.isArray(tokenTree.content));
+const tokenAst = pkg.tokensToAst(tokenList);
+assert.ok(Array.isArray(tokenAst.content));
 
-const flattenedTreeTokens = pkg.documentTreeToTokens(tokenTree);
-assert.ok(Array.isArray(flattenedTreeTokens));
+const flattenedAstTokens = pkg.astToTokens(tokenAst);
+assert.ok(Array.isArray(flattenedAstTokens));
 
 const issues = pkg.lintContent({
   source,

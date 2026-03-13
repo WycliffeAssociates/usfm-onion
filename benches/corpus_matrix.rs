@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use usfm_onion::{
+    ast::usfm_to_ast,
+    cst::parse_usfm,
     convert::{
         HtmlOptions, convert_content, from_usj_str, from_usx_str, usfm_to_html, usfm_to_usx,
         usfm_to_vref,
     },
-    document_tree::usfm_to_document_tree,
     format::format_content,
     lint::{LintOptions, lint_content},
     model::DocumentFormat,
@@ -76,8 +77,12 @@ const CORPORA: &[CorpusSpec] = &[
 
 const OPERATIONS: &[Operation] = &[
     Operation {
-        label: "usfm -> document_tree",
-        run: bench_into_document_tree,
+        label: "usfm -> cst",
+        run: bench_into_cst,
+    },
+    Operation {
+        label: "usfm -> ast",
+        run: bench_into_ast,
     },
     Operation {
         label: "usfm -> tokens",
@@ -348,9 +353,17 @@ fn total_file_count(root: &Path) -> usize {
     count
 }
 
-fn bench_into_document_tree(corpus: &Corpus, mode: Mode) -> usize {
+fn bench_into_ast(corpus: &Corpus, mode: Mode) -> usize {
     map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
-        usfm_to_document_tree(source).content.len()
+        usfm_to_ast(source).content.len()
+    })
+    .into_iter()
+    .sum()
+}
+
+fn bench_into_cst(corpus: &Corpus, mode: Mode) -> usize {
+    map_sources(corpus.usfm_sources.as_slice(), mode, |source| {
+        parse_usfm(source).content.len()
     })
     .into_iter()
     .sum()

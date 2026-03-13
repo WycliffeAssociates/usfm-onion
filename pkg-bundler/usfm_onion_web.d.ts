@@ -381,7 +381,7 @@ export interface WebProjectedOpResult {
 
 export interface WebProjectedUsfmDocument {
     tokens: WebToken[];
-    documentTree: DocumentTreeDocument;
+    ast: AstDocument;
     lintIssues: WebLintIssue[] | null;
 }
 
@@ -554,6 +554,48 @@ export function applyRevertsByBlockId(request: WebApplyRevertsByBlockIdRequest):
 
 export function applyTokenFixes(request: WebApplyTokenFixesRequest): WebTokenTransformResult;
 
+/**
+ * Convert AST runtime JSON into HTML output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ */
+export function astToHtml(document: any, options?: WebHtmlOptions | null): string;
+
+/**
+ * Flatten AST runtime JSON back into canonical flat tokens.
+ *
+ * The input is accepted as generic `JsValue` because the wasm package does
+ * not currently publish a precise TypeScript contract for the recursive tree
+ * shape. Downstream callers should only pass values they obtained from the
+ * AST APIs above, or values they have validated themselves.
+ */
+export function astToTokens(document: any): WebToken[];
+
+/**
+ * Convert AST runtime JSON into typed USJ output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ */
+export function astToUsj(document: any): any;
+
+/**
+ * Convert AST runtime JSON into USX output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ */
+export function astToUsx(document: any): string;
+
+/**
+ * Convert AST runtime JSON into VREF output.
+ *
+ * The input tree is currently an opaque runtime JSON value at the TS layer,
+ * not a polished generated tree type.
+ */
+export function astToVref(document: any): WebVrefEntry[];
+
 export function buildSidBlocks(request: WebBuildSidBlocksRequest): WebSidBlock[];
 
 export function characterMarkers(): string[];
@@ -561,6 +603,12 @@ export function characterMarkers(): string[];
 export function classifyTokens(tokens: WebToken[]): WebTokenVariant[];
 
 export function convertContent(request: WebContentRequest): string;
+
+export function cstToken(document: any, token_ref: any): WebToken;
+
+export function cstTokenText(document: any, token_ref: any): string;
+
+export function cstTokenValue(document: any, token_ref: any): string;
 
 export function diffChapterTokenStreams(request: WebDiffChapterTokenStreamsRequest): WebChapterTokenDiff[];
 
@@ -585,48 +633,6 @@ export function diffUsfmByChapter(request: WebDiffUsfmRequest): WebChapterDiffGr
 export function diffUsfmSources(request: WebDiffUsfmRequest): WebChapterTokenDiff[];
 
 export function diffUsfmSourcesByChapter(request: WebDiffUsfmRequest): WebChapterDiffGroup[];
-
-/**
- * Convert document-tree runtime JSON into HTML output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function documentTreeToHtml(document: any, options?: WebHtmlOptions | null): string;
-
-/**
- * Flatten document-tree runtime JSON back into canonical flat tokens.
- *
- * The input is accepted as generic `JsValue` because the wasm package does
- * not currently publish a precise TypeScript contract for the recursive tree
- * shape. Downstream callers should only pass values they obtained from the
- * document-tree APIs above, or values they have validated themselves.
- */
-export function documentTreeToTokens(document: any): WebToken[];
-
-/**
- * Convert document-tree runtime JSON into typed USJ output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function documentTreeToUsj(document: any): any;
-
-/**
- * Convert document-tree runtime JSON into USX output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function documentTreeToUsx(document: any): string;
-
-/**
- * Convert document-tree runtime JSON into VREF output.
- *
- * The input tree is currently an opaque runtime JSON value at the TS layer,
- * not a polished generated tree type.
- */
-export function documentTreeToVref(document: any): WebVrefEntry[];
 
 export function flattenDiffMap(groups: WebChapterDiffGroup[]): WebChapterTokenDiff[];
 
@@ -654,15 +660,15 @@ export function fromUsj(document: any): string;
 export function fromUsx(content: string): string;
 
 /**
- * Project a parsed document into the canonical document tree.
+ * Project a parsed document into the canonical AST.
  *
  * Important: in the wasm package this is currently exposed as runtime JSON,
  * not a polished TypeScript discriminated union. The generated `.d.ts`
- * surface treats document-tree values as opaque `any`, so downstream code
+ * surface treats AST values as opaque `any`, so downstream code
  * should validate/narrow the returned shape explicitly instead of assuming a
  * strongly typed TS contract.
  */
-export function intoDocumentTree(document: WebParsedDocument): any;
+export function intoAst(document: WebParsedDocument): any;
 
 export function intoHtml(document: WebParsedDocument, options?: WebHtmlOptions | null): string;
 
@@ -781,13 +787,13 @@ export function tokenTransformChangeCodes(): string[];
 export function tokenTransformSkipReasonCodes(): string[];
 
 /**
- * Project canonical flat tokens into document-tree runtime JSON.
+ * Project canonical flat tokens into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
  * validate/narrow it in downstream code.
  */
-export function tokensToDocumentTree(tokens: WebToken[]): any;
+export function tokensToAst(tokens: WebToken[]): any;
 
 export function tokensToHtml(tokens: WebToken[], options?: WebHtmlOptions | null): string;
 
@@ -800,13 +806,13 @@ export function tokensToUsx(tokens: WebToken[]): string;
 export function tokensToVref(tokens: WebToken[]): WebVrefEntry[];
 
 /**
- * Project USFM directly into document-tree runtime JSON.
+ * Project USFM directly into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
  * validate/narrow it in downstream code.
  */
-export function usfmToDocumentTree(content: string): any;
+export function usfmToAst(content: string): any;
 
 export function usfmToHtml(content: string, options?: WebHtmlOptions | null): string;
 
@@ -821,26 +827,26 @@ export function usfmToUsx(content: string): string;
 export function usfmToVref(content: string): WebVrefEntry[];
 
 /**
- * Project USJ directly into document-tree runtime JSON.
+ * Project USJ directly into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
  * validate/narrow it in downstream code.
  */
-export function usjToDocumentTree(content: string): any;
+export function usjToAst(content: string): any;
 
 export function usjToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 
 export function usjToUsfm(content: string): string;
 
 /**
- * Project USX directly into document-tree runtime JSON.
+ * Project USX directly into AST runtime JSON.
  *
  * Important: the wasm package does not currently export a rich TypeScript
  * type for the recursive tree. Treat the return value as runtime data and
  * validate/narrow it in downstream code.
  */
-export function usxToDocumentTree(content: string): any;
+export function usxToAst(content: string): any;
 
 export function usxToTokens(content: string, token_options?: WebIntoTokensOptions | null): WebToken[];
 

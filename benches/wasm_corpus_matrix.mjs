@@ -19,7 +19,7 @@ const corpora = [
 ];
 
 const operations = [
-  { label: "usfm -> document_tree", run: benchIntoDocumentTree },
+  { label: "usfm -> ast", run: benchIntoAst },
   { label: "usfm -> tokens", run: benchIntoTokens },
   { label: "lint usfm", run: benchLintUsfm },
   { label: "format usfm", run: benchFormatUsfm },
@@ -170,9 +170,9 @@ function measure(run, corpus, iterations, warmup) {
   return samples[Math.floor(samples.length / 2)];
 }
 
-function benchIntoDocumentTree(corpus) {
+function benchIntoAst(corpus) {
   return corpus.usfmSources.reduce(
-    (sum, source) => sum + pkg.usfmToDocumentTree(source).content.length,
+    (sum, source) => sum + pkg.usfmToAst(source).content.length,
     0,
   );
 }

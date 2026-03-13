@@ -6,7 +6,7 @@ pub use crate::internal::usx_to_usfm::UsxToUsfmError;
 pub use crate::internal::vref::VrefMap;
 pub use crate::model::usj::UsjDocument;
 
-use crate::document_tree::DocumentTreeDocument;
+use crate::ast::AstDocument;
 use crate::tokens::{Token, usfm_to_tokens};
 
 pub fn from_usj_str(source: &str) -> Result<String, DocumentError> {
@@ -25,30 +25,27 @@ pub fn from_usx(source: &str) -> Result<String, UsxToUsfmError> {
     crate::internal::api::from_usx(source)
 }
 
-pub fn document_tree_to_usj(document: &DocumentTreeDocument) -> Result<UsjDocument, DocumentError> {
+pub fn ast_to_usj(document: &AstDocument) -> Result<UsjDocument, DocumentError> {
     Ok(crate::internal::usj::document_tree_to_usj_document(
         document,
     ))
 }
 
-pub fn document_tree_to_usx(document: &DocumentTreeDocument) -> Result<String, DocumentError> {
+pub fn ast_to_usx(document: &AstDocument) -> Result<String, DocumentError> {
     Ok(crate::internal::usx::document_tree_to_usx_string(document)?)
 }
 
-pub fn document_tree_to_html(
-    document: &DocumentTreeDocument,
-    options: HtmlOptions,
-) -> Result<String, DocumentError> {
+pub fn ast_to_html(document: &AstDocument, options: HtmlOptions) -> Result<String, DocumentError> {
     Ok(crate::internal::html::render_document_tree(
         document, options,
     ))
 }
 
-pub fn document_tree_to_vref(document: &DocumentTreeDocument) -> Result<VrefMap, DocumentError> {
+pub fn ast_to_vref(document: &AstDocument) -> Result<VrefMap, DocumentError> {
     Ok(crate::internal::vref::document_tree_to_vref_map(document))
 }
 
-pub fn into_document_tree(handle: &crate::parse::ParseHandle) -> DocumentTreeDocument {
+pub fn into_ast(handle: &crate::parse::ParseHandle) -> AstDocument {
     crate::internal::api::into_document_tree(handle)
 }
 
@@ -83,18 +80,18 @@ pub fn into_vref_from_tokens<T: crate::model::SourceTokenText>(tokens: &[T]) -> 
 }
 
 pub fn usfm_to_usj(source: &str) -> Result<UsjDocument, DocumentError> {
-    let tree = crate::document_tree::usfm_to_document_tree(source);
-    document_tree_to_usj(&tree)
+    let ast = crate::ast::usfm_to_ast(source);
+    ast_to_usj(&ast)
 }
 
 pub fn usfm_to_usx(source: &str) -> Result<String, DocumentError> {
-    let tree = crate::document_tree::usfm_to_document_tree(source);
-    document_tree_to_usx(&tree)
+    let ast = crate::ast::usfm_to_ast(source);
+    ast_to_usx(&ast)
 }
 
 pub fn usfm_to_html(source: &str, options: HtmlOptions) -> Result<String, DocumentError> {
-    let tree = crate::document_tree::usfm_to_document_tree(source);
-    document_tree_to_html(&tree, options)
+    let ast = crate::ast::usfm_to_ast(source);
+    ast_to_html(&ast, options)
 }
 
 pub fn usfm_content_to_html(source: &str, options: HtmlOptions) -> String {
@@ -102,38 +99,38 @@ pub fn usfm_content_to_html(source: &str, options: HtmlOptions) -> String {
 }
 
 pub fn usfm_to_vref(source: &str) -> Result<VrefMap, DocumentError> {
-    let tree = crate::document_tree::usfm_to_document_tree(source);
-    document_tree_to_vref(&tree)
+    let ast = crate::ast::usfm_to_ast(source);
+    ast_to_vref(&ast)
 }
 
 pub fn usj_to_usx(source: &str) -> Result<String, DocumentError> {
-    let tree = crate::document_tree::usj_to_document_tree(source)?;
-    document_tree_to_usx(&tree)
+    let ast = crate::ast::usj_to_ast(source)?;
+    ast_to_usx(&ast)
 }
 
 pub fn usx_to_usj(source: &str) -> Result<UsjDocument, DocumentError> {
-    let tree = crate::document_tree::usx_to_document_tree(source)?;
-    document_tree_to_usj(&tree)
+    let ast = crate::ast::usx_to_ast(source)?;
+    ast_to_usj(&ast)
 }
 
 pub fn tokens_to_usj(tokens: &[Token]) -> Result<UsjDocument, DocumentError> {
-    let tree = crate::document_tree::tokens_to_document_tree(tokens);
-    document_tree_to_usj(&tree)
+    let ast = crate::ast::tokens_to_ast(tokens);
+    ast_to_usj(&ast)
 }
 
 pub fn tokens_to_usx(tokens: &[Token]) -> Result<String, DocumentError> {
-    let tree = crate::document_tree::tokens_to_document_tree(tokens);
-    document_tree_to_usx(&tree)
+    let ast = crate::ast::tokens_to_ast(tokens);
+    ast_to_usx(&ast)
 }
 
 pub fn tokens_to_html(tokens: &[Token], options: HtmlOptions) -> Result<String, DocumentError> {
-    let tree = crate::document_tree::tokens_to_document_tree(tokens);
-    document_tree_to_html(&tree, options)
+    let ast = crate::ast::tokens_to_ast(tokens);
+    ast_to_html(&ast, options)
 }
 
 pub fn tokens_to_vref(tokens: &[Token]) -> Result<VrefMap, DocumentError> {
-    let tree = crate::document_tree::tokens_to_document_tree(tokens);
-    document_tree_to_vref(&tree)
+    let ast = crate::ast::tokens_to_ast(tokens);
+    ast_to_vref(&ast)
 }
 
 pub fn usj_to_tokens(source: &str) -> Result<Vec<Token>, DocumentError> {

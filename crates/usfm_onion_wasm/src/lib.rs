@@ -4,10 +4,14 @@ use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
 use usfm_onion::{
+    ast::{
+        AstDocument, ast_to_tokens, tokens_to_ast, usfm_to_ast, usj_to_ast, usx_to_ast,
+    },
+    cst::{CstDocument, CstTokenRef},
     convert::{
         HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, convert_content,
-        document_tree_to_html, document_tree_to_usj, document_tree_to_usx, document_tree_to_vref,
-        from_usj, from_usx, into_document_tree, into_html, into_usj, into_usx, into_vref,
+        ast_to_html, ast_to_usj, ast_to_usx, ast_to_vref, from_usj, from_usx, into_ast,
+        into_html, into_usj, into_usx, into_vref,
         tokens_to_html, tokens_to_usj, tokens_to_usx, tokens_to_vref, usfm_to_html, usfm_to_usj,
         usfm_to_usx, usfm_to_vref,
     },
@@ -40,12 +44,8 @@ use usfm_onion::{
         note_marker_family, note_markers, note_submarkers, paragraph_markers,
     },
     model::{
-        DocumentFormat, DocumentTreeDocument, ScanResult, ScanToken, ScanTokenKind, Span, Token,
+        DocumentFormat, ScanResult, ScanToken, ScanTokenKind, Span, Token,
         TokenKind, TokenVariant, TokenViewOptions, UsjDocument, VrefMap, WhitespacePolicy,
-    },
-    document_tree::{
-        document_tree_to_tokens, tokens_to_document_tree, usfm_to_document_tree,
-        usj_to_document_tree, usx_to_document_tree,
     },
     parse::{
         self, IntoTokensOptions, ParseHandle, ParseRecovery, ProjectUsfmOptions,
@@ -507,7 +507,7 @@ pub struct WebLintIssue {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct WebProjectedUsfmDocument {
     pub tokens: Vec<WebToken>,
-    pub document_tree: DocumentTreeDocument,
+    pub ast: AstDocument,
     pub lint_issues: Option<Vec<WebLintIssue>>,
 }
 
@@ -1435,79 +1435,100 @@ pub fn wasm_into_usj(document: WebParsedDocument) -> Result<JsValue, JsError> {
     to_js_value(&into_usj(&handle)).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = intoDocumentTree)]
-/// Project a parsed document into the canonical document tree.
+#[wasm_bindgen(js_name = intoAst)]
+/// Project a parsed document into the canonical AST.
 ///
 /// Important: in the wasm package this is currently exposed as runtime JSON,
 /// not a polished TypeScript discriminated union. The generated `.d.ts`
-/// surface treats document-tree values as opaque `any`, so downstream code
+/// surface treats AST values as opaque `any`, so downstream code
 /// should validate/narrow the returned shape explicitly instead of assuming a
 /// strongly typed TS contract.
-pub fn wasm_into_document_tree(document: WebParsedDocument) -> Result<JsValue, JsError> {
+pub fn wasm_into_ast(document: WebParsedDocument) -> Result<JsValue, JsError> {
     let handle = rehydrate_parse_handle(&document);
-    to_js_value(&into_document_tree(&handle)).map_err(js_error)
+    to_js_value(&into_ast(&handle)).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = usfmToDocumentTree)]
-/// Project USFM directly into document-tree runtime JSON.
+#[wasm_bindgen(js_name = usfmToAst)]
+/// Project USFM directly into AST runtime JSON.
 ///
 /// Important: the wasm package does not currently export a rich TypeScript
 /// type for the recursive tree. Treat the return value as runtime data and
 /// validate/narrow it in downstream code.
-pub fn wasm_usfm_to_document_tree(content: &str) -> Result<JsValue, JsError> {
-    to_js_value(&usfm_to_document_tree(content)).map_err(js_error)
+pub fn wasm_usfm_to_ast(content: &str) -> Result<JsValue, JsError> {
+    to_js_value(&usfm_to_ast(content)).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = usjToDocumentTree)]
-/// Project USJ directly into document-tree runtime JSON.
+#[wasm_bindgen(js_name = usjToAst)]
+/// Project USJ directly into AST runtime JSON.
 ///
 /// Important: the wasm package does not currently export a rich TypeScript
 /// type for the recursive tree. Treat the return value as runtime data and
 /// validate/narrow it in downstream code.
-pub fn wasm_usj_to_document_tree(content: &str) -> Result<JsValue, JsError> {
-    usj_to_document_tree(content)
+pub fn wasm_usj_to_ast(content: &str) -> Result<JsValue, JsError> {
+    usj_to_ast(content)
         .map_err(js_error)
-        .and_then(|tree| to_js_value(&tree).map_err(js_error_from_serde))
+        .and_then(|ast| to_js_value(&ast).map_err(js_error_from_serde))
 }
 
-#[wasm_bindgen(js_name = usxToDocumentTree)]
-/// Project USX directly into document-tree runtime JSON.
+#[wasm_bindgen(js_name = usxToAst)]
+/// Project USX directly into AST runtime JSON.
 ///
 /// Important: the wasm package does not currently export a rich TypeScript
 /// type for the recursive tree. Treat the return value as runtime data and
 /// validate/narrow it in downstream code.
-pub fn wasm_usx_to_document_tree(content: &str) -> Result<JsValue, JsError> {
-    usx_to_document_tree(content)
+pub fn wasm_usx_to_ast(content: &str) -> Result<JsValue, JsError> {
+    usx_to_ast(content)
         .map_err(js_error)
-        .and_then(|tree| to_js_value(&tree).map_err(js_error_from_serde))
+        .and_then(|ast| to_js_value(&ast).map_err(js_error_from_serde))
 }
 
-#[wasm_bindgen(js_name = tokensToDocumentTree)]
-/// Project canonical flat tokens into document-tree runtime JSON.
+#[wasm_bindgen(js_name = tokensToAst)]
+/// Project canonical flat tokens into AST runtime JSON.
 ///
 /// Important: the wasm package does not currently export a rich TypeScript
 /// type for the recursive tree. Treat the return value as runtime data and
 /// validate/narrow it in downstream code.
-pub fn wasm_tokens_to_document_tree(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
+pub fn wasm_tokens_to_ast(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
     let native = tokens
         .into_iter()
         .map(from_web_flat_token)
         .collect::<Vec<_>>();
-    to_js_value(&tokens_to_document_tree(native.as_slice())).map_err(js_error)
+    to_js_value(&tokens_to_ast(native.as_slice())).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = documentTreeToTokens)]
-/// Flatten document-tree runtime JSON back into canonical flat tokens.
+#[wasm_bindgen(js_name = astToTokens)]
+/// Flatten AST runtime JSON back into canonical flat tokens.
 ///
 /// The input is accepted as generic `JsValue` because the wasm package does
 /// not currently publish a precise TypeScript contract for the recursive tree
 /// shape. Downstream callers should only pass values they obtained from the
-/// document-tree APIs above, or values they have validated themselves.
-pub fn wasm_document_tree_to_tokens(document: JsValue) -> Result<Vec<WebToken>, JsError> {
-    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
-    document_tree_to_tokens(&document)
+/// AST APIs above, or values they have validated themselves.
+pub fn wasm_ast_to_tokens(document: JsValue) -> Result<Vec<WebToken>, JsError> {
+    let document: AstDocument = from_js_value(document).map_err(js_error)?;
+    ast_to_tokens(&document)
         .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
         .map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = cstToken)]
+pub fn wasm_cst_token(document: JsValue, token_ref: JsValue) -> Result<WebToken, JsError> {
+    let document: CstDocument = from_js_value(document).map_err(js_error)?;
+    let token_ref: CstTokenRef = from_js_value(token_ref).map_err(js_error)?;
+    Ok(map_flat_token(document.token(&token_ref).clone()))
+}
+
+#[wasm_bindgen(js_name = cstTokenText)]
+pub fn wasm_cst_token_text(document: JsValue, token_ref: JsValue) -> Result<String, JsError> {
+    let document: CstDocument = from_js_value(document).map_err(js_error)?;
+    let token_ref: CstTokenRef = from_js_value(token_ref).map_err(js_error)?;
+    Ok(document.token_text(&token_ref).to_string())
+}
+
+#[wasm_bindgen(js_name = cstTokenValue)]
+pub fn wasm_cst_token_value(document: JsValue, token_ref: JsValue) -> Result<String, JsError> {
+    let document: CstDocument = from_js_value(document).map_err(js_error)?;
+    let token_ref: CstTokenRef = from_js_value(token_ref).map_err(js_error)?;
+    Ok(document.token_value(&token_ref).to_string())
 }
 
 #[wasm_bindgen(js_name = intoHtml)]
@@ -1571,49 +1592,49 @@ pub fn wasm_tokens_to_vref(tokens: Vec<WebToken>) -> Result<Vec<WebVrefEntry>, J
         .map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = documentTreeToUsj)]
-/// Convert document-tree runtime JSON into typed USJ output.
+#[wasm_bindgen(js_name = astToUsj)]
+/// Convert AST runtime JSON into typed USJ output.
 ///
 /// The input tree is currently an opaque runtime JSON value at the TS layer,
 /// not a polished generated tree type.
-pub fn wasm_document_tree_to_usj(document: JsValue) -> Result<JsValue, JsError> {
-    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
-    document_tree_to_usj(&document)
+pub fn wasm_ast_to_usj(document: JsValue) -> Result<JsValue, JsError> {
+    let document: AstDocument = from_js_value(document).map_err(js_error)?;
+    ast_to_usj(&document)
         .map_err(js_error)
         .and_then(|usj| to_js_value(&usj).map_err(js_error_from_serde))
 }
 
-#[wasm_bindgen(js_name = documentTreeToUsx)]
-/// Convert document-tree runtime JSON into USX output.
+#[wasm_bindgen(js_name = astToUsx)]
+/// Convert AST runtime JSON into USX output.
 ///
 /// The input tree is currently an opaque runtime JSON value at the TS layer,
 /// not a polished generated tree type.
-pub fn wasm_document_tree_to_usx(document: JsValue) -> Result<String, JsError> {
-    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
-    document_tree_to_usx(&document).map_err(js_error)
+pub fn wasm_ast_to_usx(document: JsValue) -> Result<String, JsError> {
+    let document: AstDocument = from_js_value(document).map_err(js_error)?;
+    ast_to_usx(&document).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = documentTreeToHtml)]
-/// Convert document-tree runtime JSON into HTML output.
+#[wasm_bindgen(js_name = astToHtml)]
+/// Convert AST runtime JSON into HTML output.
 ///
 /// The input tree is currently an opaque runtime JSON value at the TS layer,
 /// not a polished generated tree type.
-pub fn wasm_document_tree_to_html(
+pub fn wasm_ast_to_html(
     document: JsValue,
     options: Option<WebHtmlOptions>,
 ) -> Result<String, JsError> {
-    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
-    document_tree_to_html(&document, html_options(options)).map_err(js_error)
+    let document: AstDocument = from_js_value(document).map_err(js_error)?;
+    ast_to_html(&document, html_options(options)).map_err(js_error)
 }
 
-#[wasm_bindgen(js_name = documentTreeToVref)]
-/// Convert document-tree runtime JSON into VREF output.
+#[wasm_bindgen(js_name = astToVref)]
+/// Convert AST runtime JSON into VREF output.
 ///
 /// The input tree is currently an opaque runtime JSON value at the TS layer,
 /// not a polished generated tree type.
-pub fn wasm_document_tree_to_vref(document: JsValue) -> Result<Vec<WebVrefEntry>, JsError> {
-    let document: DocumentTreeDocument = from_js_value(document).map_err(js_error)?;
-    document_tree_to_vref(&document)
+pub fn wasm_ast_to_vref(document: JsValue) -> Result<Vec<WebVrefEntry>, JsError> {
+    let document: AstDocument = from_js_value(document).map_err(js_error)?;
+    ast_to_vref(&document)
         .map(map_vref_map)
         .map_err(js_error)
 }
@@ -2429,7 +2450,7 @@ fn map_token_template(template: TokenTemplate) -> WebTokenTemplate {
 fn map_projected_document(document: ProjectedUsfmDocument) -> WebProjectedUsfmDocument {
     WebProjectedUsfmDocument {
         tokens: document.tokens.into_iter().map(map_flat_token).collect(),
-        document_tree: document.document_tree,
+        ast: document.document_tree,
         lint_issues: document
             .lint_issues
             .map(|issues| issues.into_iter().map(map_lint_issue).collect()),

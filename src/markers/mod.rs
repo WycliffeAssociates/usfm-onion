@@ -150,8 +150,7 @@ pub fn is_body_paragraph_marker(marker: &str) -> bool {
 pub fn is_poetry_marker(marker: &str) -> bool {
     matches!(
         marker.strip_prefix('+').unwrap_or(marker),
-        "q" | "q1" | "q2" | "q3" | "q4" | "qr" | "qc" | "qa" | "qm" | "qm1" | "qm2"
-            | "qm3" | "qd"
+        "q" | "q1" | "q2" | "q3" | "q4" | "qr" | "qc" | "qa" | "qm" | "qm1" | "qm2" | "qm3" | "qd"
     )
 }
 
@@ -187,7 +186,12 @@ pub fn all_markers() -> Vec<String> {
 pub fn paragraph_markers() -> Vec<String> {
     crate::internal::marker_defs::MARKER_SPECS
         .iter()
-        .filter(|spec| matches!(spec.kind, crate::internal::marker_defs::SpecMarkerKind::Paragraph))
+        .filter(|spec| {
+            matches!(
+                spec.kind,
+                crate::internal::marker_defs::SpecMarkerKind::Paragraph
+            )
+        })
         .map(|spec| spec.marker.to_string())
         .collect()
 }
@@ -195,7 +199,12 @@ pub fn paragraph_markers() -> Vec<String> {
 pub fn note_markers() -> Vec<String> {
     crate::internal::marker_defs::MARKER_SPECS
         .iter()
-        .filter(|spec| matches!(spec.kind, crate::internal::marker_defs::SpecMarkerKind::Note))
+        .filter(|spec| {
+            matches!(
+                spec.kind,
+                crate::internal::marker_defs::SpecMarkerKind::Note
+            )
+        })
         .map(|spec| spec.marker.to_string())
         .collect()
 }
@@ -212,7 +221,10 @@ pub fn character_markers() -> Vec<String> {
     crate::internal::marker_defs::MARKER_SPECS
         .iter()
         .filter(|spec| {
-            matches!(spec.kind, crate::internal::marker_defs::SpecMarkerKind::Character)
+            matches!(
+                spec.kind,
+                crate::internal::marker_defs::SpecMarkerKind::Character
+            )
         })
         .map(|spec| spec.marker.to_string())
         .collect()

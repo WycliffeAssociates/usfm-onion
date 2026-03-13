@@ -4,16 +4,15 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
 use usfm_onion::{
+    ast::{
+        ast_to_tokens, read_usfm_to_ast, read_usj_to_ast, read_usx_to_ast, tokens_to_ast,
+        usfm_to_ast, usj_to_ast, usx_to_ast,
+    },
     convert::{
         HtmlOptions, convert_path, from_usj_str, from_usx_str, tokens_to_html, tokens_to_usj,
         tokens_to_usx, tokens_to_vref, usfm_to_html, usfm_to_usj, usfm_to_usx, usfm_to_vref,
     },
     diff::{BuildSidBlocksOptions, diff_content, diff_paths, diff_tokens},
-    document_tree::{
-        document_tree_to_tokens, read_usfm_to_document_tree, read_usj_to_document_tree,
-        read_usx_to_document_tree, tokens_to_document_tree, usfm_to_document_tree,
-        usj_to_document_tree, usx_to_document_tree,
-    },
     format::{IntoTokensOptions, format_content, format_flat_tokens, format_path},
     lint::{LintOptions, TokenLintOptions, lint_content, lint_flat_tokens, lint_path},
     model::{DocumentFormat, Token, TokenKind},
@@ -102,9 +101,9 @@ fn run_intake_output_content_surface(case: &BenchCase) -> usize {
     let usj_tokens = usj_to_tokens(case.usj.as_str()).expect("USJ content should tokenize");
     score += usfm_tokens.len() + usx_tokens.len() + usj_tokens.len();
 
-    let usfm_tree = usfm_to_document_tree(case.usfm.as_str());
-    let usx_tree = usx_to_document_tree(case.usx.as_str()).expect("USX content should project");
-    let usj_tree = usj_to_document_tree(case.usj.as_str()).expect("USJ content should project");
+    let usfm_tree = usfm_to_ast(case.usfm.as_str());
+    let usx_tree = usx_to_ast(case.usx.as_str()).expect("USX content should project");
+    let usj_tree = usj_to_ast(case.usj.as_str()).expect("USJ content should project");
     score += usfm_tree.content.len() + usx_tree.content.len() + usj_tree.content.len();
 
     let usfm_from_usx = from_usx_str(case.usx.as_str()).expect("USX should convert to USFM");
@@ -123,9 +122,8 @@ fn run_intake_output_content_surface(case: &BenchCase) -> usize {
         + vref_from_usfm.len();
 
     let usfm_from_tokens = tokens_to_usfm(case.tokens.as_slice());
-    let tree_from_tokens = tokens_to_document_tree(case.tokens.as_slice());
-    let tokens_from_tree =
-        document_tree_to_tokens(&tree_from_tokens).expect("document tree should flatten");
+    let tree_from_tokens = tokens_to_ast(case.tokens.as_slice());
+    let tokens_from_tree = ast_to_tokens(&tree_from_tokens).expect("AST should flatten");
     let usj_from_tokens = tokens_to_usj(case.tokens.as_slice()).expect("tokens should project USJ");
     let usx_from_tokens = tokens_to_usx(case.tokens.as_slice()).expect("tokens should project USX");
     let html_from_tokens = tokens_to_html(case.tokens.as_slice(), HtmlOptions::default())
@@ -153,12 +151,10 @@ fn run_intake_output_path_surface(case: &BenchCase) -> usize {
     let usj_tokens = read_usj_to_tokens(case.usj_path.as_path()).expect("USJ path should tokenize");
     score += usfm_tokens.len() + usx_tokens.len() + usj_tokens.len();
 
-    let usfm_tree = read_usfm_to_document_tree(case.usfm_path.as_path())
-        .expect("USFM path should project document tree");
-    let usx_tree = read_usx_to_document_tree(case.usx_path.as_path())
-        .expect("USX path should project document tree");
-    let usj_tree = read_usj_to_document_tree(case.usj_path.as_path())
-        .expect("USJ path should project document tree");
+    let usfm_tree =
+        read_usfm_to_ast(case.usfm_path.as_path()).expect("USFM path should project AST");
+    let usx_tree = read_usx_to_ast(case.usx_path.as_path()).expect("USX path should project AST");
+    let usj_tree = read_usj_to_ast(case.usj_path.as_path()).expect("USJ path should project AST");
     score += usfm_tree.content.len() + usx_tree.content.len() + usj_tree.content.len();
 
     let usfm_from_usx = convert_path(

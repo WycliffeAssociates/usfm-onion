@@ -23,6 +23,7 @@ pub(crate) enum Node {
         marker: String,
         marker_span: Span,
         attribute_spans: Vec<Span>,
+        end_span: Option<Span>,
         closed: bool,
     },
     Leaf {
@@ -36,6 +37,7 @@ pub(crate) struct ContainerNode {
     pub kind: ContainerKind,
     pub marker: String,
     pub marker_span: Span,
+    pub close_span: Option<Span>,
     pub special_span: Option<Span>,
     pub attribute_spans: Vec<Span>,
     pub children: Vec<Node>,

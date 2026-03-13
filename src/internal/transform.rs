@@ -92,11 +92,9 @@ pub const TOKEN_FIX_CODES: &[&str] = &[
     "insert-close-marker",
 ];
 
-pub const TOKEN_TRANSFORM_CHANGE_CODES: &[&str] =
-    &["format-tokens", "custom-format-pass"];
+pub const TOKEN_TRANSFORM_CHANGE_CODES: &[&str] = &["format-tokens", "custom-format-pass"];
 
-pub const TOKEN_TRANSFORM_SKIP_REASON_CODES: &[&str] =
-    &["token-not-found", "empty-replacement"];
+pub const TOKEN_TRANSFORM_SKIP_REASON_CODES: &[&str] = &["token-not-found", "empty-replacement"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenTransformChange {
