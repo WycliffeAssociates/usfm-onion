@@ -64,7 +64,6 @@ fn handle_to_cst(handle: &ParseHandle) -> CstDocument {
 
     CstDocument {
         doc_type: "CST".to_string(),
-        source_usfm: handle.source().to_string(),
         book_code: handle.book_code().map(ToOwned::to_owned),
         recoveries: crate::parse::handle::recoveries(handle).to_vec(),
         tokens,

@@ -1,3 +1,18 @@
 // AGENT: USE THIS FILE TO TEST AND BENCHMARK CODE
 
-fn main() {}
+use std::fs;
+use std::path::Path;
+
+use usfm_onion::cst;
+
+fn main() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("example-corpora/examples.bsb/642JNBSB.usfm");
+    let source = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    let document = cst::parse_usfm(&source);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&document).expect("CST should serialize")
+    );
+}

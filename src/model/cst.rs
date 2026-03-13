@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 pub struct CstDocument {
     #[serde(rename = "type")]
     pub doc_type: String,
-    pub source_usfm: String,
     pub book_code: Option<String>,
     pub recoveries: Vec<ParseRecovery>,
     pub tokens: Vec<Token>,
