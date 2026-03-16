@@ -3,8 +3,8 @@ use regex::Regex;
 use std::sync::OnceLock;
 
 use crate::token::{
-    BookCodeToken, MarkerToken, NumberRangeKind, NumberRangeToken, ScanResult, ScanToken,
-    ScanTokenKind, Span, TriviaToken, marker_metadata, marker_text_name,
+    AttributeEntryToken, BookCodeToken, MarkerToken, NumberRangeKind, NumberRangeToken,
+    ScanResult, ScanToken, ScanTokenKind, Span, TriviaToken, marker_metadata, marker_text_name,
 };
 
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,8 +18,8 @@ enum RawTokenKind {
     #[token("//")]
     OptBreak,
 
-    #[regex(r#"\|(?:[^\\\r\n"]|\\.|"[^"\\]*(?:\\.[^"\\]*)*")*"#)]
-    Attributes,
+    #[token("|")]
+    Pipe,
 
     #[token("\\*", priority = 10)]
     MilestoneEnd,
@@ -51,11 +51,33 @@ enum PendingPayload {
 
 pub fn lex(source: &str) -> ScanResult<'_> {
     let mut tokens = Vec::new();
-    let mut lexer = RawTokenKind::lexer(source).spanned();
     let mut pending = None;
+    let mut in_attribute_run = false;
+    let mut index = 0usize;
 
-    while let Some((result, span)) = lexer.next() {
-        let raw_span = make_span(span.start, span.end);
+    while index < source.len() {
+        if in_attribute_run {
+            if let Some((entry, end)) = consume_attribute_entry(source, index) {
+                tokens.push(ScanToken::AttributeEntry(entry));
+                index = end;
+                continue;
+            }
+
+            if let Some((ws, end)) = consume_inline_whitespace(source, index) {
+                tokens.push(ScanToken::Whitespace(ws));
+                index = end;
+                continue;
+            }
+
+            in_attribute_run = false;
+        }
+
+        let mut lexer = RawTokenKind::lexer(&source[index..]);
+        let Some(result) = lexer.next() else {
+            break;
+        };
+        let span = lexer.span();
+        let raw_span = make_span(index + span.start, index + span.end);
         let slice = &source[raw_span.as_range()];
 
         match result {
@@ -64,18 +86,22 @@ pub fn lex(source: &str) -> ScanResult<'_> {
                     tokens.push(ScanToken::Whitespace(trivia(raw_span, slice)));
                 }
                 RawTokenKind::Newline => {
+                    in_attribute_run = false;
                     tokens.push(ScanToken::Newline(trivia(raw_span, slice)));
                 }
                 RawTokenKind::OptBreak => {
                     pending = None;
+                    in_attribute_run = false;
                     tokens.push(ScanToken::OptBreak(trivia(raw_span, slice)));
                 }
-                RawTokenKind::Attributes => {
+                RawTokenKind::Pipe => {
                     pending = None;
-                    tokens.push(ScanToken::Attributes(trivia(raw_span, slice)));
+                    in_attribute_run = true;
+                    tokens.push(ScanToken::Pipe(trivia(raw_span, slice)));
                 }
                 RawTokenKind::MilestoneEnd => {
                     pending = None;
+                    in_attribute_run = false;
                     tokens.push(ScanToken::MilestoneEnd(trivia(raw_span, slice)));
                 }
                 RawTokenKind::Marker
@@ -83,12 +109,17 @@ pub fn lex(source: &str) -> ScanResult<'_> {
                 | RawTokenKind::ClosingMarker
                 | RawTokenKind::NestedClosingMarker
                 | RawTokenKind::Milestone => {
+                    in_attribute_run = false;
                     let marker_name = marker_text_name(raw_kind_to_scan_kind(kind), slice);
                     let token = marker_token(kind, raw_span, slice);
                     pending = pending_payload_for(kind, marker_name);
                     tokens.push(token);
                 }
                 RawTokenKind::Text => {
+                    if in_attribute_run {
+                        in_attribute_run = false;
+                    }
+
                     if let Some((matched, rest)) =
                         consume_contextual_payload(source, raw_span, slice, pending)
                     {
@@ -108,6 +139,8 @@ pub fn lex(source: &str) -> ScanResult<'_> {
                 tokens.push(ScanToken::Text(trivia(raw_span, slice)));
             }
         }
+
+        index = raw_span.end as usize;
     }
 
     ScanResult { tokens }
@@ -138,13 +171,13 @@ fn raw_kind_to_scan_kind(kind: RawTokenKind) -> ScanTokenKind {
         RawTokenKind::Whitespace => ScanTokenKind::Whitespace,
         RawTokenKind::Newline => ScanTokenKind::Newline,
         RawTokenKind::OptBreak => ScanTokenKind::OptBreak,
+        RawTokenKind::Pipe => ScanTokenKind::Pipe,
         RawTokenKind::Marker => ScanTokenKind::Marker,
         RawTokenKind::NestedMarker => ScanTokenKind::NestedMarker,
         RawTokenKind::ClosingMarker => ScanTokenKind::ClosingMarker,
         RawTokenKind::NestedClosingMarker => ScanTokenKind::NestedClosingMarker,
         RawTokenKind::Milestone => ScanTokenKind::Milestone,
         RawTokenKind::MilestoneEnd => ScanTokenKind::MilestoneEnd,
-        RawTokenKind::Attributes => ScanTokenKind::Attributes,
         RawTokenKind::Text => ScanTokenKind::Text,
     }
 }
@@ -152,6 +185,70 @@ fn raw_kind_to_scan_kind(kind: RawTokenKind) -> ScanTokenKind {
 fn trivia<'a>(span: Span, lexeme: &'a str) -> TriviaToken<'a> {
     TriviaToken { span, lexeme }
 }
+
+fn consume_attribute_entry<'a>(
+    source: &'a str,
+    start: usize,
+) -> Option<(AttributeEntryToken<'a>, usize)> {
+    let input = &source[start..];
+    let equals_index = input.find('=')?;
+    let key = &input[..equals_index];
+    if key.is_empty()
+        || key.chars().any(char::is_whitespace)
+        || key.contains('\\')
+        || key.contains('|')
+    {
+        return None;
+    }
+
+    let value = input.get(equals_index + 1..)?;
+    if !value.starts_with('"') {
+        return None;
+    }
+
+    let mut escaped = false;
+    for (offset, ch) in input[equals_index + 2..].char_indices() {
+        if ch == '"' && !escaped {
+            let end = equals_index + 2 + offset + ch.len_utf8();
+            let lexeme = &input[..end];
+            let inner_value = &input[equals_index + 2..equals_index + 2 + offset];
+            let span = Span::new(start as u32, (start + end) as u32);
+            return Some((
+                AttributeEntryToken {
+                    span,
+                    lexeme,
+                    key,
+                    value: inner_value,
+                },
+                start + end,
+            ));
+        }
+        escaped = ch == '\\' && !escaped;
+    }
+
+    None
+}
+
+fn consume_inline_whitespace<'a>(source: &'a str, start: usize) -> Option<(TriviaToken<'a>, usize)> {
+    let slice = &source[start..];
+    let len = slice
+        .chars()
+        .take_while(|ch| matches!(ch, ' ' | '\t'))
+        .map(char::len_utf8)
+        .sum::<usize>();
+    if len == 0 {
+        return None;
+    }
+    let span = Span::new(start as u32, (start + len) as u32);
+    Some((
+        TriviaToken {
+            span,
+            lexeme: &source[span.as_range()],
+        },
+        start + len,
+    ))
+}
+
 
 fn pending_payload_for(kind: RawTokenKind, marker_name: &str) -> Option<PendingPayload> {
     match kind {
@@ -460,5 +557,58 @@ mod tests {
         };
         assert_eq!(book.lexeme, "1JN");
         assert!(book.is_valid);
+    }
+
+    #[test]
+    fn splits_pipe_and_attribute_entries() {
+        let result = lex("\\zaln-s |x-strong=\"G42450\" x-lemma=\"πρεσβύτερος\"");
+        assert_eq!(
+            result.tokens.iter().map(ScanToken::kind).collect::<Vec<_>>(),
+            vec![
+                ScanTokenKind::Milestone,
+                ScanTokenKind::Whitespace,
+                ScanTokenKind::Pipe,
+                ScanTokenKind::AttributeEntry,
+                ScanTokenKind::Whitespace,
+                ScanTokenKind::AttributeEntry,
+            ]
+        );
+
+        let ScanToken::AttributeEntry(entry) = result.tokens[3] else {
+            panic!("expected attribute entry");
+        };
+        assert_eq!(entry.key, "x-strong");
+        assert_eq!(entry.value, "G42450");
+    }
+
+    #[test]
+    fn stops_attribute_run_at_marker_boundaries() {
+        let result = lex(
+            "\\zaln-s |x-strong=\"G42450\" x-content=\"πρεσβύτερος\"\\*\\w elder|x-occurrence=\"1\" x-occurrences=\"1\"\\w*\\zaln-e\\*,",
+        );
+        assert_eq!(
+            result.tokens.iter().map(ScanToken::kind).collect::<Vec<_>>(),
+            vec![
+                ScanTokenKind::Milestone,
+                ScanTokenKind::Whitespace,
+                ScanTokenKind::Pipe,
+                ScanTokenKind::AttributeEntry,
+                ScanTokenKind::Whitespace,
+                ScanTokenKind::AttributeEntry,
+                ScanTokenKind::MilestoneEnd,
+                ScanTokenKind::Marker,
+                ScanTokenKind::Whitespace,
+                ScanTokenKind::Text,
+                ScanTokenKind::Pipe,
+                ScanTokenKind::AttributeEntry,
+                ScanTokenKind::Whitespace,
+                ScanTokenKind::AttributeEntry,
+                ScanTokenKind::ClosingMarker,
+                ScanTokenKind::Milestone,
+                ScanTokenKind::MilestoneEnd,
+                ScanTokenKind::Text,
+            ]
+        );
+        assert_eq!(result.tokens.last().map(ScanToken::lexeme), Some(","));
     }
 }

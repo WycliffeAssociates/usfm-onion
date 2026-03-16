@@ -71,3 +71,32 @@ lexer/corpus/lex/xl     time:   [28.783 ms 29.526 ms 30.552 ms]
 Found 11 outliers among 100 measurements (11.00%)
   5 (5.00%) high mild
   6 (6.00%) high severe
+
+
+
+
+Let's start the next layer of the onion. 
+
+The output of the Lexer should be a "Lexeme"
+
+Parse:
+Unlike our main inspo crate of usfm3, we don't want an AST but rather a concrete syntax tree. 
+The entrypont is `parse` and it has two outputs: 
+1. A pass over our lexed tokens that adds ids, sids, merges in horizontal whitespace, combines multiple semantic / logical units into a single itme (i.e. attributes) General Syntax. The output goal is Vec of Tokens that raises the semantic one more level. 
+In USFM, within a character marker span an attributes list is separated from the text content by a vertical bar |. Attributes are listed as pairs of name + corresponding value using the syntax: attribute="value". The attribute name is a single ASCII string. The value is wrapped in quotes.
+
+In USX, attributes are applied to elements in the standard XML syntax: attribute="value".
+
+USFM
+
+USX
+
+USJ
+
+Example 1. Glossary word with lemma attribute
+\w gracious|lemma="grace"\w*. 
+
+
+The Tokens must have a dedicated fn / impl to go back into usfm string format. 
+
+The next downstream from it will be the concrete syntax tree I think. Where I'd love to design such that 1 Token (not lexeme) = 1 entry in the CST and the CST is doing ntohing more than placing Tokens into a tree relationship.

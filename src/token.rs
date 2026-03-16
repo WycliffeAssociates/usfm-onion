@@ -25,13 +25,14 @@ pub enum ScanTokenKind {
     Whitespace,
     Newline,
     OptBreak,
+    Pipe,
     Marker,
     NestedMarker,
     ClosingMarker,
     NestedClosingMarker,
     Milestone,
     MilestoneEnd,
-    Attributes,
+    AttributeEntry,
     BookCode,
     NumberRange,
     Text,
@@ -56,6 +57,14 @@ pub struct MarkerToken<'a> {
     pub lexeme: &'a str,
     pub name: &'a str,
     pub metadata: MarkerMetadata,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AttributeEntryToken<'a> {
+    pub span: Span,
+    pub lexeme: &'a str,
+    pub key: &'a str,
+    pub value: &'a str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -87,13 +96,14 @@ pub enum ScanToken<'a> {
     Whitespace(TriviaToken<'a>),
     Newline(TriviaToken<'a>),
     OptBreak(TriviaToken<'a>),
+    Pipe(TriviaToken<'a>),
     Marker(MarkerToken<'a>),
     NestedMarker(MarkerToken<'a>),
     ClosingMarker(MarkerToken<'a>),
     NestedClosingMarker(MarkerToken<'a>),
     Milestone(MarkerToken<'a>),
     MilestoneEnd(TriviaToken<'a>),
-    Attributes(TriviaToken<'a>),
+    AttributeEntry(AttributeEntryToken<'a>),
     BookCode(BookCodeToken<'a>),
     NumberRange(NumberRangeToken<'a>),
     Text(TriviaToken<'a>),
@@ -105,13 +115,14 @@ impl<'a> ScanToken<'a> {
             Self::Whitespace(_) => ScanTokenKind::Whitespace,
             Self::Newline(_) => ScanTokenKind::Newline,
             Self::OptBreak(_) => ScanTokenKind::OptBreak,
+            Self::Pipe(_) => ScanTokenKind::Pipe,
             Self::Marker(_) => ScanTokenKind::Marker,
             Self::NestedMarker(_) => ScanTokenKind::NestedMarker,
             Self::ClosingMarker(_) => ScanTokenKind::ClosingMarker,
             Self::NestedClosingMarker(_) => ScanTokenKind::NestedClosingMarker,
             Self::Milestone(_) => ScanTokenKind::Milestone,
             Self::MilestoneEnd(_) => ScanTokenKind::MilestoneEnd,
-            Self::Attributes(_) => ScanTokenKind::Attributes,
+            Self::AttributeEntry(_) => ScanTokenKind::AttributeEntry,
             Self::BookCode(_) => ScanTokenKind::BookCode,
             Self::NumberRange(_) => ScanTokenKind::NumberRange,
             Self::Text(_) => ScanTokenKind::Text,
@@ -123,14 +134,15 @@ impl<'a> ScanToken<'a> {
             Self::Whitespace(token)
             | Self::Newline(token)
             | Self::OptBreak(token)
+            | Self::Pipe(token)
             | Self::MilestoneEnd(token)
-            | Self::Attributes(token)
             | Self::Text(token) => token.span,
             Self::Marker(token)
             | Self::NestedMarker(token)
             | Self::ClosingMarker(token)
             | Self::NestedClosingMarker(token)
             | Self::Milestone(token) => token.span,
+            Self::AttributeEntry(token) => token.span,
             Self::BookCode(token) => token.span,
             Self::NumberRange(token) => token.span,
         }
@@ -141,14 +153,15 @@ impl<'a> ScanToken<'a> {
             Self::Whitespace(token)
             | Self::Newline(token)
             | Self::OptBreak(token)
+            | Self::Pipe(token)
             | Self::MilestoneEnd(token)
-            | Self::Attributes(token)
             | Self::Text(token) => token.lexeme,
             Self::Marker(token)
             | Self::NestedMarker(token)
             | Self::ClosingMarker(token)
             | Self::NestedClosingMarker(token)
             | Self::Milestone(token) => token.lexeme,
+            Self::AttributeEntry(token) => token.lexeme,
             Self::BookCode(token) => token.lexeme,
             Self::NumberRange(token) => token.lexeme,
         }
@@ -206,4 +219,123 @@ pub fn marker_metadata(name: &str) -> MarkerMetadata {
             family: None,
         }
     }
+}
+
+pub type Lexeme<'a> = ScanToken<'a>;
+pub type LexemeKind = ScanTokenKind;
+pub type LexResult<'a> = ScanResult<'a>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum TokenKind {
+    Newline,
+    OptBreak,
+    Marker,
+    EndMarker,
+    Milestone,
+    MilestoneEnd,
+    BookCode,
+    Number,
+    Text,
+    AttributeList,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AttributeItem<'a> {
+    pub span: Span,
+    pub source: &'a str,
+    pub key: &'a str,
+    pub value: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type")]
+pub enum TokenData<'a> {
+    Newline,
+    OptBreak,
+    Marker {
+        name: &'a str,
+        metadata: MarkerMetadata,
+        nested: bool,
+    },
+    EndMarker {
+        name: &'a str,
+        metadata: MarkerMetadata,
+        nested: bool,
+    },
+    Milestone {
+        name: &'a str,
+        metadata: MarkerMetadata,
+    },
+    MilestoneEnd,
+    BookCode {
+        code: &'a str,
+        is_valid: bool,
+    },
+    Number {
+        start: u32,
+        end: Option<u32>,
+        kind: NumberRangeKind,
+    },
+    Text,
+    AttributeList {
+        entries: Vec<AttributeItem<'a>>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Token<'a> {
+    pub id: String,
+    pub sid: Option<String>,
+    pub span: Span,
+    pub source: &'a str,
+    #[serde(flatten)]
+    pub data: TokenData<'a>,
+}
+
+impl<'a> Token<'a> {
+    pub fn kind(&self) -> TokenKind {
+        match self.data {
+            TokenData::Newline => TokenKind::Newline,
+            TokenData::OptBreak => TokenKind::OptBreak,
+            TokenData::Marker { .. } => TokenKind::Marker,
+            TokenData::EndMarker { .. } => TokenKind::EndMarker,
+            TokenData::Milestone { .. } => TokenKind::Milestone,
+            TokenData::MilestoneEnd => TokenKind::MilestoneEnd,
+            TokenData::BookCode { .. } => TokenKind::BookCode,
+            TokenData::Number { .. } => TokenKind::Number,
+            TokenData::Text => TokenKind::Text,
+            TokenData::AttributeList { .. } => TokenKind::AttributeList,
+        }
+    }
+
+    pub fn marker_name(&self) -> Option<&'a str> {
+        match self.data {
+            TokenData::Marker { name, .. }
+            | TokenData::EndMarker { name, .. }
+            | TokenData::Milestone { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+
+    pub fn to_usfm_fragment(&self) -> &'a str {
+        self.source
+    }
+}
+
+pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
+    tokens
+        .iter()
+        .map(Token::to_usfm_fragment)
+        .collect::<String>()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+pub struct ParseAnalysis<'a> {
+    pub book_code: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ParseResult<'a> {
+    pub tokens: Vec<Token<'a>>,
+    pub analysis: ParseAnalysis<'a>,
 }
