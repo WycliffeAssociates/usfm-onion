@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::marker_defs::{MarkerFamily, SpecMarkerKind, lookup_marker_def};
+use crate::marker_defs::{MarkerFamily, SpecMarkerKind, StructuralMarkerInfo, lookup_marker_metadata};
 
 pub type BytePos = u32;
 
@@ -206,11 +206,11 @@ pub fn marker_text_name(kind: ScanTokenKind, lexeme: &str) -> &str {
 }
 
 pub fn marker_metadata(name: &str) -> MarkerMetadata {
-    if let Some(def) = lookup_marker_def(name) {
+    if let Some((canonical, kind, family)) = lookup_marker_metadata(name) {
         MarkerMetadata {
-            canonical: Some(def.marker),
-            kind: Some(def.kind),
-            family: def.family,
+            canonical: Some(canonical),
+            kind: Some(kind),
+            family,
         }
     } else {
         MarkerMetadata {
@@ -255,16 +255,19 @@ pub enum TokenData<'a> {
     Marker {
         name: &'a str,
         metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
         nested: bool,
     },
     EndMarker {
         name: &'a str,
         metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
         nested: bool,
     },
     Milestone {
         name: &'a str,
         metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
     },
     MilestoneEnd,
     BookCode {
@@ -284,8 +287,8 @@ pub enum TokenData<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Token<'a> {
-    pub id: String,
-    pub sid: Option<String>,
+    pub id: TokenId<'a>,
+    pub sid: Option<Sid<'a>>,
     pub span: Span,
     pub source: &'a str,
     #[serde(flatten)]
@@ -327,6 +330,35 @@ pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
         .iter()
         .map(Token::to_usfm_fragment)
         .collect::<String>()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Sid<'a> {
+    pub book_code: &'a str,
+    pub chapter: u32,
+    pub verse: u32,
+}
+
+impl<'a> Sid<'a> {
+    pub const fn new(book_code: &'a str, chapter: u32, verse: u32) -> Self {
+        Self {
+            book_code,
+            chapter,
+            verse,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TokenId<'a> {
+    pub book_code: &'a str,
+    pub index: u32,
+}
+
+impl<'a> TokenId<'a> {
+    pub const fn new(book_code: &'a str, index: u32) -> Self {
+        Self { book_code, index }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]

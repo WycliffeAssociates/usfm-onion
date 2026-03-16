@@ -100,3 +100,64 @@ Example 1. Glossary word with lemma attribute
 The Tokens must have a dedicated fn / impl to go back into usfm string format. 
 
 The next downstream from it will be the concrete syntax tree I think. Where I'd love to design such that 1 Token (not lexeme) = 1 entry in the CST and the CST is doing ntohing more than placing Tokens into a tree relationship.
+
+
+cargo bench --bench parse
+    Finished `bench` profile [optimized] target(s) in 0.41s
+     Running benches/parse.rs (target/release/deps/parse-47607e8129ac2e17)
+parse/corpus/parse/short
+                        time:   [14.592 µs 14.660 µs 14.777 µs]
+                        thrpt:  [120.94 MiB/s 121.91 MiB/s 122.48 MiB/s]
+Found 10 outliers among 100 measurements (10.00%)
+  3 (3.00%) high mild
+  7 (7.00%) high severe
+Benchmarking parse/corpus/parse/medium: Warming up for 3.0000 s
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 5.5s, enable flat sampling, or reduce sample count to 60.
+parse/corpus/parse/medium
+                        time:   [1.0940 ms 1.1478 ms 1.2455 ms]
+                        thrpt:  [111.09 MiB/s 120.55 MiB/s 126.47 MiB/s]
+Found 8 outliers among 100 measurements (8.00%)
+  8 (8.00%) high severe
+parse/corpus/parse/large
+                        time:   [4.5921 ms 4.5977 ms 4.6035 ms]
+                        thrpt:  [56.471 MiB/s 56.542 MiB/s 56.611 MiB/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+Benchmarking parse/corpus/parse/xl: Warming up for 3.0000 s
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 6.5s, or reduce sample count to 70.
+parse/corpus/parse/xl   time:   [60.486 ms 60.993 ms 61.550 ms]
+                        thrpt:  [79.366 MiB/s 80.092 MiB/s 80.763 MiB/s]
+Found 5 outliers among 100 measurements (5.00%)
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+
+
+
+
+
+spec formats:
+usj / usx 
+
+USJ
+- see usfm3 crate where its AST mimic usj on purpose
+- chapter becomes
+  -  "type": "chapter",
+      "marker": "c",
+      "number": "2",
+      "sid": "LAM 2". (not 0 prefixed)
+- verse becomes:
+  -   "type": "verse",
+          "marker": "v",
+          "number": "1",
+          "sid": "LAM 2:1"
+
+- Text is just a scalar value and not an object
+- attributes are key-value pairs
+
+
+
+NlP format
+vref
+
+web reading format
+html

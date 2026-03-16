@@ -1,24 +1,34 @@
 // // AGENT: USE THIS FILE TO TEST AND BENCHMARK CODE
 
-use std::fs;
-use std::path::Path;
-use usfm_onion::{parse, tokens_to_usfm};
-
 fn main() {
-    let path = Path::new("example-corpora/examples.bsb/631JNBSB.usfm");
-    let source = fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    profile();
+    // let path = Path::new("example-corpora/en_ulb/01-GEN.usfm");
+    // let source = fs::read_to_string(&path)
+    //     .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
 
-    let parsed = parse(&source);
-    println!("{:#?}", parsed);
-    println!("{}", tokens_to_usfm(&parsed.tokens) == source);
-    let output_path = Path::new("playgroundOut.json");
-    serde_json::to_writer(
-        fs::File::create(output_path)
-            .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display())),
-        &parsed,
-    )
-    .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+    // let document = parse_cst(&source);
+    // println!("{:#?}", document);
+    // println!("{}", cst_to_usfm(&document) == source);
+    // let output_path = Path::new("playgroundOut.json");
+    // serde_json::to_writer(
+    //     fs::File::create(output_path)
+    //         .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display())),
+    //     &document,
+    // )
+    // .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+}
+
+fn profile() {
+    let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
+    let mut total = 0usize;
+
+    for _ in 0..200 {
+        let doc = usfm_onion::parse_cst(&source);
+        total += doc.tokens.len();
+        std::hint::black_box(&doc);
+    }
+
+    println!("{total}");
 }
 // fn main() {
 //     let path =

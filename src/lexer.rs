@@ -1,6 +1,4 @@
 use logos::Logos;
-use regex::Regex;
-use std::sync::OnceLock;
 
 use crate::token::{
     AttributeEntryToken, BookCodeToken, MarkerToken, NumberRangeKind, NumberRangeToken,
@@ -190,40 +188,55 @@ fn consume_attribute_entry<'a>(
     source: &'a str,
     start: usize,
 ) -> Option<(AttributeEntryToken<'a>, usize)> {
-    let input = &source[start..];
-    let equals_index = input.find('=')?;
-    let key = &input[..equals_index];
-    if key.is_empty()
-        || key.chars().any(char::is_whitespace)
-        || key.contains('\\')
-        || key.contains('|')
-    {
+    let bytes = source.as_bytes();
+    if start >= bytes.len() {
         return None;
     }
 
-    let value = input.get(equals_index + 1..)?;
-    if !value.starts_with('"') {
+    let mut cursor = start;
+    while let Some(&byte) = bytes.get(cursor) {
+        match byte {
+            b'=' => break,
+            b' ' | b'\t' | b'\r' | b'\n' | b'\\' | b'|' => return None,
+            _ => cursor += 1,
+        }
+    }
+
+    if cursor == start || bytes.get(cursor) != Some(&b'=') {
         return None;
     }
 
+    let key = &source[start..cursor];
+    cursor += 1;
+
+    if bytes.get(cursor) != Some(&b'"') {
+        return None;
+    }
+
+    let value_start = cursor + 1;
+    cursor = value_start;
     let mut escaped = false;
-    for (offset, ch) in input[equals_index + 2..].char_indices() {
-        if ch == '"' && !escaped {
-            let end = equals_index + 2 + offset + ch.len_utf8();
-            let lexeme = &input[..end];
-            let inner_value = &input[equals_index + 2..equals_index + 2 + offset];
-            let span = Span::new(start as u32, (start + end) as u32);
+
+    while let Some(&byte) = bytes.get(cursor) {
+        if byte == b'"' && !escaped {
+            let end = cursor + 1;
+            let span = Span::new(start as u32, end as u32);
             return Some((
                 AttributeEntryToken {
                     span,
-                    lexeme,
+                    lexeme: &source[start..end],
                     key,
-                    value: inner_value,
+                    value: &source[value_start..cursor],
                 },
-                start + end,
+                end,
             ));
         }
-        escaped = ch == '\\' && !escaped;
+
+        escaped = byte == b'\\' && !escaped;
+        if byte != b'\\' {
+            escaped = false;
+        }
+        cursor += 1;
     }
 
     None
@@ -306,50 +319,134 @@ fn consume_number_range<'a>(
     span: Span,
     slice: &'a str,
 ) -> Option<(ScanToken<'a>, TriviaToken<'a>)> {
-    let captures = number_range_regex().captures(slice)?;
-    let matched = captures.get(0)?;
-    if matched.start() != 0 {
-        return None;
-    }
-
-    let matched_text = matched.as_str();
-    let matched_end = span.start + matched_text.len() as u32;
+    let parsed = parse_number_range_prefix(slice)?;
+    let matched_text = &slice[..parsed.matched_len];
+    let matched_end = span.start + parsed.matched_len as u32;
     let rest_span = Span::new(matched_end, span.end);
     let rest_slice = &source[rest_span.as_range()];
-
-    let start = captures.name("start")?.as_str().parse().ok()?;
-    let end = captures
-        .name("end")
-        .and_then(|value| value.as_str().parse::<u32>().ok());
-    let kind = classify_number_range(matched_text, end.is_some());
 
     Some((
         ScanToken::NumberRange(NumberRangeToken {
             span: Span::new(span.start, matched_end),
             lexeme: matched_text,
-            start,
-            end,
-            kind,
+            start: parsed.start,
+            end: parsed.end,
+            kind: parsed.kind,
         }),
         trivia(rest_span, rest_slice),
     ))
 }
 
-fn classify_number_range(text: &str, has_end: bool) -> NumberRangeKind {
-    match (text.contains(','), has_end) {
-        (false, false) => NumberRangeKind::Single,
-        (false, true) => NumberRangeKind::Range,
-        (true, false) => NumberRangeKind::Sequence,
-        (true, true) => NumberRangeKind::SequenceWithRange,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ParsedNumberRange {
+    matched_len: usize,
+    start: u32,
+    end: Option<u32>,
+    kind: NumberRangeKind,
+}
+
+fn parse_number_range_prefix(slice: &str) -> Option<ParsedNumberRange> {
+    let bytes = slice.as_bytes();
+    let mut cursor = 0usize;
+
+    let start = parse_ascii_digits(bytes, &mut cursor)?;
+    if start == 0 {
+        return None;
+    }
+
+    consume_number_suffix(slice, &mut cursor);
+
+    let mut kind = NumberRangeKind::Single;
+    let mut end = None;
+
+    while let Some(separator_len) = consume_number_separator(slice, &mut cursor) {
+        let separator = bytes.get(cursor - 1)?;
+        let next = match parse_ascii_digits(bytes, &mut cursor) {
+            Some(value) => value,
+            None => {
+                cursor -= separator_len;
+                break;
+            }
+        };
+        consume_number_suffix(slice, &mut cursor);
+
+        match separator {
+            b'-' => {
+                end = Some(next);
+                kind = match kind {
+                    NumberRangeKind::Single => NumberRangeKind::Range,
+                    NumberRangeKind::Sequence => NumberRangeKind::SequenceWithRange,
+                    existing => existing,
+                };
+            }
+            b',' => {
+                kind = match kind {
+                    NumberRangeKind::Single => NumberRangeKind::Sequence,
+                    NumberRangeKind::Range => NumberRangeKind::SequenceWithRange,
+                    existing => existing,
+                };
+            }
+            _ => {}
+        }
+    }
+
+    Some(ParsedNumberRange {
+        matched_len: cursor,
+        start,
+        end,
+        kind,
+    })
+}
+
+fn parse_ascii_digits(bytes: &[u8], cursor: &mut usize) -> Option<u32> {
+    let start = *cursor;
+    let mut value = 0u32;
+
+    while let Some(&byte) = bytes.get(*cursor) {
+        if !byte.is_ascii_digit() {
+            break;
+        }
+        value = value.checked_mul(10)?.checked_add((byte - b'0') as u32)?;
+        *cursor += 1;
+    }
+
+    (*cursor > start).then_some(value)
+}
+
+fn consume_number_suffix(slice: &str, cursor: &mut usize) {
+    while *cursor < slice.len() {
+        let next = &slice[*cursor..];
+        let Some(ch) = next.chars().next() else {
+            break;
+        };
+        if ch.is_alphabetic() || matches!(ch, '\u{0300}'..='\u{036f}' | '\u{1ab0}'..='\u{1aff}' | '\u{1dc0}'..='\u{1dff}' | '\u{20d0}'..='\u{20ff}' | '\u{fe20}'..='\u{fe2f}') {
+            *cursor += ch.len_utf8();
+        } else {
+            break;
+        }
     }
 }
 
-fn number_range_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r"^(?<start>[1-9][0-9]*)[\p{L}\p{Mn}]*(?:\u{200f}?[\-,](?<end>[0-9]+)[\p{L}\p{Mn}]*)*(?:\u{200f}?[\-,][0-9]+[\p{L}\p{Mn}]*)*")
-            .expect("number range regex should compile")
-    })
+fn consume_number_separator(slice: &str, cursor: &mut usize) -> Option<usize> {
+    let mut consumed_rtl_mark = false;
+    if slice[*cursor..].starts_with('\u{200f}') {
+        *cursor += '\u{200f}'.len_utf8();
+        consumed_rtl_mark = true;
+    }
+
+    let bytes = slice.as_bytes();
+    match bytes.get(*cursor) {
+        Some(b'-' | b',') => {
+            *cursor += 1;
+            Some(if consumed_rtl_mark { 2 } else { 1 })
+        }
+        _ => {
+            if consumed_rtl_mark {
+                *cursor -= '\u{200f}'.len_utf8();
+            }
+            None
+        }
+    }
 }
 
 fn make_span(start: usize, end: usize) -> Span {

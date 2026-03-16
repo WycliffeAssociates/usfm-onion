@@ -171,6 +171,30 @@ pub enum BlockBehavior {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum StructuralScopeKind {
+    Unknown,
+    Header,
+    Block,
+    Note,
+    Character,
+    Milestone,
+    Chapter,
+    Verse,
+    TableRow,
+    TableCell,
+    Sidebar,
+    Periph,
+    Meta,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct StructuralMarkerInfo {
+    pub scope_kind: StructuralScopeKind,
+    pub inline_context: Option<InlineContext>,
+    pub note_context: Option<SpecContext>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ClosingBehavior {
     None,
     RequiredExplicit,
@@ -312,6 +336,18 @@ pub fn lookup_marker_def(marker: &str) -> Option<MarkerDef> {
     })
 }
 
+pub fn lookup_marker_metadata(
+    marker: &str,
+) -> Option<(&'static str, SpecMarkerKind, Option<MarkerFamily>)> {
+    if let Some(metadata) = fast_marker_metadata(marker) {
+        return Some(metadata);
+    }
+
+    let normalized = normalized_marker(marker)?;
+    let spec = lookup_spec_marker(normalized.canonical)?;
+    Some((spec.marker, spec.kind, marker_family_for(spec.marker, spec.kind)))
+}
+
 pub fn lookup_marker_id(marker: &str) -> Option<MarkerId> {
     normalized_marker(marker).map(|normalized| MarkerId::new(normalized.canonical))
 }
@@ -448,6 +484,229 @@ pub fn marker_is_note_sub(marker: &str) -> bool {
         .unwrap_or(false)
 }
 
+pub fn structural_marker_info(marker: &str, kind: Option<SpecMarkerKind>) -> StructuralMarkerInfo {
+    if let Some(info) = fast_structural_marker_info(marker, kind) {
+        return info;
+    }
+
+    match kind {
+        None => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Unknown,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Header) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Header,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Paragraph) => match marker_block_behavior(marker) {
+            BlockBehavior::TableRow => StructuralMarkerInfo {
+                scope_kind: StructuralScopeKind::TableRow,
+                inline_context: Some(InlineContext::Table),
+                note_context: None,
+            },
+            BlockBehavior::TableCell => StructuralMarkerInfo {
+                scope_kind: StructuralScopeKind::TableCell,
+                inline_context: Some(InlineContext::Table),
+                note_context: None,
+            },
+            BlockBehavior::SidebarStart | BlockBehavior::SidebarEnd => StructuralMarkerInfo {
+                scope_kind: StructuralScopeKind::Sidebar,
+                inline_context: None,
+                note_context: None,
+            },
+            BlockBehavior::Paragraph(inline_context) => StructuralMarkerInfo {
+                scope_kind: StructuralScopeKind::Block,
+                inline_context: Some(inline_context),
+                note_context: None,
+            },
+            BlockBehavior::None => StructuralMarkerInfo {
+                scope_kind: StructuralScopeKind::Block,
+                inline_context: None,
+                note_context: None,
+            },
+        },
+        Some(SpecMarkerKind::Note) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Note,
+            inline_context: None,
+            note_context: marker_note_context(marker),
+        },
+        Some(SpecMarkerKind::Character) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Character,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Milestone) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Milestone,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Chapter) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Chapter,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Verse) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Verse,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Periph) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Periph,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Meta) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Meta,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Sidebar) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Sidebar,
+            inline_context: None,
+            note_context: None,
+        },
+        Some(SpecMarkerKind::TableRow) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::TableRow,
+            inline_context: Some(InlineContext::Table),
+            note_context: None,
+        },
+        Some(SpecMarkerKind::TableCell) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::TableCell,
+            inline_context: Some(InlineContext::Table),
+            note_context: None,
+        },
+        Some(SpecMarkerKind::Figure) => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Block,
+            inline_context: None,
+            note_context: None,
+        },
+    }
+}
+
+fn fast_structural_marker_info(
+    marker: &str,
+    kind: Option<SpecMarkerKind>,
+) -> Option<StructuralMarkerInfo> {
+    let kind = kind?;
+    let info = match kind {
+        SpecMarkerKind::Header => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Header,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Note => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Note,
+            inline_context: None,
+            note_context: marker_note_context(marker),
+        },
+        SpecMarkerKind::Character => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Character,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Milestone => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Milestone,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Chapter => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Chapter,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Verse => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Verse,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Periph => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Periph,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Meta => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Meta,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Sidebar => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Sidebar,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::TableRow => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::TableRow,
+            inline_context: Some(InlineContext::Table),
+            note_context: None,
+        },
+        SpecMarkerKind::TableCell => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::TableCell,
+            inline_context: Some(InlineContext::Table),
+            note_context: None,
+        },
+        SpecMarkerKind::Figure => StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Block,
+            inline_context: None,
+            note_context: None,
+        },
+        SpecMarkerKind::Paragraph => return fast_paragraph_structural_info(marker),
+    };
+
+    Some(info)
+}
+
+fn fast_paragraph_structural_info(marker: &str) -> Option<StructuralMarkerInfo> {
+    let info = if marker == "tr" {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::TableRow,
+            inline_context: Some(InlineContext::Table),
+            note_context: None,
+        }
+    } else if table_cell_base(marker).is_some() {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::TableCell,
+            inline_context: Some(InlineContext::Table),
+            note_context: None,
+        }
+    } else if matches!(marker, "esb" | "esbe") {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Sidebar,
+            inline_context: None,
+            note_context: None,
+        }
+    } else if is_list_marker_name(marker) {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Block,
+            inline_context: Some(InlineContext::List),
+            note_context: None,
+        }
+    } else if is_section_marker_name(marker) {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Block,
+            inline_context: Some(InlineContext::Section),
+            note_context: None,
+        }
+    } else if is_para_marker_name(marker) {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Block,
+            inline_context: Some(InlineContext::Para),
+            note_context: None,
+        }
+    } else if is_non_inline_paragraph_marker_name(marker) {
+        StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Block,
+            inline_context: None,
+            note_context: None,
+        }
+    } else {
+        return None;
+    };
+
+    Some(info)
+}
+
 fn marker_allows_embedded_char_context(marker: &str, context: SpecContext) -> bool {
     if !matches!(context, SpecContext::Footnote | SpecContext::CrossReference) {
         return false;
@@ -522,6 +781,62 @@ fn marker_family_for(marker: &str, kind: SpecMarkerKind) -> Option<MarkerFamily>
         return Some(MarkerFamily::SectionParagraph);
     }
     None
+}
+
+fn fast_marker_metadata(
+    marker: &str,
+) -> Option<(&'static str, SpecMarkerKind, Option<MarkerFamily>)> {
+    match marker {
+        "id" => Some(("id", SpecMarkerKind::Header, None)),
+        "h" => Some(("h", SpecMarkerKind::Paragraph, None)),
+        "c" => Some(("c", SpecMarkerKind::Chapter, None)),
+        "v" => Some(("v", SpecMarkerKind::Verse, None)),
+        "p" => Some(("p", SpecMarkerKind::Paragraph, None)),
+        "m" => Some(("m", SpecMarkerKind::Paragraph, None)),
+        "b" => Some(("b", SpecMarkerKind::Paragraph, None)),
+        "r" => Some(("r", SpecMarkerKind::Paragraph, None)),
+        "mt" => Some(("mt", SpecMarkerKind::Paragraph, None)),
+        "mt1" => Some(("mt1", SpecMarkerKind::Paragraph, None)),
+        "mt2" => Some(("mt2", SpecMarkerKind::Paragraph, None)),
+        "mt3" => Some(("mt3", SpecMarkerKind::Paragraph, None)),
+        "mt4" => Some(("mt4", SpecMarkerKind::Paragraph, None)),
+        "s" => Some(("s", SpecMarkerKind::Paragraph, None)),
+        "s1" => Some(("s1", SpecMarkerKind::Paragraph, None)),
+        "s2" => Some(("s2", SpecMarkerKind::Paragraph, None)),
+        "s3" => Some(("s3", SpecMarkerKind::Paragraph, None)),
+        "s4" => Some(("s4", SpecMarkerKind::Paragraph, None)),
+        "q" => Some(("q", SpecMarkerKind::Paragraph, None)),
+        "q1" => Some(("q1", SpecMarkerKind::Paragraph, None)),
+        "q2" => Some(("q2", SpecMarkerKind::Paragraph, None)),
+        "q3" => Some(("q3", SpecMarkerKind::Paragraph, None)),
+        "q4" => Some(("q4", SpecMarkerKind::Paragraph, None)),
+        "f" | "fe" | "ef" => Some(("f", SpecMarkerKind::Note, Some(MarkerFamily::Footnote))),
+        "x" | "ex" => Some(("x", SpecMarkerKind::Note, Some(MarkerFamily::CrossReference))),
+        "ft" => Some(("ft", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fr" => Some(("fr", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fq" => Some(("fq", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fqa" => Some(("fqa", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fk" => Some(("fk", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fl" => Some(("fl", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fw" => Some(("fw", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fp" => Some(("fp", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fv" => Some(("fv", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fdc" => Some(("fdc", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "fm" => Some(("fm", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
+        "xo" => Some(("xo", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xop" => Some(("xop", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xk" => Some(("xk", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xq" => Some(("xq", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xt" => Some(("xt", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xta" => Some(("xta", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xot" => Some(("xot", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xnt" => Some(("xnt", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "xdc" => Some(("xdc", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "w" => Some(("w", SpecMarkerKind::Character, None)),
+        "jmp" => Some(("jmp", SpecMarkerKind::Character, None)),
+        "ref" => Some(("ref", SpecMarkerKind::Character, None)),
+        _ => None,
+    }
 }
 
 fn marker_family_role(marker: &str, canonical: &'static str) -> MarkerFamilyRole {
@@ -618,6 +933,54 @@ fn is_section_marker_name(marker: &str) -> bool {
         || (marker.starts_with('s') && marker != "sts")
         || marker == "sd"
         || marker.starts_with("sd")
+}
+
+fn is_para_marker_name(marker: &str) -> bool {
+    matches!(
+        marker,
+        "p"
+            | "m"
+            | "po"
+            | "pr"
+            | "cls"
+            | "pmo"
+            | "pm"
+            | "pmc"
+            | "pmr"
+            | "mi"
+            | "nb"
+            | "pc"
+            | "ph"
+            | "phi"
+            | "pi"
+            | "pii"
+            | "b"
+            | "q"
+            | "qr"
+            | "qc"
+            | "qa"
+            | "qm"
+            | "qd"
+            | "lh"
+            | "lf"
+            | "lit"
+    ) || marker.starts_with("q")
+        || marker.starts_with("pi")
+        || marker.starts_with("ph")
+        || marker.starts_with("mi")
+}
+
+fn is_non_inline_paragraph_marker_name(marker: &str) -> bool {
+    matches!(
+        marker,
+        "h" | "toc" | "toca" | "imt" | "imte" | "is" | "ip" | "ipi" | "im" | "imi" | "imq"
+            | "ipq" | "ipr" | "ib" | "ili" | "iot" | "io" | "iex" | "mt" | "mte" | "ms"
+            | "mr" | "cl" | "cd" | "s" | "sr" | "r" | "d" | "sp" | "restore"
+    ) || marker.starts_with("mt")
+        || marker.starts_with("mte")
+        || marker.starts_with("is")
+        || marker.starts_with("ili")
+        || marker.starts_with("io")
 }
 
 #[cfg(test)]

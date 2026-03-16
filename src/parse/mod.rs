@@ -1,7 +1,8 @@
 use crate::lexer::lex;
+use crate::marker_defs::structural_marker_info;
 use crate::token::{
-    AttributeItem, Lexeme, NumberRangeToken, ParseAnalysis, ParseResult, ScanToken, Span, Token,
-    TokenData, TokenKind, tokens_to_usfm,
+    AttributeItem, Lexeme, NumberRangeToken, ParseAnalysis, ParseResult, ScanToken, Sid, Span,
+    Token, TokenData, TokenId, TokenKind, tokens_to_usfm,
 };
 
 pub fn parse(source: &str) -> ParseResult<'_> {
@@ -32,7 +33,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
             ScanToken::Newline(token) => {
                 flush_pending_whitespace(source, &mut state, &mut tokens);
                 let token = Token {
-                    id: String::new(),
+                    id: TokenId::new("", 0),
                     sid: state.current_sid.clone(),
                     span: token.span,
                     source: token.lexeme,
@@ -62,6 +63,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         TokenData::Marker {
                             name: marker.name,
                             metadata: marker.metadata,
+                            structural: structural_marker_info(marker.name, marker.metadata.kind),
                             nested: false,
                         },
                     );
@@ -69,7 +71,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
 
                     state.pending_ws = book_code.leading_ws;
                     state.current_book_code = Some(book_code.lexeme);
-                    state.current_sid = Some(format!("{} 0:0", book_code.lexeme));
+                    state.current_sid = Some(Sid::new(book_code.lexeme, 0, 0));
                     let book_token = token_with_current_ws_and_sid(
                         source,
                         &mut state,
@@ -95,6 +97,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         TokenData::Marker {
                             name: marker.name,
                             metadata: marker.metadata,
+                            structural: structural_marker_info(marker.name, marker.metadata.kind),
                             nested: false,
                         },
                         next_sid.clone(),
@@ -124,6 +127,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     TokenData::Marker {
                         name: marker.name,
                         metadata: marker.metadata,
+                        structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: false,
                     },
                 );
@@ -138,6 +142,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     TokenData::Marker {
                         name: marker.name,
                         metadata: marker.metadata,
+                        structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: true,
                     },
                 );
@@ -152,6 +157,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     TokenData::EndMarker {
                         name: marker.name,
                         metadata: marker.metadata,
+                        structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: false,
                     },
                 );
@@ -166,6 +172,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     TokenData::EndMarker {
                         name: marker.name,
                         metadata: marker.metadata,
+                        structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: true,
                     },
                 );
@@ -180,6 +187,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     TokenData::Milestone {
                         name: marker.name,
                         metadata: marker.metadata,
+                        structural: structural_marker_info(marker.name, marker.metadata.kind),
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -196,7 +204,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     analysis.book_code = Some(book.lexeme);
                 }
                 state.current_book_code = Some(book.lexeme);
-                state.current_sid = Some(format!("{} 0:0", book.lexeme));
+                state.current_sid = Some(Sid::new(book.lexeme, 0, 0));
                 let token = token_with_current_ws_and_sid(
                     source,
                     &mut state,
@@ -247,7 +255,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
 struct ParseState<'a> {
     current_book_code: Option<&'a str>,
     current_chapter: u32,
-    current_sid: Option<String>,
+    current_sid: Option<Sid<'a>>,
     pending_ws: Option<Span>,
 }
 
@@ -381,7 +389,7 @@ fn build_attribute_list<'a>(
     let start_span = state.pending_ws.map(|ws| ws.start).unwrap_or(pipe.span.start);
     let span = Span::new(start_span, end_span.end);
     let token = Token {
-        id: String::new(),
+        id: TokenId::new("", 0),
         sid: state.current_sid.clone(),
         span,
         source: &source[span.as_range()],
@@ -390,11 +398,15 @@ fn build_attribute_list<'a>(
     (token, cursor)
 }
 
-fn advanced_sid(state: &ParseState<'_>, marker_name: &str, number: &NumberRangeToken<'_>) -> Option<String> {
+fn advanced_sid<'a>(
+    state: &ParseState<'a>,
+    marker_name: &str,
+    number: &NumberRangeToken<'_>,
+) -> Option<Sid<'a>> {
     let book = state.current_book_code?;
     match marker_name {
-        "c" => Some(format!("{} {}:0", book, number.start)),
-        "v" => Some(format!("{} {}:{}", book, state.current_chapter, number.lexeme)),
+        "c" => Some(Sid::new(book, number.start, 0)),
+        "v" => Some(Sid::new(book, state.current_chapter, number.start)),
         _ => state.current_sid.clone(),
     }
 }
@@ -426,7 +438,7 @@ fn token_with_current_ws<'a>(
     state: &mut ParseState<'a>,
     span: Span,
     data: TokenData<'a>,
-    sid: Option<String>,
+    sid: Option<Sid<'a>>,
 ) -> Token<'a> {
     let start = state
         .pending_ws
@@ -435,7 +447,7 @@ fn token_with_current_ws<'a>(
     state.pending_ws = None;
     let span = Span::new(start, span.end);
     Token {
-        id: String::new(),
+        id: TokenId::new("", 0),
         sid,
         span,
         source: &source[span.as_range()],
@@ -452,7 +464,7 @@ fn flush_pending_whitespace<'a>(source: &'a str, state: &mut ParseState<'a>, tok
         last.source = &source[last.span.as_range()];
     } else {
         tokens.push(Token {
-            id: String::new(),
+            id: TokenId::new("", 0),
             sid: state.current_sid.clone(),
             span: ws,
             source: &source[ws.as_range()],
@@ -486,10 +498,9 @@ fn assign_ids(tokens: &mut [Token<'_>]) {
     for (index, token) in tokens.iter_mut().enumerate() {
         let book = token
             .sid
-            .as_deref()
-            .and_then(|sid| sid.split_once(' ').map(|(book, _)| book))
+            .map(|sid| sid.book_code)
             .unwrap_or(default_book);
-        token.id = format!("{book}-{index}");
+        token.id = TokenId::new(book, index as u32);
     }
 }
 
@@ -505,28 +516,28 @@ mod tests {
     fn parse_assigns_ids_and_sids() {
         let parsed = parse("\\id GEN\n\\c 1\n\\v 2 text\n");
         assert_eq!(parsed.analysis.book_code, Some("GEN"));
-        assert_eq!(parsed.tokens.first().map(|token| token.id.as_str()), Some("GEN-0"));
+        assert_eq!(parsed.tokens.first().map(|token| token.id), Some(TokenId::new("GEN", 0)));
 
         let book = parsed
             .tokens
             .iter()
             .find(|token| matches!(token.data, TokenData::BookCode { code: "GEN", .. }))
             .expect("book code token");
-        assert_eq!(book.sid.as_deref(), Some("GEN 0:0"));
+        assert_eq!(book.sid, Some(Sid::new("GEN", 0, 0)));
 
         let chapter_marker = parsed
             .tokens
             .iter()
             .find(|token| matches!(token.data, TokenData::Marker { name: "c", .. }))
             .expect("chapter marker token");
-        assert_eq!(chapter_marker.sid.as_deref(), Some("GEN 1:0"));
+        assert_eq!(chapter_marker.sid, Some(Sid::new("GEN", 1, 0)));
 
         let verse_marker = parsed
             .tokens
             .iter()
             .find(|token| matches!(token.data, TokenData::Marker { name: "v", .. }))
             .expect("verse marker token");
-        assert_eq!(verse_marker.sid.as_deref(), Some("GEN 1:2"));
+        assert_eq!(verse_marker.sid, Some(Sid::new("GEN", 1, 2)));
     }
 
     #[test]
