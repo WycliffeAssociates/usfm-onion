@@ -10,6 +10,7 @@ pub mod parse;
 mod structure;
 pub mod token;
 pub mod usj;
+pub mod usx;
 
 pub use cst::{
     CstDocument, CstNode, CstWalkIter, WalkItem, build_cst, build_cst_roots, cst_to_tokens,
@@ -24,3 +25,4 @@ pub use token::{
     tokens_to_usfm,
 };
 pub use usj::{UsjDocument, UsjElement, UsjError, UsjNode, cst_to_usj, from_usj, from_usj_str, usfm_to_usj};
+pub use usx::{UsxError, cst_to_usx, usfm_to_usx, usj_to_usx};

@@ -61,6 +61,14 @@ harness = false
 name = "cst_walk"
 harness = false
 
+[[bench]]
+name = "usj"
+harness = false
+
+[[bench]]
+name = "usx"
+harness = false
+
 [profile.profiling]
 inherits = "release"
 debug = 2
