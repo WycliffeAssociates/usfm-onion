@@ -22,4 +22,6 @@ target
 
 repos_to_compare
 
-./src/bin/playground.rs
+src/bin/playground.rs
+playgroundOut.json
+.DS_Store

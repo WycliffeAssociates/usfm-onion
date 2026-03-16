@@ -1,25 +1,6 @@
 #![allow(dead_code, unused_imports)]
 
-pub(crate) mod api;
-pub(crate) mod diff;
-pub(crate) mod format;
-pub(crate) mod html;
-pub(crate) mod inspect;
 pub(crate) mod lexer;
-pub(crate) mod lint;
-pub(crate) mod marker_defs;
+pub mod marker_defs;
 pub(crate) mod marker_defs_data;
 pub(crate) mod markers;
-pub(crate) mod parse;
-pub(crate) mod recovery;
-pub(crate) mod syntax;
-pub(crate) mod transform;
-pub(crate) mod tree_walk;
-pub(crate) mod usj;
-pub(crate) mod usj_to_usfm;
-pub(crate) mod usj_walk;
-pub(crate) mod usx;
-pub(crate) mod usx_to_usfm;
-pub(crate) mod vref;
-pub(crate) mod write_exact;
-pub(crate) mod xml;

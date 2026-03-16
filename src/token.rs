@@ -1,8 +1,10 @@
-use crate::internal::marker_defs::{MarkerFamily, SpecMarkerKind, lookup_marker_def};
+use serde::Serialize;
+
+use crate::marker_defs::{MarkerFamily, SpecMarkerKind, lookup_marker_def};
 
 pub type BytePos = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct Span {
     pub start: BytePos,
     pub end: BytePos,
@@ -18,7 +20,7 @@ impl Span {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ScanTokenKind {
     Whitespace,
     Newline,
@@ -35,20 +37,20 @@ pub enum ScanTokenKind {
     Text,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct TriviaToken<'a> {
     pub span: Span,
     pub lexeme: &'a str,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MarkerMetadata {
     pub canonical: Option<&'static str>,
     pub kind: Option<SpecMarkerKind>,
     pub family: Option<MarkerFamily>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MarkerToken<'a> {
     pub span: Span,
     pub lexeme: &'a str,
@@ -56,14 +58,14 @@ pub struct MarkerToken<'a> {
     pub metadata: MarkerMetadata,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct BookCodeToken<'a> {
     pub span: Span,
     pub lexeme: &'a str,
     pub is_valid: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum NumberRangeKind {
     Single,
     Range,
@@ -71,7 +73,7 @@ pub enum NumberRangeKind {
     SequenceWithRange,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct NumberRangeToken<'a> {
     pub span: Span,
     pub lexeme: &'a str,
@@ -80,7 +82,7 @@ pub struct NumberRangeToken<'a> {
     pub kind: NumberRangeKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ScanToken<'a> {
     Whitespace(TriviaToken<'a>),
     Newline(TriviaToken<'a>),
@@ -164,7 +166,7 @@ impl<'a> ScanToken<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ScanResult<'a> {
     pub tokens: Vec<ScanToken<'a>>,
 }
