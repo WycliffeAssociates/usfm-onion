@@ -1,4 +1,6 @@
+pub mod convert;
 pub mod cst;
+mod export_tree;
 pub mod lexer;
 pub mod marker_defs;
 mod marker_defs_data;
@@ -7,6 +9,7 @@ pub mod markers;
 pub mod parse;
 mod structure;
 pub mod token;
+pub mod usj;
 
 pub use cst::{
     CstDocument, CstNode, CstWalkIter, WalkItem, build_cst, build_cst_roots, cst_to_tokens,
@@ -20,3 +23,4 @@ pub use token::{
     ScanResult, ScanToken, ScanTokenKind, Sid, Token, TokenData, TokenId, TokenKind,
     tokens_to_usfm,
 };
+pub use usj::{UsjDocument, UsjElement, UsjError, UsjNode, cst_to_usj, from_usj, from_usj_str, usfm_to_usj};

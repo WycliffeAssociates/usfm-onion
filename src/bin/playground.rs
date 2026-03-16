@@ -2,6 +2,7 @@
 
 fn main() {
     profile();
+    // dump_usj();
     // let path = Path::new("example-corpora/en_ulb/01-GEN.usfm");
     // let source = fs::read_to_string(&path)
     //     .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
@@ -29,6 +30,25 @@ fn profile() {
     }
 
     println!("{total}");
+}
+
+#[allow(dead_code)]
+fn dump_usj() {
+    let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
+    let document = usfm_onion::usfm_to_usj(&source).expect("USJ export should succeed");
+
+    let output_path = std::path::Path::new("playgroundOut.json");
+    serde_json::to_writer_pretty(
+        std::fs::File::create(output_path)
+            .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display())),
+        &document,
+    )
+    .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&document).expect("USJ should serialize")
+    );
 }
 // fn main() {
 //     let path =
