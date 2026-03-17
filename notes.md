@@ -152,8 +152,8 @@ USJ
           "sid": "LAM 2:1"
 
 - Text is just a scalar value and not an object
-- attributes are key-value pairs
-
+- attributes are key-value pairs. 
+not sure on iter over token vs walk concrete syntax tree on this one for what's simpler? Mostly our concrete syntax tree doesn't nest chars for example, and chapters are already a separate token from numbers where it collapses the two, so will have to have some logic to have to account for how usj is different than our eixsting concrete syntax tree that is more granular. 
 
 
 NlP format
@@ -161,3 +161,9 @@ vref
 
 web reading format
 html
+
+
+## For benches with copora
+USFM_BENCH_CORPORA=examples.bsb cargo bench --bench lint
+USFM_BENCH_CORPORA="en_ulb en_ult" cargo bench --bench lint
+USFM_BENCH_CORPORA=all cargo bench --bench lint

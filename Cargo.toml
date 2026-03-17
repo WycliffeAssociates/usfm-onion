@@ -69,6 +69,10 @@ harness = false
 name = "usx"
 harness = false
 
+[[bench]]
+name = "lint"
+harness = false
+
 [profile.profiling]
 inherits = "release"
 debug = 2
