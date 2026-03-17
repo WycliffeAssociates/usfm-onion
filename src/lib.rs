@@ -37,8 +37,8 @@ pub use format::{
 };
 pub use html::{HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions};
 pub use lint_impl::{
-    AppliedTokenFix, ApplyTokenFixesResult, LintCategory, LintCode, LintIssue, LintOptions,
-    LintResult, LintSeverity, LintSummary, LintSuppression, LintableToken, apply_token_fixes,
+    LintCategory, LintCode, LintIssue, LintOptions, LintResult, LintSeverity, LintSummary,
+    LintSuppression, LintableToken, MessageParams as LintMessageParams, TokenFix, apply_token_fix,
 };
 pub use markers::{
     MarkerCategory, MarkerInlineContext, MarkerKind, MarkerNoteFamily, MarkerNoteSubkind,

@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::format::{FormatOptions, FormattableToken, format};
+use crate::format::FormatToken;
+use crate::format::FormattableToken;
 use crate::marker_defs::{
     InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
     marker_allows_effective_context, marker_inline_context, marker_note_context,
@@ -10,7 +11,6 @@ use crate::marker_defs::{
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
-use crate::format::FormatToken;
 use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind};
 
 pub trait LintableToken {
@@ -272,6 +272,7 @@ pub struct LintIssue {
     pub related_token_id: Option<String>,
     pub sid: Option<String>,
     pub marker: Option<String>,
+    pub fix: Option<TokenFix>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
@@ -288,20 +289,30 @@ pub struct LintResult {
     pub summary: LintSummary,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct AppliedTokenFix {
-    pub code: LintCode,
-    pub token_id: Option<String>,
-    pub sid: Option<String>,
-    pub marker: Option<String>,
-}
+pub type MessageParams = BTreeMap<String, String>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ApplyTokenFixesResult<T> {
-    pub tokens: Vec<T>,
-    pub applied_fixes: Vec<AppliedTokenFix>,
-    pub remaining_issues: Vec<LintIssue>,
-    pub remaining_summary: LintSummary,
+pub enum TokenFix {
+    ReplaceToken {
+        code: String,
+        label: String,
+        label_params: MessageParams,
+        target_token_id: String,
+        replacements: Vec<crate::format::TokenTemplate>,
+    },
+    DeleteToken {
+        code: String,
+        label: String,
+        label_params: MessageParams,
+        target_token_id: String,
+    },
+    InsertAfter {
+        code: String,
+        label: String,
+        label_params: MessageParams,
+        target_token_id: String,
+        insert: Vec<crate::format::TokenTemplate>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -451,19 +462,16 @@ impl DocumentLintState {
             .unwrap_or(self.slot)
     }
 
-    fn apply_marker<T: LintableToken>(
-        &mut self,
-        tokens: &[T],
-        index: usize,
-        token: &T,
-    ) {
+    fn apply_marker<T: LintableToken>(&mut self, tokens: &[T], index: usize, token: &T) {
         let Some(name) = token.marker() else {
             return;
         };
 
         match token_marker_kind(token) {
             MarkerKind::Header => {
-                if name == "id" && let Some(book_code) = next_book_code_after_marker(tokens, index) {
+                if name == "id"
+                    && let Some(book_code) = next_book_code_after_marker(tokens, index)
+                {
                     self.kind = infer_document_kind(book_code);
                     if self.kind == DocumentKind::PeripheralDivided {
                         self.slot = TopLevelSlot::AwaitDivision;
@@ -580,12 +588,7 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
         LintCode::VerseMetadataOutsideVerse,
         LintCode::VerseOutsideExplicitParagraph,
     ]) {
-        lint_structure_rules(
-            tokens,
-            &options,
-            &enabled,
-            &mut issues,
-        );
+        lint_structure_rules(tokens, &options, &enabled, &mut issues);
     }
     if enabled.has(LintCode::UnknownMarker) {
         lint_unknown_markers(tokens, &mut issues);
@@ -628,64 +631,95 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     LintResult { issues, summary }
 }
 
-pub fn apply_token_fixes<T>(
-    tokens: &[T],
-    lint_options: LintOptions,
-    format_options: FormatOptions,
-) -> ApplyTokenFixesResult<T>
-where
-    T: LintableToken + FormattableToken + Clone,
-{
-    let initial = lint_tokens(tokens, lint_options.clone());
-    let fixed_tokens = format(tokens, format_options);
-    let remaining = lint_tokens(&fixed_tokens, lint_options);
-    let remaining_keys = issue_multiset(&remaining.issues);
+pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec<T> {
+    let Some(index) = tokens
+        .iter()
+        .position(|token| token.id() == Some(fix.target_token_id()))
+    else {
+        return tokens.to_vec();
+    };
 
-    let mut seen = remaining_keys;
-    let mut applied_fixes = Vec::new();
-    for issue in initial.issues {
-        let key = lint_issue_key(&issue);
-        if let Some(count) = seen.get_mut(&key)
-            && *count > 0
-        {
-            *count -= 1;
-            continue;
+    let mut next_tokens = tokens.to_vec();
+    let anchor = next_tokens[index].clone();
+
+    match fix {
+        TokenFix::ReplaceToken { replacements, .. } => {
+            if replacements.is_empty() {
+                return next_tokens;
+            }
+            let replacement_tokens =
+                build_replacement_tokens(&anchor, replacements, ReplacementMode::Replace);
+            next_tokens.splice(index..=index, replacement_tokens);
         }
-        applied_fixes.push(AppliedTokenFix {
-            code: issue.code,
-            token_id: issue.token_id,
-            sid: issue.sid,
-            marker: issue.marker,
-        });
+        TokenFix::DeleteToken { .. } => {
+            next_tokens.remove(index);
+        }
+        TokenFix::InsertAfter { insert, .. } => {
+            if insert.is_empty() {
+                return next_tokens;
+            }
+            let insert_tokens =
+                build_replacement_tokens(&anchor, insert, ReplacementMode::InsertAfter);
+            next_tokens.splice(index + 1..index + 1, insert_tokens);
+        }
     }
 
-    ApplyTokenFixesResult {
-        tokens: fixed_tokens,
-        applied_fixes,
-        remaining_issues: remaining.issues,
-        remaining_summary: remaining.summary,
+    next_tokens
+}
+
+impl TokenFix {
+    pub fn target_token_id(&self) -> &str {
+        match self {
+            Self::ReplaceToken {
+                target_token_id, ..
+            }
+            | Self::DeleteToken {
+                target_token_id, ..
+            }
+            | Self::InsertAfter {
+                target_token_id, ..
+            } => target_token_id,
+        }
     }
 }
 
-fn issue_multiset(issues: &[LintIssue]) -> HashMap<String, usize> {
-    let mut counts = HashMap::new();
-    for issue in issues {
-        *counts.entry(lint_issue_key(issue)).or_insert(0) += 1;
+#[derive(Debug, Clone, Copy)]
+enum ReplacementMode {
+    Replace,
+    InsertAfter,
+}
+
+fn build_replacement_tokens<T: FormattableToken>(
+    anchor: &T,
+    templates: &[crate::format::TokenTemplate],
+    mode: ReplacementMode,
+) -> Vec<T> {
+    let mut built = Vec::with_capacity(templates.len());
+    for (index, template) in templates.iter().enumerate() {
+        let mut token = if index == 0 && matches!(mode, ReplacementMode::Replace) {
+            anchor.clone()
+        } else {
+            T::synthetic_like(
+                Some(anchor),
+                template.kind,
+                template.text.clone(),
+                template.marker.clone(),
+                template.sid.clone(),
+            )
+        };
+        token.set_kind(template.kind);
+        token.set_text(template.text.clone());
+        token.set_marker(template.marker.clone());
+        token.set_sid(template.sid.clone());
+        built.push(token);
     }
-    counts
+    built
 }
 
-fn lint_issue_key(issue: &LintIssue) -> String {
-    format!(
-        "{}|{}|{}|{}",
-        issue.code.code(),
-        issue.token_id.as_deref().unwrap_or(""),
-        issue.sid.as_deref().unwrap_or(""),
-        issue.marker.as_deref().unwrap_or("")
-    )
-}
-
-fn lint_missing_separator_after_marker<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
+fn lint_missing_separator_after_marker<T: LintableToken>(
+    tokens: &[T],
+    issues: &mut Vec<LintIssue>,
+) {
     for window in tokens.windows(2) {
         let [current, next] = window else { continue };
         if current.kind() != TokenKind::Marker || next.kind() != TokenKind::Text {
@@ -695,7 +729,10 @@ fn lint_missing_separator_after_marker<T: LintableToken>(tokens: &[T], issues: &
             continue;
         };
         let marker_kind = token_marker_kind(current);
-        if matches!(marker_kind, MarkerKind::MilestoneStart | MarkerKind::MilestoneEnd) {
+        if matches!(
+            marker_kind,
+            MarkerKind::MilestoneStart | MarkerKind::MilestoneEnd
+        ) {
             continue;
         }
         if matches!(marker_kind, MarkerKind::Unknown) && marker.starts_with('z') {
@@ -709,10 +746,11 @@ fn lint_missing_separator_after_marker<T: LintableToken>(tokens: &[T], issues: &
         }
         issues.push(issue(
             LintCode::MissingSeparatorAfterMarker,
-            format!("marker \\{marker} is immediately followed by text"),
+            format!("marker \\{marker} is immediately missing a space after it before the neighboring text"),
             current,
             Some(next),
-        ));
+        )
+        .with_fix(missing_separator_fix(next)));
     }
 }
 
@@ -733,7 +771,9 @@ fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIs
         };
         issues.push(issue(
             LintCode::EmptyParagraph,
-            format!("paragraph marker \\{marker} creates an empty block before the next block marker"),
+            format!(
+                "paragraph marker \\{marker} creates an empty block before the next block marker"
+            ),
             token,
             Some(&tokens[boundary_index]),
         ));
@@ -904,7 +944,8 @@ fn lint_structure_rules<T: LintableToken>(
             {
                 issues.push(simple_issue(
                     LintCode::VerseOutsideExplicitParagraph,
-                    "verse marker appears outside an explicit paragraph, list, or table block".to_string(),
+                    "verse marker appears outside an explicit paragraph, list, or table block"
+                        .to_string(),
                     token,
                 ));
             }
@@ -1012,6 +1053,7 @@ fn lint_structure_rules<T: LintableToken>(
             related_token_id: None,
             sid: None,
             marker: Some("id".to_string()),
+            fix: None,
         });
     }
 }
@@ -1100,7 +1142,9 @@ fn lint_chapter_rules<T: LintableToken>(
             && token.marker() == Some("cl")
             && let Some(text_index) = next_text_token_index(tokens, index + 1)
         {
-            let label = strip_digits(tokens[text_index].text().trim()).trim().to_string();
+            let label = strip_digits(tokens[text_index].text().trim())
+                .trim()
+                .to_string();
             if !label.is_empty() {
                 labels.entry(label).or_default().push((
                     tokens[text_index].span(),
@@ -1137,6 +1181,7 @@ fn lint_chapter_rules<T: LintableToken>(
                         related_token_id: None,
                         sid,
                         marker: Some("cl".to_string()),
+                        fix: None,
                     });
                 }
             }
@@ -1273,7 +1318,10 @@ fn lint_marker_balance_rules<T: LintableToken>(
         {
             issues.push(simple_issue(
                 LintCode::MissingMilestoneSelfClose,
-                format!("milestone \\{} is missing a closing \\*", marker.unwrap_or("")),
+                format!(
+                    "milestone \\{} is missing a closing \\*",
+                    marker.unwrap_or("")
+                ),
                 token,
             ));
         }
@@ -1281,7 +1329,10 @@ fn lint_marker_balance_rules<T: LintableToken>(
         match kind {
             TokenKind::Marker => {
                 let marker_kind = token_marker_kind(token);
-                if matches!(marker_kind, MarkerKind::Character | MarkerKind::Note | MarkerKind::Meta) {
+                if matches!(
+                    marker_kind,
+                    MarkerKind::Character | MarkerKind::Note | MarkerKind::Meta
+                ) {
                     stack.push(OpenMarkerFrame {
                         marker: marker.unwrap_or_default().to_string(),
                         token_index: index,
@@ -1292,7 +1343,9 @@ fn lint_marker_balance_rules<T: LintableToken>(
                 if let Some(structural) = token.structural()
                     && matches!(
                         structural.scope_kind,
-                        StructuralScopeKind::Note | StructuralScopeKind::Character | StructuralScopeKind::Milestone
+                        StructuralScopeKind::Note
+                            | StructuralScopeKind::Character
+                            | StructuralScopeKind::Milestone
                     )
                 {
                     structural_stack.push(OpenLintFrame {
@@ -1303,8 +1356,20 @@ fn lint_marker_balance_rules<T: LintableToken>(
                 }
             }
             TokenKind::EndMarker => {
-                handle_close_marker(token, marker.unwrap_or_default(), &mut stack, enabled, issues);
-                handle_structural_close(token, marker.unwrap_or_default(), &mut structural_stack, enabled, issues);
+                handle_close_marker(
+                    token,
+                    marker.unwrap_or_default(),
+                    &mut stack,
+                    enabled,
+                    issues,
+                );
+                handle_structural_close(
+                    token,
+                    marker.unwrap_or_default(),
+                    &mut structural_stack,
+                    enabled,
+                    issues,
+                );
             }
             TokenKind::MilestoneEnd => {
                 handle_milestone_end(token, &mut structural_stack, enabled, issues);
@@ -1312,19 +1377,24 @@ fn lint_marker_balance_rules<T: LintableToken>(
             _ => {}
         }
 
-        if matches!(
-            kind,
-            TokenKind::Marker | TokenKind::Milestone
-        ) && matches!(
-            token_marker_kind(token),
-            MarkerKind::Paragraph
-                | MarkerKind::Header
-                | MarkerKind::Meta
-                | MarkerKind::Chapter
-                | MarkerKind::Periph
-                | MarkerKind::Unknown
-        ) {
-            close_structural_frames_for_boundary(tokens, token, &mut structural_stack, enabled, issues);
+        if matches!(kind, TokenKind::Marker | TokenKind::Milestone)
+            && matches!(
+                token_marker_kind(token),
+                MarkerKind::Paragraph
+                    | MarkerKind::Header
+                    | MarkerKind::Meta
+                    | MarkerKind::Chapter
+                    | MarkerKind::Periph
+                    | MarkerKind::Unknown
+            )
+        {
+            close_structural_frames_for_boundary(
+                tokens,
+                token,
+                &mut structural_stack,
+                enabled,
+                issues,
+            );
         }
     }
 
@@ -1344,7 +1414,10 @@ fn lint_marker_balance_rules<T: LintableToken>(
                     category: code.category(),
                     severity: code.severity(),
                     message: if code == LintCode::UnclosedNote {
-                        format!("note \\{} was not closed before paragraph or chapter boundary", frame.marker)
+                        format!(
+                            "note \\{} was not closed before paragraph or chapter boundary",
+                            frame.marker
+                        )
                     } else {
                         format!("\\{} was still open at end of file", frame.marker)
                     },
@@ -1354,6 +1427,7 @@ fn lint_marker_balance_rules<T: LintableToken>(
                     related_token_id: anchor.id(),
                     sid: tokens[frame.token_index].sid().or_else(|| anchor.sid()),
                     marker: Some(frame.marker),
+                    fix: None,
                 });
             }
         }
@@ -1388,7 +1462,10 @@ fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
     ))
 }
 
-fn next_book_code_after_marker<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<&str> {
+fn next_book_code_after_marker<T: LintableToken>(
+    tokens: &[T],
+    marker_index: usize,
+) -> Option<&str> {
     let next_index = next_significant_token_index(tokens, marker_index + 1)?;
     (tokens[next_index].kind() == TokenKind::BookCode).then(|| tokens[next_index].text().trim())
 }
@@ -1401,7 +1478,11 @@ fn infer_document_kind(book_code: &str) -> DocumentKind {
     }
 }
 
-fn lint_number_predecessor<T: LintableToken>(tokens: &[T], index: usize, issues: &mut Vec<LintIssue>) {
+fn lint_number_predecessor<T: LintableToken>(
+    tokens: &[T],
+    index: usize,
+    issues: &mut Vec<LintIssue>,
+) {
     let token = &tokens[index];
     let Some(prev_index) = previous_significant_token_index(tokens, index) else {
         issues.push(simple_issue(
@@ -1483,9 +1564,8 @@ fn handle_close_marker<T: LintableToken>(
     }
 
     if is_note_close_marker(marker) {
-        while let Some((frame_kind, _frame_marker)) = stack
-            .last()
-            .map(|frame| (frame.kind, frame.marker.clone()))
+        while let Some((frame_kind, _frame_marker)) =
+            stack.last().map(|frame| (frame.kind, frame.marker.clone()))
         {
             if frame_kind == MarkerKind::Character
                 && stack.last().is_some_and(|frame| frame.valid_in_note)
@@ -1517,7 +1597,10 @@ fn handle_close_marker<T: LintableToken>(
             if enabled.has(LintCode::ImplicitlyClosedMarker) {
                 issues.push(simple_issue_with_marker(
                     LintCode::ImplicitlyClosedMarker,
-                    format!("marker \\{} was implicitly closed before \\{}*", frame.marker, marker),
+                    format!(
+                        "marker \\{} was implicitly closed before \\{}*",
+                        frame.marker, marker
+                    ),
                     &frame.marker,
                     token,
                 ));
@@ -1540,9 +1623,8 @@ fn handle_structural_close<T: LintableToken>(
     issues: &mut Vec<LintIssue>,
 ) {
     if is_note_close_marker(marker) {
-        while let Some((frame_kind, frame_marker)) = stack
-            .last()
-            .map(|frame| (frame.kind, frame.marker.clone()))
+        while let Some((frame_kind, frame_marker)) =
+            stack.last().map(|frame| (frame.kind, frame.marker.clone()))
         {
             if frame_kind == StructuralScopeKind::Character
                 && marker_note_subkind(frame_marker.as_str()).is_some()
@@ -1555,8 +1637,10 @@ fn handle_structural_close<T: LintableToken>(
     }
 
     if let Some(match_pos) = stack.iter().rposition(|frame| {
-        matches!(frame.kind, StructuralScopeKind::Note | StructuralScopeKind::Character)
-            && frame.marker == marker
+        matches!(
+            frame.kind,
+            StructuralScopeKind::Note | StructuralScopeKind::Character
+        ) && frame.marker == marker
     }) {
         if match_pos + 1 != stack.len() && enabled.has(LintCode::MisnestedCloseMarker) {
             if let Some(open) = stack.last() {
@@ -1618,9 +1702,15 @@ fn close_structural_frames_for_boundary<T: LintableToken>(
                 category: code.category(),
                 severity: code.severity(),
                 message: if code == LintCode::UnclosedNote {
-                    format!("note \\{} was not closed before paragraph or chapter boundary", frame.marker)
+                    format!(
+                        "note \\{} was not closed before paragraph or chapter boundary",
+                        frame.marker
+                    )
                 } else {
-                    format!("marker \\{} was not closed before the next block boundary", frame.marker)
+                    format!(
+                        "marker \\{} was not closed before the next block boundary",
+                        frame.marker
+                    )
                 },
                 span: open.span(),
                 related_span: boundary.span(),
@@ -1628,6 +1718,7 @@ fn close_structural_frames_for_boundary<T: LintableToken>(
                 related_token_id: boundary.id(),
                 sid: open.sid().or_else(|| boundary.sid()),
                 marker: Some(frame.marker),
+                fix: None,
             });
         }
     }
@@ -1644,7 +1735,11 @@ fn unclosed_marker_issue<T: LintableToken>(
         MarkerKind::Character => LintCode::CharNotClosed,
         _ => LintCode::UnclosedMarkerAtEof,
     };
-    let location = if at_eof { "before end of file" } else { "before the next block boundary" };
+    let location = if at_eof {
+        "before end of file"
+    } else {
+        "before the next block boundary"
+    };
     let open = &tokens[frame.token_index];
     LintIssue {
         code,
@@ -1657,6 +1752,7 @@ fn unclosed_marker_issue<T: LintableToken>(
         related_token_id: anchor.id(),
         sid: open.sid().or_else(|| anchor.sid()),
         marker: Some(frame.marker.clone()),
+        fix: None,
     }
 }
 
@@ -1690,11 +1786,15 @@ fn token_primary_number<T: LintableToken>(token: &T) -> Option<u32> {
 }
 
 fn token_number_range<T: LintableToken>(token: &T) -> Option<(u32, u32)> {
-    token.number_info().and_then(|(start, end, kind)| match kind {
-        NumberRangeKind::Single => Some((start, start)),
-        NumberRangeKind::Range => end.map(|end| (start, end)),
-        NumberRangeKind::Sequence | NumberRangeKind::SequenceWithRange => Some((start, end.unwrap_or(start))),
-    })
+    token
+        .number_info()
+        .and_then(|(start, end, kind)| match kind {
+            NumberRangeKind::Single => Some((start, start)),
+            NumberRangeKind::Range => end.map(|end| (start, end)),
+            NumberRangeKind::Sequence | NumberRangeKind::SequenceWithRange => {
+                Some((start, end.unwrap_or(start)))
+            }
+        })
 }
 
 fn parse_primary_number(text: &str) -> Option<u32> {
@@ -1713,7 +1813,13 @@ fn parse_number_range(text: &str) -> Option<(u32, u32)> {
         return None;
     }
     let mut parts = trimmed.split('-');
-    let start = parts.next()?.split(',').next()?.trim_matches(|ch: char| !ch.is_ascii_digit()).parse::<u32>().ok()?;
+    let start = parts
+        .next()?
+        .split(',')
+        .next()?
+        .trim_matches(|ch: char| !ch.is_ascii_digit())
+        .parse::<u32>()
+        .ok()?;
     let end_raw = match parts.next() {
         Some(value) => value,
         None => trimmed,
@@ -1744,14 +1850,20 @@ fn top_level_contexts_for(kind: DocumentKind) -> &'static [(TopLevelSlot, SpecCo
             (TopLevelSlot::Headers, SpecContext::BookHeaders),
             (TopLevelSlot::Titles, SpecContext::BookTitles),
             (TopLevelSlot::Introduction, SpecContext::BookIntroduction),
-            (TopLevelSlot::IntroductionEndTitles, SpecContext::BookIntroductionEndTitles),
+            (
+                TopLevelSlot::IntroductionEndTitles,
+                SpecContext::BookIntroductionEndTitles,
+            ),
             (TopLevelSlot::Content, SpecContext::ChapterContent),
         ],
         DocumentKind::PeripheralStandalone | DocumentKind::PeripheralDivided => &[
             (TopLevelSlot::Headers, SpecContext::BookHeaders),
             (TopLevelSlot::Titles, SpecContext::BookTitles),
             (TopLevelSlot::Introduction, SpecContext::BookIntroduction),
-            (TopLevelSlot::IntroductionEndTitles, SpecContext::BookIntroductionEndTitles),
+            (
+                TopLevelSlot::IntroductionEndTitles,
+                SpecContext::BookIntroductionEndTitles,
+            ),
             (TopLevelSlot::Content, SpecContext::PeripheralContent),
         ],
     }
@@ -1815,7 +1927,10 @@ fn token_marker_kind<T: LintableToken>(token: &T) -> MarkerKind {
             StructuralScopeKind::Meta => MarkerKind::Meta,
         };
     }
-    token.marker().map(|name| lookup_marker(name).kind).unwrap_or(MarkerKind::Unknown)
+    token
+        .marker()
+        .map(|name| lookup_marker(name).kind)
+        .unwrap_or(MarkerKind::Unknown)
 }
 
 fn next_number_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
@@ -1878,7 +1993,9 @@ fn ends_with_horizontal_whitespace(text: &str) -> bool {
 }
 
 fn strip_digits(text: &str) -> &str {
-    let first_digit = text.find(|ch: char| ch.is_ascii_digit()).unwrap_or(text.len());
+    let first_digit = text
+        .find(|ch: char| ch.is_ascii_digit())
+        .unwrap_or(text.len());
     &text[..first_digit]
 }
 
@@ -1937,7 +2054,10 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
     matches!(marker, "b")
 }
 
-fn empty_paragraph_boundary_index<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<usize> {
+fn empty_paragraph_boundary_index<T: LintableToken>(
+    tokens: &[T],
+    marker_index: usize,
+) -> Option<usize> {
     let mut index = marker_index + 1;
     while index < tokens.len() {
         let token = &tokens[index];
@@ -2025,6 +2145,29 @@ fn issue<T: LintableToken, U: LintableToken>(
         related_token_id: related.and_then(LintableToken::id),
         sid: token.sid(),
         marker: token.marker().map(ToOwned::to_owned),
+        fix: None,
+    }
+}
+
+impl LintIssue {
+    fn with_fix(mut self, fix: TokenFix) -> Self {
+        self.fix = Some(fix);
+        self
+    }
+}
+
+fn missing_separator_fix<T: LintableToken>(token: &T) -> TokenFix {
+    TokenFix::ReplaceToken {
+        code: "insert-separator-after-marker".to_string(),
+        label: "InsertSeparatorAfterMarker".to_string(),
+        label_params: MessageParams::default(),
+        target_token_id: token.id().expect("fixable token should have id"),
+        replacements: vec![crate::format::TokenTemplate {
+            kind: token.kind(),
+            text: format!(" {}", token.text()),
+            marker: token.marker().map(ToOwned::to_owned),
+            sid: token.sid(),
+        }],
     }
 }
 
@@ -2060,7 +2203,10 @@ fn dedupe_issues(issues: Vec<LintIssue>) -> Vec<LintIssue> {
     deduped
 }
 
-fn apply_suppressions(issues: Vec<LintIssue>, suppressions: &[LintSuppression]) -> (Vec<LintIssue>, usize) {
+fn apply_suppressions(
+    issues: Vec<LintIssue>,
+    suppressions: &[LintSuppression],
+) -> (Vec<LintIssue>, usize) {
     let suppression_keys = suppressions
         .iter()
         .map(|suppression| (suppression.code, suppression.sid.as_str()))
@@ -2184,55 +2330,155 @@ mod tests {
         ];
 
         let issues = lint_tokens(&tokens, LintOptions::default());
-        assert!(issues
-            .issues
-            .iter()
-            .any(|issue| issue.code == LintCode::MissingSeparatorAfterMarker));
+        assert!(
+            issues
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::MissingSeparatorAfterMarker)
+        );
         assert_eq!(tokens[0].lane, 1);
+    }
+
+    #[test]
+    fn missing_separator_issue_carries_concrete_fix_and_apply_token_fix_updates_tokens() {
+        let tokens = vec![
+            crate::FormatToken {
+                kind: TokenKind::Marker,
+                text: "\\p".to_string(),
+                marker: Some("p".to_string()),
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-0".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+            crate::FormatToken {
+                kind: TokenKind::Text,
+                text: "Alpha".to_string(),
+                marker: None,
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-1".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+        ];
+
+        let result = lint_tokens(&tokens, LintOptions::default());
+        let issue = result
+            .issues
+            .into_iter()
+            .find(|issue| issue.code == LintCode::MissingSeparatorAfterMarker)
+            .expect("expected missing-separator issue");
+        let fix = issue.fix.expect("expected concrete token fix");
+        let fixed = apply_token_fix(&tokens, &fix);
+
+        assert_eq!(fixed.len(), 2);
+        assert_eq!(fixed[0].text, "\\p");
+        assert_eq!(fixed[1].text, " Alpha");
     }
 
     #[test]
     fn missing_id_is_reported() {
         let result = lint_usfm("\\c 1\n\\v 1 text", LintOptions::default());
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::MissingIdMarker));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::MissingIdMarker)
+        );
     }
 
     #[test]
     fn duplicate_id_is_reported() {
-        let result = lint_usfm("\\id GEN\n\\id EXO\n\\c 1\n\\v 1 text", LintOptions::default());
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::DuplicateIdMarker));
+        let result = lint_usfm(
+            "\\id GEN\n\\id EXO\n\\c 1\n\\v 1 text",
+            LintOptions::default(),
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::DuplicateIdMarker)
+        );
     }
 
     #[test]
     fn missing_chapter_and_verse_numbers_are_reported() {
         let result = lint_usfm("\\id GEN\n\\c\n\\v text", LintOptions::default());
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::MissingChapterNumber));
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::MissingVerseNumber));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::MissingChapterNumber)
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::MissingVerseNumber)
+        );
     }
 
     #[test]
     fn note_submarker_outside_note_is_reported() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\ft outside note\n", LintOptions::default());
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::NoteSubmarkerOutsideNote));
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\ft outside note\n",
+            LintOptions::default(),
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::NoteSubmarkerOutsideNote)
+        );
     }
 
     #[test]
     fn chapter_and_verse_metadata_attachment_is_checked() {
         let result = lint_usfm("\\id GEN\n\\c 1\n\\vp 2\n\\ca 3", LintOptions::default());
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::VerseMetadataOutsideVerse));
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::ChapterMetadataOutsideChapter));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::VerseMetadataOutsideVerse)
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::ChapterMetadataOutsideChapter)
+        );
     }
 
     #[test]
     fn numbering_rules_are_reported() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n\\c 3\n", LintOptions::default());
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::DuplicateVerseNumber));
-        assert!(result.issues.iter().any(|issue| issue.code == LintCode::ChapterExpectedIncreaseByOne));
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n\\c 3\n",
+            LintOptions::default(),
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::DuplicateVerseNumber)
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::ChapterExpectedIncreaseByOne)
+        );
     }
 
     #[test]
     fn structural_balance_rules_are_reported() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text", LintOptions::default());
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text",
+            LintOptions::default(),
+        );
         assert!(result.issues.iter().any(|issue| {
             matches!(
                 issue.code,
@@ -2243,9 +2489,22 @@ mod tests {
 
     #[test]
     fn note_structural_submarkers_do_not_report_implicit_or_misnested_close_on_note_end() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\p \\f + \\ft note\\f*", LintOptions::default());
-        assert!(!result.issues.iter().any(|issue| issue.code == LintCode::ImplicitlyClosedMarker));
-        assert!(!result.issues.iter().any(|issue| issue.code == LintCode::MisnestedCloseMarker));
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p \\f + \\ft note\\f*",
+            LintOptions::default(),
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::ImplicitlyClosedMarker)
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::MisnestedCloseMarker)
+        );
     }
 
     #[test]
@@ -2264,10 +2523,12 @@ mod tests {
             sid: "GEN 1:1".to_string(),
         }];
         let suppressed = lint_usfm("\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text", options);
-        assert!(!suppressed
-            .issues
-            .iter()
-            .any(|issue| issue.code == LintCode::DuplicateVerseNumber));
+        assert!(
+            !suppressed
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::DuplicateVerseNumber)
+        );
         assert_eq!(suppressed.summary.suppressed_count, 1);
     }
 
@@ -2275,7 +2536,17 @@ mod tests {
     fn summary_counts_by_category_and_severity() {
         let result = lint_usfm("\\c 2\n\\v 1 text\n\\v 1 text", LintOptions::default());
         assert!(result.summary.total_count > 0);
-        assert!(result.summary.by_category.contains_key(&LintCategory::Document));
-        assert!(result.summary.by_severity.contains_key(&LintSeverity::Error));
+        assert!(
+            result
+                .summary
+                .by_category
+                .contains_key(&LintCategory::Document)
+        );
+        assert!(
+            result
+                .summary
+                .by_severity
+                .contains_key(&LintSeverity::Error)
+        );
     }
 }

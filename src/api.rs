@@ -8,10 +8,7 @@ use crate::diff::{
 };
 use crate::format::{FormatOptions, FormatToken, FormattableToken, format, format_mut};
 use crate::html::{HtmlOptions, tokens_to_html, usfm_to_html};
-use crate::lint::{
-    ApplyTokenFixesResult, LintOptions, LintResult, LintableToken, apply_token_fixes, lint_tokens,
-    lint_usfm,
-};
+use crate::lint::{LintOptions, LintResult, LintableToken, TokenFix, apply_token_fix, lint_tokens, lint_usfm};
 use crate::parse::parse;
 use crate::token::{ParseAnalysis, Sid, Token, TokenId};
 use crate::usj::{UsjDocument, UsjError, from_usj_str, usfm_to_usj};
@@ -149,13 +146,8 @@ impl Usfm {
         lint_usfm(&self.source, options)
     }
 
-    pub fn apply_token_fixes(
-        &self,
-        lint_options: LintOptions,
-        format_options: FormatOptions,
-    ) -> ApplyTokenFixesResult<FormatToken> {
-        self.parse_owned()
-            .apply_token_fixes(lint_options, format_options)
+    pub fn apply_token_fix(&self, fix: &TokenFix) -> Vec<FormatToken> {
+        self.parse_owned().apply_token_fix(fix)
     }
 
     pub fn parse_owned(&self) -> ParsedUsfm {
@@ -328,12 +320,8 @@ impl ParsedUsfm {
         lint_tokens(&self.tokens, options)
     }
 
-    pub fn apply_token_fixes(
-        &self,
-        lint_options: LintOptions,
-        format_options: FormatOptions,
-    ) -> ApplyTokenFixesResult<FormatToken> {
-        apply_token_fixes(&self.tokens, lint_options, format_options)
+    pub fn apply_token_fix(&self, fix: &TokenFix) -> Vec<FormatToken> {
+        apply_token_fix(&self.tokens, fix)
     }
 
     pub fn format(&self, options: FormatOptions) -> Vec<FormatToken> {
@@ -607,13 +595,9 @@ impl<T: LintableToken> TokenStream<T> {
     }
 }
 
-impl<T: LintableToken + FormattableToken + Clone> TokenStream<T> {
-    pub fn apply_token_fixes(
-        &self,
-        lint_options: LintOptions,
-        format_options: FormatOptions,
-    ) -> ApplyTokenFixesResult<T> {
-        apply_token_fixes(&self.tokens, lint_options, format_options)
+impl<T: FormattableToken> TokenStream<T> {
+    pub fn apply_token_fix(&self, fix: &TokenFix) -> Vec<T> {
+        apply_token_fix(&self.tokens, fix)
     }
 }
 
@@ -1316,6 +1300,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::LintCode;
 
     #[test]
     fn usfm_from_str_and_path_work() {
@@ -1403,13 +1388,43 @@ mod tests {
     }
 
     #[test]
-    fn apply_token_fixes_and_revert_diff_block_are_available() {
+    fn apply_token_fix_and_revert_diff_block_are_available() {
         let baseline = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1 Alpha\n");
-        let changed = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1  Alpha\n");
-
-        let fixed = changed.apply_token_fixes(LintOptions::default(), FormatOptions::default());
-        assert!(!fixed.tokens.is_empty());
-        assert_ne!(fixed.tokens, changed.parse_owned().tokens().to_vec());
+        let changed = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1Alpha\n");
+        let malformed_tokens = vec![
+            crate::FormatToken {
+                kind: crate::TokenKind::Marker,
+                text: "\\p".to_string(),
+                marker: Some("p".to_string()),
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-0".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+            crate::FormatToken {
+                kind: crate::TokenKind::Text,
+                text: "Alpha".to_string(),
+                marker: None,
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-1".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+        ];
+        let issue = TokenStream::from_tokens(malformed_tokens.clone())
+            .lint(LintOptions::default())
+            .issues
+            .into_iter()
+            .find(|issue| issue.code == LintCode::MissingSeparatorAfterMarker)
+            .expect("expected missing-separator issue");
+        let fix = issue.fix.expect("expected concrete token fix");
+        let fixed = TokenStream::from_tokens(malformed_tokens).apply_token_fix(&fix);
+        assert_eq!(fixed.len(), 2);
+        assert_eq!(fixed[1].text, " Alpha");
 
         let baseline_parsed = baseline.parse_owned();
         let changed_parsed = changed.parse_owned();

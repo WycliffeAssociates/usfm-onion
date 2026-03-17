@@ -22,11 +22,10 @@ use usfm_onion::html::{
     HtmlNoteMode as NativeHtmlNoteMode, HtmlOptions as NativeHtmlOptions, usfm_to_html,
 };
 use usfm_onion::lint::{
-    ApplyTokenFixesResult as NativeApplyTokenFixesResult, AppliedTokenFix as NativeAppliedTokenFix,
     LintCategory as NativeLintCategory, LintCode as NativeLintCode,
     LintOptions as NativeLintOptions, LintResult as NativeLintResult,
     LintSeverity as NativeLintSeverity, LintSuppression as NativeLintSuppression, LintableToken,
-    apply_token_fixes, lint_tokens, lint_usfm,
+    TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
 };
 use usfm_onion::marker_defs::{
     BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, SpecContext,
@@ -303,6 +302,7 @@ export interface LintIssue {
   relatedTokenId?: string;
   sid?: string;
   marker?: string;
+  fix?: TokenFix;
 }
 
 export interface LintSummary {
@@ -317,19 +317,30 @@ export interface LintResult {
   summary: LintSummary;
 }
 
-export interface AppliedTokenFix {
-  code: LintCode;
-  tokenId?: string;
-  sid?: string;
-  marker?: string;
-}
-
-export interface ApplyTokenFixesResult {
-  tokens: FormatToken[];
-  usfm: string;
-  appliedFixes: AppliedTokenFix[];
-  remainingIssues: LintIssue[];
-  remainingSummary: LintSummary;
+export type TokenFix =
+  | {
+      type: "replaceToken";
+      code: string;
+      label: string;
+      labelParams: Record<string, string>;
+      targetTokenId: string;
+      replacements: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
+    }
+  | {
+      type: "deleteToken";
+      code: string;
+      label: string;
+      labelParams: Record<string, string>;
+      targetTokenId: string;
+    }
+  | {
+      type: "insertAfter";
+      code: string;
+      label: string;
+      labelParams: Record<string, string>;
+      targetTokenId: string;
+      insert: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
+    };
 }
 
 export interface FormatOptions {
@@ -476,7 +487,7 @@ export class ParsedUsfm {
   tokens(): Token[];
   cst(): CstDocument;
   lint(options?: LintOptions): LintResult;
-  applyTokenFixes(lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+  applyTokenFix(fix: TokenFix): Token[];
   revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
   format(options?: FormatOptions): string;
   toUsfm(): string;
@@ -512,7 +523,7 @@ export function parse(source: string): ParsedUsfm;
 export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
-export function applyTokenFixes(tokens: Token[], lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
 export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
@@ -661,6 +672,8 @@ struct LintIssueValue {
     sid: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     marker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fix: Option<TokenFixValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -680,25 +693,39 @@ struct LintResultValue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AppliedTokenFixValue {
-    code: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    token_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    sid: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    marker: Option<String>,
+#[serde(tag = "type", rename_all = "camelCase")]
+enum TokenFixValue {
+    ReplaceToken {
+        code: String,
+        label: String,
+        label_params: std::collections::BTreeMap<String, String>,
+        target_token_id: String,
+        replacements: Vec<TokenTemplateValue>,
+    },
+    DeleteToken {
+        code: String,
+        label: String,
+        label_params: std::collections::BTreeMap<String, String>,
+        target_token_id: String,
+    },
+    InsertAfter {
+        code: String,
+        label: String,
+        label_params: std::collections::BTreeMap<String, String>,
+        target_token_id: String,
+        insert: Vec<TokenTemplateValue>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApplyTokenFixesResultValue {
-    tokens: Vec<TokenValue>,
-    usfm: String,
-    applied_fixes: Vec<AppliedTokenFixValue>,
-    remaining_issues: Vec<LintIssueValue>,
-    remaining_summary: LintSummaryValue,
+struct TokenTemplateValue {
+    kind: String,
+    text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -956,24 +983,13 @@ impl ParsedUsfm {
         to_js_value(&map_lint_result(lint_usfm(&self.source, options)))
     }
 
-    #[wasm_bindgen(js_name = applyTokenFixes)]
-    pub fn apply_token_fixes(
-        &self,
-        lint_options: Option<JsValue>,
-        format_options: Option<JsValue>,
-    ) -> Result<JsValue, JsError> {
+    #[wasm_bindgen(js_name = applyTokenFix)]
+    pub fn apply_token_fix(&self, fix: JsValue) -> Result<JsValue, JsError> {
         let parsed = native_parse(&self.source);
-        let native_tokens = parsed
-            .tokens
-            .iter()
-            .map(format_token_with_identity)
-            .collect::<Vec<_>>();
-        let result = apply_token_fixes(
-            &native_tokens,
-            parse_lint_options(lint_options)?,
-            parse_format_options(format_options)?,
-        );
-        to_js_value(&map_apply_token_fixes_result(result))
+        let native_tokens = parsed.tokens.iter().map(format_token_with_identity).collect::<Vec<_>>();
+        let fix = parse_token_fix(fix)?;
+        let result = apply_token_fix(&native_tokens, &fix);
+        to_js_value(&result.iter().map(map_format_token).collect::<Vec<_>>())
     }
 
     #[wasm_bindgen(js_name = revertDiffBlock)]
@@ -1186,23 +1202,16 @@ pub fn wasm_lint_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<JsV
     to_js_value(&map_lint_result(lint_tokens(&tokens, options)))
 }
 
-#[wasm_bindgen(skip_typescript, js_name = applyTokenFixes)]
-pub fn wasm_apply_token_fixes(
-    tokens: JsValue,
-    lint_options: Option<JsValue>,
-    format_options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
+#[wasm_bindgen(skip_typescript, js_name = applyTokenFix)]
+pub fn wasm_apply_token_fix(tokens: JsValue, fix: JsValue) -> Result<JsValue, JsError> {
     let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
     let native_tokens = values
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Result<Vec<_>, JsError>>()?;
-    let result = apply_token_fixes(
-        &native_tokens,
-        parse_lint_options(lint_options)?,
-        parse_format_options(format_options)?,
-    );
-    to_js_value(&map_apply_token_fixes_result(result))
+    let fix = parse_token_fix(fix)?;
+    let result = apply_token_fix(&native_tokens, &fix);
+    to_js_value(&result.iter().map(map_format_token).collect::<Vec<_>>())
 }
 
 #[wasm_bindgen(skip_typescript, js_name = lintTokenBatch)]
@@ -1593,6 +1602,64 @@ fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
     owned
 }
 
+fn parse_token_fix(value: JsValue) -> Result<NativeTokenFix, JsError> {
+    let value: TokenFixValue = from_js_value(value).map_err(js_serde_error)?;
+    match value {
+        TokenFixValue::ReplaceToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            replacements,
+        } => Ok(NativeTokenFix::ReplaceToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            replacements: replacements
+                .into_iter()
+                .map(parse_token_template)
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
+        TokenFixValue::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        } => Ok(NativeTokenFix::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        }),
+        TokenFixValue::InsertAfter {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            insert,
+        } => Ok(NativeTokenFix::InsertAfter {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            insert: insert
+                .into_iter()
+                .map(parse_token_template)
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
+    }
+}
+
+fn parse_token_template(value: TokenTemplateValue) -> Result<usfm_onion::TokenTemplate, JsError> {
+    Ok(usfm_onion::TokenTemplate {
+        kind: parse_token_kind(value.kind.as_str())?,
+        text: value.text,
+        marker: value.marker,
+        sid: value.sid,
+    })
+}
+
 fn parse_structural_info(value: StructuralMarkerInfoValue) -> Result<StructuralMarkerInfo, JsError> {
     Ok(StructuralMarkerInfo {
         scope_kind: parse_scope_kind(value.scope_kind.as_str())?,
@@ -1779,32 +1846,54 @@ fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummaryValue {
     }
 }
 
-fn map_applied_token_fix(fix: NativeAppliedTokenFix) -> AppliedTokenFixValue {
-    AppliedTokenFixValue {
-        code: lint_code_str(fix.code).to_string(),
-        token_id: fix.token_id,
-        sid: fix.sid,
-        marker: fix.marker,
+fn map_token_fix(fix: NativeTokenFix) -> TokenFixValue {
+    match fix {
+        NativeTokenFix::ReplaceToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            replacements,
+        } => TokenFixValue::ReplaceToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            replacements: replacements.into_iter().map(map_token_template).collect(),
+        },
+        NativeTokenFix::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        } => TokenFixValue::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        },
+        NativeTokenFix::InsertAfter {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            insert,
+        } => TokenFixValue::InsertAfter {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            insert: insert.into_iter().map(map_token_template).collect(),
+        },
     }
 }
 
-fn map_apply_token_fixes_result(
-    result: NativeApplyTokenFixesResult<NativeFormatToken>,
-) -> ApplyTokenFixesResultValue {
-    ApplyTokenFixesResultValue {
-        tokens: result.tokens.iter().map(map_format_token).collect(),
-        usfm: format_tokens_to_usfm(&result.tokens),
-        applied_fixes: result
-            .applied_fixes
-            .into_iter()
-            .map(map_applied_token_fix)
-            .collect(),
-        remaining_issues: result
-            .remaining_issues
-            .into_iter()
-            .map(map_lint_issue)
-            .collect(),
-        remaining_summary: map_lint_summary(result.remaining_summary),
+fn map_token_template(template: usfm_onion::TokenTemplate) -> TokenTemplateValue {
+    TokenTemplateValue {
+        kind: token_kind_str(template.kind).to_string(),
+        text: template.text,
+        marker: template.marker,
+        sid: template.sid,
     }
 }
 
@@ -1820,6 +1909,7 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssueValue {
         related_token_id: issue.related_token_id,
         sid: issue.sid,
         marker: issue.marker,
+        fix: issue.fix.map(map_token_fix),
     }
 }
 
