@@ -14,6 +14,10 @@ fn main() {
     // dump_usx();
     // dump_vref();
     // dump_lint();
+    // dump_format();
+    // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| {
+    //     usfm_onion::format_usfm(source, usfm_onion::FormatOptions::default())
+    // });
     // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| usfm_onion::parse(source));
     // 1. Load the actual USFM data into memory first
     let corpus_path = Path::new(_bsb_corpus);
@@ -34,7 +38,8 @@ fn main() {
             // entries.iter().map(...) is lazy! We use for_each to actually run it.
             entries.iter().for_each(|entry| {
                 // Pass the content (entry.value), not the directory path
-                let _ = usfm_onion::lint_usfm(&entry.value, usfm_onion::LintOptions::default());
+                // let _ = usfm_onion::lint_usfm(&entry.value, usfm_onion::LintOptions::default());
+                let _ = usfm_onion::format_usfm(&entry.value, usfm_onion::FormatOptions::default());
             });
         },
         20,
@@ -146,6 +151,18 @@ fn dump_lint() {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
 
     println!("{json}");
+}
+
+#[allow(dead_code)]
+fn dump_format() {
+    let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
+    let formatted = usfm_onion::format_usfm(&source, usfm_onion::FormatOptions::default());
+
+    let output_path = std::path::Path::new("playgroundOut.usfm");
+    std::fs::write(output_path, &formatted)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+
+    println!("{formatted}");
 }
 
 #[derive(serde::Serialize)]

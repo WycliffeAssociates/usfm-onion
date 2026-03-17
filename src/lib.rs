@@ -1,6 +1,7 @@
 pub mod convert;
 pub mod cst;
 mod export_tree;
+pub mod format;
 pub mod lexer;
 mod lint_impl;
 pub mod lint {
@@ -22,6 +23,11 @@ pub use cst::{
     cst_to_usfm, parse_cst,
 };
 pub use lexer::lex;
+pub use format::{
+    FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatToken, FormattableToken,
+    MessageParams, TokenTemplate, format, format_mut, format_tokens, format_tokens_profile,
+    format_tokens_to_usfm, format_usfm, into_format_tokens,
+};
 pub use lint_impl::{
     LintCategory, LintCode, LintIssue, LintOptions, LintResult, LintSeverity, LintSummary,
     LintSuppression, LintableToken, lint_tokens, lint_usfm,

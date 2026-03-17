@@ -162,6 +162,10 @@ vref
 web reading format
 html
 
+diff: 
+I think can just wholesale keep things as they were unless you see a reason not too?
+
+
 
 ## For benches with copora
 USFM_BENCH_CORPORA=examples.bsb cargo bench --bench lint

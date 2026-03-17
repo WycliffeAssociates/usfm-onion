@@ -73,6 +73,10 @@ harness = false
 name = "lint"
 harness = false
 
+[[bench]]
+name = "format"
+harness = false
+
 [profile.profiling]
 inherits = "release"
 debug = 2
