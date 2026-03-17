@@ -1,3 +1,4 @@
+use crate::format::FormatToken;
 use crate::parse::parse;
 use crate::token::{Token, TokenKind};
 use serde::Serialize;
@@ -52,6 +53,28 @@ impl<'a> DiffableToken for Token<'a> {
 
     fn marker_key(&self) -> Option<&str> {
         self.marker_name()
+    }
+}
+
+impl DiffableToken for FormatToken {
+    fn sid(&self) -> Option<&str> {
+        self.sid.as_deref()
+    }
+
+    fn text(&self) -> &str {
+        &self.text
+    }
+
+    fn id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
+    fn kind_key(&self) -> Option<&str> {
+        Some(token_kind_key(self.kind))
+    }
+
+    fn marker_key(&self) -> Option<&str> {
+        self.marker.as_deref()
     }
 }
 

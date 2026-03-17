@@ -85,6 +85,14 @@ harness = false
 name = "html"
 harness = false
 
+[[bench]]
+name = "omni"
+harness = false
+
+[[bench]]
+name = "execution"
+harness = false
+
 [profile.profiling]
 inherits = "release"
 debug = 2

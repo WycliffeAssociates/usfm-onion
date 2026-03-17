@@ -1,6 +1,6 @@
 mod common;
 
-use common::{selected_corpus_batches, standard_corpus_cases};
+use common::{batch_label, case_label, selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use usfm_onion::diff::{BuildSidBlocksOptions, diff_chapter_token_streams, diff_usfm_sources};
 use usfm_onion::parse::parse;
@@ -12,9 +12,9 @@ fn benchmark_diff(c: &mut Criterion) {
     for case in &corpus_cases {
         let baseline = parse(case.source.as_str());
         let current = parse(case.source.as_str());
-        token_group.throughput(Throughput::Bytes(case.source.len() as u64));
+        token_group.throughput(Throughput::Bytes(case.total_bytes as u64));
         token_group.bench_with_input(
-            BenchmarkId::new("diff_chapter_token_streams", case.name),
+            BenchmarkId::new("diff_chapter_token_streams", case_label(case)),
             case,
             |b, _case| {
                 b.iter(|| {
@@ -31,9 +31,9 @@ fn benchmark_diff(c: &mut Criterion) {
 
     let mut source_group = c.benchmark_group("diff/source");
     for case in &corpus_cases {
-        source_group.throughput(Throughput::Bytes(case.source.len() as u64));
+        source_group.throughput(Throughput::Bytes(case.total_bytes as u64));
         source_group.bench_with_input(
-            BenchmarkId::new("diff_usfm_sources", case.name),
+            BenchmarkId::new("diff_usfm_sources", case_label(case)),
             case,
             |b, case| {
                 b.iter(|| {
@@ -61,7 +61,7 @@ fn benchmark_diff(c: &mut Criterion) {
                 .collect::<Vec<_>>();
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("diff_chapter_token_streams", &batch.name),
+                BenchmarkId::new("diff_chapter_token_streams", batch_label(batch)),
                 batch,
                 |b, _batch| {
                     b.iter(|| {
@@ -77,7 +77,7 @@ fn benchmark_diff(c: &mut Criterion) {
             );
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("diff_usfm_sources", &batch.name),
+                BenchmarkId::new("diff_usfm_sources", batch_label(batch)),
                 batch,
                 |b, batch| {
                     b.iter(|| {

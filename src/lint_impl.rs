@@ -9,6 +9,7 @@ use crate::marker_defs::{
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
+use crate::format::FormatToken;
 use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind};
 
 pub trait LintableToken {
@@ -71,6 +72,40 @@ impl<'a> LintableToken for Token<'a> {
             TokenData::Number { start, end, kind } => Some((start, end, kind)),
             _ => None,
         }
+    }
+}
+
+impl LintableToken for FormatToken {
+    fn kind(&self) -> TokenKind {
+        self.kind
+    }
+
+    fn span(&self) -> Option<Span> {
+        self.span
+    }
+
+    fn text(&self) -> &str {
+        &self.text
+    }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker.as_deref()
+    }
+
+    fn sid(&self) -> Option<String> {
+        self.sid.clone()
+    }
+
+    fn id(&self) -> Option<String> {
+        self.id.clone()
+    }
+
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        self.structural
+    }
+
+    fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
+        self.number_info
     }
 }
 

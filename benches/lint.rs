@@ -1,6 +1,6 @@
 mod common;
 
-use common::{selected_corpus_batches, standard_corpus_cases};
+use common::{batch_label, case_label, selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use usfm_onion::lint::{LintOptions, lint_tokens};
 use usfm_onion::parse::parse;
@@ -11,9 +11,9 @@ fn benchmark_lint(c: &mut Criterion) {
     let mut token_group = c.benchmark_group("lint/tokens");
     for case in &corpus_cases {
         let parsed = parse(case.source.as_str());
-        token_group.throughput(Throughput::Bytes(case.source.len() as u64));
+        token_group.throughput(Throughput::Bytes(case.total_bytes as u64));
         token_group.bench_with_input(
-            BenchmarkId::new("lint_tokens", case.name),
+            BenchmarkId::new("lint_tokens", case_label(case)),
             case,
             |b, _case| {
                 b.iter(|| black_box(lint_tokens(&parsed.tokens, LintOptions::default())));
@@ -35,7 +35,7 @@ fn benchmark_lint(c: &mut Criterion) {
                 .collect::<Vec<_>>();
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("lint_tokens", &batch.name),
+                BenchmarkId::new("lint_tokens", batch_label(batch)),
                 batch,
                 |b, _batch| {
                     b.iter(|| {

@@ -1,9 +1,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[allow(dead_code)]
 pub struct BenchCase {
+    #[allow(dead_code)]
     pub name: &'static str,
+    pub label: String,
     pub source: String,
+    #[allow(dead_code)]
+    pub total_chars: usize,
+    pub total_bytes: usize,
 }
 
 pub struct CorpusDoc {
@@ -13,19 +19,31 @@ pub struct CorpusDoc {
 }
 
 pub struct CorpusBatch {
+    #[allow(dead_code)]
     pub name: String,
+    pub label: String,
     pub docs: Vec<CorpusDoc>,
+    #[allow(dead_code)]
+    pub total_chars: usize,
     pub total_bytes: usize,
 }
 
+#[allow(dead_code)]
 pub fn load_corpus_case(name: &'static str, relative_path: &str) -> BenchCase {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path);
+    let source = fs::read_to_string(path).expect("benchmark corpus should read");
+    let total_chars = source.chars().count();
+    let total_bytes = source.len();
     BenchCase {
         name,
-        source: fs::read_to_string(path).expect("benchmark corpus should read"),
+        label: format!("{name} ({total_chars} chars)"),
+        source,
+        total_chars,
+        total_bytes,
     }
 }
 
+#[allow(dead_code)]
 pub fn standard_corpus_cases() -> [BenchCase; 4] {
     [
         load_corpus_case("short", "example-corpora/en_ulb/64-2JN.usfm"),
@@ -96,12 +114,27 @@ fn load_corpus_batch(name: &str) -> CorpusBatch {
         .collect::<Vec<_>>();
 
     let total_bytes = docs.iter().map(|doc| doc.source.len()).sum::<usize>();
+    let total_chars = docs.iter().map(|doc| doc.source.chars().count()).sum::<usize>();
 
     CorpusBatch {
         name: name.to_string(),
+        label: format!(
+            "{name} ({} files, {total_chars} chars)",
+            docs.len()
+        ),
         docs,
+        total_chars,
         total_bytes,
     }
+}
+
+#[allow(dead_code)]
+pub fn case_label(case: &BenchCase) -> &str {
+    &case.label
+}
+
+pub fn batch_label(batch: &CorpusBatch) -> &str {
+    &batch.label
 }
 
 fn collect_usfm_paths(root: &Path, paths: &mut Vec<PathBuf>) {

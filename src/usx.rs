@@ -6,11 +6,14 @@ use std::path::Path;
 #[cfg(test)]
 use std::path::PathBuf;
 
+use std::collections::BTreeMap;
+
+use quick_xml::Reader;
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::cst::CstDocument;
-use crate::usj::{UsjDocument, UsjElement, UsjNode, cst_to_usj, usfm_to_usj};
+use crate::usj::{UsjDocument, UsjElement, UsjNode, cst_to_usj, from_usj, usfm_to_usj};
 
 #[derive(Debug)]
 pub enum UsxError {
@@ -71,9 +74,263 @@ pub fn usj_to_usx(document: &UsjDocument) -> Result<String, UsxError> {
     usj_to_usx_with_version(document, document.version.as_str())
 }
 
+pub fn usx_to_usj(source: &str) -> Result<UsjDocument, UsxError> {
+    let mut reader = Reader::from_str(source);
+    reader.config_mut().trim_text(false);
+
+    let mut version = None;
+    let mut content = Vec::new();
+    let mut stack = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(start) => {
+                let tag = decode_name(start.name().as_ref());
+                let attrs = read_attrs(&reader, &start)?;
+                if tag == "usx" {
+                    version = attrs.get("version").cloned();
+                } else {
+                    stack.push(UsxFrame {
+                        tag,
+                        attrs,
+                        children: Vec::new(),
+                    });
+                }
+            }
+            Event::Empty(empty) => {
+                let tag = decode_name(empty.name().as_ref());
+                let attrs = read_attrs(&reader, &empty)?;
+                if tag == "usx" {
+                    version = attrs.get("version").cloned();
+                } else if let Some(node) = frame_to_node(UsxFrame {
+                    tag,
+                    attrs,
+                    children: Vec::new(),
+                }) {
+                    push_node(&mut content, &mut stack, node);
+                }
+            }
+            Event::End(end) => {
+                let tag = decode_name(end.name().as_ref());
+                if tag == "usx" {
+                    break;
+                }
+                if let Some(frame) = stack.pop() {
+                    if let Some(node) = frame_to_node(frame) {
+                        push_node(&mut content, &mut stack, node);
+                    }
+                }
+            }
+            Event::Text(text) => {
+                if let Some(value) = decode_text(&reader, text.as_ref())? {
+                    push_node(&mut content, &mut stack, UsjNode::Text(value));
+                }
+            }
+            Event::CData(text) => {
+                if let Some(value) = decode_text(&reader, text.as_ref())? {
+                    push_node(&mut content, &mut stack, UsjNode::Text(value));
+                }
+            }
+            Event::Decl(_)
+            | Event::PI(_)
+            | Event::Comment(_)
+            | Event::DocType(_) => {}
+            Event::Eof => break,
+        }
+        buf.clear();
+    }
+
+    Ok(UsjDocument {
+        doc_type: "USJ".to_string(),
+        version: version.unwrap_or_else(|| "3.0".to_string()),
+        content,
+    })
+}
+
+pub fn from_usx_str(source: &str) -> Result<String, UsxError> {
+    let document = usx_to_usj(source)?;
+    Ok(from_usj(&document)?)
+}
+
 fn usj_to_usx_with_version(document: &UsjDocument, version: &str) -> Result<String, UsxError> {
     let mut serializer = UsxSerializer::new(version);
     serializer.write(document)
+}
+
+#[derive(Debug)]
+struct UsxFrame {
+    tag: String,
+    attrs: BTreeMap<String, String>,
+    children: Vec<UsjNode>,
+}
+
+fn push_node(root: &mut Vec<UsjNode>, stack: &mut [UsxFrame], node: UsjNode) {
+    if let Some(parent) = stack.last_mut() {
+        parent.children.push(node);
+    } else {
+        root.push(node);
+    }
+}
+
+fn decode_name(name: &[u8]) -> String {
+    String::from_utf8_lossy(name).into_owned()
+}
+
+fn read_attrs(
+    reader: &Reader<&[u8]>,
+    start: &BytesStart<'_>,
+) -> Result<BTreeMap<String, String>, UsxError> {
+    let mut attrs = BTreeMap::new();
+    for attr in start.attributes().with_checks(false) {
+        let attr = attr.map_err(quick_xml::Error::from)?;
+        let key = decode_name(attr.key.as_ref());
+        let value = attr
+            .decode_and_unescape_value(reader.decoder())
+            .map_err(quick_xml::Error::from)?
+            .into_owned();
+        attrs.insert(key, value);
+    }
+    Ok(attrs)
+}
+
+fn decode_text(reader: &Reader<&[u8]>, bytes: &[u8]) -> Result<Option<String>, UsxError> {
+    let decoded = reader.decoder().decode(bytes).map_err(quick_xml::Error::from)?;
+    let unescaped = quick_xml::escape::unescape(&decoded)
+        .map_err(quick_xml::Error::from)?
+        .into_owned();
+
+    if should_preserve_text(&unescaped) {
+        Ok(Some(unescaped))
+    } else {
+        Ok(None)
+    }
+}
+
+fn should_preserve_text(text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    if !text.chars().all(char::is_whitespace) {
+        return true;
+    }
+    !(text.contains('\n') || text.contains('\r') || text.contains('\t'))
+}
+
+fn frame_to_node(mut frame: UsxFrame) -> Option<UsjNode> {
+    let element = match frame.tag.as_str() {
+        "book" => UsjElement::Book {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "id".to_string()),
+            code: remove_attr(&mut frame.attrs, "code").unwrap_or_default(),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "chapter" => {
+            if frame.attrs.contains_key("eid") {
+                return None;
+            }
+            UsjElement::Chapter {
+                marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "c".to_string()),
+                number: remove_attr(&mut frame.attrs, "number").unwrap_or_default(),
+                sid: remove_attr(&mut frame.attrs, "sid"),
+                altnumber: remove_attr(&mut frame.attrs, "altnumber"),
+                pubnumber: remove_attr(&mut frame.attrs, "pubnumber"),
+                extra: frame.attrs,
+            }
+        }
+        "verse" => {
+            if frame.attrs.contains_key("eid") {
+                return None;
+            }
+            UsjElement::Verse {
+                marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "v".to_string()),
+                number: remove_attr(&mut frame.attrs, "number").unwrap_or_default(),
+                sid: remove_attr(&mut frame.attrs, "sid"),
+                altnumber: remove_attr(&mut frame.attrs, "altnumber"),
+                pubnumber: remove_attr(&mut frame.attrs, "pubnumber"),
+                extra: frame.attrs,
+            }
+        }
+        "para" => UsjElement::Para {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "p".to_string()),
+            content: frame.children,
+            extra: {
+                frame.attrs.remove("vid");
+                frame.attrs
+            },
+        },
+        "char" => UsjElement::Char {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_default(),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "ref" => UsjElement::Ref {
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "note" => UsjElement::Note {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_default(),
+            caller: remove_attr(&mut frame.attrs, "caller").unwrap_or_else(|| "+".to_string()),
+            content: frame.children,
+            category: remove_attr(&mut frame.attrs, "category"),
+            extra: frame.attrs,
+        },
+        "ms" => UsjElement::Milestone {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "ms".to_string()),
+            extra: frame.attrs,
+        },
+        "figure" => UsjElement::Figure {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "fig".to_string()),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "sidebar" => UsjElement::Sidebar {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "esb".to_string()),
+            content: frame.children,
+            category: remove_attr(&mut frame.attrs, "category"),
+            extra: frame.attrs,
+        },
+        "periph" => UsjElement::Periph {
+            content: frame.children,
+            alt: remove_attr(&mut frame.attrs, "alt"),
+            extra: frame.attrs,
+        },
+        "table" => UsjElement::Table {
+            content: frame.children,
+            extra: {
+                frame.attrs.remove("vid");
+                frame.attrs
+            },
+        },
+        "row" => UsjElement::TableRow {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "tr".to_string()),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "cell" => UsjElement::TableCell {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| "tc".to_string()),
+            align: remove_attr(&mut frame.attrs, "align"),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "unmatched" => UsjElement::Unmatched {
+            marker: remove_attr(&mut frame.attrs, "marker").unwrap_or_else(|| "*".to_string()),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+        "optbreak" => UsjElement::OptBreak {},
+        _ => UsjElement::Unknown {
+            marker: remove_attr(&mut frame.attrs, "style").unwrap_or_else(|| frame.tag.clone()),
+            content: frame.children,
+            extra: frame.attrs,
+        },
+    };
+
+    Some(UsjNode::Element(element))
+}
+
+fn remove_attr(attrs: &mut BTreeMap<String, String>, key: &str) -> Option<String> {
+    attrs.remove(key)
 }
 
 struct UsxSerializer<'a> {
@@ -407,6 +664,19 @@ fn collect_usx_fixture_pairs(root: &Path) -> Vec<(PathBuf, PathBuf)> {
 }
 
 #[cfg(test)]
+fn fixture_is_validated_pass(path: &Path) -> bool {
+    let metadata_path = path.with_file_name("metadata.xml");
+    fs::read_to_string(&metadata_path)
+        .map(|metadata| metadata.contains("<validated>pass</validated>"))
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+fn normalize_usfm_fixture_text(source: &str) -> String {
+    source.replace("\r\n", "\n").trim_end_matches('\n').to_string()
+}
+
+#[cfg(test)]
 fn collect_usx_fixture_pairs_into(root: &Path, pairs: &mut Vec<(PathBuf, PathBuf)>) {
     let Ok(entries) = fs::read_dir(root) else {
         return;
@@ -479,6 +749,59 @@ mod tests {
         }
     }
 
+    #[test]
+    fn paired_fixtures_import_back_to_parseable_usfm() {
+        for (usfm_path, usx_path) in collect_usx_fixture_pairs(Path::new("testData")) {
+            let xml = fs::read_to_string(&usx_path)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", usx_path.display()));
+            let actual = from_usx_str(&xml)
+                .unwrap_or_else(|error| panic!("USX import failed for {}: {error}", usx_path.display()));
+
+            let reparsed = usfm_to_usj(&actual)
+                .unwrap_or_else(|error| panic!("reverse USFM should parse for {}: {error}", usx_path.display()));
+
+            assert!(
+                !actual.is_empty(),
+                "reverse USFM should not be empty for {}",
+                usx_path.display()
+            );
+            assert!(
+                !normalize_document(&reparsed).content.is_empty(),
+                "reverse USFM should produce structured content for {}",
+                usfm_path.display()
+            );
+            let _ = (&usfm_path, &usx_path);
+        }
+    }
+
+    #[test]
+    #[ignore = "Exact byte roundtrip through USJ/USX is too source-spelling-sensitive right now"]
+    fn validated_pass_fixtures_are_lossless_across_usfm_usj_usx_usj_usfm() {
+        for (usfm_path, usx_path) in collect_usx_fixture_pairs(Path::new("testData")) {
+            if !fixture_is_validated_pass(&usx_path) {
+                continue;
+            }
+
+            let expected = fs::read_to_string(&usfm_path)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
+            let usj = usfm_to_usj(&expected)
+                .unwrap_or_else(|error| panic!("USFM -> USJ failed for {}: {error}", usfm_path.display()));
+            let usx = crate::usx::usj_to_usx(&usj)
+                .unwrap_or_else(|error| panic!("USJ -> USX failed for {}: {error}", usfm_path.display()));
+            let roundtripped_usj = crate::usx::usx_to_usj(&usx)
+                .unwrap_or_else(|error| panic!("USX -> USJ failed for {}: {error}", usfm_path.display()));
+            let actual = crate::usj::from_usj(&roundtripped_usj)
+                .unwrap_or_else(|error| panic!("USJ -> USFM failed for {}: {error}", usfm_path.display()));
+
+            assert_eq!(
+                normalize_usfm_fixture_text(&actual),
+                normalize_usfm_fixture_text(&expected),
+                "validated pass fixture should survive usfm -> usj -> usx -> usj -> usfm for {}",
+                usfm_path.display()
+            );
+        }
+    }
+
     fn xml_is_well_formed(source: &str) -> bool {
         let mut reader = quick_xml::Reader::from_str(source);
         reader.config_mut().trim_text(false);
@@ -490,5 +813,197 @@ mod tests {
                 Err(_) => return false,
             }
         }
+    }
+
+    fn normalize_document(document: &UsjDocument) -> UsjDocument {
+        UsjDocument {
+            doc_type: document.doc_type.clone(),
+            version: String::new(),
+            content: normalize_nodes(&document.content),
+        }
+    }
+
+    fn normalize_nodes(nodes: &[UsjNode]) -> Vec<UsjNode> {
+        let mut normalized = Vec::new();
+        for node in nodes {
+            match node {
+                UsjNode::Text(text) => {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        if let Some(UsjNode::Text(previous)) = normalized.last_mut() {
+                            previous.push_str(trimmed);
+                        } else {
+                            normalized.push(UsjNode::Text(trimmed.to_string()));
+                        }
+                    }
+                }
+                UsjNode::Element(element) => normalized.push(UsjNode::Element(normalize_element(element))),
+            }
+        }
+        normalized
+    }
+
+    fn normalize_element(element: &UsjElement) -> UsjElement {
+        match element {
+            UsjElement::Book {
+                marker,
+                code,
+                content,
+                extra,
+            } => UsjElement::Book {
+                marker: marker.clone(),
+                code: code.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::Chapter {
+                marker,
+                number,
+                altnumber,
+                pubnumber,
+                extra,
+                ..
+            } => UsjElement::Chapter {
+                marker: marker.clone(),
+                number: number.clone(),
+                sid: None,
+                altnumber: altnumber.clone(),
+                pubnumber: pubnumber.clone(),
+                extra: extra.clone(),
+            },
+            UsjElement::Verse {
+                marker,
+                number,
+                altnumber,
+                pubnumber,
+                extra,
+                ..
+            } => UsjElement::Verse {
+                marker: marker.clone(),
+                number: number.clone(),
+                sid: None,
+                altnumber: altnumber.clone(),
+                pubnumber: pubnumber.clone(),
+                extra: extra.clone(),
+            },
+            UsjElement::Para {
+                marker,
+                content,
+                extra,
+            } => UsjElement::Para {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                extra: normalize_extra(extra, &["vid"]),
+            },
+            UsjElement::Char {
+                marker,
+                content,
+                extra,
+            } => UsjElement::Char {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::Ref { content, extra } => UsjElement::Ref {
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::Note {
+                marker,
+                caller,
+                content,
+                category,
+                extra,
+            } => UsjElement::Note {
+                marker: marker.clone(),
+                caller: caller.clone(),
+                content: normalize_nodes(content),
+                category: category.clone(),
+                extra: extra.clone(),
+            },
+            UsjElement::Milestone { marker, extra } => UsjElement::Milestone {
+                marker: marker.clone(),
+                extra: extra.clone(),
+            },
+            UsjElement::Figure {
+                marker,
+                content,
+                extra,
+            } => UsjElement::Figure {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::Sidebar {
+                marker,
+                content,
+                category,
+                extra,
+            } => UsjElement::Sidebar {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                category: category.clone(),
+                extra: extra.clone(),
+            },
+            UsjElement::Periph { content, alt, extra } => UsjElement::Periph {
+                content: normalize_nodes(content),
+                alt: alt.clone(),
+                extra: extra.clone(),
+            },
+            UsjElement::Table { content, extra } => UsjElement::Table {
+                content: normalize_nodes(content),
+                extra: normalize_extra(extra, &["vid"]),
+            },
+            UsjElement::TableRow {
+                marker,
+                content,
+                extra,
+            } => UsjElement::TableRow {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::TableCell {
+                marker,
+                align,
+                content,
+                extra,
+            } => UsjElement::TableCell {
+                marker: marker.clone(),
+                align: align.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::Unknown {
+                marker,
+                content,
+                extra,
+            } => UsjElement::Unknown {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::Unmatched {
+                marker,
+                content,
+                extra,
+            } => UsjElement::Unmatched {
+                marker: marker.clone(),
+                content: normalize_nodes(content),
+                extra: extra.clone(),
+            },
+            UsjElement::OptBreak {} => UsjElement::OptBreak {},
+        }
+    }
+
+    fn normalize_extra(
+        extra: &std::collections::BTreeMap<String, String>,
+        drop_keys: &[&str],
+    ) -> std::collections::BTreeMap<String, String> {
+        extra
+            .iter()
+            .filter(|(key, _)| !drop_keys.iter().any(|drop| *drop == key.as_str()))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
     }
 }

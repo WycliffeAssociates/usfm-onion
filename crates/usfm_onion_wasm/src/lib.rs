@@ -1,3195 +1,2296 @@
-// use serde::{Deserialize, Serialize};
-// use serde_wasm_bindgen::{from_value as from_js_value, to_value as to_js_value};
-// use tsify::Tsify;
-// use wasm_bindgen::prelude::*;
-
-// use usfm_onion::{
-//     ast::{
-//         AstDocument, ast_to_tokens, tokens_to_ast, usfm_to_ast, usj_to_ast, usx_to_ast,
-//     },
-//     cst::{CstDocument, CstTokenRef},
-//     convert::{
-//         HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, convert_content,
-//         ast_to_html, ast_to_usj, ast_to_usx, ast_to_vref, from_usj, from_usx, into_ast,
-//         into_html, into_usj, into_usx, into_vref,
-//         tokens_to_html, tokens_to_usj, tokens_to_usx, tokens_to_vref, usfm_to_html, usfm_to_usj,
-//         usfm_to_usx, usfm_to_vref,
-//     },
-//     diff::{
-//         BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
-//         DiffsByChapterMap, SidBlock, SidBlockDiff, TokenAlignment, apply_revert_by_block_id,
-//         apply_reverts_by_block_id, build_sid_blocks, diff_chapter_token_streams, diff_content,
-//         diff_sid_blocks, diff_tokens, diff_usfm, diff_usfm_by_chapter, diff_usfm_sources,
-//         diff_usfm_sources_by_chapter, flatten_diff_map, replace_chapter_diffs_in_map,
-//         replace_many_chapter_diffs_in_map,
-//     },
-//     format::{
-//         self, FormatOptions, SkippedTokenTransform, TokenFix, TokenTemplate, TokenTransformChange,
-//         TokenTransformKind, TokenTransformResult, TokenTransformSkipReason, apply_token_fixes,
-//         format_content_with_options, format_flat_token_batches,
-//         format_flat_token_batches_with_options, format_flat_tokens,
-//         format_flat_tokens_with_options, TOKEN_FIX_CODES, TOKEN_TRANSFORM_CHANGE_CODES,
-//         TOKEN_TRANSFORM_SKIP_REASON_CODES,
-//     },
-//     lint::{
-//         self, BatchExecutionOptions, LintCode, LintIssue, LintOptions, LintSuppression,
-//         TokenLintOptions, lint_content, lint_document, lint_document_batch,
-//         lint_flat_token_batches, lint_flat_tokens,
-//     },
-//     markers::{
-//         MarkerCategory, MarkerInfo, MarkerInlineContext, MarkerNoteFamily, MarkerNoteSubkind,
-//         all_markers, character_markers, is_body_paragraph_marker, is_character_marker,
-//         is_document_marker, is_known_marker, is_note_container, is_note_submarker,
-//         is_paragraph_marker, is_poetry_marker, is_regular_character_marker, marker_info,
-//         note_marker_family, note_markers, note_submarkers, paragraph_markers,
-//     },
-//     model::{
-//         DocumentFormat, ScanResult, ScanToken, ScanTokenKind, Span, Token,
-//         TokenKind, TokenVariant, TokenViewOptions, UsjDocument, VrefMap, WhitespacePolicy,
-//     },
-//     parse::{
-//         self, IntoTokensOptions, ParseHandle, ParseRecovery, ProjectUsfmOptions,
-//         ProjectedUsfmDocument, RecoveryCode, RecoveryPayload, into_tokens, into_tokens_batch,
-//         into_tokens_from_content, into_usfm_from_tokens, lex_sources, parse_content,
-//         parse_contents, parse_sources, project_content, project_document, project_usfm_batch,
-//         push_whitespace, recoveries,
-//     },
-//     tokens::{classify_tokens, usfm_to_token_variants},
-// };
-
-// #[wasm_bindgen(typescript_custom_section)]
-// const TS_JSON_VALUE_ALIAS: &str = r#"
-// export type Value =
-//   | string
-//   | number
-//   | boolean
-//   | null
-//   | Value[]
-//   | { [key: string]: Value };
-// "#;
-
-// #[wasm_bindgen(typescript_custom_section)]
-// const TS_PUBLIC_TYPE_ALIASES: &str = r#"
-// export type MaybeString = string | null | undefined;
-// export type Span = WebSpan;
-// export type BatchExecutionOptions = WebBatchExecutionOptions;
-// export type IntoTokensOptions = WebIntoTokensOptions;
-// export type TokenViewOptions = WebTokenViewOptions;
-// export type LintSuppression = WebLintSuppression;
-// export type TokenLintOptions = WebTokenLintOptions;
-// export type LintOptions = WebLintOptions;
-// export type ProjectUsfmOptions = WebProjectUsfmOptions;
-// export type FormatOptions = WebFormatOptions;
-// export type BuildSidBlocksOptions = WebBuildSidBlocksOptions;
-// export type HtmlOptions = WebHtmlOptions;
-// export type Token = Omit<WebToken, "sid" | "marker"> & { sid?: MaybeString; marker?: MaybeString };
-// export type TokenTemplate = Omit<WebTokenTemplate, "sid" | "marker"> & { sid?: MaybeString; marker?: MaybeString };
-// export type TokenFix = WebTokenFix;
-// export type LintIssue = Omit<WebLintIssue, "marker" | "tokenId" | "relatedTokenId" | "sid"> & {
-//   marker?: MaybeString;
-//   tokenId?: MaybeString;
-//   relatedTokenId?: MaybeString;
-//   sid?: MaybeString;
-// };
-// export type ProjectedUsfmDocument = WebProjectedUsfmDocument;
-// export type TokenTransformChange = WebTokenTransformChange;
-// export type SkippedTokenTransform = Omit<WebSkippedTokenTransform, "targetTokenId"> & {
-//   targetTokenId?: MaybeString;
-// };
-// export type TokenTransformResult = WebTokenTransformResult;
-// export type Diff = WebChapterTokenDiff;
-// export type DiffTokenAlignment = WebTokenAlignment;
-// export type SidBlock = WebSidBlock;
-// export type SidBlockDiff = WebSidBlockDiff;
-// export type VrefEntry = WebVrefEntry;
-// export type ParseRecovery = WebParseRecovery;
-// export type ParsedDocument = WebParsedDocument;
-// export type DocumentFormat = WebDocumentFormat;
-// export type WhitespacePolicy = WebWhitespacePolicy;
-// export type HtmlNoteMode = WebHtmlNoteMode;
-// export type HtmlCallerStyle = WebHtmlCallerStyle;
-// export type HtmlCallerScope = WebHtmlCallerScope;
-// export type MarkerCategory = WebMarkerCategory;
-// export type MarkerNoteFamily = WebMarkerNoteFamily;
-// export type MarkerNoteSubkind = WebMarkerNoteSubkind;
-// export type MarkerInlineContext = WebMarkerInlineContext;
-// export type MarkerInfo = WebMarkerInfo;
-// export type AstDocument = {
-//   type: string;
-//   version: string;
-//   content: AstNode[];
-// };
-// export type AstNode = AstElement;
-// export type AstElement =
-//   | ({ type: "text"; value: string } & Record<string, Value>)
-//   | ({ type: "book"; marker: string; code: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "chapter"; marker: string; number: string } & Record<string, Value>)
-//   | ({ type: "verse"; marker: string; number: string } & Record<string, Value>)
-//   | ({ type: "para"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "char"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "note"; marker: string; caller: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "ms"; marker: string } & Record<string, Value>)
-//   | ({ type: "figure"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "sidebar"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "periph"; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "table"; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "table:row"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "table:cell"; marker: string; align: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "ref"; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "unknown"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "unmatched"; marker: string; content?: AstNode[] } & Record<string, Value>)
-//   | ({ type: "optbreak" } & Record<string, Value>)
-//   | ({ type: "linebreak"; value: string } & Record<string, Value>);
-// export type UsjDocument = {
-//   type: string;
-//   version: string;
-//   content: UsjNode[];
-// };
-// export type UsjNode = string | UsjElement;
-// export type UsjElement =
-//   | ({ type: "book"; marker: string; code: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "chapter"; marker: string; number: string } & Record<string, Value>)
-//   | ({ type: "verse"; marker: string; number: string } & Record<string, Value>)
-//   | ({ type: "para"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "char"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "note"; marker: string; caller: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "ms"; marker: string } & Record<string, Value>)
-//   | ({ type: "figure"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "sidebar"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "periph"; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "table"; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "table:row"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "table:cell"; marker: string; align: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "ref"; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "unknown"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "unmatched"; marker: string; content?: UsjNode[] } & Record<string, Value>)
-//   | ({ type: "optbreak" } & Record<string, Value>);
-// export type CstDocument = {
-//   type: string;
-//   sourceUsfm: string;
-//   bookCode?: MaybeString;
-//   recoveries: ParseRecovery[];
-//   tokens: Token[];
-//   content: CstNode[];
-// };
-// export type CstTokenRef = {
-//   token: number;
-//   span: Span;
-// };
-// export type CstContainerKind =
-//   | "book"
-//   | "paragraph"
-//   | "character"
-//   | "note"
-//   | "figure"
-//   | "sidebar"
-//   | "periph"
-//   | "tableRow"
-//   | "tableCell"
-//   | "header"
-//   | "meta"
-//   | "unknown";
-// export type CstLeafKind =
-//   | "text"
-//   | "whitespace"
-//   | "newline"
-//   | "optBreak"
-//   | "attributes";
-// export type CstContainer = {
-//   type: "container";
-//   kind: CstContainerKind;
-//   marker: string;
-//   markerToken?: CstTokenRef | null;
-//   closeToken?: CstTokenRef | null;
-//   specialToken?: CstTokenRef | null;
-//   attributeTokens?: CstTokenRef[];
-//   children?: CstNode[];
-// };
-// export type CstChapter = {
-//   type: "chapter";
-//   markerToken: CstTokenRef;
-//   numberToken?: CstTokenRef | null;
-// };
-// export type CstVerse = {
-//   type: "verse";
-//   markerToken: CstTokenRef;
-//   numberToken?: CstTokenRef | null;
-// };
-// export type CstMilestone = {
-//   type: "milestone";
-//   marker: string;
-//   markerToken: CstTokenRef;
-//   attributeTokens?: CstTokenRef[];
-//   endToken?: CstTokenRef | null;
-//   closed: boolean;
-// };
-// export type CstLeaf = {
-//   type: "leaf";
-//   kind: CstLeafKind;
-//   token: CstTokenRef;
-// };
-// export type CstElement =
-//   | CstContainer
-//   | CstChapter
-//   | CstVerse
-//   | CstMilestone
-//   | CstLeaf;
-// export type CstNode = CstElement;
-// "#;
-
-// #[wasm_bindgen(typescript_custom_section)]
-// const TS_TYPED_RUNTIME_DECLS: &str = r#"
-// export function intoAst(document: WebParsedDocument): AstDocument;
-// export function usfmToAst(content: string): AstDocument;
-// export function usjToAst(content: string): AstDocument;
-// export function usxToAst(content: string): AstDocument;
-// export function tokensToAst(tokens: WebToken[]): AstDocument;
-// export function astToTokens(document: AstDocument): WebToken[];
-// export function astToUsj(document: AstDocument): UsjDocument;
-// export function astToUsx(document: AstDocument): string;
-// export function astToHtml(document: AstDocument, options?: WebHtmlOptions | null): string;
-// export function astToVref(document: AstDocument): WebVrefEntry[];
-// export function intoUsj(document: WebParsedDocument): UsjDocument;
-// export function tokensToUsj(tokens: WebToken[]): UsjDocument;
-// export function usfmToUsj(content: string): UsjDocument;
-// export function fromUsj(document: UsjDocument): string;
-// export function cstToken(document: CstDocument, tokenRef: CstTokenRef): WebToken;
-// export function cstTokenText(document: CstDocument, tokenRef: CstTokenRef): string;
-// export function cstTokenValue(document: CstDocument, tokenRef: CstTokenRef): string;
-// "#;
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebDocumentFormat {
-//     Usfm,
-//     Usj,
-//     Usx,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebWhitespacePolicy {
-//     MergeToVisible,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebMarkerCategory {
-//     Document,
-//     Paragraph,
-//     Character,
-//     NoteContainer,
-//     NoteSubmarker,
-//     Chapter,
-//     Verse,
-//     MilestoneStart,
-//     MilestoneEnd,
-//     Figure,
-//     SidebarStart,
-//     SidebarEnd,
-//     Periph,
-//     Meta,
-//     TableRow,
-//     TableCell,
-//     Header,
-//     Unknown,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebMarkerNoteFamily {
-//     Footnote,
-//     CrossReference,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebMarkerNoteSubkind {
-//     Structural,
-//     StructuralKeepsNestedCharsOpen,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebMarkerInlineContext {
-//     Para,
-//     Section,
-//     List,
-//     Table,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebMarkerInfo {
-//     pub marker: String,
-//     pub canonical: Option<String>,
-//     pub known: bool,
-//     pub deprecated: bool,
-//     pub category: WebMarkerCategory,
-//     pub note_family: Option<WebMarkerNoteFamily>,
-//     pub note_subkind: Option<WebMarkerNoteSubkind>,
-//     pub inline_context: Option<WebMarkerInlineContext>,
-//     pub default_attribute: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebBatchExecutionOptions {
-//     #[serde(default = "default_parallel_true")]
-//     pub parallel: bool,
-// }
-
-// #[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebIntoTokensOptions {
-//     #[serde(default)]
-//     pub merge_horizontal_whitespace: bool,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenViewOptions {
-//     #[serde(default)]
-//     pub whitespace_policy: Option<WebWhitespacePolicy>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintSuppression {
-//     pub code: String,
-//     pub sid: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenLintOptions {
-//     #[serde(default)]
-//     pub disabled_rules: Vec<String>,
-//     #[serde(default)]
-//     pub suppressions: Vec<WebLintSuppression>,
-//     #[serde(default)]
-//     pub allow_implicit_chapter_content_verse: bool,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintOptions {
-//     #[serde(default)]
-//     pub include_parse_recoveries: bool,
-//     #[serde(default)]
-//     pub token_view: Option<WebTokenViewOptions>,
-//     #[serde(default)]
-//     pub token_rules: Option<WebTokenLintOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebProjectUsfmOptions {
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-//     #[serde(default)]
-//     pub lint_options: Option<WebLintOptions>,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebHtmlNoteMode {
-//     Extracted,
-//     Inline,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebHtmlCallerStyle {
-//     Numeric,
-//     AlphaLower,
-//     AlphaUpper,
-//     RomanLower,
-//     RomanUpper,
-//     Source,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebHtmlCallerScope {
-//     DocumentSequential,
-//     VerseSequential,
-// }
-
-// #[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebHtmlOptions {
-//     #[serde(default)]
-//     pub wrap_root: bool,
-//     #[serde(default = "default_prefer_native_true")]
-//     pub prefer_native_elements: bool,
-//     #[serde(default)]
-//     pub note_mode: Option<WebHtmlNoteMode>,
-//     #[serde(default)]
-//     pub caller_style: Option<WebHtmlCallerStyle>,
-//     #[serde(default)]
-//     pub caller_scope: Option<WebHtmlCallerScope>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebFormatOptions {
-//     #[serde(default = "default_true")]
-//     pub recover_malformed_markers: bool,
-//     #[serde(default = "default_true")]
-//     pub collapse_whitespace_in_text: bool,
-//     #[serde(default = "default_true")]
-//     pub ensure_inline_separators: bool,
-//     #[serde(default = "default_true")]
-//     pub remove_duplicate_verse_numbers: bool,
-//     #[serde(default = "default_true")]
-//     pub normalize_spacing_after_paragraph_markers: bool,
-//     #[serde(default = "default_true")]
-//     pub remove_unwanted_linebreaks: bool,
-//     #[serde(default = "default_true")]
-//     pub bridge_consecutive_verse_markers: bool,
-//     #[serde(default = "default_true")]
-//     pub remove_orphan_empty_verse_before_contentful_verse: bool,
-//     #[serde(default = "default_true")]
-//     pub remove_bridge_verse_enumerators: bool,
-//     #[serde(default = "default_true")]
-//     pub move_chapter_label_after_chapter_marker: bool,
-//     #[serde(default = "default_true")]
-//     pub insert_default_paragraph_after_chapter_intro: bool,
-//     #[serde(default)]
-//     pub remove_empty_paragraphs: bool,
-//     #[serde(default = "default_true")]
-//     pub insert_structural_linebreaks: bool,
-//     #[serde(default = "default_true")]
-//     pub collapse_consecutive_linebreaks: bool,
-//     #[serde(default = "default_true")]
-//     pub normalize_marker_whitespace_at_line_start: bool,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebBuildSidBlocksOptions {
-//     #[serde(default = "default_allow_empty_sid_true")]
-//     pub allow_empty_sid: bool,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebSpan {
-//     pub start: usize,
-//     pub end: usize,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebToken {
-//     pub id: String,
-//     pub kind: String,
-//     pub span: WebSpan,
-//     pub sid: Option<String>,
-//     pub marker: Option<String>,
-//     pub text: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(tag = "type", rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebTokenVariant {
-//     Newline {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         text: String,
-//     },
-//     OptBreak {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         text: String,
-//     },
-//     Marker {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         marker: String,
-//         text: String,
-//     },
-//     EndMarker {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         marker: String,
-//         text: String,
-//     },
-//     Milestone {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         marker: String,
-//         text: String,
-//     },
-//     MilestoneEnd {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         marker: Option<String>,
-//         text: String,
-//     },
-//     Attributes {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         text: String,
-//     },
-//     BookCode {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         text: String,
-//     },
-//     Number {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         text: String,
-//     },
-//     Text {
-//         id: String,
-//         span: WebSpan,
-//         sid: Option<String>,
-//         text: String,
-//     },
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebScanToken {
-//     pub kind: String,
-//     pub span: WebSpan,
-//     pub text: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebScanResult {
-//     pub tokens: Vec<WebScanToken>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebParseRecovery {
-//     pub code: String,
-//     pub span: WebSpan,
-//     pub related_span: Option<WebSpan>,
-//     pub payload: Option<WebRecoveryPayload>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(tag = "type", rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebRecoveryPayload {
-//     Marker { marker: String },
-//     Close { open: String, close: String },
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebParsedDocument {
-//     pub source_usfm: String,
-//     pub book_code: Option<String>,
-//     pub recoveries: Vec<WebParseRecovery>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintIssue {
-//     pub code: String,
-//     pub severity: String,
-//     pub marker: Option<String>,
-//     pub message: String,
-//     pub message_params: std::collections::BTreeMap<String, String>,
-//     pub span: WebSpan,
-//     pub related_span: Option<WebSpan>,
-//     pub token_id: Option<String>,
-//     pub related_token_id: Option<String>,
-//     pub sid: Option<String>,
-//     pub fix: Option<WebTokenFix>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebProjectedUsfmDocument {
-//     pub tokens: Vec<WebToken>,
-//     pub ast: AstDocument,
-//     pub lint_issues: Option<Vec<WebLintIssue>>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenTemplate {
-//     pub kind: String,
-//     pub text: String,
-//     pub marker: Option<String>,
-//     pub sid: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(tag = "type", rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub enum WebTokenFix {
-//     ReplaceToken {
-//         code: String,
-//         label: String,
-//         label_params: std::collections::BTreeMap<String, String>,
-//         #[serde(rename = "targetTokenId")]
-//         target_token_id: String,
-//         replacements: Vec<WebTokenTemplate>,
-//     },
-//     DeleteToken {
-//         code: String,
-//         label: String,
-//         label_params: std::collections::BTreeMap<String, String>,
-//         #[serde(rename = "targetTokenId")]
-//         target_token_id: String,
-//     },
-//     InsertAfter {
-//         code: String,
-//         label: String,
-//         label_params: std::collections::BTreeMap<String, String>,
-//         #[serde(rename = "targetTokenId")]
-//         target_token_id: String,
-//         insert: Vec<WebTokenTemplate>,
-//     },
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenTransformChange {
-//     pub kind: String,
-//     pub code: String,
-//     pub label: String,
-//     pub label_params: std::collections::BTreeMap<String, String>,
-//     pub target_token_id: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebSkippedTokenTransform {
-//     pub kind: String,
-//     pub code: String,
-//     pub label: String,
-//     pub label_params: std::collections::BTreeMap<String, String>,
-//     pub reason_code: String,
-//     pub target_token_id: Option<String>,
-//     pub reason: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenTransformResult {
-//     pub tokens: Vec<WebToken>,
-//     pub applied_changes: Vec<WebTokenTransformChange>,
-//     pub skipped_changes: Vec<WebSkippedTokenTransform>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebVrefEntry {
-//     pub reference: String,
-//     pub text: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenAlignment {
-//     pub change: String,
-//     pub counterpart_index: Option<usize>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebSidBlock {
-//     pub block_id: String,
-//     pub semantic_sid: String,
-//     pub start: usize,
-//     pub end_exclusive: usize,
-//     pub prev_block_id: Option<String>,
-//     pub text_full: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebSidBlockDiff {
-//     pub block_id: String,
-//     pub semantic_sid: String,
-//     pub status: String,
-//     pub original: Option<WebSidBlock>,
-//     pub current: Option<WebSidBlock>,
-//     pub original_text: String,
-//     pub current_text: String,
-//     pub original_text_only: String,
-//     pub current_text_only: String,
-//     pub is_whitespace_change: bool,
-//     pub is_usfm_structure_change: bool,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebChapterTokenDiff {
-//     pub block_id: String,
-//     pub semantic_sid: String,
-//     pub status: String,
-//     pub original: Option<WebSidBlock>,
-//     pub current: Option<WebSidBlock>,
-//     pub original_text: String,
-//     pub current_text: String,
-//     pub original_text_only: String,
-//     pub current_text_only: String,
-//     pub is_whitespace_change: bool,
-//     pub is_usfm_structure_change: bool,
-//     pub original_tokens: Vec<WebToken>,
-//     pub current_tokens: Vec<WebToken>,
-//     pub original_alignment: Vec<WebTokenAlignment>,
-//     pub current_alignment: Vec<WebTokenAlignment>,
-//     pub undo_side: String,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebChapterDiffGroup {
-//     pub book: String,
-//     pub chapter: u32,
-//     pub diffs: Vec<WebChapterTokenDiff>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokenBatch {
-//     pub tokens: Vec<WebToken>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintBatch {
-//     pub issues: Vec<WebLintIssue>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebParseContentRequest {
-//     pub source: String,
-//     pub format: WebDocumentFormat,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebParseContentsRequest {
-//     pub sources: Vec<String>,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLexSourcesRequest {
-//     pub sources: Vec<String>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebIntoTokensRequest {
-//     pub document: WebParsedDocument,
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebIntoTokensFromContentRequest {
-//     pub source: String,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebIntoTokensFromContentsRequest {
-//     pub sources: Vec<String>,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebIntoTokensBatchRequest {
-//     pub documents: Vec<WebParsedDocument>,
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebProjectDocumentRequest {
-//     pub document: WebParsedDocument,
-//     #[serde(default)]
-//     pub options: Option<WebProjectUsfmOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebProjectContentRequest {
-//     pub source: String,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub options: Option<WebProjectUsfmOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebProjectContentsRequest {
-//     pub sources: Vec<String>,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub options: Option<WebProjectUsfmOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebIntoUsxRequest {
-//     pub document: WebParsedDocument,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebContentRequest {
-//     pub source: String,
-//     pub source_format: WebDocumentFormat,
-//     pub target_format: WebDocumentFormat,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintContentRequest {
-//     pub source: String,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub options: Option<WebLintOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintContentsRequest {
-//     pub sources: Vec<String>,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub options: Option<WebLintOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintDocumentRequest {
-//     pub document: WebParsedDocument,
-//     #[serde(default)]
-//     pub options: Option<WebLintOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintDocumentBatchRequest {
-//     pub documents: Vec<WebParsedDocument>,
-//     #[serde(default)]
-//     pub options: Option<WebLintOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintTokensRequest {
-//     pub tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub options: Option<WebTokenLintOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintTokenBatchesRequest {
-//     pub token_batches: Vec<Vec<WebToken>>,
-//     #[serde(default)]
-//     pub options: Option<WebTokenLintOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebFormatContentRequest {
-//     pub source: String,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-//     #[serde(default)]
-//     pub format_options: Option<WebFormatOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebFormatContentsRequest {
-//     pub sources: Vec<String>,
-//     pub format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub token_options: Option<WebIntoTokensOptions>,
-//     #[serde(default)]
-//     pub format_options: Option<WebFormatOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebFormatTokensRequest {
-//     pub tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub format_options: Option<WebFormatOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebFormatTokenBatchesRequest {
-//     pub token_batches: Vec<Vec<WebToken>>,
-//     #[serde(default)]
-//     pub format_options: Option<WebFormatOptions>,
-//     #[serde(default)]
-//     pub batch_options: Option<WebBatchExecutionOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebApplyTokenFixesRequest {
-//     pub tokens: Vec<WebToken>,
-//     pub fixes: Vec<WebTokenFix>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebDiffContentRequest {
-//     pub baseline_source: String,
-//     pub baseline_format: WebDocumentFormat,
-//     pub current_source: String,
-//     pub current_format: WebDocumentFormat,
-//     #[serde(default)]
-//     pub token_view: Option<WebTokenViewOptions>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebDiffUsfmRequest {
-//     pub baseline_usfm: String,
-//     pub current_usfm: String,
-//     #[serde(default)]
-//     pub token_view: Option<WebTokenViewOptions>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebDiffTokensRequest {
-//     pub baseline_tokens: Vec<WebToken>,
-//     pub current_tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebBuildSidBlocksRequest {
-//     pub tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebDiffSidBlocksRequest {
-//     pub baseline_blocks: Vec<WebSidBlock>,
-//     pub current_blocks: Vec<WebSidBlock>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebDiffChapterTokenStreamsRequest {
-//     pub baseline_tokens: Vec<WebToken>,
-//     pub current_tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebRevertDiffBlockRequest {
-//     pub block_id: String,
-//     pub baseline_tokens: Vec<WebToken>,
-//     pub current_tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebApplyRevertsByBlockIdRequest {
-//     pub diff_block_ids: Vec<String>,
-//     pub baseline_tokens: Vec<WebToken>,
-//     pub current_tokens: Vec<WebToken>,
-//     #[serde(default)]
-//     pub build_options: Option<WebBuildSidBlocksOptions>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebReplaceChapterDiffsInMapRequest {
-//     pub groups: Vec<WebChapterDiffGroup>,
-//     pub book: String,
-//     pub chapter: u32,
-//     pub diffs: Vec<WebChapterTokenDiff>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebChapterDiffReplacement {
-//     pub book: String,
-//     pub chapter: u32,
-//     pub diffs: Vec<WebChapterTokenDiff>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebReplaceManyChapterDiffsInMapRequest {
-//     pub groups: Vec<WebChapterDiffGroup>,
-//     pub replacements: Vec<WebChapterDiffReplacement>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebStringOpResult {
-//     pub value: Option<String>,
-//     pub error: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebParsedOpResult {
-//     pub value: Option<WebParsedDocument>,
-//     pub error: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTokensOpResult {
-//     pub value: Option<Vec<WebToken>>,
-//     pub error: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebProjectedOpResult {
-//     pub value: Option<WebProjectedUsfmDocument>,
-//     pub error: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebLintOpResult {
-//     pub value: Option<Vec<WebLintIssue>>,
-//     pub error: Option<String>,
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-// #[serde(rename_all = "camelCase")]
-// #[tsify(into_wasm_abi, from_wasm_abi)]
-// pub struct WebTransformOpResult {
-//     pub value: Option<WebTokenTransformResult>,
-//     pub error: Option<String>,
-// }
-
-// #[wasm_bindgen(js_name = packageVersion)]
-// pub fn package_version() -> String {
-//     env!("CARGO_PKG_VERSION").to_string()
-// }
-
-// #[wasm_bindgen(js_name = parseContent)]
-// /// Parse raw content once and keep the returned document if you plan to project
-// /// multiple views from it.
-// pub fn wasm_parse_content(request: WebParseContentRequest) -> Result<WebParsedDocument, JsError> {
-//     let handle =
-//         parse_content(&request.source, document_format(request.format)).map_err(js_error)?;
-//     Ok(map_parse_handle(handle))
-// }
-
-// #[wasm_bindgen(js_name = parseContents)]
-// pub fn wasm_parse_contents(request: WebParseContentsRequest) -> Vec<WebParsedOpResult> {
-//     parse_contents(
-//         request.sources.as_slice(),
-//         document_format(request.format),
-//         batch_options(request.batch_options.clone()),
-//     )
-//     .into_iter()
-//     .map(|result| match result {
-//         Ok(handle) => WebParsedOpResult {
-//             value: Some(map_parse_handle(handle)),
-//             error: None,
-//         },
-//         Err(error) => WebParsedOpResult {
-//             value: None,
-//             error: Some(error.to_string()),
-//         },
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = parseSources)]
-// pub fn wasm_parse_sources(request: WebLexSourcesRequest) -> Vec<WebParsedDocument> {
-//     parse_sources(
-//         request.sources.as_slice(),
-//         batch_options(request.batch_options.clone()),
-//     )
-//     .into_iter()
-//     .map(map_parse_handle)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = lexSources)]
-// pub fn wasm_lex_sources(request: WebLexSourcesRequest) -> Vec<WebScanResult> {
-//     lex_sources(
-//         request.sources.as_slice(),
-//         batch_options(request.batch_options.clone()),
-//     )
-//     .into_iter()
-//     .map(map_scan_result)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = intoTokens)]
-// /// Project a previously parsed document into canonical flat tokens.
-// pub fn wasm_into_tokens(request: WebIntoTokensRequest) -> Vec<WebToken> {
-//     let handle = rehydrate_parse_handle(&request.document);
-//     into_tokens(&handle, into_tokens_options(request.token_options))
-//         .into_iter()
-//         .map(map_flat_token)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = intoTokensFromContent)]
-// /// Parse raw content and immediately project flat tokens.
-// ///
-// /// Prefer `parseContent(...)` plus `intoTokens(...)` when you will also lint,
-// /// format, diff, or project other views from the same source.
-// pub fn wasm_into_tokens_from_content(
-//     request: WebIntoTokensFromContentRequest,
-// ) -> Result<Vec<WebToken>, JsError> {
-//     into_tokens_from_content(
-//         &request.source,
-//         document_format(request.format),
-//         into_tokens_options(request.token_options),
-//     )
-//     .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
-//     .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = intoTokensFromContents)]
-// pub fn wasm_into_tokens_from_contents(
-//     request: WebIntoTokensFromContentsRequest,
-// ) -> Vec<WebTokensOpResult> {
-//     let options = into_tokens_options(request.token_options.clone());
-//     parse::into_tokens_from_contents(
-//         request.sources.as_slice(),
-//         document_format(request.format),
-//         options,
-//         batch_options(request.batch_options.clone()),
-//     )
-//     .into_iter()
-//     .map(|result| match result {
-//         Ok(tokens) => WebTokensOpResult {
-//             value: Some(tokens.into_iter().map(map_flat_token).collect()),
-//             error: None,
-//         },
-//         Err(error) => WebTokensOpResult {
-//             value: None,
-//             error: Some(error.to_string()),
-//         },
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = intoTokensBatch)]
-// pub fn wasm_into_tokens_batch(request: WebIntoTokensBatchRequest) -> Vec<WebTokenBatch> {
-//     let handles = request
-//         .documents
-//         .iter()
-//         .map(rehydrate_parse_handle)
-//         .collect::<Vec<_>>();
-//     into_tokens_batch(
-//         handles.as_slice(),
-//         into_tokens_options(request.token_options),
-//         batch_options(request.batch_options),
-//     )
-//     .into_iter()
-//     .map(|tokens| WebTokenBatch {
-//         tokens: tokens.into_iter().map(map_flat_token).collect(),
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = tokensToUsfm)]
-// pub fn wasm_tokens_to_usfm(tokens: Vec<WebToken>) -> String {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     into_usfm_from_tokens(native.as_slice())
-// }
-
-// #[wasm_bindgen(js_name = usfmToTokens)]
-// pub fn wasm_usfm_to_tokens(
-//     content: &str,
-//     token_options: Option<WebIntoTokensOptions>,
-// ) -> Result<Vec<WebToken>, JsError> {
-//     into_tokens_from_content(content, DocumentFormat::Usfm, into_tokens_options(token_options))
-//         .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
-//         .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = usjToTokens)]
-// pub fn wasm_usj_to_tokens(
-//     content: &str,
-//     token_options: Option<WebIntoTokensOptions>,
-// ) -> Result<Vec<WebToken>, JsError> {
-//     into_tokens_from_content(content, DocumentFormat::Usj, into_tokens_options(token_options))
-//         .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
-//         .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = usxToTokens)]
-// pub fn wasm_usx_to_tokens(
-//     content: &str,
-//     token_options: Option<WebIntoTokensOptions>,
-// ) -> Result<Vec<WebToken>, JsError> {
-//     into_tokens_from_content(content, DocumentFormat::Usx, into_tokens_options(token_options))
-//         .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
-//         .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = classifyTokens)]
-// pub fn wasm_classify_tokens(tokens: Vec<WebToken>) -> Vec<WebTokenVariant> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     classify_tokens(native.as_slice())
-//         .into_iter()
-//         .map(map_token_variant)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = usfmToTokenVariants)]
-// pub fn wasm_usfm_to_token_variants(content: &str) -> Vec<WebTokenVariant> {
-//     usfm_to_token_variants(content)
-//         .into_iter()
-//         .map(map_token_variant)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = lintCodes)]
-// pub fn wasm_lint_codes() -> Vec<String> {
-//     LintCode::ALL.iter().map(|code| code.as_str().to_string()).collect()
-// }
-
-// #[wasm_bindgen(js_name = tokenFixCodes)]
-// pub fn wasm_token_fix_codes() -> Vec<String> {
-//     TOKEN_FIX_CODES.iter().map(|code| (*code).to_string()).collect()
-// }
-
-// #[wasm_bindgen(js_name = tokenTransformChangeCodes)]
-// pub fn wasm_token_transform_change_codes() -> Vec<String> {
-//     TOKEN_TRANSFORM_CHANGE_CODES
-//         .iter()
-//         .map(|code| (*code).to_string())
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = tokenTransformSkipReasonCodes)]
-// pub fn wasm_token_transform_skip_reason_codes() -> Vec<String> {
-//     TOKEN_TRANSFORM_SKIP_REASON_CODES
-//         .iter()
-//         .map(|code| (*code).to_string())
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = markerInfo)]
-// pub fn wasm_marker_info(marker: &str) -> WebMarkerInfo {
-//     map_marker_info(marker_info(marker))
-// }
-
-// #[wasm_bindgen(js_name = isKnownMarker)]
-// pub fn wasm_is_known_marker(marker: &str) -> bool {
-//     is_known_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isDocumentMarker)]
-// pub fn wasm_is_document_marker(marker: &str) -> bool {
-//     is_document_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isParagraphMarker)]
-// pub fn wasm_is_paragraph_marker(marker: &str) -> bool {
-//     is_paragraph_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isBodyParagraphMarker)]
-// pub fn wasm_is_body_paragraph_marker(marker: &str) -> bool {
-//     is_body_paragraph_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isPoetryMarker)]
-// pub fn wasm_is_poetry_marker(marker: &str) -> bool {
-//     is_poetry_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isCharacterMarker)]
-// pub fn wasm_is_character_marker(marker: &str) -> bool {
-//     is_character_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isRegularCharacterMarker)]
-// pub fn wasm_is_regular_character_marker(marker: &str) -> bool {
-//     is_regular_character_marker(marker)
-// }
-
-// #[wasm_bindgen(js_name = isNoteContainer)]
-// pub fn wasm_is_note_container(marker: &str) -> bool {
-//     is_note_container(marker)
-// }
-
-// #[wasm_bindgen(js_name = isNoteSubmarker)]
-// pub fn wasm_is_note_submarker(marker: &str) -> bool {
-//     is_note_submarker(marker)
-// }
-
-// #[wasm_bindgen(js_name = noteMarkerFamily)]
-// pub fn wasm_note_marker_family(marker: &str) -> Option<WebMarkerNoteFamily> {
-//     note_marker_family(marker).map(map_note_family_value)
-// }
-
-// #[wasm_bindgen(js_name = allMarkers)]
-// pub fn wasm_all_markers() -> Vec<String> {
-//     all_markers()
-// }
-
-// #[wasm_bindgen(js_name = paragraphMarkers)]
-// pub fn wasm_paragraph_markers() -> Vec<String> {
-//     paragraph_markers()
-// }
-
-// #[wasm_bindgen(js_name = noteMarkers)]
-// pub fn wasm_note_markers() -> Vec<String> {
-//     note_markers()
-// }
-
-// #[wasm_bindgen(js_name = noteSubmarkers)]
-// pub fn wasm_note_submarkers() -> Vec<String> {
-//     note_submarkers()
-// }
-
-// #[wasm_bindgen(js_name = characterMarkers)]
-// pub fn wasm_character_markers() -> Vec<String> {
-//     character_markers()
-// }
-
-// #[wasm_bindgen(js_name = pushWhitespace)]
-// pub fn wasm_push_whitespace(tokens: Vec<WebToken>) -> Vec<WebToken> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     push_whitespace(native.as_slice())
-//         .into_iter()
-//         .map(map_flat_token)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = projectDocument)]
-// pub fn wasm_project_document(request: WebProjectDocumentRequest) -> WebProjectedUsfmDocument {
-//     let handle = rehydrate_parse_handle(&request.document);
-//     map_projected_document(project_document(&handle, project_options(request.options)))
-// }
-
-// #[wasm_bindgen(js_name = projectContent)]
-// pub fn wasm_project_content(
-//     request: WebProjectContentRequest,
-// ) -> Result<WebProjectedUsfmDocument, JsError> {
-//     project_content(
-//         &request.source,
-//         document_format(request.format),
-//         project_options(request.options),
-//     )
-//     .map(map_projected_document)
-//     .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = projectContents)]
-// pub fn wasm_project_contents(request: WebProjectContentsRequest) -> Vec<WebProjectedOpResult> {
-//     request
-//         .sources
-//         .iter()
-//         .map(|source| {
-//             project_content(
-//                 source,
-//                 document_format(request.format),
-//                 project_options(request.options.clone()),
-//             )
-//             .map(map_projected_document)
-//         })
-//         .map(|result| match result {
-//             Ok(value) => WebProjectedOpResult {
-//                 value: Some(value),
-//                 error: None,
-//             },
-//             Err(error) => WebProjectedOpResult {
-//                 value: None,
-//                 error: Some(error.to_string()),
-//             },
-//         })
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = projectUsfmBatch)]
-// pub fn wasm_project_usfm_batch(
-//     request: WebProjectContentsRequest,
-// ) -> Vec<WebProjectedUsfmDocument> {
-//     project_usfm_batch(
-//         request.sources.as_slice(),
-//         project_options(request.options),
-//         batch_options(request.batch_options),
-//     )
-//     .into_iter()
-//     .map(map_projected_document)
-//     .collect()
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = intoUsj)]
-// pub fn wasm_into_usj(document: WebParsedDocument) -> Result<JsValue, JsError> {
-//     let handle = rehydrate_parse_handle(&document);
-//     to_js_value(&into_usj(&handle)).map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = intoAst)]
-// /// Project a parsed document into the canonical AST.
-// ///
-// /// The wasm package ships explicit TypeScript declarations for the AST
-// /// runtime shape, so downstream code can import and use `AstDocument`,
-// /// `AstNode`, and `AstElement`.
-// pub fn wasm_into_ast(document: WebParsedDocument) -> Result<JsValue, JsError> {
-//     let handle = rehydrate_parse_handle(&document);
-//     to_js_value(&into_ast(&handle)).map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = usfmToAst)]
-// /// Project USFM directly into AST runtime JSON.
-// pub fn wasm_usfm_to_ast(content: &str) -> Result<JsValue, JsError> {
-//     to_js_value(&usfm_to_ast(content)).map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = usjToAst)]
-// /// Project USJ directly into AST runtime JSON.
-// pub fn wasm_usj_to_ast(content: &str) -> Result<JsValue, JsError> {
-//     usj_to_ast(content)
-//         .map_err(js_error)
-//         .and_then(|ast| to_js_value(&ast).map_err(js_error_from_serde))
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = usxToAst)]
-// /// Project USX directly into AST runtime JSON.
-// pub fn wasm_usx_to_ast(content: &str) -> Result<JsValue, JsError> {
-//     usx_to_ast(content)
-//         .map_err(js_error)
-//         .and_then(|ast| to_js_value(&ast).map_err(js_error_from_serde))
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = tokensToAst)]
-// /// Project canonical flat tokens into AST runtime JSON.
-// pub fn wasm_tokens_to_ast(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     to_js_value(&tokens_to_ast(native.as_slice())).map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = astToTokens)]
-// /// Flatten AST runtime JSON back into canonical flat tokens.
-// ///
-// /// The input is accepted as `JsValue` at the Rust boundary, but the generated
-// /// TypeScript declarations publish the concrete `AstDocument` shape.
-// pub fn wasm_ast_to_tokens(document: JsValue) -> Result<Vec<WebToken>, JsError> {
-//     let document: AstDocument = from_js_value(document).map_err(js_error)?;
-//     ast_to_tokens(&document)
-//         .map(|tokens| tokens.into_iter().map(map_flat_token).collect())
-//         .map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = cstToken)]
-// pub fn wasm_cst_token(document: JsValue, token_ref: JsValue) -> Result<WebToken, JsError> {
-//     let document: CstDocument = from_js_value(document).map_err(js_error)?;
-//     let token_ref: CstTokenRef = from_js_value(token_ref).map_err(js_error)?;
-//     Ok(map_flat_token(document.token(&token_ref).clone()))
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = cstTokenText)]
-// pub fn wasm_cst_token_text(document: JsValue, token_ref: JsValue) -> Result<String, JsError> {
-//     let document: CstDocument = from_js_value(document).map_err(js_error)?;
-//     let token_ref: CstTokenRef = from_js_value(token_ref).map_err(js_error)?;
-//     Ok(document.token_text(&token_ref).to_string())
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = cstTokenValue)]
-// pub fn wasm_cst_token_value(document: JsValue, token_ref: JsValue) -> Result<String, JsError> {
-//     let document: CstDocument = from_js_value(document).map_err(js_error)?;
-//     let token_ref: CstTokenRef = from_js_value(token_ref).map_err(js_error)?;
-//     Ok(document.token_value(&token_ref).to_string())
-// }
-
-// #[wasm_bindgen(js_name = intoHtml)]
-// pub fn wasm_into_html(document: WebParsedDocument, options: Option<WebHtmlOptions>) -> String {
-//     let handle = rehydrate_parse_handle(&document);
-//     into_html(&handle, html_options(options))
-// }
-
-// #[wasm_bindgen(js_name = intoUsx)]
-// pub fn wasm_into_usx(request: WebIntoUsxRequest) -> Result<String, JsError> {
-//     let handle = rehydrate_parse_handle(&request.document);
-//     into_usx(&handle).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = intoVref)]
-// pub fn wasm_into_vref(document: WebParsedDocument) -> Vec<WebVrefEntry> {
-//     let handle = rehydrate_parse_handle(&document);
-//     map_vref_map(into_vref(&handle))
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = tokensToUsj)]
-// pub fn wasm_tokens_to_usj(tokens: Vec<WebToken>) -> Result<JsValue, JsError> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     tokens_to_usj(native.as_slice())
-//         .map_err(js_error)
-//         .and_then(|document| to_js_value(&document).map_err(js_error_from_serde))
-// }
-
-// #[wasm_bindgen(js_name = tokensToUsx)]
-// pub fn wasm_tokens_to_usx(tokens: Vec<WebToken>) -> Result<String, JsError> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     tokens_to_usx(native.as_slice()).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = tokensToHtml)]
-// pub fn wasm_tokens_to_html(
-//     tokens: Vec<WebToken>,
-//     options: Option<WebHtmlOptions>,
-// ) -> Result<String, JsError> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     tokens_to_html(native.as_slice(), html_options(options)).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = tokensToVref)]
-// pub fn wasm_tokens_to_vref(tokens: Vec<WebToken>) -> Result<Vec<WebVrefEntry>, JsError> {
-//     let native = tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     tokens_to_vref(native.as_slice())
-//         .map(map_vref_map)
-//         .map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = astToUsj)]
-// /// Convert AST runtime JSON into typed USJ output.
-// pub fn wasm_ast_to_usj(document: JsValue) -> Result<JsValue, JsError> {
-//     let document: AstDocument = from_js_value(document).map_err(js_error)?;
-//     ast_to_usj(&document)
-//         .map_err(js_error)
-//         .and_then(|usj| to_js_value(&usj).map_err(js_error_from_serde))
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = astToUsx)]
-// /// Convert AST runtime JSON into USX output.
-// pub fn wasm_ast_to_usx(document: JsValue) -> Result<String, JsError> {
-//     let document: AstDocument = from_js_value(document).map_err(js_error)?;
-//     ast_to_usx(&document).map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = astToHtml)]
-// /// Convert AST runtime JSON into HTML output.
-// pub fn wasm_ast_to_html(
-//     document: JsValue,
-//     options: Option<WebHtmlOptions>,
-// ) -> Result<String, JsError> {
-//     let document: AstDocument = from_js_value(document).map_err(js_error)?;
-//     ast_to_html(&document, html_options(options)).map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = astToVref)]
-// /// Convert AST runtime JSON into VREF output.
-// pub fn wasm_ast_to_vref(document: JsValue) -> Result<Vec<WebVrefEntry>, JsError> {
-//     let document: AstDocument = from_js_value(document).map_err(js_error)?;
-//     ast_to_vref(&document)
-//         .map(map_vref_map)
-//         .map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = fromUsj)]
-// pub fn wasm_from_usj(document: JsValue) -> Result<String, JsError> {
-//     let document: UsjDocument = from_js_value(document).map_err(js_error)?;
-//     from_usj(&document).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = fromUsx)]
-// pub fn wasm_from_usx(content: &str) -> Result<String, JsError> {
-//     from_usx(content).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = convertContent)]
-// pub fn wasm_convert_content(request: WebContentRequest) -> Result<String, JsError> {
-//     convert_content(
-//         &request.source,
-//         document_format(request.source_format),
-//         document_format(request.target_format),
-//     )
-//     .map_err(js_error)
-// }
-
-// #[wasm_bindgen(skip_typescript, js_name = usfmToUsj)]
-// pub fn wasm_usfm_to_usj(content: &str) -> Result<JsValue, JsError> {
-//     usfm_to_usj(content)
-//         .map_err(js_error)
-//         .and_then(|document| to_js_value(&document).map_err(js_error_from_serde))
-// }
-
-// #[wasm_bindgen(js_name = usfmToUsx)]
-// pub fn wasm_usfm_to_usx(content: &str) -> Result<String, JsError> {
-//     usfm_to_usx(content).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = usfmToHtml)]
-// pub fn wasm_usfm_to_html(content: &str, options: Option<WebHtmlOptions>) -> Result<String, JsError> {
-//     usfm_to_html(content, html_options(options)).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = usfmToVref)]
-// pub fn wasm_usfm_to_vref(content: &str) -> Result<Vec<WebVrefEntry>, JsError> {
-//     usfm_to_vref(content).map(map_vref_map).map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = usjToUsfm)]
-// pub fn wasm_usj_to_usfm(content: &str) -> Result<String, JsError> {
-//     wasm_convert_content(WebContentRequest {
-//         source: content.to_string(),
-//         source_format: WebDocumentFormat::Usj,
-//         target_format: WebDocumentFormat::Usfm,
-//     })
-// }
-
-// #[wasm_bindgen(js_name = usxToUsfm)]
-// pub fn wasm_usx_to_usfm(content: &str) -> Result<String, JsError> {
-//     wasm_convert_content(WebContentRequest {
-//         source: content.to_string(),
-//         source_format: WebDocumentFormat::Usx,
-//         target_format: WebDocumentFormat::Usfm,
-//     })
-// }
-
-// #[wasm_bindgen(js_name = lintContent)]
-// /// Parse content, project tokens, then lint.
-// ///
-// /// If you already have canonical flat tokens, prefer `lintFlatTokens(...)`.
-// pub fn wasm_lint_content(request: WebLintContentRequest) -> Result<Vec<WebLintIssue>, JsError> {
-//     lint_content(
-//         &request.source,
-//         document_format(request.format),
-//         lint_options(request.options),
-//     )
-//     .map(|issues| issues.into_iter().map(map_lint_issue).collect())
-//     .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = lintContents)]
-// pub fn wasm_lint_contents(request: WebLintContentsRequest) -> Vec<WebLintOpResult> {
-//     lint::lint_contents(
-//         request.sources.as_slice(),
-//         document_format(request.format),
-//         lint_options(request.options.clone()),
-//         batch_options(request.batch_options),
-//     )
-//     .into_iter()
-//     .map(|result| match result {
-//         Ok(value) => WebLintOpResult {
-//             value: Some(value.into_iter().map(map_lint_issue).collect()),
-//             error: None,
-//         },
-//         Err(error) => WebLintOpResult {
-//             value: None,
-//             error: Some(error.to_string()),
-//         },
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = lintDocument)]
-// pub fn wasm_lint_document(request: WebLintDocumentRequest) -> Vec<WebLintIssue> {
-//     let handle = rehydrate_parse_handle(&request.document);
-//     lint_document(&handle, lint_options(request.options))
-//         .into_iter()
-//         .map(map_lint_issue)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = lintDocumentBatch)]
-// pub fn wasm_lint_document_batch(request: WebLintDocumentBatchRequest) -> Vec<WebLintBatch> {
-//     let handles = request
-//         .documents
-//         .iter()
-//         .map(rehydrate_parse_handle)
-//         .collect::<Vec<_>>();
-//     lint_document_batch(
-//         handles.as_slice(),
-//         lint_options(request.options),
-//         batch_options(request.batch_options),
-//     )
-//     .into_iter()
-//     .map(|issues| WebLintBatch {
-//         issues: issues.into_iter().map(map_lint_issue).collect(),
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = lintFlatTokens)]
-// /// Lint canonical flat tokens without reparsing source content.
-// pub fn wasm_lint_flat_tokens(request: WebLintTokensRequest) -> Vec<WebLintIssue> {
-//     let tokens = request
-//         .tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     lint_flat_tokens(tokens.as_slice(), token_lint_options(request.options))
-//         .into_iter()
-//         .map(map_lint_issue)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = lintTokenBatches)]
-// /// Lint batches of canonical flat token streams without reparsing source content.
-// pub fn wasm_lint_flat_token_batches(request: WebLintTokenBatchesRequest) -> Vec<WebLintBatch> {
-//     let batches = request
-//         .token_batches
-//         .into_iter()
-//         .map(|batch| {
-//             batch
-//                 .into_iter()
-//                 .map(from_web_flat_token)
-//                 .collect::<Vec<_>>()
-//         })
-//         .collect::<Vec<_>>();
-//     lint_flat_token_batches(
-//         batches.as_slice(),
-//         token_lint_options(request.options),
-//         batch_options(request.batch_options),
-//     )
-//     .into_iter()
-//     .map(|issues| WebLintBatch {
-//         issues: issues.into_iter().map(map_lint_issue).collect(),
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = formatContent)]
-// /// Parse content, project tokens, then run the formatter.
-// ///
-// /// If you already have canonical flat tokens, prefer `formatFlatTokens(...)`.
-// pub fn wasm_format_content(
-//     request: WebFormatContentRequest,
-// ) -> Result<WebTokenTransformResult, JsError> {
-//     format_content_with_options(
-//         &request.source,
-//         document_format(request.format),
-//         into_tokens_options(request.token_options),
-//         format_options(request.format_options),
-//     )
-//     .map(map_transform_result)
-//     .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = formatContents)]
-// pub fn wasm_format_contents(request: WebFormatContentsRequest) -> Vec<WebTransformOpResult> {
-//     format::format_contents_with_options(
-//         request.sources.as_slice(),
-//         document_format(request.format),
-//         into_tokens_options(request.token_options.clone()),
-//         format_options(request.format_options.clone()),
-//         batch_options(request.batch_options),
-//     )
-//     .into_iter()
-//     .map(|result| match result {
-//         Ok(value) => WebTransformOpResult {
-//             value: Some(map_transform_result(value)),
-//             error: None,
-//         },
-//         Err(error) => WebTransformOpResult {
-//             value: None,
-//             error: Some(error.to_string()),
-//         },
-//     })
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = formatFlatTokens)]
-// /// Format canonical flat tokens without reparsing source content.
-// pub fn wasm_format_flat_tokens(request: WebFormatTokensRequest) -> WebTokenTransformResult {
-//     let tokens = request
-//         .tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     let result = match request.format_options {
-//         Some(options) => {
-//             format_flat_tokens_with_options(tokens.as_slice(), format_options(Some(options)))
-//         }
-//         None => format_flat_tokens(tokens.as_slice()),
-//     };
-//     map_transform_result(result)
-// }
-
-// #[wasm_bindgen(js_name = formatTokenBatches)]
-// /// Format batches of canonical flat token streams without reparsing source content.
-// pub fn wasm_format_flat_token_batches(
-//     request: WebFormatTokenBatchesRequest,
-// ) -> Vec<WebTokenTransformResult> {
-//     let batches = request
-//         .token_batches
-//         .into_iter()
-//         .map(|batch| {
-//             batch
-//                 .into_iter()
-//                 .map(from_web_flat_token)
-//                 .collect::<Vec<_>>()
-//         })
-//         .collect::<Vec<_>>();
-//     let results = match request.format_options {
-//         Some(options) => format_flat_token_batches_with_options(
-//             batches.as_slice(),
-//             format_options(Some(options)),
-//             batch_options(request.batch_options),
-//         ),
-//         None => format_flat_token_batches(batches.as_slice(), batch_options(request.batch_options)),
-//     };
-//     results.into_iter().map(map_transform_result).collect()
-// }
-
-// #[wasm_bindgen(js_name = applyTokenFixes)]
-// pub fn wasm_apply_token_fixes(request: WebApplyTokenFixesRequest) -> WebTokenTransformResult {
-//     let tokens = request
-//         .tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     let fixes = request
-//         .fixes
-//         .into_iter()
-//         .map(from_web_token_fix)
-//         .collect::<Vec<_>>();
-//     map_transform_result(apply_token_fixes(tokens.as_slice(), fixes.as_slice()))
-// }
-
-// #[wasm_bindgen(js_name = diffContent)]
-// /// Parse both sources, project canonical flat tokens, then diff.
-// ///
-// /// If you already have canonical flat tokens, prefer `diffTokens(...)`.
-// pub fn wasm_diff_content(
-//     request: WebDiffContentRequest,
-// ) -> Result<Vec<WebChapterTokenDiff>, JsError> {
-//     diff_content(
-//         &request.baseline_source,
-//         document_format(request.baseline_format),
-//         &request.current_source,
-//         document_format(request.current_format),
-//         &token_view_options(request.token_view),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .map(|diffs| diffs.into_iter().map(map_chapter_token_diff).collect())
-//     .map_err(js_error)
-// }
-
-// #[wasm_bindgen(js_name = diffTokens)]
-// /// Diff canonical flat token streams without reparsing source content.
-// pub fn wasm_diff_tokens(request: WebDiffTokensRequest) -> Vec<WebChapterTokenDiff> {
-//     let baseline = request
-//         .baseline_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     let current = request
-//         .current_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     diff_tokens(
-//         baseline.as_slice(),
-//         current.as_slice(),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_chapter_token_diff)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = buildSidBlocks)]
-// pub fn wasm_build_sid_blocks(request: WebBuildSidBlocksRequest) -> Vec<WebSidBlock> {
-//     let tokens = request
-//         .tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     build_sid_blocks(
-//         tokens.as_slice(),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_sid_block)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = diffSidBlocks)]
-// pub fn wasm_diff_sid_blocks(request: WebDiffSidBlocksRequest) -> Vec<WebSidBlockDiff> {
-//     let baseline = request
-//         .baseline_blocks
-//         .into_iter()
-//         .map(from_web_sid_block)
-//         .collect::<Vec<_>>();
-//     let current = request
-//         .current_blocks
-//         .into_iter()
-//         .map(from_web_sid_block)
-//         .collect::<Vec<_>>();
-//     diff_sid_blocks(baseline.as_slice(), current.as_slice())
-//         .into_iter()
-//         .map(map_sid_block_diff)
-//         .collect()
-// }
-
-// #[wasm_bindgen(js_name = diffChapterTokenStreams)]
-// pub fn wasm_diff_chapter_token_streams(
-//     request: WebDiffChapterTokenStreamsRequest,
-// ) -> Vec<WebChapterTokenDiff> {
-//     let baseline = request
-//         .baseline_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     let current = request
-//         .current_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     diff_chapter_token_streams(
-//         baseline.as_slice(),
-//         current.as_slice(),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_chapter_token_diff)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = diffUsfm)]
-// pub fn wasm_diff_usfm(request: WebDiffUsfmRequest) -> Vec<WebChapterTokenDiff> {
-//     diff_usfm(
-//         &request.baseline_usfm,
-//         &request.current_usfm,
-//         &token_view_options(request.token_view),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_chapter_token_diff)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = diffUsfmByChapter)]
-// pub fn wasm_diff_usfm_by_chapter(request: WebDiffUsfmRequest) -> Vec<WebChapterDiffGroup> {
-//     let grouped = diff_usfm_by_chapter(
-//         &request.baseline_usfm,
-//         &request.current_usfm,
-//         &token_view_options(request.token_view),
-//         &build_sid_blocks_options(request.build_options),
-//     );
-//     map_diff_groups(grouped)
-// }
-
-// #[wasm_bindgen(js_name = diffUsfmSources)]
-// pub fn wasm_diff_usfm_sources(request: WebDiffUsfmRequest) -> Vec<WebChapterTokenDiff> {
-//     diff_usfm_sources(
-//         &request.baseline_usfm,
-//         &request.current_usfm,
-//         &token_view_options(request.token_view),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_chapter_token_diff)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = diffUsfmSourcesByChapter)]
-// pub fn wasm_diff_usfm_sources_by_chapter(request: WebDiffUsfmRequest) -> Vec<WebChapterDiffGroup> {
-//     map_diff_groups(diff_usfm_sources_by_chapter(
-//         &request.baseline_usfm,
-//         &request.current_usfm,
-//         &token_view_options(request.token_view),
-//         &build_sid_blocks_options(request.build_options),
-//     ))
-// }
-
-// #[wasm_bindgen(js_name = applyRevertByBlockId)]
-// pub fn wasm_apply_revert_by_block_id(request: WebRevertDiffBlockRequest) -> Vec<WebToken> {
-//     let baseline = request
-//         .baseline_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     let current = request
-//         .current_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     apply_revert_by_block_id(
-//         &request.block_id,
-//         baseline.as_slice(),
-//         current.as_slice(),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_flat_token)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = revertDiffBlock)]
-// pub fn wasm_revert_diff_block(request: WebRevertDiffBlockRequest) -> Vec<WebToken> {
-//     wasm_apply_revert_by_block_id(request)
-// }
-
-// #[wasm_bindgen(js_name = applyRevertsByBlockId)]
-// pub fn wasm_apply_reverts_by_block_id(request: WebApplyRevertsByBlockIdRequest) -> Vec<WebToken> {
-//     let baseline = request
-//         .baseline_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     let current = request
-//         .current_tokens
-//         .into_iter()
-//         .map(from_web_flat_token)
-//         .collect::<Vec<_>>();
-//     apply_reverts_by_block_id(
-//         request.diff_block_ids.as_slice(),
-//         baseline.as_slice(),
-//         current.as_slice(),
-//         &build_sid_blocks_options(request.build_options),
-//     )
-//     .into_iter()
-//     .map(map_flat_token)
-//     .collect()
-// }
-
-// #[wasm_bindgen(js_name = revertDiffBlocks)]
-// pub fn wasm_revert_diff_blocks(request: WebApplyRevertsByBlockIdRequest) -> Vec<WebToken> {
-//     wasm_apply_reverts_by_block_id(request)
-// }
-
-// #[wasm_bindgen(js_name = replaceChapterDiffsInMap)]
-// pub fn wasm_replace_chapter_diffs_in_map(
-//     request: WebReplaceChapterDiffsInMapRequest,
-// ) -> Vec<WebChapterDiffGroup> {
-//     let map = from_web_diff_groups(request.groups);
-//     map_diff_groups(replace_chapter_diffs_in_map(
-//         &map,
-//         &request.book,
-//         request.chapter,
-//         request
-//             .diffs
-//             .into_iter()
-//             .map(from_web_chapter_token_diff)
-//             .collect(),
-//     ))
-// }
-
-// #[wasm_bindgen(js_name = replaceManyChapterDiffsInMap)]
-// pub fn wasm_replace_many_chapter_diffs_in_map(
-//     request: WebReplaceManyChapterDiffsInMapRequest,
-// ) -> Vec<WebChapterDiffGroup> {
-//     let map = from_web_diff_groups(request.groups);
-//     let replacements = request
-//         .replacements
-//         .into_iter()
-//         .map(|entry| {
-//             (
-//                 entry.book,
-//                 entry.chapter,
-//                 entry
-//                     .diffs
-//                     .into_iter()
-//                     .map(from_web_chapter_token_diff)
-//                     .collect::<Vec<_>>(),
-//             )
-//         })
-//         .collect::<Vec<_>>();
-//     map_diff_groups(replace_many_chapter_diffs_in_map(
-//         &map,
-//         replacements.as_slice(),
-//     ))
-// }
-
-// #[wasm_bindgen(js_name = flattenDiffMap)]
-// pub fn wasm_flatten_diff_map(groups: Vec<WebChapterDiffGroup>) -> Vec<WebChapterTokenDiff> {
-//     let map = from_web_diff_groups(groups);
-//     flatten_diff_map(&map)
-//         .into_iter()
-//         .map(map_chapter_token_diff)
-//         .collect()
-// }
-
-// fn rehydrate_parse_handle(document: &WebParsedDocument) -> ParseHandle {
-//     parse::parse(&document.source_usfm)
-// }
-
-// fn map_parse_handle(handle: ParseHandle) -> WebParsedDocument {
-//     WebParsedDocument {
-//         source_usfm: handle.source().to_string(),
-//         book_code: handle.book_code().map(ToString::to_string),
-//         recoveries: recoveries(&handle)
-//             .iter()
-//             .cloned()
-//             .map(map_parse_recovery)
-//             .collect(),
-//     }
-// }
-
-// fn map_scan_result(result: ScanResult) -> WebScanResult {
-//     WebScanResult {
-//         tokens: result.tokens.into_iter().map(map_scan_token).collect(),
-//     }
-// }
-
-// fn map_scan_token(token: ScanToken) -> WebScanToken {
-//     WebScanToken {
-//         kind: scan_token_kind_name(&token.kind).to_string(),
-//         span: map_span(token.span),
-//         text: token.text,
-//     }
-// }
-
-// fn map_parse_recovery(recovery: ParseRecovery) -> WebParseRecovery {
-//     WebParseRecovery {
-//         code: recovery_code_name(&recovery.code).to_string(),
-//         span: map_span(recovery.span),
-//         related_span: recovery.related_span.map(map_span),
-//         payload: recovery.payload.map(map_recovery_payload),
-//     }
-// }
-
-// fn map_recovery_payload(payload: RecoveryPayload) -> WebRecoveryPayload {
-//     match payload {
-//         RecoveryPayload::Marker { marker } => WebRecoveryPayload::Marker { marker },
-//         RecoveryPayload::Close { open, close } => WebRecoveryPayload::Close { open, close },
-//     }
-// }
-
-// fn map_flat_token(token: Token) -> WebToken {
-//     WebToken {
-//         id: token.id,
-//         kind: token_kind_name(&token.kind).to_string(),
-//         span: map_span(token.span),
-//         sid: token.sid,
-//         marker: token.marker,
-//         text: token.text,
-//     }
-// }
-
-// fn map_marker_info(info: MarkerInfo) -> WebMarkerInfo {
-//     WebMarkerInfo {
-//         marker: info.marker,
-//         canonical: info.canonical,
-//         known: info.known,
-//         deprecated: info.deprecated,
-//         category: map_marker_category(info.category),
-//         note_family: info.note_family.map(map_note_family_value),
-//         note_subkind: info.note_subkind.map(map_note_subkind_value),
-//         inline_context: info.inline_context.map(map_marker_inline_context_value),
-//         default_attribute: info.default_attribute,
-//     }
-// }
-
-// fn map_marker_category(category: MarkerCategory) -> WebMarkerCategory {
-//     match category {
-//         MarkerCategory::Document => WebMarkerCategory::Document,
-//         MarkerCategory::Paragraph => WebMarkerCategory::Paragraph,
-//         MarkerCategory::Character => WebMarkerCategory::Character,
-//         MarkerCategory::NoteContainer => WebMarkerCategory::NoteContainer,
-//         MarkerCategory::NoteSubmarker => WebMarkerCategory::NoteSubmarker,
-//         MarkerCategory::Chapter => WebMarkerCategory::Chapter,
-//         MarkerCategory::Verse => WebMarkerCategory::Verse,
-//         MarkerCategory::MilestoneStart => WebMarkerCategory::MilestoneStart,
-//         MarkerCategory::MilestoneEnd => WebMarkerCategory::MilestoneEnd,
-//         MarkerCategory::Figure => WebMarkerCategory::Figure,
-//         MarkerCategory::SidebarStart => WebMarkerCategory::SidebarStart,
-//         MarkerCategory::SidebarEnd => WebMarkerCategory::SidebarEnd,
-//         MarkerCategory::Periph => WebMarkerCategory::Periph,
-//         MarkerCategory::Meta => WebMarkerCategory::Meta,
-//         MarkerCategory::TableRow => WebMarkerCategory::TableRow,
-//         MarkerCategory::TableCell => WebMarkerCategory::TableCell,
-//         MarkerCategory::Header => WebMarkerCategory::Header,
-//         MarkerCategory::Unknown => WebMarkerCategory::Unknown,
-//     }
-// }
-
-// fn map_note_family_value(family: MarkerNoteFamily) -> WebMarkerNoteFamily {
-//     match family {
-//         MarkerNoteFamily::Footnote => WebMarkerNoteFamily::Footnote,
-//         MarkerNoteFamily::CrossReference => WebMarkerNoteFamily::CrossReference,
-//     }
-// }
-
-// fn map_note_subkind_value(subkind: MarkerNoteSubkind) -> WebMarkerNoteSubkind {
-//     match subkind {
-//         MarkerNoteSubkind::Structural => WebMarkerNoteSubkind::Structural,
-//         MarkerNoteSubkind::StructuralKeepsNestedCharsOpen => {
-//             WebMarkerNoteSubkind::StructuralKeepsNestedCharsOpen
-//         }
-//     }
-// }
-
-// fn map_marker_inline_context_value(context: MarkerInlineContext) -> WebMarkerInlineContext {
-//     match context {
-//         MarkerInlineContext::Para => WebMarkerInlineContext::Para,
-//         MarkerInlineContext::Section => WebMarkerInlineContext::Section,
-//         MarkerInlineContext::List => WebMarkerInlineContext::List,
-//         MarkerInlineContext::Table => WebMarkerInlineContext::Table,
-//     }
-// }
-
-// fn map_token_variant(token: TokenVariant) -> WebTokenVariant {
-//     match token {
-//         TokenVariant::Newline { id, span, sid, text } => WebTokenVariant::Newline {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             text,
-//         },
-//         TokenVariant::OptBreak { id, span, sid, text } => WebTokenVariant::OptBreak {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             text,
-//         },
-//         TokenVariant::Marker {
-//             id,
-//             span,
-//             sid,
-//             marker,
-//             text,
-//         } => WebTokenVariant::Marker {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             marker,
-//             text,
-//         },
-//         TokenVariant::EndMarker {
-//             id,
-//             span,
-//             sid,
-//             marker,
-//             text,
-//         } => WebTokenVariant::EndMarker {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             marker,
-//             text,
-//         },
-//         TokenVariant::Milestone {
-//             id,
-//             span,
-//             sid,
-//             marker,
-//             text,
-//         } => WebTokenVariant::Milestone {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             marker,
-//             text,
-//         },
-//         TokenVariant::MilestoneEnd {
-//             id,
-//             span,
-//             sid,
-//             marker,
-//             text,
-//         } => WebTokenVariant::MilestoneEnd {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             marker,
-//             text,
-//         },
-//         TokenVariant::Attributes { id, span, sid, text } => WebTokenVariant::Attributes {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             text,
-//         },
-//         TokenVariant::BookCode { id, span, sid, text } => WebTokenVariant::BookCode {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             text,
-//         },
-//         TokenVariant::Number { id, span, sid, text } => WebTokenVariant::Number {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             text,
-//         },
-//         TokenVariant::Text { id, span, sid, text } => WebTokenVariant::Text {
-//             id,
-//             span: map_span(span),
-//             sid,
-//             text,
-//         },
-//     }
-// }
-
-// fn from_web_flat_token(token: WebToken) -> Token {
-//     Token {
-//         id: token.id,
-//         kind: parse_token_kind(&token.kind),
-//         span: token.span.start..token.span.end,
-//         sid: token.sid,
-//         marker: token.marker,
-//         text: token.text,
-//     }
-// }
-
-// fn map_lint_issue(issue: LintIssue) -> WebLintIssue {
-//     WebLintIssue {
-//         code: issue.code.as_str().to_string(),
-//         severity: issue.severity.as_str().to_string(),
-//         marker: issue.marker,
-//         message: issue.message,
-//         message_params: issue.message_params,
-//         span: map_span(issue.span),
-//         related_span: issue.related_span.map(map_span),
-//         token_id: issue.token_id,
-//         related_token_id: issue.related_token_id,
-//         sid: issue.sid,
-//         fix: issue.fix.map(map_token_fix),
-//     }
-// }
-
-// fn map_token_fix(fix: TokenFix) -> WebTokenFix {
-//     match fix {
-//         TokenFix::ReplaceToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             replacements,
-//         } => WebTokenFix::ReplaceToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             replacements: replacements.into_iter().map(map_token_template).collect(),
-//         },
-//         TokenFix::DeleteToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//         } => WebTokenFix::DeleteToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//         },
-//         TokenFix::InsertAfter {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             insert,
-//         } => WebTokenFix::InsertAfter {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             insert: insert.into_iter().map(map_token_template).collect(),
-//         },
-//     }
-// }
-
-// fn map_token_template(template: TokenTemplate) -> WebTokenTemplate {
-//     WebTokenTemplate {
-//         kind: token_kind_name(&template.kind).to_string(),
-//         text: template.text,
-//         marker: template.marker,
-//         sid: template.sid,
-//     }
-// }
-
-// fn map_projected_document(document: ProjectedUsfmDocument) -> WebProjectedUsfmDocument {
-//     WebProjectedUsfmDocument {
-//         tokens: document.tokens.into_iter().map(map_flat_token).collect(),
-//         ast: document.document_tree,
-//         lint_issues: document
-//             .lint_issues
-//             .map(|issues| issues.into_iter().map(map_lint_issue).collect()),
-//     }
-// }
-
-// fn map_transform_result(result: TokenTransformResult<Token>) -> WebTokenTransformResult {
-//     WebTokenTransformResult {
-//         tokens: result.tokens.into_iter().map(map_flat_token).collect(),
-//         applied_changes: result
-//             .applied_changes
-//             .into_iter()
-//             .map(map_transform_change)
-//             .collect(),
-//         skipped_changes: result
-//             .skipped_changes
-//             .into_iter()
-//             .map(map_skipped_transform)
-//             .collect(),
-//     }
-// }
-
-// fn map_transform_change(change: TokenTransformChange) -> WebTokenTransformChange {
-//     WebTokenTransformChange {
-//         kind: transform_kind_name(&change.kind).to_string(),
-//         code: change.code,
-//         label: change.label,
-//         label_params: change.label_params,
-//         target_token_id: change.target_token_id,
-//     }
-// }
-
-// fn map_skipped_transform(skip: SkippedTokenTransform) -> WebSkippedTokenTransform {
-//     WebSkippedTokenTransform {
-//         kind: transform_kind_name(&skip.kind).to_string(),
-//         code: skip.code,
-//         label: skip.label,
-//         label_params: skip.label_params,
-//         reason_code: skip.reason.as_str().to_string(),
-//         target_token_id: skip.target_token_id,
-//         reason: transform_skip_reason_name(&skip.reason).to_string(),
-//     }
-// }
-
-// fn map_vref_map(map: VrefMap) -> Vec<WebVrefEntry> {
-//     map.into_iter()
-//         .map(|(reference, text)| WebVrefEntry { reference, text })
-//         .collect()
-// }
-
-// fn map_chapter_token_diff(diff: ChapterTokenDiff<Token>) -> WebChapterTokenDiff {
-//     WebChapterTokenDiff {
-//         block_id: diff.block_id,
-//         semantic_sid: diff.semantic_sid,
-//         status: diff_status_name(diff.status).to_string(),
-//         original: diff.original.map(map_sid_block),
-//         current: diff.current.map(map_sid_block),
-//         original_text: diff.original_text,
-//         current_text: diff.current_text,
-//         original_text_only: diff.original_text_only,
-//         current_text_only: diff.current_text_only,
-//         is_whitespace_change: diff.is_whitespace_change,
-//         is_usfm_structure_change: diff.is_usfm_structure_change,
-//         original_tokens: diff
-//             .original_tokens
-//             .into_iter()
-//             .map(map_flat_token)
-//             .collect(),
-//         current_tokens: diff
-//             .current_tokens
-//             .into_iter()
-//             .map(map_flat_token)
-//             .collect(),
-//         original_alignment: diff
-//             .original_alignment
-//             .into_iter()
-//             .map(map_token_alignment)
-//             .collect(),
-//         current_alignment: diff
-//             .current_alignment
-//             .into_iter()
-//             .map(map_token_alignment)
-//             .collect(),
-//         undo_side: diff_undo_side_name(diff.undo_side).to_string(),
-//     }
-// }
-
-// fn map_sid_block_diff(diff: SidBlockDiff) -> WebSidBlockDiff {
-//     WebSidBlockDiff {
-//         block_id: diff.block_id,
-//         semantic_sid: diff.semantic_sid,
-//         status: diff_status_name(diff.status).to_string(),
-//         original: diff.original.map(map_sid_block),
-//         current: diff.current.map(map_sid_block),
-//         original_text: diff.original_text,
-//         current_text: diff.current_text,
-//         original_text_only: diff.original_text_only,
-//         current_text_only: diff.current_text_only,
-//         is_whitespace_change: diff.is_whitespace_change,
-//         is_usfm_structure_change: diff.is_usfm_structure_change,
-//     }
-// }
-
-// fn map_sid_block(block: SidBlock) -> WebSidBlock {
-//     WebSidBlock {
-//         block_id: block.block_id,
-//         semantic_sid: block.semantic_sid,
-//         start: block.start,
-//         end_exclusive: block.end_exclusive,
-//         prev_block_id: block.prev_block_id,
-//         text_full: block.text_full,
-//     }
-// }
-
-// fn from_web_sid_block(block: WebSidBlock) -> SidBlock {
-//     SidBlock {
-//         block_id: block.block_id,
-//         semantic_sid: block.semantic_sid,
-//         start: block.start,
-//         end_exclusive: block.end_exclusive,
-//         prev_block_id: block.prev_block_id,
-//         text_full: block.text_full,
-//     }
-// }
-
-// fn map_token_alignment(alignment: TokenAlignment) -> WebTokenAlignment {
-//     WebTokenAlignment {
-//         change: diff_token_change_name(alignment.change).to_string(),
-//         counterpart_index: alignment.counterpart_index,
-//     }
-// }
-
-// fn map_diff_groups(groups: DiffsByChapterMap<ChapterTokenDiff<Token>>) -> Vec<WebChapterDiffGroup> {
-//     let mut out = Vec::new();
-//     for (book, chapters) in groups {
-//         for (chapter, diffs) in chapters {
-//             out.push(WebChapterDiffGroup {
-//                 book: book.clone(),
-//                 chapter,
-//                 diffs: diffs.into_iter().map(map_chapter_token_diff).collect(),
-//             });
-//         }
-//     }
-//     out
-// }
-
-// fn from_web_diff_groups(
-//     groups: Vec<WebChapterDiffGroup>,
-// ) -> DiffsByChapterMap<ChapterTokenDiff<Token>> {
-//     let mut out = DiffsByChapterMap::new();
-//     for group in groups {
-//         out.entry(group.book).or_default().insert(
-//             group.chapter,
-//             group
-//                 .diffs
-//                 .into_iter()
-//                 .map(from_web_chapter_token_diff)
-//                 .collect(),
-//         );
-//     }
-//     out
-// }
-
-// fn from_web_chapter_token_diff(diff: WebChapterTokenDiff) -> ChapterTokenDiff<Token> {
-//     ChapterTokenDiff {
-//         block_id: diff.block_id,
-//         semantic_sid: diff.semantic_sid,
-//         status: parse_diff_status(&diff.status),
-//         original: diff.original.map(from_web_sid_block),
-//         current: diff.current.map(from_web_sid_block),
-//         original_text: diff.original_text,
-//         current_text: diff.current_text,
-//         original_text_only: diff.original_text_only,
-//         current_text_only: diff.current_text_only,
-//         is_whitespace_change: diff.is_whitespace_change,
-//         is_usfm_structure_change: diff.is_usfm_structure_change,
-//         original_tokens: diff
-//             .original_tokens
-//             .into_iter()
-//             .map(from_web_flat_token)
-//             .collect(),
-//         current_tokens: diff
-//             .current_tokens
-//             .into_iter()
-//             .map(from_web_flat_token)
-//             .collect(),
-//         original_alignment: diff
-//             .original_alignment
-//             .into_iter()
-//             .map(from_web_token_alignment)
-//             .collect(),
-//         current_alignment: diff
-//             .current_alignment
-//             .into_iter()
-//             .map(from_web_token_alignment)
-//             .collect(),
-//         undo_side: parse_diff_undo_side(&diff.undo_side),
-//     }
-// }
-
-// fn from_web_token_alignment(alignment: WebTokenAlignment) -> TokenAlignment {
-//     TokenAlignment {
-//         change: parse_diff_token_change(&alignment.change),
-//         counterpart_index: alignment.counterpart_index,
-//     }
-// }
-
-// fn from_web_token_fix(fix: WebTokenFix) -> TokenFix {
-//     match fix {
-//         WebTokenFix::ReplaceToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             replacements,
-//         } => TokenFix::ReplaceToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             replacements: replacements
-//                 .into_iter()
-//                 .map(from_web_token_template)
-//                 .collect(),
-//         },
-//         WebTokenFix::DeleteToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//         } => TokenFix::DeleteToken {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//         },
-//         WebTokenFix::InsertAfter {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             insert,
-//         } => TokenFix::InsertAfter {
-//             code,
-//             label,
-//             label_params,
-//             target_token_id,
-//             insert: insert.into_iter().map(from_web_token_template).collect(),
-//         },
-//     }
-// }
-
-// fn from_web_token_template(template: WebTokenTemplate) -> TokenTemplate {
-//     TokenTemplate {
-//         kind: parse_token_kind(&template.kind),
-//         text: template.text,
-//         marker: template.marker,
-//         sid: template.sid,
-//     }
-// }
-
-// fn map_span(span: Span) -> WebSpan {
-//     WebSpan {
-//         start: span.start,
-//         end: span.end,
-//     }
-// }
-
-// fn document_format(format: WebDocumentFormat) -> DocumentFormat {
-//     match format {
-//         WebDocumentFormat::Usfm => DocumentFormat::Usfm,
-//         WebDocumentFormat::Usj => DocumentFormat::Usj,
-//         WebDocumentFormat::Usx => DocumentFormat::Usx,
-//     }
-// }
-
-// fn batch_options(options: Option<WebBatchExecutionOptions>) -> BatchExecutionOptions {
-//     let options = options.unwrap_or(WebBatchExecutionOptions {
-//         parallel: default_parallel_true(),
-//     });
-//     BatchExecutionOptions {
-//         parallel: options.parallel,
-//     }
-// }
-
-// fn into_tokens_options(options: Option<WebIntoTokensOptions>) -> IntoTokensOptions {
-//     let options = options.unwrap_or_default();
-//     IntoTokensOptions {
-//         merge_horizontal_whitespace: options.merge_horizontal_whitespace,
-//     }
-// }
-
-// fn token_view_options(options: Option<WebTokenViewOptions>) -> TokenViewOptions {
-//     let policy = options
-//         .and_then(|options| options.whitespace_policy)
-//         .unwrap_or(WebWhitespacePolicy::MergeToVisible);
-//     TokenViewOptions {
-//         whitespace_policy: match policy {
-//             WebWhitespacePolicy::MergeToVisible => WhitespacePolicy::MergeToVisible,
-//         },
-//     }
-// }
-
-// fn html_options(options: Option<WebHtmlOptions>) -> HtmlOptions {
-//     let options = options.unwrap_or_default();
-//     HtmlOptions {
-//         wrap_root: options.wrap_root,
-//         prefer_native_elements: options.prefer_native_elements,
-//         note_mode: match options.note_mode.unwrap_or(WebHtmlNoteMode::Extracted) {
-//             WebHtmlNoteMode::Extracted => HtmlNoteMode::Extracted,
-//             WebHtmlNoteMode::Inline => HtmlNoteMode::Inline,
-//         },
-//         caller_style: match options.caller_style.unwrap_or(WebHtmlCallerStyle::Numeric) {
-//             WebHtmlCallerStyle::Numeric => HtmlCallerStyle::Numeric,
-//             WebHtmlCallerStyle::AlphaLower => HtmlCallerStyle::AlphaLower,
-//             WebHtmlCallerStyle::AlphaUpper => HtmlCallerStyle::AlphaUpper,
-//             WebHtmlCallerStyle::RomanLower => HtmlCallerStyle::RomanLower,
-//             WebHtmlCallerStyle::RomanUpper => HtmlCallerStyle::RomanUpper,
-//             WebHtmlCallerStyle::Source => HtmlCallerStyle::Source,
-//         },
-//         caller_scope: match options
-//             .caller_scope
-//             .unwrap_or(WebHtmlCallerScope::VerseSequential)
-//         {
-//             WebHtmlCallerScope::DocumentSequential => HtmlCallerScope::DocumentSequential,
-//             WebHtmlCallerScope::VerseSequential => HtmlCallerScope::VerseSequential,
-//         },
-//     }
-// }
-
-// fn token_lint_options(options: Option<WebTokenLintOptions>) -> TokenLintOptions {
-//     let options = options.unwrap_or(WebTokenLintOptions {
-//         disabled_rules: Vec::new(),
-//         suppressions: Vec::new(),
-//         allow_implicit_chapter_content_verse: false,
-//     });
-//     TokenLintOptions {
-//         disabled_rules: options
-//             .disabled_rules
-//             .iter()
-//             .filter_map(|code| parse_lint_code(code))
-//             .collect(),
-//         suppressions: options
-//             .suppressions
-//             .into_iter()
-//             .filter_map(|suppression| {
-//                 parse_lint_code(&suppression.code).map(|code| LintSuppression {
-//                     code,
-//                     sid: suppression.sid,
-//                 })
-//             })
-//             .collect(),
-//         allow_implicit_chapter_content_verse: options.allow_implicit_chapter_content_verse,
-//     }
-// }
-
-// fn lint_options(options: Option<WebLintOptions>) -> LintOptions {
-//     let options = options.unwrap_or(WebLintOptions {
-//         include_parse_recoveries: false,
-//         token_view: None,
-//         token_rules: None,
-//     });
-//     LintOptions {
-//         include_parse_recoveries: options.include_parse_recoveries,
-//         token_view: token_view_options(options.token_view),
-//         token_rules: token_lint_options(options.token_rules),
-//     }
-// }
-
-// fn project_options(options: Option<WebProjectUsfmOptions>) -> ProjectUsfmOptions {
-//     let options = options.unwrap_or(WebProjectUsfmOptions {
-//         token_options: None,
-//         lint_options: None,
-//     });
-//     ProjectUsfmOptions {
-//         token_options: into_tokens_options(options.token_options),
-//         lint_options: options
-//             .lint_options
-//             .map(|options| lint_options(Some(options))),
-//     }
-// }
-
-// fn format_options(options: Option<WebFormatOptions>) -> FormatOptions {
-//     if let Some(options) = options {
-//         FormatOptions {
-//             recover_malformed_markers: options.recover_malformed_markers,
-//             collapse_whitespace_in_text: options.collapse_whitespace_in_text,
-//             ensure_inline_separators: options.ensure_inline_separators,
-//             remove_duplicate_verse_numbers: options.remove_duplicate_verse_numbers,
-//             normalize_spacing_after_paragraph_markers: options
-//                 .normalize_spacing_after_paragraph_markers,
-//             remove_unwanted_linebreaks: options.remove_unwanted_linebreaks,
-//             bridge_consecutive_verse_markers: options.bridge_consecutive_verse_markers,
-//             remove_orphan_empty_verse_before_contentful_verse: options
-//                 .remove_orphan_empty_verse_before_contentful_verse,
-//             remove_bridge_verse_enumerators: options.remove_bridge_verse_enumerators,
-//             move_chapter_label_after_chapter_marker: options
-//                 .move_chapter_label_after_chapter_marker,
-//             insert_default_paragraph_after_chapter_intro: options
-//                 .insert_default_paragraph_after_chapter_intro,
-//             remove_empty_paragraphs: options.remove_empty_paragraphs,
-//             insert_structural_linebreaks: options.insert_structural_linebreaks,
-//             collapse_consecutive_linebreaks: options.collapse_consecutive_linebreaks,
-//             normalize_marker_whitespace_at_line_start: options
-//                 .normalize_marker_whitespace_at_line_start,
-//         }
-//     } else {
-//         FormatOptions::default()
-//     }
-// }
-
-// fn build_sid_blocks_options(options: Option<WebBuildSidBlocksOptions>) -> BuildSidBlocksOptions {
-//     let options = options.unwrap_or(WebBuildSidBlocksOptions {
-//         allow_empty_sid: default_allow_empty_sid_true(),
-//     });
-//     BuildSidBlocksOptions {
-//         allow_empty_sid: options.allow_empty_sid,
-//     }
-// }
-
-// fn token_kind_name(kind: &TokenKind) -> &'static str {
-//     match kind {
-//         TokenKind::Newline => "newline",
-//         TokenKind::OptBreak => "optbreak",
-//         TokenKind::Marker => "marker",
-//         TokenKind::EndMarker => "end-marker",
-//         TokenKind::Milestone => "milestone",
-//         TokenKind::MilestoneEnd => "milestone-end",
-//         TokenKind::Attributes => "attributes",
-//         TokenKind::BookCode => "book-code",
-//         TokenKind::Number => "number",
-//         TokenKind::Text => "text",
-//     }
-// }
-
-// fn parse_token_kind(kind: &str) -> TokenKind {
-//     match kind {
-//         "whitespace" => TokenKind::Text,
-//         "newline" => TokenKind::Newline,
-//         "optbreak" => TokenKind::OptBreak,
-//         "marker" => TokenKind::Marker,
-//         "end-marker" => TokenKind::EndMarker,
-//         "milestone" => TokenKind::Milestone,
-//         "milestone-end" => TokenKind::MilestoneEnd,
-//         "attributes" => TokenKind::Attributes,
-//         "book-code" => TokenKind::BookCode,
-//         "number" => TokenKind::Number,
-//         _ => TokenKind::Text,
-//     }
-// }
-
-// fn scan_token_kind_name(kind: &ScanTokenKind) -> &'static str {
-//     match kind {
-//         ScanTokenKind::Whitespace => "whitespace",
-//         ScanTokenKind::Newline => "newline",
-//         ScanTokenKind::OptBreak => "optbreak",
-//         ScanTokenKind::Marker => "marker",
-//         ScanTokenKind::NestedMarker => "nested-marker",
-//         ScanTokenKind::ClosingMarker => "closing-marker",
-//         ScanTokenKind::NestedClosingMarker => "nested-closing-marker",
-//         ScanTokenKind::Milestone => "milestone",
-//         ScanTokenKind::MilestoneEnd => "milestone-end",
-//         ScanTokenKind::Attributes => "attributes",
-//         ScanTokenKind::Text => "text",
-//     }
-// }
-
-// fn transform_kind_name(kind: &TokenTransformKind) -> &'static str {
-//     match kind {
-//         TokenTransformKind::Fix => "fix",
-//         TokenTransformKind::Format => "format",
-//         TokenTransformKind::CustomFormatPass => "custom-format-pass",
-//     }
-// }
-
-// fn transform_skip_reason_name(reason: &TokenTransformSkipReason) -> &'static str {
-//     match reason {
-//         TokenTransformSkipReason::TokenNotFound => "token-not-found",
-//         TokenTransformSkipReason::EmptyReplacement => "empty-replacement",
-//     }
-// }
-
-// fn recovery_code_name(code: &RecoveryCode) -> &'static str {
-//     match code {
-//         RecoveryCode::MissingChapterNumber => "missing-chapter-number",
-//         RecoveryCode::MissingVerseNumber => "missing-verse-number",
-//         RecoveryCode::MissingMilestoneSelfClose => "missing-milestone-self-close",
-//         RecoveryCode::ImplicitlyClosedMarker => "implicitly-closed-marker",
-//         RecoveryCode::StrayCloseMarker => "stray-close-marker",
-//         RecoveryCode::MisnestedCloseMarker => "misnested-close-marker",
-//         RecoveryCode::UnclosedNote => "unclosed-note",
-//         RecoveryCode::UnclosedMarkerAtEof => "unclosed-marker-at-eof",
-//     }
-// }
-
-// fn diff_status_name(status: DiffStatus) -> &'static str {
-//     match status {
-//         DiffStatus::Added => "added",
-//         DiffStatus::Deleted => "deleted",
-//         DiffStatus::Modified => "modified",
-//         DiffStatus::Unchanged => "unchanged",
-//     }
-// }
-
-// fn parse_diff_status(status: &str) -> DiffStatus {
-//     match status {
-//         "added" => DiffStatus::Added,
-//         "deleted" => DiffStatus::Deleted,
-//         "modified" => DiffStatus::Modified,
-//         _ => DiffStatus::Unchanged,
-//     }
-// }
-
-// fn diff_token_change_name(change: DiffTokenChange) -> &'static str {
-//     match change {
-//         DiffTokenChange::Unchanged => "unchanged",
-//         DiffTokenChange::Added => "added",
-//         DiffTokenChange::Deleted => "deleted",
-//         DiffTokenChange::Modified => "modified",
-//     }
-// }
-
-// fn parse_diff_token_change(change: &str) -> DiffTokenChange {
-//     match change {
-//         "added" => DiffTokenChange::Added,
-//         "deleted" => DiffTokenChange::Deleted,
-//         "modified" => DiffTokenChange::Modified,
-//         _ => DiffTokenChange::Unchanged,
-//     }
-// }
-
-// fn diff_undo_side_name(side: DiffUndoSide) -> &'static str {
-//     match side {
-//         DiffUndoSide::Original => "original",
-//         DiffUndoSide::Current => "current",
-//     }
-// }
-
-// fn parse_diff_undo_side(side: &str) -> DiffUndoSide {
-//     match side {
-//         "original" => DiffUndoSide::Original,
-//         _ => DiffUndoSide::Current,
-//     }
-// }
-
-// fn parse_lint_code(code: &str) -> Option<LintCode> {
-//     [
-//         LintCode::MissingSeparatorAfterMarker,
-//         LintCode::EmptyParagraph,
-//         LintCode::NumberRangeAfterChapterMarker,
-//         LintCode::VerseRangeExpectedAfterVerseMarker,
-//         LintCode::VerseContentNotEmpty,
-//         LintCode::UnknownToken,
-//         LintCode::CharNotClosed,
-//         LintCode::NoteNotClosed,
-//         LintCode::ParagraphBeforeFirstChapter,
-//         LintCode::VerseBeforeFirstChapter,
-//         LintCode::NoteSubmarkerOutsideNote,
-//         LintCode::DuplicateIdMarker,
-//         LintCode::IdMarkerNotAtFileStart,
-//         LintCode::ChapterMetadataOutsideChapter,
-//         LintCode::VerseMetadataOutsideVerse,
-//         LintCode::MissingChapterNumber,
-//         LintCode::MissingVerseNumber,
-//         LintCode::MissingMilestoneSelfClose,
-//         LintCode::ImplicitlyClosedMarker,
-//         LintCode::StrayCloseMarker,
-//         LintCode::MisnestedCloseMarker,
-//         LintCode::UnclosedNote,
-//         LintCode::UnclosedMarkerAtEof,
-//         LintCode::DuplicateChapterNumber,
-//         LintCode::ChapterExpectedIncreaseByOne,
-//         LintCode::DuplicateVerseNumber,
-//         LintCode::VerseExpectedIncreaseByOne,
-//         LintCode::InvalidNumberRange,
-//         LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
-//         LintCode::VerseTextFollowsVerseRange,
-//         LintCode::UnknownMarker,
-//         LintCode::UnknownCloseMarker,
-//         LintCode::InconsistentChapterLabel,
-//         LintCode::MarkerNotValidInContext,
-//         LintCode::VerseOutsideExplicitParagraph,
-//     ]
-//     .into_iter()
-//     .find(|candidate| candidate.as_str() == code)
-// }
-
-// fn js_error(error: impl std::fmt::Display) -> JsError {
-//     JsError::new(&error.to_string())
-// }
-
-// fn js_error_from_serde(error: serde_wasm_bindgen::Error) -> JsError {
-//     JsError::new(&error.to_string())
-// }
-
-// fn default_prefer_native_true() -> bool {
-//     true
-// }
-
-// fn default_true() -> bool {
-//     true
-// }
-
-// fn default_parallel_true() -> bool {
-//     true
-// }
-
-// fn default_allow_empty_sid_true() -> bool {
-//     true
-// }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::{WebFormatOptions, format_options};
-//     use crate::format::FormatOptions;
-
-//     #[test]
-//     fn empty_web_format_options_use_default_enabled_rules() {
-//         let web: WebFormatOptions = serde_json::from_str("{}").expect("parse web format options");
-//         assert_eq!(format_options(Some(web)), FormatOptions::default());
-//     }
-
-//     #[test]
-//     fn explicit_web_format_option_can_disable_a_single_rule() {
-//         let web: WebFormatOptions = serde_json::from_str(
-//             r#"{"collapseConsecutiveLinebreaks":false}"#,
-//         )
-//         .expect("parse web format options");
-
-//         let options = format_options(Some(web));
-//         assert!(options.insert_structural_linebreaks);
-//         assert!(!options.collapse_consecutive_linebreaks);
-//     }
-// }
+use js_sys::Array;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_wasm_bindgen::{from_value as from_js_value, to_value as swb_to_js_value};
+use wasm_bindgen::prelude::*;
+
+use usfm_onion::cst::{CstDocument as NativeCstDocument, CstNode as NativeCstNode, parse_cst};
+use usfm_onion::diff::{
+    BuildSidBlocksOptions as NativeBuildSidBlocksOptions, ChapterTokenDiff as NativeChapterTokenDiff,
+    DiffStatus as NativeDiffStatus, DiffTokenChange as NativeDiffTokenChange,
+    DiffUndoSide as NativeDiffUndoSide, DiffableToken, DiffsByChapterMap as NativeDiffsByChapterMap,
+    SidBlock as NativeSidBlock, TokenAlignment as NativeTokenAlignment, diff_chapter_token_streams,
+    diff_usfm_sources, diff_usfm_sources_by_chapter,
+};
+use usfm_onion::format::{
+    FormatOptions as NativeFormatOptions, FormatRule as NativeFormatRule,
+    FormatToken as NativeFormatToken, format_tokens as native_format_tokens,
+    format_tokens_to_usfm, format_usfm,
+};
+use usfm_onion::html::{
+    HtmlCallerScope as NativeHtmlCallerScope, HtmlCallerStyle as NativeHtmlCallerStyle,
+    HtmlNoteMode as NativeHtmlNoteMode, HtmlOptions as NativeHtmlOptions, usfm_to_html,
+};
+use usfm_onion::lint::{
+    LintCategory as NativeLintCategory, LintCode as NativeLintCode, LintOptions as NativeLintOptions,
+    LintResult as NativeLintResult, LintSeverity as NativeLintSeverity,
+    LintSuppression as NativeLintSuppression, LintableToken, lint_tokens, lint_usfm,
+};
+use usfm_onion::marker_defs::{
+    BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, SpecContext,
+    StructuralMarkerInfo, StructuralScopeKind,
+};
+use usfm_onion::markers::{
+    MarkerCategory as NativeMarkerCategory, MarkerInlineContext as NativeMarkerInlineContext,
+    MarkerKind as NativeMarkerKind, MarkerNoteFamily as NativeMarkerNoteFamily,
+    MarkerNoteSubkind as NativeMarkerNoteSubkind, UsfmMarkerInfo as NativeUsfmMarkerInfo,
+    is_known_marker, marker_catalog, marker_info,
+};
+use usfm_onion::parse::parse as native_parse;
+use usfm_onion::token::{
+    AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
+    NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
+    TokenData as NativeTokenData, TokenKind as NativeTokenKind,
+    tokens_to_usfm,
+};
+use usfm_onion::usj::{UsjDocument, usfm_to_usj};
+use usfm_onion::usx::usfm_to_usx;
+use usfm_onion::vref::{VrefMap, usfm_to_vref_map};
+
+#[wasm_bindgen(typescript_custom_section)]
+const TS_TYPES: &str = r#"
+export type Span = { start: number; end: number };
+export type TokenKind =
+  | "newline"
+  | "optBreak"
+  | "marker"
+  | "endMarker"
+  | "milestone"
+  | "milestoneEnd"
+  | "bookCode"
+  | "number"
+  | "text"
+  | "attributeList";
+export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
+export type MarkerKind =
+  | "paragraph"
+  | "note"
+  | "character"
+  | "header"
+  | "chapter"
+  | "verse"
+  | "milestoneStart"
+  | "milestoneEnd"
+  | "sidebarStart"
+  | "sidebarEnd"
+  | "figure"
+  | "meta"
+  | "periph"
+  | "tableRow"
+  | "tableCell"
+  | "unknown";
+export type MarkerCategory =
+  | "document"
+  | "paragraph"
+  | "character"
+  | "noteContainer"
+  | "noteSubmarker"
+  | "chapter"
+  | "verse"
+  | "milestoneStart"
+  | "milestoneEnd"
+  | "figure"
+  | "sidebarStart"
+  | "sidebarEnd"
+  | "periph"
+  | "meta"
+  | "tableRow"
+  | "tableCell"
+  | "header"
+  | "unknown";
+export type MarkerNoteFamily = "footnote" | "crossReference";
+export type MarkerNoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
+export type MarkerInlineContext = "para" | "section" | "list" | "table";
+export type MarkerFamily =
+  | "footnote"
+  | "crossReference"
+  | "sectionParagraph"
+  | "listParagraph"
+  | "tableCell"
+  | "milestone"
+  | "sidebar";
+export type MarkerFamilyRole =
+  | "canonical"
+  | "numberedVariant"
+  | "nestedVariant"
+  | "milestoneStart"
+  | "milestoneEnd"
+  | "alias";
+export type BlockBehavior =
+  | "none"
+  | "paragraph"
+  | "tableRow"
+  | "tableCell"
+  | "sidebarStart"
+  | "sidebarEnd";
+export type ClosingBehavior =
+  | "none"
+  | "requiredExplicit"
+  | "optionalExplicitUntilNoteEnd"
+  | "selfClosingMilestone";
+export type SpecContext =
+  | "scripture"
+  | "bookIdentification"
+  | "bookHeaders"
+  | "bookTitles"
+  | "bookIntroduction"
+  | "bookIntroductionEndTitles"
+  | "bookChapterLabel"
+  | "chapterContent"
+  | "peripheral"
+  | "peripheralContent"
+  | "peripheralDivision"
+  | "chapter"
+  | "verse"
+  | "section"
+  | "para"
+  | "list"
+  | "table"
+  | "sidebar"
+  | "footnote"
+  | "crossReference";
+export type StructuralScopeKind =
+  | "unknown"
+  | "header"
+  | "block"
+  | "note"
+  | "character"
+  | "milestone"
+  | "chapter"
+  | "verse"
+  | "tableRow"
+  | "tableCell"
+  | "sidebar"
+  | "periph"
+  | "meta";
+export type LintCategory = "document" | "structure" | "context" | "numbering";
+export type LintSeverity = "error" | "warning";
+export type LintCode =
+  | "missing-id-marker"
+  | "missing-separator-after-marker"
+  | "empty-paragraph"
+  | "number-range-after-chapter-marker"
+  | "verse-range-expected-after-verse-marker"
+  | "verse-content-not-empty"
+  | "unknown-token"
+  | "char-not-closed"
+  | "note-not-closed"
+  | "paragraph-before-first-chapter"
+  | "verse-before-first-chapter"
+  | "note-submarker-outside-note"
+  | "duplicate-id-marker"
+  | "id-marker-not-at-file-start"
+  | "chapter-metadata-outside-chapter"
+  | "verse-metadata-outside-verse"
+  | "missing-chapter-number"
+  | "missing-verse-number"
+  | "missing-milestone-self-close"
+  | "implicitly-closed-marker"
+  | "stray-close-marker"
+  | "misnested-close-marker"
+  | "unclosed-note"
+  | "unclosed-marker-at-eof"
+  | "duplicate-chapter-number"
+  | "chapter-expected-increase-by-one"
+  | "duplicate-verse-number"
+  | "verse-expected-increase-by-one"
+  | "invalid-number-range"
+  | "number-range-not-preceded-by-marker-expecting-number"
+  | "verse-text-follows-verse-range"
+  | "unknown-marker"
+  | "unknown-close-marker"
+  | "inconsistent-chapter-label"
+  | "marker-not-valid-in-context"
+  | "verse-outside-explicit-paragraph";
+export type FormatRule =
+  | "recover-malformed-markers"
+  | "collapse-whitespace-in-text"
+  | "ensure-inline-separators"
+  | "remove-duplicate-verse-numbers"
+  | "normalize-spacing-after-paragraph-markers"
+  | "remove-unwanted-linebreaks"
+  | "bridge-consecutive-verse-markers"
+  | "remove-orphan-empty-verse-before-contentful-verse"
+  | "remove-bridge-verse-enumerators"
+  | "move-chapter-label-after-chapter-marker"
+  | "insert-default-paragraph-after-chapter-intro"
+  | "remove-empty-paragraphs"
+  | "insert-structural-linebreaks"
+  | "collapse-consecutive-linebreaks"
+  | "normalize-marker-whitespace-at-line-start";
+export type HtmlNoteMode = "extracted" | "inline";
+export type HtmlCallerStyle = "numeric" | "alphaLower" | "alphaUpper" | "romanLower" | "romanUpper" | "source";
+export type HtmlCallerScope = "documentSequential" | "verseSequential";
+export type DiffStatus = "added" | "deleted" | "modified" | "unchanged";
+export type DiffTokenChange = "unchanged" | "added" | "deleted" | "modified";
+export type DiffUndoSide = "original" | "current";
+
+export interface AttributeItem {
+  span: Span;
+  text: string;
+  key: string;
+  value: string;
+}
+
+export interface MarkerMetadata {
+  canonical?: string;
+  kind?: string;
+  family?: MarkerFamily;
+}
+
+export interface StructuralMarkerInfo {
+  scopeKind: StructuralScopeKind;
+  inlineContext?: MarkerInlineContext;
+  noteContext?: SpecContext;
+}
+
+export interface NumberInfo {
+  start: number;
+  end?: number;
+  kind: NumberRangeKind;
+}
+
+export interface Token {
+  id: string;
+  kind: TokenKind;
+  text: string;
+  span?: Span;
+  sid?: string;
+  marker?: string;
+  nested?: boolean;
+  markerMetadata?: MarkerMetadata;
+  structural?: StructuralMarkerInfo;
+  numberInfo?: NumberInfo;
+  bookCode?: string;
+  bookCodeValid?: boolean;
+  attributes?: AttributeItem[];
+}
+
+export type FormatToken = Token;
+
+export interface CstNode {
+  tokenIndex: number;
+  children: CstNode[];
+}
+
+export interface CstDocument {
+  tokens: Token[];
+  roots: CstNode[];
+}
+
+export interface LintSuppression {
+  code: LintCode;
+  sid: string;
+}
+
+export interface LintOptions {
+  enabledCodes?: LintCode[];
+  disabledCodes?: LintCode[];
+  suppressed?: LintSuppression[];
+  allowImplicitChapterContentVerse?: boolean;
+}
+
+export interface LintIssue {
+  code: LintCode;
+  category: LintCategory;
+  severity: LintSeverity;
+  message: string;
+  span?: Span;
+  relatedSpan?: Span;
+  tokenId?: string;
+  relatedTokenId?: string;
+  sid?: string;
+  marker?: string;
+}
+
+export interface LintSummary {
+  byCategory: Partial<Record<LintCategory, number>>;
+  bySeverity: Partial<Record<LintSeverity, number>>;
+  totalCount: number;
+  suppressedCount: number;
+}
+
+export interface LintResult {
+  issues: LintIssue[];
+  summary: LintSummary;
+}
+
+export interface FormatOptions {
+  recoverMalformedMarkers?: boolean;
+  collapseWhitespaceInText?: boolean;
+  ensureInlineSeparators?: boolean;
+  removeDuplicateVerseNumbers?: boolean;
+  normalizeSpacingAfterParagraphMarkers?: boolean;
+  removeUnwantedLinebreaks?: boolean;
+  bridgeConsecutiveVerseMarkers?: boolean;
+  removeOrphanEmptyVerseBeforeContentfulVerse?: boolean;
+  removeBridgeVerseEnumerators?: boolean;
+  moveChapterLabelAfterChapterMarker?: boolean;
+  insertDefaultParagraphAfterChapterIntro?: boolean;
+  removeEmptyParagraphs?: boolean;
+  insertStructuralLinebreaks?: boolean;
+  collapseConsecutiveLinebreaks?: boolean;
+  normalizeMarkerWhitespaceAtLineStart?: boolean;
+}
+
+export interface FormatResult {
+  tokens: FormatToken[];
+  usfm: string;
+}
+
+export interface HtmlOptions {
+  wrapRoot?: boolean;
+  preferNativeElements?: boolean;
+  noteMode?: HtmlNoteMode;
+  callerStyle?: HtmlCallerStyle;
+  callerScope?: HtmlCallerScope;
+}
+
+export interface BuildSidBlocksOptions {
+  allowEmptySid?: boolean;
+}
+
+export interface SidBlock {
+  blockId: string;
+  semanticSid: string;
+  start: number;
+  endExclusive: number;
+  prevBlockId?: string;
+  textFull: string;
+}
+
+export interface TokenAlignment {
+  change: DiffTokenChange;
+  counterpartIndex?: number;
+}
+
+export interface ChapterTokenDiff {
+  blockId: string;
+  semanticSid: string;
+  status: DiffStatus;
+  original?: SidBlock;
+  current?: SidBlock;
+  originalText: string;
+  currentText: string;
+  originalTextOnly: string;
+  currentTextOnly: string;
+  isWhitespaceChange: boolean;
+  isUsfmStructureChange: boolean;
+  originalTokens: Token[];
+  currentTokens: Token[];
+  originalAlignment: TokenAlignment[];
+  currentAlignment: TokenAlignment[];
+  undoSide: DiffUndoSide;
+}
+
+export type DiffsByChapterMap = Record<string, Record<number, ChapterTokenDiff[]>>;
+export type VrefMap = Record<string, string>;
+
+export type Value =
+  | string
+  | number
+  | boolean
+  | null
+  | Value[]
+  | { [key: string]: Value };
+
+export type UsjDocument = {
+  type: string;
+  version: string;
+  content: UsjNode[];
+};
+
+export type UsjNode = string | UsjElement;
+
+export type UsjElement =
+  | ({ type: "book"; marker: string; code: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "chapter"; marker: string; number: string; sid?: string } & Record<string, Value>)
+  | ({ type: "verse"; marker: string; number: string; sid?: string } & Record<string, Value>)
+  | ({ type: "para"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "char"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "ref"; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "note"; marker: string; caller: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "ms"; marker: string } & Record<string, Value>)
+  | ({ type: "figure"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "sidebar"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "periph"; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "table"; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "table:row"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "table:cell"; marker: string; align?: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "unknown"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "unmatched"; marker: string; content?: UsjNode[] } & Record<string, Value>)
+  | ({ type: "optbreak" } & Record<string, Value>);
+
+export interface LintCodeMeta {
+  code: LintCode;
+  category: LintCategory;
+  severity: LintSeverity;
+}
+
+export interface FormatRuleMeta {
+  code: FormatRule;
+  labelKey: string;
+}
+
+export interface MarkerInfo {
+  marker: string;
+  canonical?: string;
+  known: boolean;
+  deprecated: boolean;
+  category: MarkerCategory;
+  kind: MarkerKind;
+  family?: MarkerFamily;
+  familyRole?: MarkerFamilyRole;
+  noteFamily?: MarkerNoteFamily;
+  noteSubkind?: MarkerNoteSubkind;
+  inlineContext?: MarkerInlineContext;
+  defaultAttribute?: string;
+  contexts: SpecContext[];
+  blockBehavior?: BlockBehavior;
+  closingBehavior?: ClosingBehavior;
+  source?: string;
+}
+
+export interface LintLocalizations extends Partial<Record<LintCode, string>> {}
+export interface FormatLocalizations extends Partial<Record<FormatRule, string>> {}
+
+export class ParsedUsfm {
+  private constructor();
+  tokens(): Token[];
+  cst(): CstDocument;
+  lint(options?: LintOptions): LintResult;
+  format(options?: FormatOptions): string;
+  toUsfm(): string;
+  toUsj(): UsjDocument;
+  toUsx(): string;
+  toHtml(options?: HtmlOptions): string;
+  toVref(): VrefMap;
+  diff(other: ParsedUsfm, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
+  diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions): DiffsByChapterMap;
+}
+
+export class ParsedUsfmBatch {
+  private constructor();
+  items(): ParsedUsfm[];
+  tokens(): Token[][];
+  lint(options?: LintOptions): LintResult[];
+  format(options?: FormatOptions): string[];
+  toUsfm(): string[];
+  toUsj(): UsjDocument[];
+  toUsx(): string[];
+  toHtml(options?: HtmlOptions): string[];
+  toVref(): VrefMap[];
+}
+
+export class UsfmMarkerCatalog {
+  private constructor();
+  all(): MarkerInfo[];
+  get(marker: string): MarkerInfo | undefined;
+  contains(marker: string): boolean;
+}
+
+export function parse(source: string): ParsedUsfm;
+export function parseBatch(sources: string[]): ParsedUsfmBatch;
+export function lintUsfm(source: string, options?: LintOptions): LintResult;
+export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
+export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
+export function formatUsfm(source: string, options?: FormatOptions): string;
+export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
+export function formatTokensMut(tokens: FormatToken[], options?: FormatOptions): FormatToken[];
+export function formatTokenBatch(tokenBatches: FormatToken[][], options?: FormatOptions): FormatResult[];
+export function tokensToUsfm(tokens: Token[]): string;
+export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
+export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
+export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions): DiffsByChapterMap;
+export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions): ChapterTokenDiff[];
+export function markerCatalog(): UsfmMarkerCatalog;
+export function markerInfo(marker: string): MarkerInfo;
+export function isKnownMarker(marker: string): boolean;
+export function lintCodes(): LintCode[];
+export function lintCodeMeta(): LintCodeMeta[];
+export function formatRules(): FormatRule[];
+export function formatRuleMeta(): FormatRuleMeta[];
+"#;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SpanValue {
+    start: u32,
+    end: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct MarkerMetadataValue {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    family: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AttributeItemValue {
+    span: SpanValue,
+    text: String,
+    key: String,
+    value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StructuralMarkerInfoValue {
+    scope_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    inline_context: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    note_context: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NumberInfoValue {
+    start: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    end: Option<u32>,
+    kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TokenValue {
+    id: String,
+    kind: String,
+    text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    span: Option<SpanValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    nested: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker_metadata: Option<MarkerMetadataValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    structural: Option<StructuralMarkerInfoValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    number_info: Option<NumberInfoValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    book_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    book_code_valid: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attributes: Vec<AttributeItemValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CstNodeValue {
+    token_index: usize,
+    children: Vec<CstNodeValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CstDocumentValue {
+    tokens: Vec<TokenValue>,
+    roots: Vec<CstNodeValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LintSuppressionValue {
+    code: String,
+    sid: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct LintOptionsValue {
+    #[serde(default)]
+    enabled_codes: Option<Vec<String>>,
+    #[serde(default)]
+    disabled_codes: Vec<String>,
+    #[serde(default)]
+    suppressed: Vec<LintSuppressionValue>,
+    #[serde(default)]
+    allow_implicit_chapter_content_verse: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LintIssueValue {
+    code: String,
+    category: String,
+    severity: String,
+    message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    span: Option<SpanValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    related_span: Option<SpanValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    token_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    related_token_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LintSummaryValue {
+    by_category: std::collections::BTreeMap<String, usize>,
+    by_severity: std::collections::BTreeMap<String, usize>,
+    total_count: usize,
+    suppressed_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LintResultValue {
+    issues: Vec<LintIssueValue>,
+    summary: LintSummaryValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct FormatOptionsValue {
+    #[serde(default)]
+    recover_malformed_markers: Option<bool>,
+    #[serde(default)]
+    collapse_whitespace_in_text: Option<bool>,
+    #[serde(default)]
+    ensure_inline_separators: Option<bool>,
+    #[serde(default)]
+    remove_duplicate_verse_numbers: Option<bool>,
+    #[serde(default)]
+    normalize_spacing_after_paragraph_markers: Option<bool>,
+    #[serde(default)]
+    remove_unwanted_linebreaks: Option<bool>,
+    #[serde(default)]
+    bridge_consecutive_verse_markers: Option<bool>,
+    #[serde(default)]
+    remove_orphan_empty_verse_before_contentful_verse: Option<bool>,
+    #[serde(default)]
+    remove_bridge_verse_enumerators: Option<bool>,
+    #[serde(default)]
+    move_chapter_label_after_chapter_marker: Option<bool>,
+    #[serde(default)]
+    insert_default_paragraph_after_chapter_intro: Option<bool>,
+    #[serde(default)]
+    remove_empty_paragraphs: Option<bool>,
+    #[serde(default)]
+    insert_structural_linebreaks: Option<bool>,
+    #[serde(default)]
+    collapse_consecutive_linebreaks: Option<bool>,
+    #[serde(default)]
+    normalize_marker_whitespace_at_line_start: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FormatResultValue {
+    tokens: Vec<TokenValue>,
+    usfm: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct HtmlOptionsValue {
+    #[serde(default)]
+    wrap_root: bool,
+    #[serde(default)]
+    prefer_native_elements: Option<bool>,
+    #[serde(default)]
+    note_mode: Option<String>,
+    #[serde(default)]
+    caller_style: Option<String>,
+    #[serde(default)]
+    caller_scope: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct BuildSidBlocksOptionsValue {
+    #[serde(default)]
+    allow_empty_sid: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SidBlockValue {
+    block_id: String,
+    semantic_sid: String,
+    start: usize,
+    end_exclusive: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prev_block_id: Option<String>,
+    text_full: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TokenAlignmentValue {
+    change: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    counterpart_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChapterTokenDiffValue {
+    block_id: String,
+    semantic_sid: String,
+    status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    original: Option<SidBlockValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    current: Option<SidBlockValue>,
+    original_text: String,
+    current_text: String,
+    original_text_only: String,
+    current_text_only: String,
+    is_whitespace_change: bool,
+    is_usfm_structure_change: bool,
+    original_tokens: Vec<TokenValue>,
+    current_tokens: Vec<TokenValue>,
+    original_alignment: Vec<TokenAlignmentValue>,
+    current_alignment: Vec<TokenAlignmentValue>,
+    undo_side: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LintCodeMetaValue {
+    code: String,
+    category: String,
+    severity: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FormatRuleMetaValue {
+    code: String,
+    label_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarkerInfoValue {
+    marker: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical: Option<String>,
+    known: bool,
+    deprecated: bool,
+    category: String,
+    kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    family_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    note_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    note_subkind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    inline_context: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    default_attribute: Option<String>,
+    contexts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    block_behavior: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    closing_behavior: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AdapterToken {
+    id: String,
+    kind: NativeTokenKind,
+    text: String,
+    span: Option<NativeSpan>,
+    sid: Option<String>,
+    marker: Option<String>,
+    structural: Option<StructuralMarkerInfo>,
+    number_info: Option<(u32, Option<u32>, NativeNumberRangeKind)>,
+}
+
+impl LintableToken for AdapterToken {
+    fn kind(&self) -> NativeTokenKind {
+        self.kind
+    }
+
+    fn span(&self) -> Option<NativeSpan> {
+        self.span
+    }
+
+    fn text(&self) -> &str {
+        &self.text
+    }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker.as_deref()
+    }
+
+    fn sid(&self) -> Option<String> {
+        self.sid.clone()
+    }
+
+    fn id(&self) -> Option<String> {
+        Some(self.id.clone())
+    }
+
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        self.structural
+    }
+
+    fn number_info(&self) -> Option<(u32, Option<u32>, NativeNumberRangeKind)> {
+        self.number_info
+    }
+}
+
+impl DiffableToken for AdapterToken {
+    fn sid(&self) -> Option<&str> {
+        self.sid.as_deref()
+    }
+
+    fn text(&self) -> &str {
+        &self.text
+    }
+
+    fn id(&self) -> Option<&str> {
+        Some(&self.id)
+    }
+
+    fn kind_key(&self) -> Option<&str> {
+        Some(token_kind_key(self.kind))
+    }
+
+    fn marker_key(&self) -> Option<&str> {
+        self.marker.as_deref()
+    }
+}
+
+#[wasm_bindgen(skip_typescript)]
+pub struct ParsedUsfm {
+    source: String,
+}
+
+#[wasm_bindgen(skip_typescript)]
+pub struct ParsedUsfmBatch {
+    sources: Vec<String>,
+}
+
+#[wasm_bindgen(skip_typescript)]
+pub struct UsfmMarkerCatalog;
+
+#[wasm_bindgen]
+impl ParsedUsfm {
+    fn new(source: String) -> Self {
+        Self { source }
+    }
+
+    pub fn tokens(&self) -> Result<JsValue, JsError> {
+        let parsed = native_parse(&self.source);
+        to_js_value(&map_tokens(&parsed.tokens))
+    }
+
+    pub fn cst(&self) -> Result<JsValue, JsError> {
+        let cst = parse_cst(&self.source);
+        to_js_value(&map_cst_document(&cst))
+    }
+
+    pub fn lint(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
+        let options = parse_lint_options(options)?;
+        to_js_value(&map_lint_result(lint_usfm(&self.source, options)))
+    }
+
+    pub fn format(&self, options: Option<JsValue>) -> Result<String, JsError> {
+        let options = parse_format_options(options)?;
+        Ok(format_usfm(&self.source, options))
+    }
+
+    pub fn to_usfm(&self) -> String {
+        let parsed = native_parse(&self.source);
+        tokens_to_usfm(&parsed.tokens)
+    }
+
+    pub fn to_usj(&self) -> Result<JsValue, JsError> {
+        let document = usfm_to_usj(&self.source).map_err(js_error)?;
+        to_js_value(&document)
+    }
+
+    pub fn to_usx(&self) -> Result<String, JsError> {
+        usfm_to_usx(&self.source).map_err(js_error)
+    }
+
+    pub fn to_html(&self, options: Option<JsValue>) -> Result<String, JsError> {
+        let options = parse_html_options(options)?;
+        Ok(usfm_to_html(&self.source, options))
+    }
+
+    pub fn to_vref(&self) -> Result<JsValue, JsError> {
+        to_js_value(&vref_to_object(usfm_to_vref_map(&self.source)))
+    }
+
+    pub fn diff(&self, other: &ParsedUsfm, options: Option<JsValue>) -> Result<JsValue, JsError> {
+        let options = parse_build_options(options)?;
+        let diffs = diff_usfm_sources(&self.source, &other.source, &options);
+        to_js_value(&map_chapter_diffs(&diffs))
+    }
+
+    #[wasm_bindgen(js_name = diffByChapter)]
+    pub fn diff_by_chapter(
+        &self,
+        other: &ParsedUsfm,
+        options: Option<JsValue>,
+    ) -> Result<JsValue, JsError> {
+        let options = parse_build_options(options)?;
+        let diffs = diff_usfm_sources_by_chapter(&self.source, &other.source, &options);
+        to_js_value(&map_diffs_by_chapter(&diffs))
+    }
+}
+
+#[wasm_bindgen]
+impl ParsedUsfmBatch {
+    fn new(sources: Vec<String>) -> Self {
+        Self { sources }
+    }
+
+    pub fn items(&self) -> Array {
+        self.sources
+            .iter()
+            .cloned()
+            .map(ParsedUsfm::new)
+            .map(JsValue::from)
+            .collect()
+    }
+
+    pub fn tokens(&self) -> Result<JsValue, JsError> {
+        let batches = self
+            .sources
+            .iter()
+            .map(|source| map_tokens(&native_parse(source).tokens))
+            .collect::<Vec<_>>();
+        to_js_value(&batches)
+    }
+
+    pub fn lint(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
+        let options = parse_lint_options(options)?;
+        let results = self
+            .sources
+            .iter()
+            .map(|source| map_lint_result(lint_usfm(source, options.clone())))
+            .collect::<Vec<_>>();
+        to_js_value(&results)
+    }
+
+    pub fn format(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
+        let options = parse_format_options(options)?;
+        let values = self
+            .sources
+            .iter()
+            .map(|source| format_usfm(source, options))
+            .collect::<Vec<_>>();
+        to_js_value(&values)
+    }
+
+    pub fn to_usfm(&self) -> Result<JsValue, JsError> {
+        let values = self
+            .sources
+            .iter()
+            .map(|source| {
+                let parsed = native_parse(source);
+                tokens_to_usfm(&parsed.tokens)
+            })
+            .collect::<Vec<_>>();
+        to_js_value(&values)
+    }
+
+    pub fn to_usj(&self) -> Result<JsValue, JsError> {
+        let values = self
+            .sources
+            .iter()
+            .map(|source| usfm_to_usj(source).map_err(js_error))
+            .collect::<Result<Vec<UsjDocument>, JsError>>()?;
+        to_js_value(&values)
+    }
+
+    pub fn to_usx(&self) -> Result<JsValue, JsError> {
+        let values = self
+            .sources
+            .iter()
+            .map(|source| usfm_to_usx(source).map_err(js_error))
+            .collect::<Result<Vec<String>, JsError>>()?;
+        to_js_value(&values)
+    }
+
+    pub fn to_html(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
+        let options = parse_html_options(options)?;
+        let values = self
+            .sources
+            .iter()
+            .map(|source| usfm_to_html(source, options))
+            .collect::<Vec<_>>();
+        to_js_value(&values)
+    }
+
+    pub fn to_vref(&self) -> Result<JsValue, JsError> {
+        let values = self
+            .sources
+            .iter()
+            .map(|source| vref_to_object(usfm_to_vref_map(source)))
+            .collect::<Vec<_>>();
+        to_js_value(&values)
+    }
+}
+
+#[wasm_bindgen]
+impl UsfmMarkerCatalog {
+    fn new() -> Self {
+        Self
+    }
+
+    pub fn all(&self) -> Result<JsValue, JsError> {
+        let entries = marker_catalog()
+            .all()
+            .iter()
+            .cloned()
+            .map(map_marker_info)
+            .collect::<Vec<_>>();
+        to_js_value(&entries)
+    }
+
+    pub fn get(&self, marker: &str) -> Result<JsValue, JsError> {
+        let value = marker_catalog().get(marker).cloned().map(map_marker_info);
+        to_js_value(&value)
+    }
+
+    pub fn contains(&self, marker: &str) -> bool {
+        marker_catalog().contains(marker)
+    }
+}
+
+#[wasm_bindgen(skip_typescript, js_name = parse)]
+pub fn wasm_parse(source: &str) -> ParsedUsfm {
+    ParsedUsfm::new(source.to_string())
+}
+
+#[wasm_bindgen(skip_typescript, js_name = parseBatch)]
+pub fn wasm_parse_batch(sources: JsValue) -> Result<ParsedUsfmBatch, JsError> {
+    let sources = from_js_or_default::<Vec<String>>(sources)?;
+    Ok(ParsedUsfmBatch::new(sources))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = lintUsfm)]
+pub fn wasm_lint_usfm(source: &str, options: Option<JsValue>) -> Result<JsValue, JsError> {
+    let options = parse_lint_options(options)?;
+    to_js_value(&map_lint_result(lint_usfm(source, options)))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = lintTokens)]
+pub fn wasm_lint_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<JsValue, JsError> {
+    let tokens = parse_adapter_tokens(tokens)?;
+    let options = parse_lint_options(options)?;
+    to_js_value(&map_lint_result(lint_tokens(&tokens, options)))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = lintTokenBatch)]
+pub fn wasm_lint_token_batch(
+    token_batches: JsValue,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let token_batches = from_js_or_default::<Vec<Vec<TokenValue>>>(token_batches)?;
+    let options = parse_lint_options(options)?;
+    let results = token_batches
+        .into_iter()
+        .map(parse_adapter_tokens_from_values)
+        .collect::<Result<Vec<_>, JsError>>()?
+        .into_iter()
+        .map(|tokens| map_lint_result(lint_tokens(&tokens, options.clone())))
+        .collect::<Vec<_>>();
+    to_js_value(&results)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = formatUsfm)]
+pub fn wasm_format_usfm(source: &str, options: Option<JsValue>) -> Result<String, JsError> {
+    Ok(format_usfm(source, parse_format_options(options)?))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = formatTokens)]
+pub fn wasm_format_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<JsValue, JsError> {
+    let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
+    let mut native_tokens = values
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    native_format_tokens(&mut native_tokens, parse_format_options(options)?);
+    let formatted = FormatResultValue {
+        tokens: native_tokens.iter().map(map_format_token).collect(),
+        usfm: format_tokens_to_usfm(&native_tokens),
+    };
+    to_js_value(&formatted)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = formatTokensMut)]
+pub fn wasm_format_tokens_mut(tokens: JsValue, options: Option<JsValue>) -> Result<JsValue, JsError> {
+    let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
+    let mut native_tokens = values
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    native_format_tokens(&mut native_tokens, parse_format_options(options)?);
+    let formatted = native_tokens.iter().map(map_format_token).collect::<Vec<_>>();
+    to_js_value(&formatted)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = formatTokenBatch)]
+pub fn wasm_format_token_batch(
+    token_batches: JsValue,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let batches = from_js_or_default::<Vec<Vec<TokenValue>>>(token_batches)?;
+    let options = parse_format_options(options)?;
+    let results = batches
+        .into_iter()
+        .map(|batch| {
+            let mut native_tokens = batch
+                .into_iter()
+                .map(token_value_to_format_token)
+                .collect::<Result<Vec<_>, JsError>>()?;
+            native_format_tokens(&mut native_tokens, options);
+            Ok(FormatResultValue {
+                tokens: native_tokens.iter().map(map_format_token).collect(),
+                usfm: format_tokens_to_usfm(&native_tokens),
+            })
+        })
+        .collect::<Result<Vec<_>, JsError>>()?;
+    to_js_value(&results)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = tokensToUsfm)]
+pub fn wasm_tokens_to_usfm(tokens: JsValue) -> Result<String, JsError> {
+    let tokens: Vec<TokenValue> = from_js_or_default(tokens)?;
+    Ok(token_values_to_usfm(&tokens))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = tokensToHtml)]
+pub fn wasm_tokens_to_html(tokens: JsValue, options: Option<JsValue>) -> Result<String, JsError> {
+    let tokens = from_js_or_default::<Vec<TokenValue>>(tokens)?;
+    let usfm = token_values_to_usfm(&tokens);
+    Ok(usfm_to_html(&usfm, parse_html_options(options)?))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = diffUsfm)]
+pub fn wasm_diff_usfm(left: &str, right: &str, options: Option<JsValue>) -> Result<JsValue, JsError> {
+    let options = parse_build_options(options)?;
+    let diffs = diff_usfm_sources(left, right, &options);
+    to_js_value(&map_chapter_diffs(&diffs))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = diffUsfmByChapter)]
+pub fn wasm_diff_usfm_by_chapter(
+    left: &str,
+    right: &str,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let options = parse_build_options(options)?;
+    let diffs = diff_usfm_sources_by_chapter(left, right, &options);
+    to_js_value(&map_diffs_by_chapter(&diffs))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = diffTokens)]
+pub fn wasm_diff_tokens(
+    left: JsValue,
+    right: JsValue,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let left = parse_adapter_tokens(left)?;
+    let right = parse_adapter_tokens(right)?;
+    let options = parse_build_options(options)?;
+    let diffs = diff_chapter_token_streams(&left, &right, &options);
+    to_js_value(&map_adapter_diffs(&diffs))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = markerCatalog)]
+pub fn wasm_marker_catalog() -> UsfmMarkerCatalog {
+    UsfmMarkerCatalog::new()
+}
+
+#[wasm_bindgen(skip_typescript, js_name = markerInfo)]
+pub fn wasm_marker_info(marker: &str) -> Result<JsValue, JsError> {
+    to_js_value(&map_marker_info(marker_info(marker)))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = isKnownMarker)]
+pub fn wasm_is_known_marker(marker: &str) -> bool {
+    is_known_marker(marker)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = lintCodes)]
+pub fn wasm_lint_codes() -> Result<JsValue, JsError> {
+    let codes = lint_code_variants()
+        .into_iter()
+        .map(lint_code_str)
+        .collect::<Vec<_>>();
+    to_js_value(&codes)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = lintCodeMeta)]
+pub fn wasm_lint_code_meta() -> Result<JsValue, JsError> {
+    let meta = lint_code_variants()
+        .into_iter()
+        .map(|code| LintCodeMetaValue {
+            code: lint_code_str(code).to_string(),
+            category: lint_category_str(code.category()).to_string(),
+            severity: lint_severity_str(code.severity()).to_string(),
+        })
+        .collect::<Vec<_>>();
+    to_js_value(&meta)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = formatRules)]
+pub fn wasm_format_rules() -> Result<JsValue, JsError> {
+    let rules = NativeFormatRule::ALL
+        .iter()
+        .map(|rule| rule.code().to_string())
+        .collect::<Vec<_>>();
+    to_js_value(&rules)
+}
+
+#[wasm_bindgen(skip_typescript, js_name = formatRuleMeta)]
+pub fn wasm_format_rule_meta() -> Result<JsValue, JsError> {
+    let meta = NativeFormatRule::ALL
+        .iter()
+        .map(|rule| FormatRuleMetaValue {
+            code: rule.code().to_string(),
+            label_key: rule.label_key().to_string(),
+        })
+        .collect::<Vec<_>>();
+    to_js_value(&meta)
+}
+
+fn parse_lint_options(value: Option<JsValue>) -> Result<NativeLintOptions, JsError> {
+    let value = value.unwrap_or(JsValue::UNDEFINED);
+    let value: LintOptionsValue = from_js_or_default(value)?;
+    Ok(NativeLintOptions {
+        enabled_codes: value
+            .enabled_codes
+            .map(|codes| codes.into_iter().map(parse_lint_code).collect::<Result<Vec<_>, _>>())
+            .transpose()?,
+        disabled_codes: value
+            .disabled_codes
+            .into_iter()
+            .map(parse_lint_code)
+            .collect::<Result<Vec<_>, _>>()?,
+        suppressed: value
+            .suppressed
+            .into_iter()
+            .map(|suppression| {
+                Ok(NativeLintSuppression {
+                    code: parse_lint_code(suppression.code)?,
+                    sid: suppression.sid,
+                })
+            })
+            .collect::<Result<Vec<_>, JsError>>()?,
+        allow_implicit_chapter_content_verse: value.allow_implicit_chapter_content_verse,
+    })
+}
+
+fn parse_format_options(value: Option<JsValue>) -> Result<NativeFormatOptions, JsError> {
+    let value = value.unwrap_or(JsValue::UNDEFINED);
+    let value: FormatOptionsValue = from_js_or_default(value)?;
+    let mut options = NativeFormatOptions::default();
+    apply_opt(&mut options.recover_malformed_markers, value.recover_malformed_markers);
+    apply_opt(
+        &mut options.collapse_whitespace_in_text,
+        value.collapse_whitespace_in_text,
+    );
+    apply_opt(&mut options.ensure_inline_separators, value.ensure_inline_separators);
+    apply_opt(
+        &mut options.remove_duplicate_verse_numbers,
+        value.remove_duplicate_verse_numbers,
+    );
+    apply_opt(
+        &mut options.normalize_spacing_after_paragraph_markers,
+        value.normalize_spacing_after_paragraph_markers,
+    );
+    apply_opt(
+        &mut options.remove_unwanted_linebreaks,
+        value.remove_unwanted_linebreaks,
+    );
+    apply_opt(
+        &mut options.bridge_consecutive_verse_markers,
+        value.bridge_consecutive_verse_markers,
+    );
+    apply_opt(
+        &mut options.remove_orphan_empty_verse_before_contentful_verse,
+        value.remove_orphan_empty_verse_before_contentful_verse,
+    );
+    apply_opt(
+        &mut options.remove_bridge_verse_enumerators,
+        value.remove_bridge_verse_enumerators,
+    );
+    apply_opt(
+        &mut options.move_chapter_label_after_chapter_marker,
+        value.move_chapter_label_after_chapter_marker,
+    );
+    apply_opt(
+        &mut options.insert_default_paragraph_after_chapter_intro,
+        value.insert_default_paragraph_after_chapter_intro,
+    );
+    apply_opt(&mut options.remove_empty_paragraphs, value.remove_empty_paragraphs);
+    apply_opt(
+        &mut options.insert_structural_linebreaks,
+        value.insert_structural_linebreaks,
+    );
+    apply_opt(
+        &mut options.collapse_consecutive_linebreaks,
+        value.collapse_consecutive_linebreaks,
+    );
+    apply_opt(
+        &mut options.normalize_marker_whitespace_at_line_start,
+        value.normalize_marker_whitespace_at_line_start,
+    );
+    Ok(options)
+}
+
+fn parse_html_options(value: Option<JsValue>) -> Result<NativeHtmlOptions, JsError> {
+    let value = value.unwrap_or(JsValue::UNDEFINED);
+    let value: HtmlOptionsValue = from_js_or_default(value)?;
+    Ok(NativeHtmlOptions {
+        wrap_root: value.wrap_root,
+        prefer_native_elements: value.prefer_native_elements.unwrap_or(true),
+        note_mode: value
+            .note_mode
+            .map(|mode| parse_html_note_mode(mode.as_str()))
+            .transpose()
+            .map_err(js_error)?
+            .unwrap_or(NativeHtmlNoteMode::Extracted),
+        caller_style: value
+            .caller_style
+            .map(|style| parse_html_caller_style(style.as_str()))
+            .transpose()
+            .map_err(js_error)?
+            .unwrap_or(NativeHtmlCallerStyle::Numeric),
+        caller_scope: value
+            .caller_scope
+            .map(|scope| parse_html_caller_scope(scope.as_str()))
+            .transpose()
+            .map_err(js_error)?
+            .unwrap_or(NativeHtmlCallerScope::VerseSequential),
+    })
+}
+
+fn parse_build_options(value: Option<JsValue>) -> Result<NativeBuildSidBlocksOptions, JsError> {
+    let value = value.unwrap_or(JsValue::UNDEFINED);
+    let value: BuildSidBlocksOptionsValue = from_js_or_default(value)?;
+    Ok(NativeBuildSidBlocksOptions {
+        allow_empty_sid: value.allow_empty_sid.unwrap_or(true),
+    })
+}
+
+fn parse_adapter_tokens(value: JsValue) -> Result<Vec<AdapterToken>, JsError> {
+    let values = from_js_or_default::<Vec<TokenValue>>(value)?;
+    parse_adapter_tokens_from_values(values)
+}
+
+fn parse_adapter_tokens_from_values(values: Vec<TokenValue>) -> Result<Vec<AdapterToken>, JsError> {
+    values.into_iter().map(token_value_to_adapter).collect()
+}
+
+fn token_value_to_adapter(value: TokenValue) -> Result<AdapterToken, JsError> {
+    Ok(AdapterToken {
+        id: value.id,
+        kind: parse_token_kind(value.kind.as_str())?,
+        text: value.text,
+        span: value.span.map(native_span),
+        sid: value.sid,
+        marker: value.marker,
+        structural: value.structural.map(parse_structural_info).transpose()?,
+        number_info: value.number_info.map(parse_number_info).transpose()?,
+    })
+}
+
+fn token_value_to_format_token(value: TokenValue) -> Result<NativeFormatToken, JsError> {
+    let kind = parse_token_kind(value.kind.as_str())?;
+    Ok(NativeFormatToken {
+        kind,
+        text: value.text,
+        marker: value.marker,
+        sid: value.sid,
+        id: Some(value.id),
+        span: value.span.map(native_span),
+        structural: value.structural.map(parse_structural_info).transpose()?,
+        number_info: value.number_info.map(parse_number_info).transpose()?,
+        marker_profile: None,
+    })
+}
+
+fn parse_structural_info(value: StructuralMarkerInfoValue) -> Result<StructuralMarkerInfo, JsError> {
+    Ok(StructuralMarkerInfo {
+        scope_kind: parse_scope_kind(value.scope_kind.as_str())?,
+        inline_context: value
+            .inline_context
+            .map(|context| parse_inline_context(context.as_str()))
+            .transpose()
+            .map_err(js_error)?,
+        note_context: value
+            .note_context
+            .map(|context| parse_spec_context(context.as_str()))
+            .transpose()
+            .map_err(js_error)?,
+    })
+}
+
+fn parse_number_info(value: NumberInfoValue) -> Result<(u32, Option<u32>, NativeNumberRangeKind), JsError> {
+    Ok((value.start, value.end, parse_number_kind(value.kind.as_str())?))
+}
+
+fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<TokenValue> {
+    tokens.iter().map(map_token).collect()
+}
+
+fn map_token(token: &NativeToken<'_>) -> TokenValue {
+    let mut value = TokenValue {
+        id: format!("{}-{}", token.id.book_code, token.id.index),
+        kind: token_kind_str(token.kind()).to_string(),
+        text: token.source.to_string(),
+        span: Some(map_span(token.span)),
+        sid: token.sid.map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse)),
+        marker: token.marker_name().map(ToOwned::to_owned),
+        nested: None,
+        marker_metadata: None,
+        structural: None,
+        number_info: None,
+        book_code: None,
+        book_code_valid: None,
+        attributes: Vec::new(),
+    };
+
+    match &token.data {
+        NativeTokenData::Marker {
+            metadata,
+            structural,
+            nested,
+            ..
+        }
+        | NativeTokenData::EndMarker {
+            metadata,
+            structural,
+            nested,
+            ..
+        } => {
+            value.nested = Some(*nested);
+            value.marker_metadata = Some(map_marker_metadata(*metadata));
+            value.structural = Some(map_structural_info(*structural));
+        }
+        NativeTokenData::Milestone {
+            metadata, structural, ..
+        } => {
+            value.marker_metadata = Some(map_marker_metadata(*metadata));
+            value.structural = Some(map_structural_info(*structural));
+        }
+        NativeTokenData::BookCode { code, is_valid } => {
+            value.book_code = Some((*code).to_string());
+            value.book_code_valid = Some(*is_valid);
+        }
+        NativeTokenData::Number { start, end, kind } => {
+            value.number_info = Some(NumberInfoValue {
+                start: *start,
+                end: *end,
+                kind: number_kind_str(*kind).to_string(),
+            });
+        }
+        NativeTokenData::AttributeList { entries } => {
+            value.attributes = entries.iter().map(map_attribute_item).collect();
+        }
+        NativeTokenData::Newline
+        | NativeTokenData::OptBreak
+        | NativeTokenData::MilestoneEnd
+        | NativeTokenData::Text => {}
+    }
+
+    value
+}
+
+fn map_format_token(token: &NativeFormatToken) -> TokenValue {
+    TokenValue {
+        id: token.id.clone().unwrap_or_default(),
+        kind: token_kind_str(token.kind).to_string(),
+        text: token.text.clone(),
+        span: token.span.map(map_span),
+        sid: token.sid.clone(),
+        marker: token.marker.clone(),
+        nested: None,
+        marker_metadata: None,
+        structural: token.structural.map(map_structural_info),
+        number_info: token.number_info.map(|(start, end, kind)| NumberInfoValue {
+            start,
+            end,
+            kind: number_kind_str(kind).to_string(),
+        }),
+        book_code: None,
+        book_code_valid: None,
+        attributes: Vec::new(),
+    }
+}
+
+fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItemValue {
+    AttributeItemValue {
+        span: map_span(item.span),
+        text: item.source.to_string(),
+        key: item.key.to_string(),
+        value: item.value.to_string(),
+    }
+}
+
+fn map_marker_metadata(metadata: NativeMarkerMetadata) -> MarkerMetadataValue {
+    MarkerMetadataValue {
+        canonical: metadata.canonical.map(ToOwned::to_owned),
+        kind: metadata.kind.map(spec_marker_kind_str).map(ToOwned::to_owned),
+        family: metadata.family.map(marker_family_str).map(ToOwned::to_owned),
+    }
+}
+
+fn map_structural_info(info: StructuralMarkerInfo) -> StructuralMarkerInfoValue {
+    StructuralMarkerInfoValue {
+        scope_kind: scope_kind_str(info.scope_kind).to_string(),
+        inline_context: info.inline_context.map(inline_context_str).map(ToOwned::to_owned),
+        note_context: info.note_context.map(spec_context_str).map(ToOwned::to_owned),
+    }
+}
+
+fn map_span(span: NativeSpan) -> SpanValue {
+    SpanValue {
+        start: span.start,
+        end: span.end,
+    }
+}
+
+fn native_span(span: SpanValue) -> NativeSpan {
+    NativeSpan {
+        start: span.start,
+        end: span.end,
+    }
+}
+
+fn map_cst_document(document: &NativeCstDocument<'_>) -> CstDocumentValue {
+    CstDocumentValue {
+        tokens: map_tokens(&document.tokens),
+        roots: document.roots.iter().map(map_cst_node).collect(),
+    }
+}
+
+fn map_cst_node(node: &NativeCstNode) -> CstNodeValue {
+    CstNodeValue {
+        token_index: node.token_index,
+        children: node.children.iter().map(map_cst_node).collect(),
+    }
+}
+
+fn map_lint_result(result: NativeLintResult) -> LintResultValue {
+    LintResultValue {
+        issues: result.issues.into_iter().map(map_lint_issue).collect(),
+        summary: LintSummaryValue {
+            by_category: result
+                .summary
+                .by_category
+                .into_iter()
+                .map(|(category, count)| (lint_category_str(category).to_string(), count))
+                .collect(),
+            by_severity: result
+                .summary
+                .by_severity
+                .into_iter()
+                .map(|(severity, count)| (lint_severity_str(severity).to_string(), count))
+                .collect(),
+            total_count: result.summary.total_count,
+            suppressed_count: result.summary.suppressed_count,
+        },
+    }
+}
+
+fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssueValue {
+    LintIssueValue {
+        code: lint_code_str(issue.code).to_string(),
+        category: lint_category_str(issue.category).to_string(),
+        severity: lint_severity_str(issue.severity).to_string(),
+        message: issue.message,
+        span: issue.span.map(map_span),
+        related_span: issue.related_span.map(map_span),
+        token_id: issue.token_id,
+        related_token_id: issue.related_token_id,
+        sid: issue.sid,
+        marker: issue.marker,
+    }
+}
+
+fn map_chapter_diffs(diffs: &[NativeChapterTokenDiff<NativeToken<'_>>]) -> Vec<ChapterTokenDiffValue> {
+    diffs.iter().map(map_native_chapter_diff).collect()
+}
+
+fn map_native_chapter_diff(diff: &NativeChapterTokenDiff<NativeToken<'_>>) -> ChapterTokenDiffValue {
+    ChapterTokenDiffValue {
+        block_id: diff.block_id.clone(),
+        semantic_sid: diff.semantic_sid.clone(),
+        status: diff_status_str(diff.status).to_string(),
+        original: diff.original.as_ref().map(map_sid_block),
+        current: diff.current.as_ref().map(map_sid_block),
+        original_text: diff.original_text.clone(),
+        current_text: diff.current_text.clone(),
+        original_text_only: diff.original_text_only.clone(),
+        current_text_only: diff.current_text_only.clone(),
+        is_whitespace_change: diff.is_whitespace_change,
+        is_usfm_structure_change: diff.is_usfm_structure_change,
+        original_tokens: map_tokens(&diff.original_tokens),
+        current_tokens: map_tokens(&diff.current_tokens),
+        original_alignment: diff
+            .original_alignment
+            .iter()
+            .copied()
+            .map(map_alignment)
+            .collect(),
+        current_alignment: diff
+            .current_alignment
+            .iter()
+            .copied()
+            .map(map_alignment)
+            .collect(),
+        undo_side: diff_undo_side_str(diff.undo_side).to_string(),
+    }
+}
+
+fn map_adapter_diffs(diffs: &[NativeChapterTokenDiff<AdapterToken>]) -> Vec<ChapterTokenDiffValue> {
+    diffs.iter().map(map_adapter_chapter_diff).collect()
+}
+
+fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> ChapterTokenDiffValue {
+    ChapterTokenDiffValue {
+        block_id: diff.block_id.clone(),
+        semantic_sid: diff.semantic_sid.clone(),
+        status: diff_status_str(diff.status).to_string(),
+        original: diff.original.as_ref().map(map_sid_block),
+        current: diff.current.as_ref().map(map_sid_block),
+        original_text: diff.original_text.clone(),
+        current_text: diff.current_text.clone(),
+        original_text_only: diff.original_text_only.clone(),
+        current_text_only: diff.current_text_only.clone(),
+        is_whitespace_change: diff.is_whitespace_change,
+        is_usfm_structure_change: diff.is_usfm_structure_change,
+        original_tokens: diff.original_tokens.iter().map(map_adapter_token).collect(),
+        current_tokens: diff.current_tokens.iter().map(map_adapter_token).collect(),
+        original_alignment: diff
+            .original_alignment
+            .iter()
+            .copied()
+            .map(map_alignment)
+            .collect(),
+        current_alignment: diff
+            .current_alignment
+            .iter()
+            .copied()
+            .map(map_alignment)
+            .collect(),
+        undo_side: diff_undo_side_str(diff.undo_side).to_string(),
+    }
+}
+
+fn map_adapter_token(token: &AdapterToken) -> TokenValue {
+    TokenValue {
+        id: token.id.clone(),
+        kind: token_kind_str(token.kind).to_string(),
+        text: token.text.clone(),
+        span: token.span.map(map_span),
+        sid: token.sid.clone(),
+        marker: token.marker.clone(),
+        nested: None,
+        marker_metadata: None,
+        structural: token.structural.map(map_structural_info),
+        number_info: token.number_info.map(|(start, end, kind)| NumberInfoValue {
+            start,
+            end,
+            kind: number_kind_str(kind).to_string(),
+        }),
+        book_code: None,
+        book_code_valid: None,
+        attributes: Vec::new(),
+    }
+}
+
+fn map_sid_block(block: &NativeSidBlock) -> SidBlockValue {
+    SidBlockValue {
+        block_id: block.block_id.clone(),
+        semantic_sid: block.semantic_sid.clone(),
+        start: block.start,
+        end_exclusive: block.end_exclusive,
+        prev_block_id: block.prev_block_id.clone(),
+        text_full: block.text_full.clone(),
+    }
+}
+
+fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignmentValue {
+    TokenAlignmentValue {
+        change: diff_token_change_str(alignment.change).to_string(),
+        counterpart_index: alignment.counterpart_index,
+    }
+}
+
+fn map_diffs_by_chapter(
+    diffs: &NativeDiffsByChapterMap<NativeChapterTokenDiff<NativeToken<'_>>>,
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiffValue>>> {
+    diffs
+        .iter()
+        .map(|(book, chapters)| {
+            (
+                book.clone(),
+                chapters
+                    .iter()
+                    .map(|(chapter, diffs)| (*chapter, map_chapter_diffs(diffs)))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfoValue {
+    MarkerInfoValue {
+        marker: info.marker,
+        canonical: info.canonical,
+        known: info.known,
+        deprecated: info.deprecated,
+        category: marker_category_str(info.category).to_string(),
+        kind: marker_kind_str(info.kind).to_string(),
+        family: info.family.map(marker_family_str).map(ToOwned::to_owned),
+        family_role: info
+            .family_role
+            .map(marker_family_role_str)
+            .map(ToOwned::to_owned),
+        note_family: info
+            .note_family
+            .map(marker_note_family_str)
+            .map(ToOwned::to_owned),
+        note_subkind: info
+            .note_subkind
+            .map(marker_note_subkind_str)
+            .map(ToOwned::to_owned),
+        inline_context: info
+            .inline_context
+            .map(marker_inline_context_str)
+            .map(ToOwned::to_owned),
+        default_attribute: info.default_attribute,
+        contexts: info
+            .contexts
+            .into_iter()
+            .map(spec_context_str)
+            .map(ToOwned::to_owned)
+            .collect(),
+        block_behavior: info
+            .block_behavior
+            .map(block_behavior_str)
+            .map(ToOwned::to_owned),
+        closing_behavior: info
+            .closing_behavior
+            .map(closing_behavior_str)
+            .map(ToOwned::to_owned),
+        source: info.source,
+    }
+}
+
+fn token_values_to_usfm(tokens: &[TokenValue]) -> String {
+    tokens.iter().map(|token| token.text.as_str()).collect()
+}
+
+fn vref_to_object(map: VrefMap) -> std::collections::BTreeMap<String, String> {
+    map.into_iter().collect()
+}
+
+fn from_js_or_default<T>(value: JsValue) -> Result<T, JsError>
+where
+    T: DeserializeOwned + Default,
+{
+    if value.is_undefined() || value.is_null() {
+        Ok(T::default())
+    } else {
+        from_js_value(value).map_err(js_serde_error)
+    }
+}
+
+fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
+    swb_to_js_value(value).map_err(js_serde_error)
+}
+
+fn apply_opt(target: &mut bool, value: Option<bool>) {
+    if let Some(value) = value {
+        *target = value;
+    }
+}
+
+fn js_error(error: impl std::fmt::Display) -> JsError {
+    JsError::new(&error.to_string())
+}
+
+fn js_serde_error(error: serde_wasm_bindgen::Error) -> JsError {
+    js_error(error)
+}
+
+fn parse_lint_code(value: String) -> Result<NativeLintCode, JsError> {
+    lint_code_variants()
+        .into_iter()
+        .find(|code| lint_code_str(*code) == value)
+        .ok_or_else(|| js_error(format!("unknown lint code '{value}'")))
+}
+
+fn lint_code_variants() -> Vec<NativeLintCode> {
+    vec![
+        NativeLintCode::MissingIdMarker,
+        NativeLintCode::MissingSeparatorAfterMarker,
+        NativeLintCode::EmptyParagraph,
+        NativeLintCode::NumberRangeAfterChapterMarker,
+        NativeLintCode::VerseRangeExpectedAfterVerseMarker,
+        NativeLintCode::VerseContentNotEmpty,
+        NativeLintCode::UnknownToken,
+        NativeLintCode::CharNotClosed,
+        NativeLintCode::NoteNotClosed,
+        NativeLintCode::ParagraphBeforeFirstChapter,
+        NativeLintCode::VerseBeforeFirstChapter,
+        NativeLintCode::NoteSubmarkerOutsideNote,
+        NativeLintCode::DuplicateIdMarker,
+        NativeLintCode::IdMarkerNotAtFileStart,
+        NativeLintCode::ChapterMetadataOutsideChapter,
+        NativeLintCode::VerseMetadataOutsideVerse,
+        NativeLintCode::MissingChapterNumber,
+        NativeLintCode::MissingVerseNumber,
+        NativeLintCode::MissingMilestoneSelfClose,
+        NativeLintCode::ImplicitlyClosedMarker,
+        NativeLintCode::StrayCloseMarker,
+        NativeLintCode::MisnestedCloseMarker,
+        NativeLintCode::UnclosedNote,
+        NativeLintCode::UnclosedMarkerAtEof,
+        NativeLintCode::DuplicateChapterNumber,
+        NativeLintCode::ChapterExpectedIncreaseByOne,
+        NativeLintCode::DuplicateVerseNumber,
+        NativeLintCode::VerseExpectedIncreaseByOne,
+        NativeLintCode::InvalidNumberRange,
+        NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
+        NativeLintCode::VerseTextFollowsVerseRange,
+        NativeLintCode::UnknownMarker,
+        NativeLintCode::UnknownCloseMarker,
+        NativeLintCode::InconsistentChapterLabel,
+        NativeLintCode::MarkerNotValidInContext,
+        NativeLintCode::VerseOutsideExplicitParagraph,
+    ]
+}
+
+fn lint_code_str(code: NativeLintCode) -> &'static str {
+    match code {
+        NativeLintCode::MissingIdMarker => "missing-id-marker",
+        NativeLintCode::MissingSeparatorAfterMarker => "missing-separator-after-marker",
+        NativeLintCode::EmptyParagraph => "empty-paragraph",
+        NativeLintCode::NumberRangeAfterChapterMarker => "number-range-after-chapter-marker",
+        NativeLintCode::VerseRangeExpectedAfterVerseMarker => "verse-range-expected-after-verse-marker",
+        NativeLintCode::VerseContentNotEmpty => "verse-content-not-empty",
+        NativeLintCode::UnknownToken => "unknown-token",
+        NativeLintCode::CharNotClosed => "char-not-closed",
+        NativeLintCode::NoteNotClosed => "note-not-closed",
+        NativeLintCode::ParagraphBeforeFirstChapter => "paragraph-before-first-chapter",
+        NativeLintCode::VerseBeforeFirstChapter => "verse-before-first-chapter",
+        NativeLintCode::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
+        NativeLintCode::DuplicateIdMarker => "duplicate-id-marker",
+        NativeLintCode::IdMarkerNotAtFileStart => "id-marker-not-at-file-start",
+        NativeLintCode::ChapterMetadataOutsideChapter => "chapter-metadata-outside-chapter",
+        NativeLintCode::VerseMetadataOutsideVerse => "verse-metadata-outside-verse",
+        NativeLintCode::MissingChapterNumber => "missing-chapter-number",
+        NativeLintCode::MissingVerseNumber => "missing-verse-number",
+        NativeLintCode::MissingMilestoneSelfClose => "missing-milestone-self-close",
+        NativeLintCode::ImplicitlyClosedMarker => "implicitly-closed-marker",
+        NativeLintCode::StrayCloseMarker => "stray-close-marker",
+        NativeLintCode::MisnestedCloseMarker => "misnested-close-marker",
+        NativeLintCode::UnclosedNote => "unclosed-note",
+        NativeLintCode::UnclosedMarkerAtEof => "unclosed-marker-at-eof",
+        NativeLintCode::DuplicateChapterNumber => "duplicate-chapter-number",
+        NativeLintCode::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
+        NativeLintCode::DuplicateVerseNumber => "duplicate-verse-number",
+        NativeLintCode::VerseExpectedIncreaseByOne => "verse-expected-increase-by-one",
+        NativeLintCode::InvalidNumberRange => "invalid-number-range",
+        NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
+            "number-range-not-preceded-by-marker-expecting-number"
+        }
+        NativeLintCode::VerseTextFollowsVerseRange => "verse-text-follows-verse-range",
+        NativeLintCode::UnknownMarker => "unknown-marker",
+        NativeLintCode::UnknownCloseMarker => "unknown-close-marker",
+        NativeLintCode::InconsistentChapterLabel => "inconsistent-chapter-label",
+        NativeLintCode::MarkerNotValidInContext => "marker-not-valid-in-context",
+        NativeLintCode::VerseOutsideExplicitParagraph => "verse-outside-explicit-paragraph",
+    }
+}
+
+fn lint_category_str(category: NativeLintCategory) -> &'static str {
+    match category {
+        NativeLintCategory::Document => "document",
+        NativeLintCategory::Structure => "structure",
+        NativeLintCategory::Context => "context",
+        NativeLintCategory::Numbering => "numbering",
+    }
+}
+
+fn lint_severity_str(severity: NativeLintSeverity) -> &'static str {
+    match severity {
+        NativeLintSeverity::Error => "error",
+        NativeLintSeverity::Warning => "warning",
+    }
+}
+
+fn parse_html_note_mode(value: &str) -> Result<NativeHtmlNoteMode, String> {
+    match value {
+        "extracted" => Ok(NativeHtmlNoteMode::Extracted),
+        "inline" => Ok(NativeHtmlNoteMode::Inline),
+        _ => Err(format!("unknown html note mode '{value}'")),
+    }
+}
+
+fn parse_html_caller_style(value: &str) -> Result<NativeHtmlCallerStyle, String> {
+    match value {
+        "numeric" => Ok(NativeHtmlCallerStyle::Numeric),
+        "alphaLower" => Ok(NativeHtmlCallerStyle::AlphaLower),
+        "alphaUpper" => Ok(NativeHtmlCallerStyle::AlphaUpper),
+        "romanLower" => Ok(NativeHtmlCallerStyle::RomanLower),
+        "romanUpper" => Ok(NativeHtmlCallerStyle::RomanUpper),
+        "source" => Ok(NativeHtmlCallerStyle::Source),
+        _ => Err(format!("unknown html caller style '{value}'")),
+    }
+}
+
+fn parse_html_caller_scope(value: &str) -> Result<NativeHtmlCallerScope, String> {
+    match value {
+        "documentSequential" => Ok(NativeHtmlCallerScope::DocumentSequential),
+        "verseSequential" => Ok(NativeHtmlCallerScope::VerseSequential),
+        _ => Err(format!("unknown html caller scope '{value}'")),
+    }
+}
+
+fn parse_token_kind(value: &str) -> Result<NativeTokenKind, JsError> {
+    match value {
+        "newline" => Ok(NativeTokenKind::Newline),
+        "optBreak" => Ok(NativeTokenKind::OptBreak),
+        "marker" => Ok(NativeTokenKind::Marker),
+        "endMarker" => Ok(NativeTokenKind::EndMarker),
+        "milestone" => Ok(NativeTokenKind::Milestone),
+        "milestoneEnd" => Ok(NativeTokenKind::MilestoneEnd),
+        "bookCode" => Ok(NativeTokenKind::BookCode),
+        "number" => Ok(NativeTokenKind::Number),
+        "text" => Ok(NativeTokenKind::Text),
+        "attributeList" => Ok(NativeTokenKind::AttributeList),
+        _ => Err(js_error(format!("unknown token kind '{value}'"))),
+    }
+}
+
+fn token_kind_str(kind: NativeTokenKind) -> &'static str {
+    match kind {
+        NativeTokenKind::Newline => "newline",
+        NativeTokenKind::OptBreak => "optBreak",
+        NativeTokenKind::Marker => "marker",
+        NativeTokenKind::EndMarker => "endMarker",
+        NativeTokenKind::Milestone => "milestone",
+        NativeTokenKind::MilestoneEnd => "milestoneEnd",
+        NativeTokenKind::BookCode => "bookCode",
+        NativeTokenKind::Number => "number",
+        NativeTokenKind::Text => "text",
+        NativeTokenKind::AttributeList => "attributeList",
+    }
+}
+
+fn token_kind_key(kind: NativeTokenKind) -> &'static str {
+    token_kind_str(kind)
+}
+
+fn parse_number_kind(value: &str) -> Result<NativeNumberRangeKind, JsError> {
+    match value {
+        "single" => Ok(NativeNumberRangeKind::Single),
+        "range" => Ok(NativeNumberRangeKind::Range),
+        "sequence" => Ok(NativeNumberRangeKind::Sequence),
+        "sequenceWithRange" => Ok(NativeNumberRangeKind::SequenceWithRange),
+        _ => Err(js_error(format!("unknown number kind '{value}'"))),
+    }
+}
+
+fn number_kind_str(kind: NativeNumberRangeKind) -> &'static str {
+    match kind {
+        NativeNumberRangeKind::Single => "single",
+        NativeNumberRangeKind::Range => "range",
+        NativeNumberRangeKind::Sequence => "sequence",
+        NativeNumberRangeKind::SequenceWithRange => "sequenceWithRange",
+    }
+}
+
+fn parse_scope_kind(value: &str) -> Result<StructuralScopeKind, JsError> {
+    match value {
+        "unknown" => Ok(StructuralScopeKind::Unknown),
+        "header" => Ok(StructuralScopeKind::Header),
+        "block" => Ok(StructuralScopeKind::Block),
+        "note" => Ok(StructuralScopeKind::Note),
+        "character" => Ok(StructuralScopeKind::Character),
+        "milestone" => Ok(StructuralScopeKind::Milestone),
+        "chapter" => Ok(StructuralScopeKind::Chapter),
+        "verse" => Ok(StructuralScopeKind::Verse),
+        "tableRow" => Ok(StructuralScopeKind::TableRow),
+        "tableCell" => Ok(StructuralScopeKind::TableCell),
+        "sidebar" => Ok(StructuralScopeKind::Sidebar),
+        "periph" => Ok(StructuralScopeKind::Periph),
+        "meta" => Ok(StructuralScopeKind::Meta),
+        _ => Err(js_error(format!("unknown structural scope kind '{value}'"))),
+    }
+}
+
+fn scope_kind_str(kind: StructuralScopeKind) -> &'static str {
+    match kind {
+        StructuralScopeKind::Unknown => "unknown",
+        StructuralScopeKind::Header => "header",
+        StructuralScopeKind::Block => "block",
+        StructuralScopeKind::Note => "note",
+        StructuralScopeKind::Character => "character",
+        StructuralScopeKind::Milestone => "milestone",
+        StructuralScopeKind::Chapter => "chapter",
+        StructuralScopeKind::Verse => "verse",
+        StructuralScopeKind::TableRow => "tableRow",
+        StructuralScopeKind::TableCell => "tableCell",
+        StructuralScopeKind::Sidebar => "sidebar",
+        StructuralScopeKind::Periph => "periph",
+        StructuralScopeKind::Meta => "meta",
+    }
+}
+
+fn parse_inline_context(value: &str) -> Result<InlineContext, String> {
+    match value {
+        "para" => Ok(InlineContext::Para),
+        "section" => Ok(InlineContext::Section),
+        "list" => Ok(InlineContext::List),
+        "table" => Ok(InlineContext::Table),
+        _ => Err(format!("unknown inline context '{value}'")),
+    }
+}
+
+fn inline_context_str(context: InlineContext) -> &'static str {
+    match context {
+        InlineContext::Para => "para",
+        InlineContext::Section => "section",
+        InlineContext::List => "list",
+        InlineContext::Table => "table",
+    }
+}
+
+fn parse_spec_context(value: &str) -> Result<SpecContext, String> {
+    match value {
+        "scripture" => Ok(SpecContext::Scripture),
+        "bookIdentification" => Ok(SpecContext::BookIdentification),
+        "bookHeaders" => Ok(SpecContext::BookHeaders),
+        "bookTitles" => Ok(SpecContext::BookTitles),
+        "bookIntroduction" => Ok(SpecContext::BookIntroduction),
+        "bookIntroductionEndTitles" => Ok(SpecContext::BookIntroductionEndTitles),
+        "bookChapterLabel" => Ok(SpecContext::BookChapterLabel),
+        "chapterContent" => Ok(SpecContext::ChapterContent),
+        "peripheral" => Ok(SpecContext::Peripheral),
+        "peripheralContent" => Ok(SpecContext::PeripheralContent),
+        "peripheralDivision" => Ok(SpecContext::PeripheralDivision),
+        "chapter" => Ok(SpecContext::Chapter),
+        "verse" => Ok(SpecContext::Verse),
+        "section" => Ok(SpecContext::Section),
+        "para" => Ok(SpecContext::Para),
+        "list" => Ok(SpecContext::List),
+        "table" => Ok(SpecContext::Table),
+        "sidebar" => Ok(SpecContext::Sidebar),
+        "footnote" => Ok(SpecContext::Footnote),
+        "crossReference" => Ok(SpecContext::CrossReference),
+        _ => Err(format!("unknown spec context '{value}'")),
+    }
+}
+
+fn spec_context_str(context: SpecContext) -> &'static str {
+    match context {
+        SpecContext::Scripture => "scripture",
+        SpecContext::BookIdentification => "bookIdentification",
+        SpecContext::BookHeaders => "bookHeaders",
+        SpecContext::BookTitles => "bookTitles",
+        SpecContext::BookIntroduction => "bookIntroduction",
+        SpecContext::BookIntroductionEndTitles => "bookIntroductionEndTitles",
+        SpecContext::BookChapterLabel => "bookChapterLabel",
+        SpecContext::ChapterContent => "chapterContent",
+        SpecContext::Peripheral => "peripheral",
+        SpecContext::PeripheralContent => "peripheralContent",
+        SpecContext::PeripheralDivision => "peripheralDivision",
+        SpecContext::Chapter => "chapter",
+        SpecContext::Verse => "verse",
+        SpecContext::Section => "section",
+        SpecContext::Para => "para",
+        SpecContext::List => "list",
+        SpecContext::Table => "table",
+        SpecContext::Sidebar => "sidebar",
+        SpecContext::Footnote => "footnote",
+        SpecContext::CrossReference => "crossReference",
+    }
+}
+
+fn spec_marker_kind_str(kind: usfm_onion::marker_defs::SpecMarkerKind) -> &'static str {
+    match kind {
+        usfm_onion::marker_defs::SpecMarkerKind::Paragraph => "paragraph",
+        usfm_onion::marker_defs::SpecMarkerKind::Character => "character",
+        usfm_onion::marker_defs::SpecMarkerKind::Note => "note",
+        usfm_onion::marker_defs::SpecMarkerKind::Chapter => "chapter",
+        usfm_onion::marker_defs::SpecMarkerKind::Verse => "verse",
+        usfm_onion::marker_defs::SpecMarkerKind::Milestone => "milestone",
+        usfm_onion::marker_defs::SpecMarkerKind::Figure => "figure",
+        usfm_onion::marker_defs::SpecMarkerKind::Sidebar => "sidebar",
+        usfm_onion::marker_defs::SpecMarkerKind::Periph => "periph",
+        usfm_onion::marker_defs::SpecMarkerKind::Meta => "meta",
+        usfm_onion::marker_defs::SpecMarkerKind::TableRow => "tableRow",
+        usfm_onion::marker_defs::SpecMarkerKind::TableCell => "tableCell",
+        usfm_onion::marker_defs::SpecMarkerKind::Header => "header",
+    }
+}
+
+fn diff_status_str(status: NativeDiffStatus) -> &'static str {
+    match status {
+        NativeDiffStatus::Added => "added",
+        NativeDiffStatus::Deleted => "deleted",
+        NativeDiffStatus::Modified => "modified",
+        NativeDiffStatus::Unchanged => "unchanged",
+    }
+}
+
+fn diff_token_change_str(change: NativeDiffTokenChange) -> &'static str {
+    match change {
+        NativeDiffTokenChange::Unchanged => "unchanged",
+        NativeDiffTokenChange::Added => "added",
+        NativeDiffTokenChange::Deleted => "deleted",
+        NativeDiffTokenChange::Modified => "modified",
+    }
+}
+
+fn diff_undo_side_str(side: NativeDiffUndoSide) -> &'static str {
+    match side {
+        NativeDiffUndoSide::Original => "original",
+        NativeDiffUndoSide::Current => "current",
+    }
+}
+
+fn marker_category_str(category: NativeMarkerCategory) -> &'static str {
+    match category {
+        NativeMarkerCategory::Document => "document",
+        NativeMarkerCategory::Paragraph => "paragraph",
+        NativeMarkerCategory::Character => "character",
+        NativeMarkerCategory::NoteContainer => "noteContainer",
+        NativeMarkerCategory::NoteSubmarker => "noteSubmarker",
+        NativeMarkerCategory::Chapter => "chapter",
+        NativeMarkerCategory::Verse => "verse",
+        NativeMarkerCategory::MilestoneStart => "milestoneStart",
+        NativeMarkerCategory::MilestoneEnd => "milestoneEnd",
+        NativeMarkerCategory::Figure => "figure",
+        NativeMarkerCategory::SidebarStart => "sidebarStart",
+        NativeMarkerCategory::SidebarEnd => "sidebarEnd",
+        NativeMarkerCategory::Periph => "periph",
+        NativeMarkerCategory::Meta => "meta",
+        NativeMarkerCategory::TableRow => "tableRow",
+        NativeMarkerCategory::TableCell => "tableCell",
+        NativeMarkerCategory::Header => "header",
+        NativeMarkerCategory::Unknown => "unknown",
+    }
+}
+
+fn marker_kind_str(kind: NativeMarkerKind) -> &'static str {
+    match kind {
+        NativeMarkerKind::Paragraph => "paragraph",
+        NativeMarkerKind::Note => "note",
+        NativeMarkerKind::Character => "character",
+        NativeMarkerKind::Header => "header",
+        NativeMarkerKind::Chapter => "chapter",
+        NativeMarkerKind::Verse => "verse",
+        NativeMarkerKind::MilestoneStart => "milestoneStart",
+        NativeMarkerKind::MilestoneEnd => "milestoneEnd",
+        NativeMarkerKind::SidebarStart => "sidebarStart",
+        NativeMarkerKind::SidebarEnd => "sidebarEnd",
+        NativeMarkerKind::Figure => "figure",
+        NativeMarkerKind::Meta => "meta",
+        NativeMarkerKind::Periph => "periph",
+        NativeMarkerKind::TableRow => "tableRow",
+        NativeMarkerKind::TableCell => "tableCell",
+        NativeMarkerKind::Unknown => "unknown",
+    }
+}
+
+fn marker_family_str(family: MarkerFamily) -> &'static str {
+    match family {
+        MarkerFamily::Footnote => "footnote",
+        MarkerFamily::CrossReference => "crossReference",
+        MarkerFamily::SectionParagraph => "sectionParagraph",
+        MarkerFamily::ListParagraph => "listParagraph",
+        MarkerFamily::TableCell => "tableCell",
+        MarkerFamily::Milestone => "milestone",
+        MarkerFamily::Sidebar => "sidebar",
+    }
+}
+
+fn marker_family_role_str(role: MarkerFamilyRole) -> &'static str {
+    match role {
+        MarkerFamilyRole::Canonical => "canonical",
+        MarkerFamilyRole::NumberedVariant => "numberedVariant",
+        MarkerFamilyRole::NestedVariant => "nestedVariant",
+        MarkerFamilyRole::MilestoneStart => "milestoneStart",
+        MarkerFamilyRole::MilestoneEnd => "milestoneEnd",
+        MarkerFamilyRole::Alias => "alias",
+    }
+}
+
+fn marker_note_family_str(family: NativeMarkerNoteFamily) -> &'static str {
+    match family {
+        NativeMarkerNoteFamily::Footnote => "footnote",
+        NativeMarkerNoteFamily::CrossReference => "crossReference",
+    }
+}
+
+fn marker_note_subkind_str(kind: NativeMarkerNoteSubkind) -> &'static str {
+    match kind {
+        NativeMarkerNoteSubkind::Structural => "structural",
+        NativeMarkerNoteSubkind::StructuralKeepsNestedCharsOpen => {
+            "structuralKeepsNestedCharsOpen"
+        }
+    }
+}
+
+fn marker_inline_context_str(context: NativeMarkerInlineContext) -> &'static str {
+    match context {
+        NativeMarkerInlineContext::Para => "para",
+        NativeMarkerInlineContext::Section => "section",
+        NativeMarkerInlineContext::List => "list",
+        NativeMarkerInlineContext::Table => "table",
+    }
+}
+
+fn block_behavior_str(behavior: BlockBehavior) -> &'static str {
+    match behavior {
+        BlockBehavior::None => "none",
+        BlockBehavior::Paragraph(_) => "paragraph",
+        BlockBehavior::TableRow => "tableRow",
+        BlockBehavior::TableCell => "tableCell",
+        BlockBehavior::SidebarStart => "sidebarStart",
+        BlockBehavior::SidebarEnd => "sidebarEnd",
+    }
+}
+
+fn closing_behavior_str(behavior: ClosingBehavior) -> &'static str {
+    match behavior {
+        ClosingBehavior::None => "none",
+        ClosingBehavior::RequiredExplicit => "requiredExplicit",
+        ClosingBehavior::OptionalExplicitUntilNoteEnd => "optionalExplicitUntilNoteEnd",
+        ClosingBehavior::SelfClosingMilestone => "selfClosingMilestone",
+    }
+}
+
+fn format_sid(book: &str, chapter: u32, verse: u32) -> String {
+    format!("{book} {chapter}:{verse}")
+}

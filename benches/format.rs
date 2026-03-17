@@ -1,6 +1,6 @@
 mod common;
 
-use common::{selected_corpus_batches, standard_corpus_cases};
+use common::{batch_label, case_label, selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use usfm_onion::format::{FormatOptions, format_tokens, format_usfm, into_format_tokens};
 use usfm_onion::parse::parse;
@@ -12,9 +12,9 @@ fn benchmark_format(c: &mut Criterion) {
     for case in &corpus_cases {
         let parsed = parse(case.source.as_str());
         let prepared = into_format_tokens(&parsed.tokens);
-        token_group.throughput(Throughput::Bytes(case.source.len() as u64));
+        token_group.throughput(Throughput::Bytes(case.total_bytes as u64));
         token_group.bench_with_input(
-            BenchmarkId::new("format_tokens", case.name),
+            BenchmarkId::new("format_tokens", case_label(case)),
             case,
             |b, _case| {
                 b.iter(|| {
@@ -29,8 +29,8 @@ fn benchmark_format(c: &mut Criterion) {
 
     let mut source_group = c.benchmark_group("format/source");
     for case in &corpus_cases {
-        source_group.throughput(Throughput::Bytes(case.source.len() as u64));
-        source_group.bench_with_input(BenchmarkId::new("format_usfm", case.name), case, |b, case| {
+        source_group.throughput(Throughput::Bytes(case.total_bytes as u64));
+        source_group.bench_with_input(BenchmarkId::new("format_usfm", case_label(case)), case, |b, case| {
             b.iter(|| black_box(format_usfm(case.source.as_str(), FormatOptions::default())));
         });
     }
@@ -52,7 +52,7 @@ fn benchmark_format(c: &mut Criterion) {
                 .collect::<Vec<_>>();
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("format_tokens", &batch.name),
+                BenchmarkId::new("format_tokens", batch_label(batch)),
                 batch,
                 |b, _batch| {
                     b.iter(|| {
@@ -66,7 +66,7 @@ fn benchmark_format(c: &mut Criterion) {
             );
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("format_usfm", &batch.name),
+                BenchmarkId::new("format_usfm", batch_label(batch)),
                 batch,
                 |b, batch| {
                     b.iter(|| {

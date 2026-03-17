@@ -8,7 +8,10 @@ use crate::cst::CstDocument;
 use crate::export_tree::{
     ExportContainerKind, ExportContainerNode, ExportDocument, ExportNode, build_export_document,
 };
-use crate::marker_defs::{NoteSubkind, SpecMarkerKind, marker_default_attribute, marker_note_subkind};
+use crate::marker_defs::{
+    NoteSubkind, SpecMarkerKind, marker_default_attribute, marker_is_note_sub,
+    marker_note_subkind,
+};
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, TokenData};
 
@@ -965,6 +968,8 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
 struct UsjSerializer {
     output: String,
     at_line_start: bool,
+    note_depth: usize,
+    char_depth: usize,
 }
 
 impl UsjSerializer {
@@ -976,24 +981,35 @@ impl UsjSerializer {
     }
 
     fn serialize_nodes(&mut self, nodes: &[UsjNode]) -> Result<(), UsjError> {
-        for node in nodes {
-            self.serialize_node(node)?;
+        for (index, node) in nodes.iter().enumerate() {
+            let next = nodes.get(index + 1);
+            self.serialize_node(node, next)?;
         }
         Ok(())
     }
 
-    fn serialize_node(&mut self, node: &UsjNode) -> Result<(), UsjError> {
+    fn serialize_node(&mut self, node: &UsjNode, next: Option<&UsjNode>) -> Result<(), UsjError> {
         match node {
             UsjNode::Text(text) => {
-                self.output.push_str(text);
-                self.at_line_start = text.ends_with('\n');
+                let mut text = text.as_str();
+                if self.output.ends_with(' ') && text.starts_with(' ') {
+                    text = &text[1..];
+                }
+                if should_trim_trailing_text_before(next) {
+                    let trimmed = text.trim_end_matches(' ');
+                    self.output.push_str(trimmed);
+                    self.at_line_start = trimmed.ends_with('\n');
+                } else {
+                    self.output.push_str(text);
+                    self.at_line_start = text.ends_with('\n');
+                }
                 Ok(())
             }
-            UsjNode::Element(element) => self.serialize_element(element),
+            UsjNode::Element(element) => self.serialize_element(element, next),
         }
     }
 
-    fn serialize_element(&mut self, element: &UsjElement) -> Result<(), UsjError> {
+    fn serialize_element(&mut self, element: &UsjElement, next: Option<&UsjNode>) -> Result<(), UsjError> {
         match element {
             UsjElement::Book {
                 marker,
@@ -1045,7 +1061,7 @@ impl UsjSerializer {
                 ..
             } => {
                 if !self.at_line_start {
-                    self.ensure_space();
+                    self.ensure_newline();
                 }
                 self.output.push('\\');
                 self.output.push_str(marker);
@@ -1061,8 +1077,19 @@ impl UsjSerializer {
                     self.output.push_str(pubnumber);
                     self.output.push_str("\\vp*");
                 }
-                self.output.push(' ');
-                self.at_line_start = false;
+                if next.is_none() {
+                    self.at_line_start = false;
+                } else if matches!(
+                    next,
+                    Some(UsjNode::Element(UsjElement::Milestone { marker, extra }))
+                        if uses_spaced_block_milestone_layout(marker, extra)
+                ) {
+                    self.output.push('\n');
+                    self.at_line_start = true;
+                } else {
+                    self.output.push(' ');
+                    self.at_line_start = false;
+                }
             }
             UsjElement::Para {
                 marker,
@@ -1081,6 +1108,9 @@ impl UsjSerializer {
                     );
                     if !first_is_verse {
                         self.output.push(' ');
+                    } else {
+                        self.output.push('\n');
+                        self.at_line_start = true;
                     }
                     self.serialize_nodes(content)?;
                 }
@@ -1090,21 +1120,63 @@ impl UsjSerializer {
                 content,
                 extra,
             } => {
+                if marker_is_note_sub(marker) && self.note_depth > 0 && self.char_depth == 0 {
+                    self.output.push('\\');
+                    self.output.push_str(marker);
+                    self.output.push(' ');
+                    self.at_line_start = false;
+                    self.char_depth += 1;
+                    self.serialize_nodes(content)?;
+                    self.char_depth -= 1;
+                    self.write_attributes_for_marker(marker, extra);
+                    if next.is_some()
+                        && !self.output.ends_with(' ')
+                        && !self.output.ends_with('\n')
+                        && !self.output.ends_with('*')
+                    {
+                        self.output.push(' ');
+                    }
+                    return Ok(());
+                }
+                if marker == "fig" && extra.is_empty() {
+                    let emitted_marker = emitted_char_marker(marker);
+                    self.output.push('\\');
+                    self.output.push_str(&emitted_marker);
+                    self.output.push(' ');
+                    self.at_line_start = false;
+                    self.serialize_nodes(content)?;
+                    return Ok(());
+                }
+                let emitted_marker = emitted_char_marker(marker);
+                if marker == "w" {
+                    self.ensure_space();
+                }
+                if marker == "fv" && self.note_depth > 0 && self.char_depth > 0 {
+                    self.ensure_newline();
+                }
                 self.output.push('\\');
-                self.output.push_str(marker);
+                self.output.push_str(&emitted_marker);
                 self.output.push(' ');
                 self.at_line_start = false;
+                self.char_depth += 1;
                 self.serialize_nodes(content)?;
-                self.write_attributes(extra);
+                self.char_depth -= 1;
+                if marker == "k"
+                    && matches!(next, Some(UsjNode::Text(text)) if text.starts_with(' '))
+                    && !self.output.ends_with(' ')
+                {
+                    self.output.push(' ');
+                }
+                self.write_attributes_for_marker(marker, extra);
                 self.output.push('\\');
-                self.output.push_str(marker);
+                self.output.push_str(&emitted_marker);
                 self.output.push('*');
             }
             UsjElement::Ref { content, extra } => {
                 self.output.push_str("\\ref ");
                 self.at_line_start = false;
                 self.serialize_nodes(content)?;
-                self.write_attributes(extra);
+                self.write_attributes_for_marker("ref", extra);
                 self.output.push_str("\\ref*");
             }
             UsjElement::Figure {
@@ -1117,7 +1189,7 @@ impl UsjSerializer {
                 self.output.push(' ');
                 self.at_line_start = false;
                 self.serialize_nodes(content)?;
-                self.write_attributes(extra);
+                self.write_attributes_for_marker(marker, extra);
                 self.output.push('\\');
                 self.output.push_str(marker);
                 self.output.push('*');
@@ -1145,13 +1217,28 @@ impl UsjSerializer {
                         self.output.push(' ');
                     }
                 }
+                self.note_depth += 1;
                 self.serialize_nodes(content)?;
+                self.note_depth -= 1;
                 self.write_attributes(extra);
                 self.output.push('\\');
                 self.output.push_str(marker);
                 self.output.push('*');
             }
             UsjElement::Milestone { marker, extra } => {
+                if uses_spaced_block_milestone_layout(marker, extra) {
+                    self.ensure_newline();
+                    self.output.push('\\');
+                    self.output.push_str(marker);
+                    if !extra.is_empty() {
+                        self.output.push(' ');
+                        self.write_attributes(extra);
+                        self.output.push(' ');
+                    }
+                    self.output.push_str("\\*");
+                    self.at_line_start = false;
+                    return Ok(());
+                }
                 self.output.push('\\');
                 self.output.push_str(marker);
                 self.write_attributes(extra);
@@ -1264,19 +1351,97 @@ impl UsjSerializer {
         Ok(())
     }
 
-    fn write_attributes(&mut self, extra: &BTreeMap<String, String>) {
+    fn write_attributes_for_marker(&mut self, marker: &str, extra: &BTreeMap<String, String>) {
         if extra.is_empty() {
             return;
         }
+
+        if marker == "fig" {
+            self.write_figure_attributes(extra);
+            return;
+        }
+
         self.output.push('|');
-        for (index, (key, value)) in extra.iter().enumerate() {
-            if index > 0 {
+        let default_key = marker_default_attribute(marker);
+        let mut first = true;
+
+        if let Some(default_key) = default_key
+            && let Some(value) = extra.get(default_key)
+        {
+            self.output.push_str(value);
+            first = false;
+        }
+
+        for (key, value) in extra {
+            if Some(key.as_str()) == default_key {
+                continue;
+            }
+            if !first {
                 self.output.push(' ');
             }
             self.output.push_str(key);
             self.output.push_str("=\"");
             self.output.push_str(value);
             self.output.push('"');
+            first = false;
+        }
+    }
+
+    fn write_figure_attributes(&mut self, extra: &BTreeMap<String, String>) {
+        self.output.push('|');
+        let ordered = ["alt", "src", "file", "size", "loc", "copy", "ref", "rotate"];
+        let mut first = true;
+
+        for key in ordered {
+            let value = match key {
+                "src" => extra.get("src").or_else(|| extra.get("file")),
+                "file" => None,
+                _ => extra.get(key),
+            };
+            let Some(value) = value else {
+                continue;
+            };
+            if !first {
+                self.output.push(' ');
+            }
+            let out_key = if key == "file" || key == "src" { "src" } else { key };
+            self.output.push_str(out_key);
+            self.output.push_str("=\"");
+            self.output.push_str(value);
+            self.output.push('"');
+            first = false;
+        }
+
+        for (key, value) in extra {
+            if matches!(key.as_str(), "alt" | "src" | "file" | "size" | "loc" | "copy" | "ref" | "rotate") {
+                continue;
+            }
+            if !first {
+                self.output.push(' ');
+            }
+            self.output.push_str(key);
+            self.output.push_str("=\"");
+            self.output.push_str(value);
+            self.output.push('"');
+            first = false;
+        }
+    }
+
+    fn write_attributes(&mut self, extra: &BTreeMap<String, String>) {
+        if extra.is_empty() {
+            return;
+        }
+        self.output.push('|');
+        let mut first = true;
+        for (key, value) in extra {
+            if !first {
+                self.output.push(' ');
+            }
+            self.output.push_str(key);
+            self.output.push_str("=\"");
+            self.output.push_str(value);
+            self.output.push('"');
+            first = false;
         }
     }
 
@@ -1292,6 +1457,29 @@ impl UsjSerializer {
             self.output.push(' ');
         }
     }
+}
+
+fn uses_spaced_block_milestone_layout(marker: &str, extra: &BTreeMap<String, String>) -> bool {
+    matches!(marker, "qt-s" | "qt-e") && (extra.contains_key("sid") || extra.contains_key("eid"))
+}
+
+fn emitted_char_marker(marker: &str) -> String {
+    // USFM 3.1 allows nested character markup without the legacy '+' prefix.
+    // We serialize using the canonical 3.1 form rather than re-inferring legacy syntax.
+    marker.to_string()
+}
+
+fn should_trim_trailing_text_before(next: Option<&UsjNode>) -> bool {
+    matches!(next, Some(UsjNode::Element(UsjElement::Verse { .. })))
+        || matches!(
+            next,
+            Some(UsjNode::Element(UsjElement::Milestone { marker, extra }))
+                if uses_spaced_block_milestone_layout(marker, extra)
+        )
+        || matches!(
+            next,
+            Some(UsjNode::Element(UsjElement::Char { marker, .. })) if marker == "fv"
+        )
 }
 
 fn extract_inline_text(exporter: &UsjExporter<'_, '_>, children: &[ExportNode]) -> Option<String> {
@@ -1436,6 +1624,19 @@ pub fn collect_usj_fixture_pairs(root: &Path) -> Vec<(PathBuf, PathBuf)> {
     collect_usj_fixture_pairs_into(root, &mut pairs);
     pairs.sort();
     pairs
+}
+
+#[cfg(test)]
+fn fixture_is_validated_pass(path: &Path) -> bool {
+    let metadata_path = path.with_file_name("metadata.xml");
+    fs::read_to_string(&metadata_path)
+        .map(|metadata| metadata.contains("<validated>pass</validated>"))
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+fn normalize_usfm_fixture_text(source: &str) -> String {
+    source.replace("\r\n", "\n").trim_end_matches('\n').to_string()
 }
 
 fn collect_usj_fixture_pairs_into(root: &Path, pairs: &mut Vec<(PathBuf, PathBuf)>) {
@@ -1592,6 +1793,64 @@ mod tests {
                 normalize_document(&actual),
                 normalize_document(&expected),
                 "fixture mismatch for {}",
+                usfm_path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn paired_fixtures_import_back_to_parseable_usfm() {
+        for (usfm_path, usj_path) in collect_usj_fixture_pairs(Path::new("testData")) {
+            let json = fs::read_to_string(&usj_path)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", usj_path.display()));
+            let actual = from_usj_str(&json)
+                .unwrap_or_else(|error| panic!("USJ import failed for {}: {error}", usj_path.display()));
+
+            let reparsed = usfm_to_usj(&actual)
+                .unwrap_or_else(|error| panic!("reverse USFM should parse for {}: {error}", usj_path.display()));
+
+            assert!(
+                !actual.is_empty(),
+                "reverse USFM should not be empty for {}",
+                usj_path.display()
+            );
+            assert!(
+                !normalize_document(&reparsed).content.is_empty(),
+                "reverse USFM should produce structured content for {}",
+                usfm_path.display()
+            );
+            let _ = (&usfm_path, &usj_path);
+        }
+    }
+
+    #[test]
+    #[ignore = "Exact byte roundtrip through USJ/USX is too source-spelling-sensitive right now"]
+    fn validated_pass_fixtures_are_lossless_across_usj_and_usx_roundtrip() {
+        for (usfm_path, usj_path) in collect_usj_fixture_pairs(Path::new("testData")) {
+            if !fixture_is_validated_pass(&usj_path) {
+                continue;
+            }
+
+            let usx_path = usj_path.with_file_name("origin.xml");
+            if !usx_path.exists() {
+                continue;
+            }
+
+            let expected = fs::read_to_string(&usfm_path)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
+            let usj = usfm_to_usj(&expected)
+                .unwrap_or_else(|error| panic!("USFM -> USJ failed for {}: {error}", usfm_path.display()));
+            let usx = crate::usx::usj_to_usx(&usj)
+                .unwrap_or_else(|error| panic!("USJ -> USX failed for {}: {error}", usfm_path.display()));
+            let roundtripped_usj = crate::usx::usx_to_usj(&usx)
+                .unwrap_or_else(|error| panic!("USX -> USJ failed for {}: {error}", usfm_path.display()));
+            let actual = from_usj(&roundtripped_usj)
+                .unwrap_or_else(|error| panic!("USJ -> USFM failed for {}: {error}", usfm_path.display()));
+
+            assert_eq!(
+                normalize_usfm_fixture_text(&actual),
+                normalize_usfm_fixture_text(&expected),
+                "validated pass fixture should survive usfm -> usj -> usx -> usj -> usfm for {}",
                 usfm_path.display()
             );
         }

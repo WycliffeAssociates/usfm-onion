@@ -1,43 +1,54 @@
 # Benchmarks
 
-This folder has two benchmark layers:
+This folder now only contains active Criterion benches for the current engine surface.
 
-- `public_api.rs`: smaller API-surface and representative single-document benchmarks using Criterion
-- `ops_lint.rs`: focused Criterion benchmarks for the token-first lint ops path
-- `conversions.rs`: focused Criterion benchmarks for individual conversion/projection paths
-- `corpus_matrix.rs`: whole-corpus throughput measurements intended for practical serial-vs-parallel comparisons
-- `wasm_corpus_matrix.mjs`: whole-corpus throughput measurements for the `pkg-web` WASM build in Node
+Focused benches:
 
-## Whole-Corpus Matrix
+- `lexer`
+- `parse`
+- `cst`
+- `cst_walk`
+- `usj`
+- `usx`
+- `lint`
+- `format`
+- `diff`
+- `html`
 
-Run the corpus sweep with:
+Convenience bench:
 
-```bash
-cargo bench --bench corpus_matrix --features rayon -- --iterations 3 --markdown
-```
+- `omni`
 
-If you want to build the benchmark target once and run the produced executable directly:
+`omni` is the broad sweep. It does not replace the focused benches; it is just the fastest way to get one pass over the main operations.
 
-```bash
-cargo build --release --features rayon --lib --bench corpus_matrix
-target/release/deps/corpus_matrix-<hash> --iterations 3 --markdown
-```
+## Corpus Selection
 
-The markdown output is designed to paste directly into the `Corpus Timing Snapshot` section of the root README.
+Whole-corpus runs use the `USFM_BENCH_CORPORA` environment variable.
 
-Corpora used by the benchmark:
-
-- `example-corpora/examples.bsb`
-- `example-corpora/bdf_reg`
-- `example-corpora/en_ult`
-
-## WASM Matrix
-
-Build the web-target package and run the WASM sweep with:
+Examples:
 
 ```bash
-wasm-pack build --manifest-path crates/usfm_onion_wasm/Cargo.toml --target web --release --out-dir ../../pkg-web --out-name usfm_onion_web
-node benches/wasm_corpus_matrix.mjs --iterations 3 --markdown
+USFM_BENCH_CORPORA=examples.bsb cargo bench --bench lint
+USFM_BENCH_CORPORA="en_ulb en_ult" cargo bench --bench format
+USFM_BENCH_CORPORA=all cargo bench --bench omni
 ```
 
-The markdown output is designed to paste directly into the `WASM Timing Snapshot` section of the root README.
+## Typical Commands
+
+Run one focused bench:
+
+```bash
+cargo bench --bench diff
+```
+
+Run the broad sweep:
+
+```bash
+cargo bench --bench omni
+```
+
+Run a whole-corpus convenience sweep:
+
+```bash
+USFM_BENCH_CORPORA=examples.bsb cargo bench --bench omni
+```

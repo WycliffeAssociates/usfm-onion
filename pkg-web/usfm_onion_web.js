@@ -1,96 +1,356 @@
 /* @ts-self-types="./usfm_onion_web.d.ts" */
 
-/**
- * @returns {string[]}
- */
-export function allMarkers() {
-    const ret = wasm.allMarkers();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebRevertDiffBlockRequest} request
- * @returns {WebToken[]}
- */
-export function applyRevertByBlockId(request) {
-    const ret = wasm.applyRevertByBlockId(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebApplyRevertsByBlockIdRequest} request
- * @returns {WebToken[]}
- */
-export function applyRevertsByBlockId(request) {
-    const ret = wasm.applyRevertsByBlockId(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebApplyTokenFixesRequest} request
- * @returns {WebTokenTransformResult}
- */
-export function applyTokenFixes(request) {
-    const ret = wasm.applyTokenFixes(request);
-    return ret;
-}
-
-/**
- * Convert AST runtime JSON into HTML output.
- * @param {any} document
- * @param {WebHtmlOptions | null} [options]
- * @returns {string}
- */
-export function astToHtml(document, options) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.astToHtml(document, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
+export class ParsedUsfm {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(ParsedUsfm.prototype);
+        obj.__wbg_ptr = ptr;
+        ParsedUsfmFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ParsedUsfmFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_parsedusfm_free(ptr, 0);
+    }
+    /**
+     * @returns {any}
+     */
+    cst() {
+        const ret = wasm.parsedusfm_cst(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
         }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {ParsedUsfm} other
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    diff(other, options) {
+        _assertClass(other, ParsedUsfm);
+        const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {ParsedUsfm} other
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    diffByChapter(other, options) {
+        _assertClass(other, ParsedUsfm);
+        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {any | null} [options]
+     * @returns {string}
+     */
+    format(options) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.parsedusfm_format(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    lint(options) {
+        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {any | null} [options]
+     * @returns {string}
+     */
+    to_html(options) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.parsedusfm_to_html(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
+     * @returns {string}
+     */
+    to_usfm() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.parsedusfm_to_usfm(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * @returns {any}
+     */
+    to_usj() {
+        const ret = wasm.parsedusfm_to_usj(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {string}
+     */
+    to_usx() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.parsedusfm_to_usx(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
+     * @returns {any}
+     */
+    to_vref() {
+        const ret = wasm.parsedusfm_to_vref(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    tokens() {
+        const ret = wasm.parsedusfm_tokens(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
 }
+if (Symbol.dispose) ParsedUsfm.prototype[Symbol.dispose] = ParsedUsfm.prototype.free;
 
-/**
- * Flatten AST runtime JSON back into canonical flat tokens.
- *
- * The input is accepted as `JsValue` at the Rust boundary, but the generated
- * TypeScript declarations publish the concrete `AstDocument` shape.
- * @param {any} document
- * @returns {WebToken[]}
- */
-export function astToTokens(document) {
-    const ret = wasm.astToTokens(document);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
+export class ParsedUsfmBatch {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(ParsedUsfmBatch.prototype);
+        obj.__wbg_ptr = ptr;
+        ParsedUsfmBatchFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
     }
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ParsedUsfmBatchFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_parsedusfmbatch_free(ptr, 0);
+    }
+    /**
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    format(options) {
+        const ret = wasm.parsedusfmbatch_format(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {Array<any>}
+     */
+    items() {
+        const ret = wasm.parsedusfmbatch_items(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    lint(options) {
+        const ret = wasm.parsedusfmbatch_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    to_html(options) {
+        const ret = wasm.parsedusfmbatch_to_html(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    to_usfm() {
+        const ret = wasm.parsedusfmbatch_to_usfm(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    to_usj() {
+        const ret = wasm.parsedusfmbatch_to_usj(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    to_usx() {
+        const ret = wasm.parsedusfmbatch_to_usx(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    to_vref() {
+        const ret = wasm.parsedusfmbatch_to_vref(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {any}
+     */
+    tokens() {
+        const ret = wasm.parsedusfmbatch_tokens(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
 }
+if (Symbol.dispose) ParsedUsfmBatch.prototype[Symbol.dispose] = ParsedUsfmBatch.prototype.free;
+
+export class UsfmMarkerCatalog {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(UsfmMarkerCatalog.prototype);
+        obj.__wbg_ptr = ptr;
+        UsfmMarkerCatalogFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        UsfmMarkerCatalogFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_usfmmarkercatalog_free(ptr, 0);
+    }
+    /**
+     * @returns {any}
+     */
+    all() {
+        const ret = wasm.usfmmarkercatalog_all(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {string} marker
+     * @returns {boolean}
+     */
+    contains(marker) {
+        const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.usfmmarkercatalog_contains(this.__wbg_ptr, ptr0, len0);
+        return ret !== 0;
+    }
+    /**
+     * @param {string} marker
+     * @returns {any}
+     */
+    get(marker) {
+        const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.usfmmarkercatalog_get(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+}
+if (Symbol.dispose) UsfmMarkerCatalog.prototype[Symbol.dispose] = UsfmMarkerCatalog.prototype.free;
 
 /**
- * Convert AST runtime JSON into typed USJ output.
- * @param {any} document
+ * @param {any} left
+ * @param {any} right
+ * @param {any | null} [options]
  * @returns {any}
  */
-export function astToUsj(document) {
-    const ret = wasm.astToUsj(document);
+export function diffTokens(left, right, options) {
+    const ret = wasm.diffTokens(left, right, isLikeNone(options) ? 0 : addToExternrefTable0(options));
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -98,108 +358,17 @@ export function astToUsj(document) {
 }
 
 /**
- * Convert AST runtime JSON into USX output.
- * @param {any} document
- * @returns {string}
+ * @param {string} left
+ * @param {string} right
+ * @param {any | null} [options]
+ * @returns {any}
  */
-export function astToUsx(document) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.astToUsx(document);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * Convert AST runtime JSON into VREF output.
- * @param {any} document
- * @returns {WebVrefEntry[]}
- */
-export function astToVref(document) {
-    const ret = wasm.astToVref(document);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebBuildSidBlocksRequest} request
- * @returns {WebSidBlock[]}
- */
-export function buildSidBlocks(request) {
-    const ret = wasm.buildSidBlocks(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string[]}
- */
-export function characterMarkers() {
-    const ret = wasm.characterMarkers();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebToken[]} tokens
- * @returns {WebTokenVariant[]}
- */
-export function classifyTokens(tokens) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+export function diffUsfm(left, right, options) {
+    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.classifyTokens(ptr0, len0);
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * @param {WebContentRequest} request
- * @returns {string}
- */
-export function convertContent(request) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.convertContent(request);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * @param {any} document
- * @param {any} token_ref
- * @returns {WebToken}
- */
-export function cstToken(document, token_ref) {
-    const ret = wasm.cstToken(document, token_ref);
+    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -207,170 +376,17 @@ export function cstToken(document, token_ref) {
 }
 
 /**
- * @param {any} document
- * @param {any} token_ref
- * @returns {string}
+ * @param {string} left
+ * @param {string} right
+ * @param {any | null} [options]
+ * @returns {any}
  */
-export function cstTokenText(document, token_ref) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.cstTokenText(document, token_ref);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * @param {any} document
- * @param {any} token_ref
- * @returns {string}
- */
-export function cstTokenValue(document, token_ref) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.cstTokenValue(document, token_ref);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * @param {WebDiffChapterTokenStreamsRequest} request
- * @returns {WebChapterTokenDiff[]}
- */
-export function diffChapterTokenStreams(request) {
-    const ret = wasm.diffChapterTokenStreams(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Parse both sources, project canonical flat tokens, then diff.
- *
- * If you already have canonical flat tokens, prefer `diffTokens(...)`.
- * @param {WebDiffContentRequest} request
- * @returns {WebChapterTokenDiff[]}
- */
-export function diffContent(request) {
-    const ret = wasm.diffContent(request);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebDiffSidBlocksRequest} request
- * @returns {WebSidBlockDiff[]}
- */
-export function diffSidBlocks(request) {
-    const ret = wasm.diffSidBlocks(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Diff canonical flat token streams without reparsing source content.
- * @param {WebDiffTokensRequest} request
- * @returns {WebChapterTokenDiff[]}
- */
-export function diffTokens(request) {
-    const ret = wasm.diffTokens(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebDiffUsfmRequest} request
- * @returns {WebChapterTokenDiff[]}
- */
-export function diffUsfm(request) {
-    const ret = wasm.diffUsfm(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebDiffUsfmRequest} request
- * @returns {WebChapterDiffGroup[]}
- */
-export function diffUsfmByChapter(request) {
-    const ret = wasm.diffUsfmByChapter(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebDiffUsfmRequest} request
- * @returns {WebChapterTokenDiff[]}
- */
-export function diffUsfmSources(request) {
-    const ret = wasm.diffUsfmSources(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebDiffUsfmRequest} request
- * @returns {WebChapterDiffGroup[]}
- */
-export function diffUsfmSourcesByChapter(request) {
-    const ret = wasm.diffUsfmSourcesByChapter(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebChapterDiffGroup[]} groups
- * @returns {WebChapterTokenDiff[]}
- */
-export function flattenDiffMap(groups) {
-    const ptr0 = passArrayJsValueToWasm0(groups, wasm.__wbindgen_malloc);
+export function diffUsfmByChapter(left, right, options) {
+    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.flattenDiffMap(ptr0, len0);
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * Parse content, project tokens, then run the formatter.
- *
- * If you already have canonical flat tokens, prefer `formatFlatTokens(...)`.
- * @param {WebFormatContentRequest} request
- * @returns {WebTokenTransformResult}
- */
-export function formatContent(request) {
-    const ret = wasm.formatContent(request);
+    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -378,72 +394,78 @@ export function formatContent(request) {
 }
 
 /**
- * @param {WebFormatContentsRequest} request
- * @returns {WebTransformOpResult[]}
+ * @returns {any}
  */
-export function formatContents(request) {
-    const ret = wasm.formatContents(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Format canonical flat tokens without reparsing source content.
- * @param {WebFormatTokensRequest} request
- * @returns {WebTokenTransformResult}
- */
-export function formatFlatTokens(request) {
-    const ret = wasm.formatFlatTokens(request);
-    return ret;
-}
-
-/**
- * Format batches of canonical flat token streams without reparsing source content.
- * @param {WebFormatTokenBatchesRequest} request
- * @returns {WebTokenTransformResult[]}
- */
-export function formatTokenBatches(request) {
-    const ret = wasm.formatTokenBatches(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {any} document
- * @returns {string}
- */
-export function fromUsj(document) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.fromUsj(document);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+export function formatRuleMeta() {
+    const ret = wasm.formatRuleMeta();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
     }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
- * @param {string} content
+ * @returns {any}
+ */
+export function formatRules() {
+    const ret = wasm.formatRules();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} token_batches
+ * @param {any | null} [options]
+ * @returns {any}
+ */
+export function formatTokenBatch(token_batches, options) {
+    const ret = wasm.formatTokenBatch(token_batches, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} tokens
+ * @param {any | null} [options]
+ * @returns {any}
+ */
+export function formatTokens(tokens, options) {
+    const ret = wasm.formatTokens(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} tokens
+ * @param {any | null} [options]
+ * @returns {any}
+ */
+export function formatTokensMut(tokens, options) {
+    const ret = wasm.formatTokensMut(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {string} source
+ * @param {any | null} [options]
  * @returns {string}
  */
-export function fromUsx(content) {
+export function formatUsfm(source, options) {
     let deferred3_0;
     let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.fromUsx(ptr0, len0);
+        const ret = wasm.formatUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
@@ -456,172 +478,6 @@ export function fromUsx(content) {
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-}
-
-/**
- * Project a parsed document into the canonical AST.
- *
- * The wasm package ships explicit TypeScript declarations for the AST
- * runtime shape, so downstream code can import and use `AstDocument`,
- * `AstNode`, and `AstElement`.
- * @param {WebParsedDocument} document
- * @returns {any}
- */
-export function intoAst(document) {
-    const ret = wasm.intoAst(document);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {WebParsedDocument} document
- * @param {WebHtmlOptions | null} [options]
- * @returns {string}
- */
-export function intoHtml(document, options) {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.intoHtml(document, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
- * Project a previously parsed document into canonical flat tokens.
- * @param {WebIntoTokensRequest} request
- * @returns {WebToken[]}
- */
-export function intoTokens(request) {
-    const ret = wasm.intoTokens(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebIntoTokensBatchRequest} request
- * @returns {WebTokenBatch[]}
- */
-export function intoTokensBatch(request) {
-    const ret = wasm.intoTokensBatch(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Parse raw content and immediately project flat tokens.
- *
- * Prefer `parseContent(...)` plus `intoTokens(...)` when you will also lint,
- * format, diff, or project other views from the same source.
- * @param {WebIntoTokensFromContentRequest} request
- * @returns {WebToken[]}
- */
-export function intoTokensFromContent(request) {
-    const ret = wasm.intoTokensFromContent(request);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebIntoTokensFromContentsRequest} request
- * @returns {WebTokensOpResult[]}
- */
-export function intoTokensFromContents(request) {
-    const ret = wasm.intoTokensFromContents(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebParsedDocument} document
- * @returns {any}
- */
-export function intoUsj(document) {
-    const ret = wasm.intoUsj(document);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {WebIntoUsxRequest} request
- * @returns {string}
- */
-export function intoUsx(request) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.intoUsx(request);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * @param {WebParsedDocument} document
- * @returns {WebVrefEntry[]}
- */
-export function intoVref(document) {
-    const ret = wasm.intoVref(document);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isBodyParagraphMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isBodyParagraphMarker(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isCharacterMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isCharacterMarker(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isDocumentMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isDocumentMarker(ptr0, len0);
-    return ret !== 0;
 }
 
 /**
@@ -636,231 +492,84 @@ export function isKnownMarker(marker) {
 }
 
 /**
- * @param {string} marker
- * @returns {boolean}
+ * @returns {any}
  */
-export function isNoteContainer(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isNoteContainer(ptr0, len0);
-    return ret !== 0;
+export function lintCodeMeta() {
+    const ret = wasm.lintCodeMeta();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isNoteSubmarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isNoteSubmarker(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isParagraphMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isParagraphMarker(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isPoetryMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isPoetryMarker(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * @param {string} marker
- * @returns {boolean}
- */
-export function isRegularCharacterMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.isRegularCharacterMarker(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * @param {WebLexSourcesRequest} request
- * @returns {WebScanResult[]}
- */
-export function lexSources(request) {
-    const ret = wasm.lexSources(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string[]}
+ * @returns {any}
  */
 export function lintCodes() {
     const ret = wasm.lintCodes();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Parse content, project tokens, then lint.
- *
- * If you already have canonical flat tokens, prefer `lintFlatTokens(...)`.
- * @param {WebLintContentRequest} request
- * @returns {WebLintIssue[]}
- */
-export function lintContent(request) {
-    const ret = wasm.lintContent(request);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
     }
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
- * @param {WebLintContentsRequest} request
- * @returns {WebLintOpResult[]}
+ * @param {any} token_batches
+ * @param {any | null} [options]
+ * @returns {any}
  */
-export function lintContents(request) {
-    const ret = wasm.lintContents(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+export function lintTokenBatch(token_batches, options) {
+    const ret = wasm.lintTokenBatch(token_batches, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
- * @param {WebLintDocumentRequest} request
- * @returns {WebLintIssue[]}
+ * @param {any} tokens
+ * @param {any | null} [options]
+ * @returns {any}
  */
-export function lintDocument(request) {
-    const ret = wasm.lintDocument(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+export function lintTokens(tokens, options) {
+    const ret = wasm.lintTokens(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
- * @param {WebLintDocumentBatchRequest} request
- * @returns {WebLintBatch[]}
+ * @param {string} source
+ * @param {any | null} [options]
+ * @returns {any}
  */
-export function lintDocumentBatch(request) {
-    const ret = wasm.lintDocumentBatch(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+export function lintUsfm(source, options) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.lintUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
- * Lint canonical flat tokens without reparsing source content.
- * @param {WebLintTokensRequest} request
- * @returns {WebLintIssue[]}
+ * @returns {UsfmMarkerCatalog}
  */
-export function lintFlatTokens(request) {
-    const ret = wasm.lintFlatTokens(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Lint batches of canonical flat token streams without reparsing source content.
- * @param {WebLintTokenBatchesRequest} request
- * @returns {WebLintBatch[]}
- */
-export function lintTokenBatches(request) {
-    const ret = wasm.lintTokenBatches(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+export function markerCatalog() {
+    const ret = wasm.markerCatalog();
+    return UsfmMarkerCatalog.__wrap(ret);
 }
 
 /**
  * @param {string} marker
- * @returns {WebMarkerInfo}
+ * @returns {any}
  */
 export function markerInfo(marker) {
     const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.markerInfo(ptr0, len0);
-    return ret;
-}
-
-/**
- * @param {string} marker
- * @returns {WebMarkerNoteFamily | undefined}
- */
-export function noteMarkerFamily(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.noteMarkerFamily(ptr0, len0);
-    return ret;
-}
-
-/**
- * @returns {string[]}
- */
-export function noteMarkers() {
-    const ret = wasm.noteMarkers();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string[]}
- */
-export function noteSubmarkers() {
-    const ret = wasm.noteSubmarkers();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string}
- */
-export function packageVersion() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.packageVersion();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
- * @returns {string[]}
- */
-export function paragraphMarkers() {
-    const ret = wasm.paragraphMarkers();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Parse raw content once and keep the returned document if you plan to project
- * multiple views from it.
- * @param {WebParseContentRequest} request
- * @returns {WebParsedDocument}
- */
-export function parseContent(request) {
-    const ret = wasm.parseContent(request);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -868,509 +577,72 @@ export function parseContent(request) {
 }
 
 /**
- * @param {WebParseContentsRequest} request
- * @returns {WebParsedOpResult[]}
+ * @param {string} source
+ * @returns {ParsedUsfm}
  */
-export function parseContents(request) {
-    const ret = wasm.parseContents(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
+export function parse(source) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.parse(ptr0, len0);
+    return ParsedUsfm.__wrap(ret);
 }
 
 /**
- * @param {WebLexSourcesRequest} request
- * @returns {WebParsedDocument[]}
+ * @param {any} sources
+ * @returns {ParsedUsfmBatch}
  */
-export function parseSources(request) {
-    const ret = wasm.parseSources(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebProjectContentRequest} request
- * @returns {WebProjectedUsfmDocument}
- */
-export function projectContent(request) {
-    const ret = wasm.projectContent(request);
+export function parseBatch(sources) {
+    const ret = wasm.parseBatch(sources);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
-    return takeFromExternrefTable0(ret[0]);
+    return ParsedUsfmBatch.__wrap(ret[0]);
 }
 
 /**
- * @param {WebProjectContentsRequest} request
- * @returns {WebProjectedOpResult[]}
- */
-export function projectContents(request) {
-    const ret = wasm.projectContents(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebProjectDocumentRequest} request
- * @returns {WebProjectedUsfmDocument}
- */
-export function projectDocument(request) {
-    const ret = wasm.projectDocument(request);
-    return ret;
-}
-
-/**
- * @param {WebProjectContentsRequest} request
- * @returns {WebProjectedUsfmDocument[]}
- */
-export function projectUsfmBatch(request) {
-    const ret = wasm.projectUsfmBatch(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebToken[]} tokens
- * @returns {WebToken[]}
- */
-export function pushWhitespace(tokens) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.pushWhitespace(ptr0, len0);
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * @param {WebReplaceChapterDiffsInMapRequest} request
- * @returns {WebChapterDiffGroup[]}
- */
-export function replaceChapterDiffsInMap(request) {
-    const ret = wasm.replaceChapterDiffsInMap(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebReplaceManyChapterDiffsInMapRequest} request
- * @returns {WebChapterDiffGroup[]}
- */
-export function replaceManyChapterDiffsInMap(request) {
-    const ret = wasm.replaceManyChapterDiffsInMap(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebRevertDiffBlockRequest} request
- * @returns {WebToken[]}
- */
-export function revertDiffBlock(request) {
-    const ret = wasm.revertDiffBlock(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @param {WebApplyRevertsByBlockIdRequest} request
- * @returns {WebToken[]}
- */
-export function revertDiffBlocks(request) {
-    const ret = wasm.revertDiffBlocks(request);
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string[]}
- */
-export function tokenFixCodes() {
-    const ret = wasm.tokenFixCodes();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string[]}
- */
-export function tokenTransformChangeCodes() {
-    const ret = wasm.tokenTransformChangeCodes();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * @returns {string[]}
- */
-export function tokenTransformSkipReasonCodes() {
-    const ret = wasm.tokenTransformSkipReasonCodes();
-    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v1;
-}
-
-/**
- * Project canonical flat tokens into AST runtime JSON.
- * @param {WebToken[]} tokens
- * @returns {any}
- */
-export function tokensToAst(tokens) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.tokensToAst(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {WebToken[]} tokens
- * @param {WebHtmlOptions | null} [options]
+ * @param {any} tokens
+ * @param {any | null} [options]
  * @returns {string}
  */
 export function tokensToHtml(tokens, options) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.tokensToHtml(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * @param {WebToken[]} tokens
- * @returns {string}
- */
-export function tokensToUsfm(tokens) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.tokensToUsfm(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
+        const ret = wasm.tokensToHtml(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
 /**
- * @param {WebToken[]} tokens
- * @returns {any}
- */
-export function tokensToUsj(tokens) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.tokensToUsj(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {WebToken[]} tokens
+ * @param {any} tokens
  * @returns {string}
  */
-export function tokensToUsx(tokens) {
-    let deferred3_0;
-    let deferred3_1;
+export function tokensToUsfm(tokens) {
+    let deferred2_0;
+    let deferred2_1;
     try {
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.tokensToUsx(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
+        const ret = wasm.tokensToUsfm(tokens);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
+            ptr1 = 0; len1 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * @param {WebToken[]} tokens
- * @returns {WebVrefEntry[]}
- */
-export function tokensToVref(tokens) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.tokensToVref(ptr0, len0);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * Project USFM directly into AST runtime JSON.
- * @param {string} content
- * @returns {any}
- */
-export function usfmToAst(content) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usfmToAst(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {string} content
- * @param {WebHtmlOptions | null} [options]
- * @returns {string}
- */
-export function usfmToHtml(content, options) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.usfmToHtml(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * @param {string} content
- * @returns {WebTokenVariant[]}
- */
-export function usfmToTokenVariants(content) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usfmToTokenVariants(ptr0, len0);
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * @param {string} content
- * @param {WebIntoTokensOptions | null} [token_options]
- * @returns {WebToken[]}
- */
-export function usfmToTokens(content, token_options) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usfmToTokens(ptr0, len0, isLikeNone(token_options) ? 0 : addToExternrefTable0(token_options));
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * @param {string} content
- * @returns {any}
- */
-export function usfmToUsj(content) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usfmToUsj(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {string} content
- * @returns {string}
- */
-export function usfmToUsx(content) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.usfmToUsx(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * @param {string} content
- * @returns {WebVrefEntry[]}
- */
-export function usfmToVref(content) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usfmToVref(ptr0, len0);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * Project USJ directly into AST runtime JSON.
- * @param {string} content
- * @returns {any}
- */
-export function usjToAst(content) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usjToAst(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {string} content
- * @param {WebIntoTokensOptions | null} [token_options]
- * @returns {WebToken[]}
- */
-export function usjToTokens(content, token_options) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usjToTokens(ptr0, len0, isLikeNone(token_options) ? 0 : addToExternrefTable0(token_options));
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * @param {string} content
- * @returns {string}
- */
-export function usjToUsfm(content) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.usjToUsfm(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * Project USX directly into AST runtime JSON.
- * @param {string} content
- * @returns {any}
- */
-export function usxToAst(content) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usxToAst(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {string} content
- * @param {WebIntoTokensOptions | null} [token_options]
- * @returns {WebToken[]}
- */
-export function usxToTokens(content, token_options) {
-    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.usxToTokens(ptr0, len0, isLikeNone(token_options) ? 0 : addToExternrefTable0(token_options));
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
-}
-
-/**
- * @param {string} content
- * @returns {string}
- */
-export function usxToUsfm(content) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.usxToUsfm(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -1392,12 +664,6 @@ function __wbg_get_imports() {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda: function(arg0, arg1) {
-            const v = arg1;
-            const ret = typeof(v) === 'bigint' ? v : undefined;
-            getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
-            getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
-        },
         __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1: function(arg0) {
             const v = arg0;
             const ret = typeof(v) === 'boolean' ? v : undefined;
@@ -1414,12 +680,12 @@ function __wbg_get_imports() {
             const ret = arg0 in arg1;
             return ret;
         },
-        __wbg___wbindgen_is_bigint_e2141d4f045b7eda: function(arg0) {
-            const ret = typeof(arg0) === 'bigint';
-            return ret;
-        },
         __wbg___wbindgen_is_function_3c846841762788c1: function(arg0) {
             const ret = typeof(arg0) === 'function';
+            return ret;
+        },
+        __wbg___wbindgen_is_null_0b605fc6b167c56f: function(arg0) {
+            const ret = arg0 === null;
             return ret;
         },
         __wbg___wbindgen_is_object_781bc9f159099513: function(arg0) {
@@ -1433,10 +699,6 @@ function __wbg_get_imports() {
         },
         __wbg___wbindgen_is_undefined_52709e72fb9f179c: function(arg0) {
             const ret = arg0 === undefined;
-            return ret;
-        },
-        __wbg___wbindgen_jsval_eq_ee31bfad3e536463: function(arg0, arg1) {
-            const ret = arg0 === arg1;
             return ret;
         },
         __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b: function(arg0, arg1) {
@@ -1468,18 +730,10 @@ function __wbg_get_imports() {
             const ret = arg0.done;
             return ret;
         },
-        __wbg_entries_e8a20ff8c9757101: function(arg0) {
-            const ret = Object.entries(arg0);
-            return ret;
-        },
         __wbg_get_326e41e095fb2575: function() { return handleError(function (arg0, arg1) {
             const ret = Reflect.get(arg0, arg1);
             return ret;
         }, arguments); },
-        __wbg_get_a8ee5c45dabc1b3b: function(arg0, arg1) {
-            const ret = arg0[arg1 >>> 0];
-            return ret;
-        },
         __wbg_get_unchecked_329cfe50afab7352: function(arg0, arg1) {
             const ret = arg0[arg1 >>> 0];
             return ret;
@@ -1492,16 +746,6 @@ function __wbg_get_imports() {
             let result;
             try {
                 result = arg0 instanceof ArrayBuffer;
-            } catch (_) {
-                result = false;
-            }
-            const ret = result;
-            return ret;
-        },
-        __wbg_instanceof_Map_f194b366846aca0c: function(arg0) {
-            let result;
-            try {
-                result = arg0 instanceof Map;
             } catch (_) {
                 result = false;
             }
@@ -1554,6 +798,10 @@ function __wbg_get_imports() {
             const ret = new Object();
             return ret;
         },
+        __wbg_new_typed_bccac67128ed885a: function() {
+            const ret = new Array();
+            return ret;
+        },
         __wbg_next_11b99ee6237339e3: function() { return handleError(function (arg0) {
             const ret = arg0.next();
             return ret;
@@ -1562,12 +810,16 @@ function __wbg_get_imports() {
             const ret = arg0.next;
             return ret;
         },
-        __wbg_parse_e9eddd2a82c706eb: function() { return handleError(function (arg0, arg1) {
-            const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
+        __wbg_parsedusfm_new: function(arg0) {
+            const ret = ParsedUsfm.__wrap(arg0);
             return ret;
-        }, arguments); },
+        },
         __wbg_prototypesetcall_d62e5099504357e6: function(arg0, arg1, arg2) {
             Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
+        },
+        __wbg_push_e87b0e732085a946: function(arg0, arg1) {
+            const ret = arg0.push(arg1);
+            return ret;
         },
         __wbg_set_282384002438957f: function(arg0, arg1, arg2) {
             arg0[arg1 >>> 0] = arg2;
@@ -1579,10 +831,6 @@ function __wbg_get_imports() {
             const ret = arg0.set(arg1, arg2);
             return ret;
         },
-        __wbg_stringify_5ae93966a84901ac: function() { return handleError(function (arg0) {
-            const ret = JSON.stringify(arg0);
-            return ret;
-        }, arguments); },
         __wbg_value_21fc78aab0322612: function(arg0) {
             const ret = arg0.value;
             return ret;
@@ -1592,17 +840,12 @@ function __wbg_get_imports() {
             const ret = arg0;
             return ret;
         },
-        __wbindgen_cast_0000000000000002: function(arg0) {
-            // Cast intrinsic for `I64 -> Externref`.
-            const ret = arg0;
-            return ret;
-        },
-        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_0000000000000004: function(arg0) {
+        __wbindgen_cast_0000000000000003: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return ret;
@@ -1623,10 +866,26 @@ function __wbg_get_imports() {
     };
 }
 
+const ParsedUsfmFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfm_free(ptr >>> 0, 1));
+const ParsedUsfmBatchFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfmbatch_free(ptr >>> 0, 1));
+const UsfmMarkerCatalogFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_usfmmarkercatalog_free(ptr >>> 0, 1));
+
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
     return idx;
+}
+
+function _assertClass(instance, klass) {
+    if (!(instance instanceof klass)) {
+        throw new Error(`expected instance of ${klass.name}`);
+    }
 }
 
 function debugString(val) {
@@ -1694,17 +953,6 @@ function debugString(val) {
     return className;
 }
 
-function getArrayJsValueFromWasm0(ptr, len) {
-    ptr = ptr >>> 0;
-    const mem = getDataViewMemory0();
-    const result = [];
-    for (let i = ptr; i < ptr + 4 * len; i += 4) {
-        result.push(wasm.__wbindgen_externrefs.get(mem.getUint32(i, true)));
-    }
-    wasm.__externref_drop_slice(ptr, len);
-    return result;
-}
-
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
@@ -1742,16 +990,6 @@ function handleError(f, args) {
 
 function isLikeNone(x) {
     return x === undefined || x === null;
-}
-
-function passArrayJsValueToWasm0(array, malloc) {
-    const ptr = malloc(array.length * 4, 4) >>> 0;
-    for (let i = 0; i < array.length; i++) {
-        const add = addToExternrefTable0(array[i]);
-        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
-    }
-    WASM_VECTOR_LEN = array.length;
-    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {

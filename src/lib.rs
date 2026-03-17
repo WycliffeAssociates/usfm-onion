@@ -22,8 +22,8 @@ pub mod usx;
 pub mod vref;
 
 pub use api::{
-    BatchItem, ExecutionMode, SourceTokenText, TokenBatch, TokenStream, Usfm, UsfmBatch, Usj,
-    UsjBatch, Usx, UsxBatch,
+    BatchItem, ExecutionMode, OwnedParseAnalysis, ParsedUsfm, ParsedUsfmBatch, SourceTokenText,
+    TokenBatch, TokenStream, Usfm, UsfmBatch, Usj, UsjBatch, Usx, UsxBatch,
 };
 pub use cst::{CstDocument, CstNode, CstWalkIter, WalkItem};
 pub use diff::{
@@ -38,6 +38,10 @@ pub use html::{HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions};
 pub use lint_impl::{
     LintCategory, LintCode, LintIssue, LintOptions, LintResult, LintSeverity, LintSummary,
     LintSuppression, LintableToken,
+};
+pub use markers::{
+    MarkerCategory, MarkerInlineContext, MarkerKind, MarkerNoteFamily, MarkerNoteSubkind,
+    UsfmMarkerCatalog, UsfmMarkerInfo, is_known_marker, marker_catalog, marker_info,
 };
 pub use token::{
     AttributeEntryToken, AttributeItem, BookCodeToken, LexResult, Lexeme, LexemeKind,

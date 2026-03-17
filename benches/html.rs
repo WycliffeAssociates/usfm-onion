@@ -1,6 +1,6 @@
 mod common;
 
-use common::{selected_corpus_batches, standard_corpus_cases};
+use common::{batch_label, case_label, selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use usfm_onion::html::{HtmlOptions, tokens_to_html, usfm_to_html};
 use usfm_onion::parse::parse;
@@ -14,9 +14,9 @@ fn benchmark_html(c: &mut Criterion) {
     let mut token_group = c.benchmark_group("html/tokens");
     for case in &corpus_cases {
         let parsed = parse(case.source.as_str());
-        token_group.throughput(Throughput::Bytes(case.source.len() as u64));
+        token_group.throughput(Throughput::Bytes(case.total_bytes as u64));
         token_group.bench_with_input(
-            BenchmarkId::new("tokens_to_html", case.name),
+            BenchmarkId::new("tokens_to_html", case_label(case)),
             case,
             |b, _case| {
                 b.iter(|| black_box(tokens_to_html(&parsed.tokens, HtmlOptions::default())));
@@ -27,8 +27,8 @@ fn benchmark_html(c: &mut Criterion) {
 
     let mut source_group = c.benchmark_group("html/source");
     for case in &corpus_cases {
-        source_group.throughput(Throughput::Bytes(case.source.len() as u64));
-        source_group.bench_with_input(BenchmarkId::new("usfm_to_html", case.name), case, |b, case| {
+        source_group.throughput(Throughput::Bytes(case.total_bytes as u64));
+        source_group.bench_with_input(BenchmarkId::new("usfm_to_html", case_label(case)), case, |b, case| {
             b.iter(|| black_box(usfm_to_html(case.source.as_str(), HtmlOptions::default())));
         });
     }
@@ -47,7 +47,7 @@ fn benchmark_html(c: &mut Criterion) {
                 .collect::<Vec<_>>();
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("tokens_to_html", &batch.name),
+                BenchmarkId::new("tokens_to_html", batch_label(batch)),
                 batch,
                 |b, _batch| {
                     b.iter(|| {
@@ -59,7 +59,7 @@ fn benchmark_html(c: &mut Criterion) {
             );
 
             whole_corpus_group.bench_with_input(
-                BenchmarkId::new("usfm_to_html", &batch.name),
+                BenchmarkId::new("usfm_to_html", batch_label(batch)),
                 batch,
                 |b, batch| {
                     b.iter(|| {

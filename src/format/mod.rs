@@ -498,8 +498,12 @@ pub fn format<T: FormattableToken + Clone>(tokens: &[T], options: FormatOptions)
     working
 }
 
-pub fn format_mut<T: FormattableToken>(tokens: &mut Vec<T>) {
-    format_tokens(tokens, FormatOptions::default());
+pub fn format_mut<T: FormattableToken>(tokens: &mut Vec<T>, options: FormatOptions) {
+    format_tokens(tokens, options);
+}
+
+pub fn format_mut_default<T: FormattableToken>(tokens: &mut Vec<T>) {
+    format_mut(tokens, FormatOptions::default());
 }
 
 pub fn format_tokens<T: FormattableToken>(tokens: &mut Vec<T>, options: FormatOptions) {
