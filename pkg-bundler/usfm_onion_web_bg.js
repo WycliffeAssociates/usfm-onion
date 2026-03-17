@@ -17,6 +17,18 @@ export class ParsedUsfm {
         wasm.__wbg_parsedusfm_free(ptr, 0);
     }
     /**
+     * @param {any | null} [lint_options]
+     * @param {any | null} [format_options]
+     * @returns {any}
+     */
+    applyTokenFixes(lint_options, format_options) {
+        const ret = wasm.parsedusfm_applyTokenFixes(this.__wbg_ptr, isLikeNone(lint_options) ? 0 : addToExternrefTable0(lint_options), isLikeNone(format_options) ? 0 : addToExternrefTable0(format_options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * @returns {any}
      */
     cst() {
@@ -80,6 +92,22 @@ export class ParsedUsfm {
      */
     lint(options) {
         const ret = wasm.parsedusfm_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {ParsedUsfm} current
+     * @param {string} block_id
+     * @param {any | null} [options]
+     * @returns {any}
+     */
+    revertDiffBlock(current, block_id, options) {
+        _assertClass(current, ParsedUsfm);
+        const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.parsedusfm_revertDiffBlock(this.__wbg_ptr, current.__wbg_ptr, ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -342,6 +370,20 @@ export class UsfmMarkerCatalog {
 if (Symbol.dispose) UsfmMarkerCatalog.prototype[Symbol.dispose] = UsfmMarkerCatalog.prototype.free;
 
 /**
+ * @param {any} tokens
+ * @param {any | null} [lint_options]
+ * @param {any | null} [format_options]
+ * @returns {any}
+ */
+export function applyTokenFixes(tokens, lint_options, format_options) {
+    const ret = wasm.applyTokenFixes(tokens, isLikeNone(lint_options) ? 0 : addToExternrefTable0(lint_options), isLikeNone(format_options) ? 0 : addToExternrefTable0(format_options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * @param {any} left
  * @param {any} right
  * @param {any | null} [options]
@@ -595,6 +637,38 @@ export function parseBatch(sources) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return ParsedUsfmBatch.__wrap(ret[0]);
+}
+
+/**
+ * @param {any} baseline
+ * @param {any} current
+ * @param {string} block_id
+ * @param {any | null} [options]
+ * @returns {any}
+ */
+export function revertDiffBlock(baseline, current, block_id, options) {
+    const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.revertDiffBlock(baseline, current, ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} baseline
+ * @param {any} current
+ * @param {any} block_ids
+ * @param {any | null} [options]
+ * @returns {any}
+ */
+export function revertDiffBlocks(baseline, current, block_ids, options) {
+    const ret = wasm.revertDiffBlocks(baseline, current, block_ids, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**

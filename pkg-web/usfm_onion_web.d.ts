@@ -267,6 +267,21 @@ export interface LintResult {
     summary: LintSummary;
 }
 
+export interface AppliedTokenFix {
+    code: LintCode;
+    tokenId?: string;
+    sid?: string;
+    marker?: string;
+}
+
+export interface ApplyTokenFixesResult {
+    tokens: FormatToken[];
+    usfm: string;
+    appliedFixes: AppliedTokenFix[];
+    remainingIssues: LintIssue[];
+    remainingSummary: LintSummary;
+}
+
 export interface FormatOptions {
     recoverMalformedMarkers?: boolean;
     collapseWhitespaceInText?: boolean;
@@ -411,6 +426,8 @@ export class ParsedUsfm {
     tokens(): Token[];
     cst(): CstDocument;
     lint(options?: LintOptions): LintResult;
+    applyTokenFixes(lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+    revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
     format(options?: FormatOptions): string;
     toUsfm(): string;
     toUsj(): UsjDocument;
@@ -445,6 +462,7 @@ export function parse(source: string): ParsedUsfm;
 export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
+export function applyTokenFixes(tokens: Token[], lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
 export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
@@ -455,6 +473,8 @@ export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
 export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions): DiffsByChapterMap;
 export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions): ChapterTokenDiff[];
+export function revertDiffBlock(baseline: Token[], current: Token[], blockId: string, options?: BuildSidBlocksOptions): Token[];
+export function revertDiffBlocks(baseline: Token[], current: Token[], blockIds: string[], options?: BuildSidBlocksOptions): Token[];
 export function markerCatalog(): UsfmMarkerCatalog;
 export function markerInfo(marker: string): MarkerInfo;
 export function isKnownMarker(marker: string): boolean;
@@ -472,6 +492,7 @@ export interface InitOutput {
     readonly __wbg_parsedusfm_free: (a: number, b: number) => void;
     readonly __wbg_parsedusfmbatch_free: (a: number, b: number) => void;
     readonly __wbg_usfmmarkercatalog_free: (a: number, b: number) => void;
+    readonly applyTokenFixes: (a: any, b: number, c: number) => [number, number, number];
     readonly diffTokens: (a: any, b: any, c: number) => [number, number, number];
     readonly diffUsfm: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -490,11 +511,13 @@ export interface InitOutput {
     readonly markerInfo: (a: number, b: number) => [number, number, number];
     readonly parse: (a: number, b: number) => number;
     readonly parseBatch: (a: any) => [number, number, number];
+    readonly parsedusfm_applyTokenFixes: (a: number, b: number, c: number) => [number, number, number];
     readonly parsedusfm_cst: (a: number) => [number, number, number];
     readonly parsedusfm_diff: (a: number, b: number, c: number) => [number, number, number];
     readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => [number, number, number];
     readonly parsedusfm_format: (a: number, b: number) => [number, number, number, number];
     readonly parsedusfm_lint: (a: number, b: number) => [number, number, number];
+    readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly parsedusfm_to_html: (a: number, b: number) => [number, number, number, number];
     readonly parsedusfm_to_usfm: (a: number) => [number, number];
     readonly parsedusfm_to_usj: (a: number) => [number, number, number];
@@ -510,6 +533,8 @@ export interface InitOutput {
     readonly parsedusfmbatch_to_usx: (a: number) => [number, number, number];
     readonly parsedusfmbatch_to_vref: (a: number) => [number, number, number];
     readonly parsedusfmbatch_tokens: (a: number) => [number, number, number];
+    readonly revertDiffBlock: (a: any, b: any, c: number, d: number, e: number) => [number, number, number];
+    readonly revertDiffBlocks: (a: any, b: any, c: any, d: number) => [number, number, number];
     readonly tokensToHtml: (a: any, b: number) => [number, number, number, number];
     readonly tokensToUsfm: (a: any) => [number, number, number, number];
     readonly usfmmarkercatalog_all: (a: number) => [number, number, number];

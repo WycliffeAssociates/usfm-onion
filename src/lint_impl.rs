@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::format::{FormatOptions, FormattableToken, format};
 use crate::marker_defs::{
     InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
     marker_allows_effective_context, marker_inline_context, marker_note_context,
@@ -167,6 +168,49 @@ pub enum LintCode {
 }
 
 impl LintCode {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::MissingIdMarker => "missing-id-marker",
+            Self::MissingSeparatorAfterMarker => "missing-separator-after-marker",
+            Self::EmptyParagraph => "empty-paragraph",
+            Self::NumberRangeAfterChapterMarker => "number-range-after-chapter-marker",
+            Self::VerseRangeExpectedAfterVerseMarker => "verse-range-expected-after-verse-marker",
+            Self::VerseContentNotEmpty => "verse-content-not-empty",
+            Self::UnknownToken => "unknown-token",
+            Self::CharNotClosed => "char-not-closed",
+            Self::NoteNotClosed => "note-not-closed",
+            Self::ParagraphBeforeFirstChapter => "paragraph-before-first-chapter",
+            Self::VerseBeforeFirstChapter => "verse-before-first-chapter",
+            Self::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
+            Self::DuplicateIdMarker => "duplicate-id-marker",
+            Self::IdMarkerNotAtFileStart => "id-marker-not-at-file-start",
+            Self::ChapterMetadataOutsideChapter => "chapter-metadata-outside-chapter",
+            Self::VerseMetadataOutsideVerse => "verse-metadata-outside-verse",
+            Self::MissingChapterNumber => "missing-chapter-number",
+            Self::MissingVerseNumber => "missing-verse-number",
+            Self::MissingMilestoneSelfClose => "missing-milestone-self-close",
+            Self::ImplicitlyClosedMarker => "implicitly-closed-marker",
+            Self::StrayCloseMarker => "stray-close-marker",
+            Self::MisnestedCloseMarker => "misnested-close-marker",
+            Self::UnclosedNote => "unclosed-note",
+            Self::UnclosedMarkerAtEof => "unclosed-marker-at-eof",
+            Self::DuplicateChapterNumber => "duplicate-chapter-number",
+            Self::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
+            Self::DuplicateVerseNumber => "duplicate-verse-number",
+            Self::VerseExpectedIncreaseByOne => "verse-expected-increase-by-one",
+            Self::InvalidNumberRange => "invalid-number-range",
+            Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                "number-range-not-preceded-by-marker-expecting-number"
+            }
+            Self::VerseTextFollowsVerseRange => "verse-text-follows-verse-range",
+            Self::UnknownMarker => "unknown-marker",
+            Self::UnknownCloseMarker => "unknown-close-marker",
+            Self::InconsistentChapterLabel => "inconsistent-chapter-label",
+            Self::MarkerNotValidInContext => "marker-not-valid-in-context",
+            Self::VerseOutsideExplicitParagraph => "verse-outside-explicit-paragraph",
+        }
+    }
+
     pub fn category(self) -> LintCategory {
         match self {
             Self::MissingIdMarker
@@ -242,6 +286,22 @@ pub struct LintSummary {
 pub struct LintResult {
     pub issues: Vec<LintIssue>,
     pub summary: LintSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AppliedTokenFix {
+    pub code: LintCode,
+    pub token_id: Option<String>,
+    pub sid: Option<String>,
+    pub marker: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ApplyTokenFixesResult<T> {
+    pub tokens: Vec<T>,
+    pub applied_fixes: Vec<AppliedTokenFix>,
+    pub remaining_issues: Vec<LintIssue>,
+    pub remaining_summary: LintSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -566,6 +626,63 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     let summary = summarize(&issues, suppressed_count);
 
     LintResult { issues, summary }
+}
+
+pub fn apply_token_fixes<T>(
+    tokens: &[T],
+    lint_options: LintOptions,
+    format_options: FormatOptions,
+) -> ApplyTokenFixesResult<T>
+where
+    T: LintableToken + FormattableToken + Clone,
+{
+    let initial = lint_tokens(tokens, lint_options.clone());
+    let fixed_tokens = format(tokens, format_options);
+    let remaining = lint_tokens(&fixed_tokens, lint_options);
+    let remaining_keys = issue_multiset(&remaining.issues);
+
+    let mut seen = remaining_keys;
+    let mut applied_fixes = Vec::new();
+    for issue in initial.issues {
+        let key = lint_issue_key(&issue);
+        if let Some(count) = seen.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            continue;
+        }
+        applied_fixes.push(AppliedTokenFix {
+            code: issue.code,
+            token_id: issue.token_id,
+            sid: issue.sid,
+            marker: issue.marker,
+        });
+    }
+
+    ApplyTokenFixesResult {
+        tokens: fixed_tokens,
+        applied_fixes,
+        remaining_issues: remaining.issues,
+        remaining_summary: remaining.summary,
+    }
+}
+
+fn issue_multiset(issues: &[LintIssue]) -> HashMap<String, usize> {
+    let mut counts = HashMap::new();
+    for issue in issues {
+        *counts.entry(lint_issue_key(issue)).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn lint_issue_key(issue: &LintIssue) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        issue.code.code(),
+        issue.token_id.as_deref().unwrap_or(""),
+        issue.sid.as_deref().unwrap_or(""),
+        issue.marker.as_deref().unwrap_or("")
+    )
 }
 
 fn lint_missing_separator_after_marker<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {

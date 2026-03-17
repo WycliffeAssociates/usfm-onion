@@ -29,6 +29,7 @@ pub use cst::{CstDocument, CstNode, CstWalkIter, WalkItem};
 pub use diff::{
     BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
     DiffableToken, DiffsByChapterMap, SidBlock, SidBlockDiff, TokenAlignment,
+    apply_revert_by_block_id, apply_reverts_by_block_id,
 };
 pub use format::{
     FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatToken, FormattableToken,
@@ -36,8 +37,8 @@ pub use format::{
 };
 pub use html::{HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions};
 pub use lint_impl::{
-    LintCategory, LintCode, LintIssue, LintOptions, LintResult, LintSeverity, LintSummary,
-    LintSuppression, LintableToken,
+    AppliedTokenFix, ApplyTokenFixesResult, LintCategory, LintCode, LintIssue, LintOptions,
+    LintResult, LintSeverity, LintSummary, LintSuppression, LintableToken, apply_token_fixes,
 };
 pub use markers::{
     MarkerCategory, MarkerInlineContext, MarkerKind, MarkerNoteFamily, MarkerNoteSubkind,

@@ -267,6 +267,21 @@ export interface LintResult {
     summary: LintSummary;
 }
 
+export interface AppliedTokenFix {
+    code: LintCode;
+    tokenId?: string;
+    sid?: string;
+    marker?: string;
+}
+
+export interface ApplyTokenFixesResult {
+    tokens: FormatToken[];
+    usfm: string;
+    appliedFixes: AppliedTokenFix[];
+    remainingIssues: LintIssue[];
+    remainingSummary: LintSummary;
+}
+
 export interface FormatOptions {
     recoverMalformedMarkers?: boolean;
     collapseWhitespaceInText?: boolean;
@@ -411,6 +426,8 @@ export class ParsedUsfm {
     tokens(): Token[];
     cst(): CstDocument;
     lint(options?: LintOptions): LintResult;
+    applyTokenFixes(lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+    revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
     format(options?: FormatOptions): string;
     toUsfm(): string;
     toUsj(): UsjDocument;
@@ -445,6 +462,7 @@ export function parse(source: string): ParsedUsfm;
 export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
+export function applyTokenFixes(tokens: Token[], lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
 export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
@@ -455,6 +473,8 @@ export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
 export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions): DiffsByChapterMap;
 export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions): ChapterTokenDiff[];
+export function revertDiffBlock(baseline: Token[], current: Token[], blockId: string, options?: BuildSidBlocksOptions): Token[];
+export function revertDiffBlocks(baseline: Token[], current: Token[], blockIds: string[], options?: BuildSidBlocksOptions): Token[];
 export function markerCatalog(): UsfmMarkerCatalog;
 export function markerInfo(marker: string): MarkerInfo;
 export function isKnownMarker(marker: string): boolean;

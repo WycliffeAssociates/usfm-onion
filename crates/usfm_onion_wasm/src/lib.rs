@@ -8,8 +8,9 @@ use usfm_onion::diff::{
     BuildSidBlocksOptions as NativeBuildSidBlocksOptions, ChapterTokenDiff as NativeChapterTokenDiff,
     DiffStatus as NativeDiffStatus, DiffTokenChange as NativeDiffTokenChange,
     DiffUndoSide as NativeDiffUndoSide, DiffableToken, DiffsByChapterMap as NativeDiffsByChapterMap,
-    SidBlock as NativeSidBlock, TokenAlignment as NativeTokenAlignment, diff_chapter_token_streams,
-    diff_usfm_sources, diff_usfm_sources_by_chapter,
+    SidBlock as NativeSidBlock, TokenAlignment as NativeTokenAlignment, apply_revert_by_block_id,
+    apply_reverts_by_block_id, diff_chapter_token_streams, diff_usfm_sources,
+    diff_usfm_sources_by_chapter,
 };
 use usfm_onion::format::{
     FormatOptions as NativeFormatOptions, FormatRule as NativeFormatRule,
@@ -21,9 +22,11 @@ use usfm_onion::html::{
     HtmlNoteMode as NativeHtmlNoteMode, HtmlOptions as NativeHtmlOptions, usfm_to_html,
 };
 use usfm_onion::lint::{
-    LintCategory as NativeLintCategory, LintCode as NativeLintCode, LintOptions as NativeLintOptions,
-    LintResult as NativeLintResult, LintSeverity as NativeLintSeverity,
-    LintSuppression as NativeLintSuppression, LintableToken, lint_tokens, lint_usfm,
+    ApplyTokenFixesResult as NativeApplyTokenFixesResult, AppliedTokenFix as NativeAppliedTokenFix,
+    LintCategory as NativeLintCategory, LintCode as NativeLintCode,
+    LintOptions as NativeLintOptions, LintResult as NativeLintResult,
+    LintSeverity as NativeLintSeverity, LintSuppression as NativeLintSuppression, LintableToken,
+    apply_token_fixes, lint_tokens, lint_usfm,
 };
 use usfm_onion::marker_defs::{
     BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, SpecContext,
@@ -314,6 +317,21 @@ export interface LintResult {
   summary: LintSummary;
 }
 
+export interface AppliedTokenFix {
+  code: LintCode;
+  tokenId?: string;
+  sid?: string;
+  marker?: string;
+}
+
+export interface ApplyTokenFixesResult {
+  tokens: FormatToken[];
+  usfm: string;
+  appliedFixes: AppliedTokenFix[];
+  remainingIssues: LintIssue[];
+  remainingSummary: LintSummary;
+}
+
 export interface FormatOptions {
   recoverMalformedMarkers?: boolean;
   collapseWhitespaceInText?: boolean;
@@ -458,6 +476,8 @@ export class ParsedUsfm {
   tokens(): Token[];
   cst(): CstDocument;
   lint(options?: LintOptions): LintResult;
+  applyTokenFixes(lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+  revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
   format(options?: FormatOptions): string;
   toUsfm(): string;
   toUsj(): UsjDocument;
@@ -492,6 +512,7 @@ export function parse(source: string): ParsedUsfm;
 export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
+export function applyTokenFixes(tokens: Token[], lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
 export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
@@ -502,6 +523,8 @@ export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
 export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions): DiffsByChapterMap;
 export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions): ChapterTokenDiff[];
+export function revertDiffBlock(baseline: Token[], current: Token[], blockId: string, options?: BuildSidBlocksOptions): Token[];
+export function revertDiffBlocks(baseline: Token[], current: Token[], blockIds: string[], options?: BuildSidBlocksOptions): Token[];
 export function markerCatalog(): UsfmMarkerCatalog;
 export function markerInfo(marker: string): MarkerInfo;
 export function isKnownMarker(marker: string): boolean;
@@ -654,6 +677,28 @@ struct LintSummaryValue {
 struct LintResultValue {
     issues: Vec<LintIssueValue>,
     summary: LintSummaryValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppliedTokenFixValue {
+    code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    token_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplyTokenFixesResultValue {
+    tokens: Vec<TokenValue>,
+    usfm: String,
+    applied_fixes: Vec<AppliedTokenFixValue>,
+    remaining_issues: Vec<LintIssueValue>,
+    remaining_summary: LintSummaryValue,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -911,6 +956,46 @@ impl ParsedUsfm {
         to_js_value(&map_lint_result(lint_usfm(&self.source, options)))
     }
 
+    #[wasm_bindgen(js_name = applyTokenFixes)]
+    pub fn apply_token_fixes(
+        &self,
+        lint_options: Option<JsValue>,
+        format_options: Option<JsValue>,
+    ) -> Result<JsValue, JsError> {
+        let parsed = native_parse(&self.source);
+        let native_tokens = parsed
+            .tokens
+            .iter()
+            .map(format_token_with_identity)
+            .collect::<Vec<_>>();
+        let result = apply_token_fixes(
+            &native_tokens,
+            parse_lint_options(lint_options)?,
+            parse_format_options(format_options)?,
+        );
+        to_js_value(&map_apply_token_fixes_result(result))
+    }
+
+    #[wasm_bindgen(js_name = revertDiffBlock)]
+    pub fn revert_diff_block(
+        &self,
+        current: &ParsedUsfm,
+        block_id: &str,
+        options: Option<JsValue>,
+    ) -> Result<JsValue, JsError> {
+        let baseline = native_parse(&self.source);
+        let current = native_parse(&current.source);
+        let baseline = baseline.tokens.iter().map(format_token_with_identity).collect::<Vec<_>>();
+        let current = current.tokens.iter().map(format_token_with_identity).collect::<Vec<_>>();
+        let reverted = apply_revert_by_block_id(
+            block_id,
+            &baseline,
+            &current,
+            &parse_build_options(options)?,
+        );
+        to_js_value(&reverted.iter().map(map_format_token).collect::<Vec<_>>())
+    }
+
     pub fn format(&self, options: Option<JsValue>) -> Result<String, JsError> {
         let options = parse_format_options(options)?;
         Ok(format_usfm(&self.source, options))
@@ -1101,6 +1186,25 @@ pub fn wasm_lint_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<JsV
     to_js_value(&map_lint_result(lint_tokens(&tokens, options)))
 }
 
+#[wasm_bindgen(skip_typescript, js_name = applyTokenFixes)]
+pub fn wasm_apply_token_fixes(
+    tokens: JsValue,
+    lint_options: Option<JsValue>,
+    format_options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
+    let native_tokens = values
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let result = apply_token_fixes(
+        &native_tokens,
+        parse_lint_options(lint_options)?,
+        parse_format_options(format_options)?,
+    );
+    to_js_value(&map_apply_token_fixes_result(result))
+}
+
 #[wasm_bindgen(skip_typescript, js_name = lintTokenBatch)]
 pub fn wasm_lint_token_batch(
     token_batches: JsValue,
@@ -1216,6 +1320,55 @@ pub fn wasm_diff_tokens(
     let options = parse_build_options(options)?;
     let diffs = diff_chapter_token_streams(&left, &right, &options);
     to_js_value(&map_adapter_diffs(&diffs))
+}
+
+#[wasm_bindgen(skip_typescript, js_name = revertDiffBlock)]
+pub fn wasm_revert_diff_block(
+    baseline: JsValue,
+    current: JsValue,
+    block_id: &str,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let baseline = from_js_or_default::<Vec<TokenValue>>(baseline)?
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let current = from_js_or_default::<Vec<TokenValue>>(current)?
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let reverted = apply_revert_by_block_id(
+        block_id,
+        &baseline,
+        &current,
+        &parse_build_options(options)?,
+    );
+    to_js_value(&reverted.iter().map(map_format_token).collect::<Vec<_>>())
+}
+
+#[wasm_bindgen(skip_typescript, js_name = revertDiffBlocks)]
+pub fn wasm_revert_diff_blocks(
+    baseline: JsValue,
+    current: JsValue,
+    block_ids: JsValue,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
+    let baseline = from_js_or_default::<Vec<TokenValue>>(baseline)?
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let current = from_js_or_default::<Vec<TokenValue>>(current)?
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Result<Vec<_>, JsError>>()?;
+    let block_ids = from_js_or_default::<Vec<String>>(block_ids)?;
+    let reverted = apply_reverts_by_block_id(
+        &block_ids,
+        &baseline,
+        &current,
+        &parse_build_options(options)?,
+    );
+    to_js_value(&reverted.iter().map(map_format_token).collect::<Vec<_>>())
 }
 
 #[wasm_bindgen(skip_typescript, js_name = markerCatalog)]
@@ -1433,6 +1586,13 @@ fn token_value_to_format_token(value: TokenValue) -> Result<NativeFormatToken, J
     })
 }
 
+fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
+    let mut owned = NativeFormatToken::from(token);
+    owned.sid = token.sid.map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse));
+    owned.id = Some(format!("{}-{}", token.id.book_code, token.id.index));
+    owned
+}
+
 fn parse_structural_info(value: StructuralMarkerInfoValue) -> Result<StructuralMarkerInfo, JsError> {
     Ok(StructuralMarkerInfo {
         scope_kind: parse_scope_kind(value.scope_kind.as_str())?,
@@ -1598,22 +1758,53 @@ fn map_cst_node(node: &NativeCstNode) -> CstNodeValue {
 fn map_lint_result(result: NativeLintResult) -> LintResultValue {
     LintResultValue {
         issues: result.issues.into_iter().map(map_lint_issue).collect(),
-        summary: LintSummaryValue {
-            by_category: result
-                .summary
-                .by_category
-                .into_iter()
-                .map(|(category, count)| (lint_category_str(category).to_string(), count))
-                .collect(),
-            by_severity: result
-                .summary
-                .by_severity
-                .into_iter()
-                .map(|(severity, count)| (lint_severity_str(severity).to_string(), count))
-                .collect(),
-            total_count: result.summary.total_count,
-            suppressed_count: result.summary.suppressed_count,
-        },
+        summary: map_lint_summary(result.summary),
+    }
+}
+
+fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummaryValue {
+    LintSummaryValue {
+        by_category: summary
+            .by_category
+            .into_iter()
+            .map(|(category, count)| (lint_category_str(category).to_string(), count))
+            .collect(),
+        by_severity: summary
+            .by_severity
+            .into_iter()
+            .map(|(severity, count)| (lint_severity_str(severity).to_string(), count))
+            .collect(),
+        total_count: summary.total_count,
+        suppressed_count: summary.suppressed_count,
+    }
+}
+
+fn map_applied_token_fix(fix: NativeAppliedTokenFix) -> AppliedTokenFixValue {
+    AppliedTokenFixValue {
+        code: lint_code_str(fix.code).to_string(),
+        token_id: fix.token_id,
+        sid: fix.sid,
+        marker: fix.marker,
+    }
+}
+
+fn map_apply_token_fixes_result(
+    result: NativeApplyTokenFixesResult<NativeFormatToken>,
+) -> ApplyTokenFixesResultValue {
+    ApplyTokenFixesResultValue {
+        tokens: result.tokens.iter().map(map_format_token).collect(),
+        usfm: format_tokens_to_usfm(&result.tokens),
+        applied_fixes: result
+            .applied_fixes
+            .into_iter()
+            .map(map_applied_token_fix)
+            .collect(),
+        remaining_issues: result
+            .remaining_issues
+            .into_iter()
+            .map(map_lint_issue)
+            .collect(),
+        remaining_summary: map_lint_summary(result.remaining_summary),
     }
 }
 

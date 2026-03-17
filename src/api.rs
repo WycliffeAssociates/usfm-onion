@@ -8,7 +8,10 @@ use crate::diff::{
 };
 use crate::format::{FormatOptions, FormatToken, FormattableToken, format, format_mut};
 use crate::html::{HtmlOptions, tokens_to_html, usfm_to_html};
-use crate::lint::{LintOptions, LintResult, LintableToken, lint_tokens, lint_usfm};
+use crate::lint::{
+    ApplyTokenFixesResult, LintOptions, LintResult, LintableToken, apply_token_fixes, lint_tokens,
+    lint_usfm,
+};
 use crate::parse::parse;
 use crate::token::{ParseAnalysis, Sid, Token, TokenId};
 use crate::usj::{UsjDocument, UsjError, from_usj_str, usfm_to_usj};
@@ -144,6 +147,15 @@ impl Usfm {
 
     pub fn lint(&self, options: LintOptions) -> LintResult {
         lint_usfm(&self.source, options)
+    }
+
+    pub fn apply_token_fixes(
+        &self,
+        lint_options: LintOptions,
+        format_options: FormatOptions,
+    ) -> ApplyTokenFixesResult<FormatToken> {
+        self.parse_owned()
+            .apply_token_fixes(lint_options, format_options)
     }
 
     pub fn parse_owned(&self) -> ParsedUsfm {
@@ -316,6 +328,14 @@ impl ParsedUsfm {
         lint_tokens(&self.tokens, options)
     }
 
+    pub fn apply_token_fixes(
+        &self,
+        lint_options: LintOptions,
+        format_options: FormatOptions,
+    ) -> ApplyTokenFixesResult<FormatToken> {
+        apply_token_fixes(&self.tokens, lint_options, format_options)
+    }
+
     pub fn format(&self, options: FormatOptions) -> Vec<FormatToken> {
         format(&self.tokens, options)
     }
@@ -358,6 +378,24 @@ impl ParsedUsfm {
             right: other,
             options: BuildSidBlocksOptions::default(),
         }
+    }
+
+    pub fn revert_diff_block(
+        &self,
+        current: &ParsedUsfm,
+        diff_block_id: &str,
+        options: BuildSidBlocksOptions,
+    ) -> Vec<FormatToken> {
+        crate::diff::apply_revert_by_block_id(diff_block_id, &self.tokens, &current.tokens, &options)
+    }
+
+    pub fn revert_diff_blocks(
+        &self,
+        current: &ParsedUsfm,
+        diff_block_ids: &[String],
+        options: BuildSidBlocksOptions,
+    ) -> Vec<FormatToken> {
+        crate::diff::apply_reverts_by_block_id(diff_block_ids, &self.tokens, &current.tokens, &options)
     }
 }
 
@@ -569,6 +607,16 @@ impl<T: LintableToken> TokenStream<T> {
     }
 }
 
+impl<T: LintableToken + FormattableToken + Clone> TokenStream<T> {
+    pub fn apply_token_fixes(
+        &self,
+        lint_options: LintOptions,
+        format_options: FormatOptions,
+    ) -> ApplyTokenFixesResult<T> {
+        apply_token_fixes(&self.tokens, lint_options, format_options)
+    }
+}
+
 impl<T: FormattableToken + Clone> TokenStream<T> {
     pub fn format(&self, options: FormatOptions) -> Vec<T> {
         format(&self.tokens, options)
@@ -594,6 +642,24 @@ impl<T: DiffableToken> TokenStream<T> {
             right: other,
             options: BuildSidBlocksOptions::default(),
         }
+    }
+
+    pub fn revert_diff_block(
+        &self,
+        current: &TokenStream<T>,
+        diff_block_id: &str,
+        options: BuildSidBlocksOptions,
+    ) -> Vec<T> {
+        crate::diff::apply_revert_by_block_id(diff_block_id, &self.tokens, &current.tokens, &options)
+    }
+
+    pub fn revert_diff_blocks(
+        &self,
+        current: &TokenStream<T>,
+        diff_block_ids: &[String],
+        options: BuildSidBlocksOptions,
+    ) -> Vec<T> {
+        crate::diff::apply_reverts_by_block_id(diff_block_ids, &self.tokens, &current.tokens, &options)
     }
 }
 
@@ -1334,6 +1400,30 @@ mod tests {
             .run();
         assert_eq!(diffs.len(), 2);
         assert!(diffs.iter().all(|item| !item.value.is_empty()));
+    }
+
+    #[test]
+    fn apply_token_fixes_and_revert_diff_block_are_available() {
+        let baseline = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1 Alpha\n");
+        let changed = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1  Alpha\n");
+
+        let fixed = changed.apply_token_fixes(LintOptions::default(), FormatOptions::default());
+        assert!(!fixed.tokens.is_empty());
+        assert_ne!(fixed.tokens, changed.parse_owned().tokens().to_vec());
+
+        let baseline_parsed = baseline.parse_owned();
+        let changed_parsed = changed.parse_owned();
+        let diffs = baseline_parsed.diff(&changed_parsed).run();
+        let verse_diff = diffs
+            .iter()
+            .find(|diff| diff.status == crate::DiffStatus::Modified && diff.semantic_sid.ends_with("1:1"))
+            .expect("expected modified verse diff");
+        let reverted = baseline_parsed.revert_diff_block(
+            &changed_parsed,
+            &verse_diff.block_id,
+            BuildSidBlocksOptions::default(),
+        );
+        assert_eq!(reverted, baseline_parsed.tokens().to_vec());
     }
 
     #[test]
