@@ -2,7 +2,8 @@ mod common;
 
 use common::{selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::{BuildSidBlocksOptions, diff_chapter_token_streams, diff_usfm_sources, parse};
+use usfm_onion::diff::{BuildSidBlocksOptions, diff_chapter_token_streams, diff_usfm_sources};
+use usfm_onion::parse::parse;
 
 fn benchmark_diff(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases();

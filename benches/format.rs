@@ -2,7 +2,8 @@ mod common;
 
 use common::{selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::{FormatOptions, format_usfm, format_tokens, into_format_tokens, parse};
+use usfm_onion::format::{FormatOptions, format_tokens, format_usfm, into_format_tokens};
+use usfm_onion::parse::parse;
 
 fn benchmark_format(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases();

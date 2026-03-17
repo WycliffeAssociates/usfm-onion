@@ -2,7 +2,8 @@ mod common;
 
 use common::standard_corpus_cases;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::{lex, parse_lexemes};
+use usfm_onion::lexer::lex;
+use usfm_onion::parse::parse_lexemes;
 
 fn benchmark_parse(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases();

@@ -2,7 +2,8 @@ mod common;
 
 use common::{selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::{HtmlOptions, parse, tokens_to_html, usfm_to_html};
+use usfm_onion::html::{HtmlOptions, tokens_to_html, usfm_to_html};
+use usfm_onion::parse::parse;
 
 fn benchmark_html(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases()

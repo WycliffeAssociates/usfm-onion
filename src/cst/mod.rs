@@ -355,7 +355,8 @@ fn flatten_nodes<'a>(nodes: &[CstNode], tokens: &[Token<'a>], output: &mut Vec<T
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{cst_to_usfm, parse, tokens_to_usfm};
+    use crate::parse::parse;
+    use crate::token::tokens_to_usfm;
     use std::fs;
     use std::path::{Path, PathBuf};
 

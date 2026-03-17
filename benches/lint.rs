@@ -2,7 +2,8 @@ mod common;
 
 use common::{selected_corpus_batches, standard_corpus_cases};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::{LintOptions, parse};
+use usfm_onion::lint::{LintOptions, lint_tokens};
+use usfm_onion::parse::parse;
 
 fn benchmark_lint(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases();
@@ -15,12 +16,7 @@ fn benchmark_lint(c: &mut Criterion) {
             BenchmarkId::new("lint_tokens", case.name),
             case,
             |b, _case| {
-                b.iter(|| {
-                    black_box(usfm_onion::lint_tokens(
-                        &parsed.tokens,
-                        LintOptions::default(),
-                    ))
-                });
+                b.iter(|| black_box(lint_tokens(&parsed.tokens, LintOptions::default())));
             },
         );
     }
@@ -44,10 +40,7 @@ fn benchmark_lint(c: &mut Criterion) {
                 |b, _batch| {
                     b.iter(|| {
                         for parsed in &parsed_docs {
-                            black_box(usfm_onion::lint_tokens(
-                                &parsed.tokens,
-                                LintOptions::default(),
-                            ));
+                            black_box(lint_tokens(&parsed.tokens, LintOptions::default()));
                         }
                     });
                 },

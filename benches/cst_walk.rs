@@ -2,7 +2,7 @@ mod common;
 
 use common::standard_corpus_cases;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::parse_cst;
+use usfm_onion::cst::parse_cst;
 
 fn benchmark_cst_walk(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases();

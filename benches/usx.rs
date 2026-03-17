@@ -2,7 +2,7 @@ mod common;
 
 use common::standard_corpus_cases;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use usfm_onion::usfm_to_usx;
+use usfm_onion::usx::usfm_to_usx;
 
 fn benchmark_usx(c: &mut Criterion) {
     let corpus_cases = standard_corpus_cases();

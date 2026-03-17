@@ -63,7 +63,7 @@ fn profile_cst() {
     let mut total = 0usize;
 
     for _ in 0..200 {
-        let doc = usfm_onion::parse_cst(&source);
+        let doc = usfm_onion::cst::parse_cst(&source);
         total += doc.tokens.len();
         std::hint::black_box(&doc);
     }
@@ -80,7 +80,7 @@ fn profile<F: Fn()>(f: F, iters: usize) {
 #[allow(dead_code)]
 fn dump_usj() {
     let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
-    let document = usfm_onion::usfm_to_usj(&source).expect("USJ export should succeed");
+    let document = usfm_onion::usj::usfm_to_usj(&source).expect("USJ export should succeed");
 
     let output_path = std::path::Path::new("playgroundOut.json");
     serde_json::to_writer_pretty(
@@ -99,7 +99,7 @@ fn dump_usj() {
 #[allow(dead_code)]
 fn dump_usx() {
     let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
-    let xml = usfm_onion::usfm_to_usx(&source).expect("USX export should succeed");
+    let xml = usfm_onion::usx::usfm_to_usx(&source).expect("USX export should succeed");
 
     let output_path = std::path::Path::new("playgroundOut.xml");
     std::fs::write(output_path, &xml)
@@ -111,8 +111,8 @@ fn dump_usx() {
 #[allow(dead_code)]
 fn dump_vref() {
     let source = std::fs::read_to_string("example-corpora/examples.bsb/631JNBSB.usfm").unwrap();
-    let map = usfm_onion::usfm_to_vref_map(&source);
-    let json = usfm_onion::vref_map_to_json_string(&map);
+    let map = usfm_onion::vref::usfm_to_vref_map(&source);
+    let json = usfm_onion::vref::vref_map_to_json_string(&map);
 
     let output_path = std::path::Path::new("playgroundOut.json");
     std::fs::write(output_path, &json)
@@ -124,7 +124,7 @@ fn dump_vref() {
 #[allow(dead_code)]
 fn dump_lint() {
     let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
-    let result = usfm_onion::lint_usfm(&source, usfm_onion::LintOptions::default());
+    let result = usfm_onion::lint::lint_usfm(&source, usfm_onion::LintOptions::default());
     let json = serde_json::to_string_pretty(&result).expect("lint result should serialize");
 
     let output_path = std::path::Path::new("playgroundOut.json");
@@ -137,7 +137,7 @@ fn dump_lint() {
 #[allow(dead_code)]
 fn dump_format() {
     let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
-    let formatted = usfm_onion::format_usfm(&source, usfm_onion::FormatOptions::default());
+    let formatted = usfm_onion::format::format_usfm(&source, usfm_onion::FormatOptions::default());
 
     let output_path = std::path::Path::new("playgroundOut.usfm");
     std::fs::write(output_path, &formatted)
@@ -165,7 +165,7 @@ fn dif_book_genesis() {
     // 2. Profile the diffing operation
     profile(
         || {
-            let _diffs = usfm_onion::diff_usfm_sources(
+            let _diffs = usfm_onion::diff::diff_usfm_sources(
                 &ulb_source,
                 &bsb_source,
                 &usfm_onion::BuildSidBlocksOptions::default(),
@@ -186,7 +186,7 @@ fn dump_diff() {
         "God saw that the light was good",
         "God saw the light was good",
     );
-    let diffs = usfm_onion::diff_usfm_sources(
+    let diffs = usfm_onion::diff::diff_usfm_sources(
         &baseline,
         &current,
         &usfm_onion::BuildSidBlocksOptions::default(),
@@ -209,7 +209,7 @@ fn dump_diff() {
 #[allow(dead_code)]
 fn dump_html() {
     let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
-    let html = usfm_onion::usfm_to_html(&source, usfm_onion::HtmlOptions::default());
+    let html = usfm_onion::html::usfm_to_html(&source, usfm_onion::HtmlOptions::default());
 
     let output_path = std::path::Path::new("playgroundOut.html");
     std::fs::write(output_path, &html)
@@ -321,7 +321,7 @@ fn time_parse_cst_file(path: &str) {
     let path = Path::new(path);
     let source = read_source(path);
     let started = Instant::now();
-    let document = usfm_onion::parse_cst(&source);
+    let document = usfm_onion::cst::parse_cst(&source);
     let elapsed = started.elapsed();
 
     println!(
