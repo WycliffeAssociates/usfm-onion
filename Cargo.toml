@@ -77,6 +77,10 @@ harness = false
 name = "format"
 harness = false
 
+[[bench]]
+name = "diff"
+harness = false
+
 [profile.profiling]
 inherits = "release"
 debug = 2

@@ -1,5 +1,6 @@
 pub mod convert;
 pub mod cst;
+pub mod diff;
 mod export_tree;
 pub mod format;
 pub mod lexer;
@@ -21,6 +22,13 @@ pub mod vref;
 pub use cst::{
     CstDocument, CstNode, CstWalkIter, WalkItem, build_cst, build_cst_roots, cst_to_tokens,
     cst_to_usfm, parse_cst,
+};
+pub use diff::{
+    BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
+    DiffableToken, DiffsByChapterMap, SidBlock, SidBlockDiff, TokenAlignment,
+    apply_revert_by_block_id, apply_reverts_by_block_id, build_sid_blocks,
+    diff_chapter_token_streams, diff_sid_blocks, diff_usfm_sources, diff_usfm_sources_by_chapter,
+    flatten_diff_map, replace_chapter_diffs_in_map, replace_many_chapter_diffs_in_map,
 };
 pub use lexer::lex;
 pub use format::{

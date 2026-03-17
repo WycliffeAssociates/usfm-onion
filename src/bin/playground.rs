@@ -15,65 +15,42 @@ fn main() {
     // dump_vref();
     // dump_lint();
     // dump_format();
+    // dump_diff();
     // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| {
     //     usfm_onion::format_usfm(source, usfm_onion::FormatOptions::default())
     // });
     // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| usfm_onion::parse(source));
     // 1. Load the actual USFM data into memory first
-    let corpus_path = Path::new(_bsb_corpus);
-    let entries = load_corpus(corpus_path)
-        .into_iter()
-        .map(|(path, source)| CorpusEntry {
-            path: relative_display(&path),
-            value: source, // We store the source string here to lint it later
-        })
-        .collect::<Vec<_>>();
+    // let corpus_path = Path::new(_bsb_corpus);
+    // let entries = load_corpus(corpus_path)
+    //     .into_iter()
+    //     .map(|(path, source)| CorpusEntry {
+    //         path: relative_display(&path),
+    //         value: source, // We store the source string here to lint it later
+    //     })
+    //     .collect::<Vec<_>>();
 
-    println!("Loaded {} files. Starting profile...", entries.len());
+    // println!("Loaded {} files. Starting profile...", entries.len());
 
     // 2. Fix the profile closure
-    let started = Instant::now();
-    profile(
-        || {
-            // entries.iter().map(...) is lazy! We use for_each to actually run it.
-            entries.iter().for_each(|entry| {
-                // Pass the content (entry.value), not the directory path
-                // let _ = usfm_onion::lint_usfm(&entry.value, usfm_onion::LintOptions::default());
-                let _ = usfm_onion::format_usfm(&entry.value, usfm_onion::FormatOptions::default());
-            });
-        },
-        20,
-    );
-    let elapsed = started.elapsed();
-    println!("took {:?} time for {} iters", elapsed, 20);
+    // let started = Instant::now();
+    // profile(
+    //     || {
+    //         // entries.iter().map(...) is lazy! We use for_each to actually run it.
+    //         entries.iter().for_each(|entry| {
+    //             // Pass the content (entry.value), not the directory path
+    //             // let _ = usfm_onion::lint_usfm(&entry.value, usfm_onion::LintOptions::default());
+    //             let _ = usfm_onion::format_usfm(&entry.value, usfm_onion::FormatOptions::default());
+    //         });
+    //     },
+    //     20,
+    // );
+    // let elapsed = started.elapsed();
+    // println!("took {:?} time for {} iters", elapsed, 20);
 
-    println!("Profile complete.");
-    // dump_corpus(en_ulb, |en_ulb| {
-    //     usfm_onion::lint_usfm(en_ulb, usfm_onion::LintOptions::default())
-    // });
-    // time_file("parse_cst", "example-corpora/examples.bsb/19PSABSB.usfm", |source| {
-    //     usfm_onion::parse_cst(source)
-    // });
-    // time_corpus("lint", "example-corpora/examples.bsb", 1, |source| {
-    //     usfm_onion::lint_usfm(source, usfm_onion::LintOptions::default())
-    // });
-    // profile_corpus("lint", "example-corpora/examples.bsb", 100, |source| {
-    //     usfm_onion::lint_usfm(source, usfm_onion::LintOptions::default())
-    // });
-    // let path = Path::new("example-corpora/en_ulb/01-GEN.usfm");
-    // let source = fs::read_to_string(&path)
-    //     .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    // println!("Profile complete.");
 
-    // let document = parse_cst(&source);
-    // println!("{:#?}", document);
-    // println!("{}", cst_to_usfm(&document) == source);
-    // let output_path = Path::new("playgroundOut.json");
-    // serde_json::to_writer(
-    //     fs::File::create(output_path)
-    //         .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display())),
-    //     &document,
-    // )
-    // .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+    dif_book_genesis();
 }
 
 #[allow(dead_code)]
@@ -163,6 +140,66 @@ fn dump_format() {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
 
     println!("{formatted}");
+}
+
+#[allow(dead_code)]
+fn dif_book_genesis() {
+    let ulb_path = "example-corpora/en_ulb/01-GEN.usfm";
+    let bsb_path = "example-corpora/examples.bsb/01GENBSB.usfm";
+
+    // 1. Load the actual USFM data into memory first
+    let ulb_source = fs::read_to_string(ulb_path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", ulb_path));
+    let bsb_source = fs::read_to_string(bsb_path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", bsb_path));
+
+    println!("Loaded files. Starting profile...");
+
+    let iters = 20;
+    let started = Instant::now();
+
+    // 2. Profile the diffing operation
+    profile(
+        || {
+            let _diffs = usfm_onion::diff_usfm_sources(
+                &ulb_source,
+                &bsb_source,
+                &usfm_onion::BuildSidBlocksOptions::default(),
+            );
+        },
+        iters,
+    );
+
+    let elapsed = started.elapsed();
+    println!("took {:?} time for {} iters", elapsed, iters);
+    println!("Profile complete.");
+}
+
+#[allow(dead_code)]
+fn dump_diff() {
+    let baseline = std::fs::read_to_string("example-corpora/examples.bsb/01GENBSB.usfm").unwrap();
+    let current = baseline.replace(
+        "God saw that the light was good",
+        "God saw the light was good",
+    );
+    let diffs = usfm_onion::diff_usfm_sources(
+        &baseline,
+        &current,
+        &usfm_onion::BuildSidBlocksOptions::default(),
+    );
+
+    let output_path = std::path::Path::new("playgroundOut.json");
+    serde_json::to_writer_pretty(
+        std::fs::File::create(output_path)
+            .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display())),
+        &diffs,
+    )
+    .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&diffs).expect("diff result should serialize")
+    );
 }
 
 #[derive(serde::Serialize)]
