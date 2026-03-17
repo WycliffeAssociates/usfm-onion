@@ -5,17 +5,17 @@ use wasm_bindgen::prelude::*;
 
 use usfm_onion::cst::{CstDocument as NativeCstDocument, CstNode as NativeCstNode, parse_cst};
 use usfm_onion::diff::{
-    BuildSidBlocksOptions as NativeBuildSidBlocksOptions, ChapterTokenDiff as NativeChapterTokenDiff,
-    DiffStatus as NativeDiffStatus, DiffTokenChange as NativeDiffTokenChange,
-    DiffUndoSide as NativeDiffUndoSide, DiffableToken, DiffsByChapterMap as NativeDiffsByChapterMap,
-    SidBlock as NativeSidBlock, TokenAlignment as NativeTokenAlignment, apply_revert_by_block_id,
-    apply_reverts_by_block_id, diff_chapter_token_streams, diff_usfm_sources,
-    diff_usfm_sources_by_chapter,
+    BuildSidBlocksOptions as NativeBuildSidBlocksOptions,
+    ChapterTokenDiff as NativeChapterTokenDiff, DiffStatus as NativeDiffStatus,
+    DiffTokenChange as NativeDiffTokenChange, DiffUndoSide as NativeDiffUndoSide, DiffableToken,
+    DiffsByChapterMap as NativeDiffsByChapterMap, SidBlock as NativeSidBlock,
+    TokenAlignment as NativeTokenAlignment, apply_revert_by_block_id, apply_reverts_by_block_id,
+    diff_chapter_token_streams, diff_usfm_sources, diff_usfm_sources_by_chapter,
 };
 use usfm_onion::format::{
     FormatOptions as NativeFormatOptions, FormatRule as NativeFormatRule,
-    FormatToken as NativeFormatToken, format_tokens as native_format_tokens,
-    format_tokens_to_usfm, format_usfm,
+    FormatToken as NativeFormatToken, format_tokens as native_format_tokens, format_tokens_to_usfm,
+    format_usfm,
 };
 use usfm_onion::html::{
     HtmlCallerScope as NativeHtmlCallerScope, HtmlCallerStyle as NativeHtmlCallerStyle,
@@ -41,8 +41,7 @@ use usfm_onion::parse::parse as native_parse;
 use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
     NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
-    TokenData as NativeTokenData, TokenKind as NativeTokenKind,
-    tokens_to_usfm,
+    TokenData as NativeTokenData, TokenKind as NativeTokenKind, tokens_to_usfm,
 };
 use usfm_onion::usj::{UsjDocument, usfm_to_usj};
 use usfm_onion::usx::usfm_to_usx;
@@ -341,7 +340,7 @@ export type TokenFix =
       targetTokenId: string;
       insert: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
     };
-}
+
 
 export interface FormatOptions {
   recoverMalformedMarkers?: boolean;
@@ -986,7 +985,11 @@ impl ParsedUsfm {
     #[wasm_bindgen(js_name = applyTokenFix)]
     pub fn apply_token_fix(&self, fix: JsValue) -> Result<JsValue, JsError> {
         let parsed = native_parse(&self.source);
-        let native_tokens = parsed.tokens.iter().map(format_token_with_identity).collect::<Vec<_>>();
+        let native_tokens = parsed
+            .tokens
+            .iter()
+            .map(format_token_with_identity)
+            .collect::<Vec<_>>();
         let fix = parse_token_fix(fix)?;
         let result = apply_token_fix(&native_tokens, &fix);
         to_js_value(&result.iter().map(map_format_token).collect::<Vec<_>>())
@@ -1001,8 +1004,16 @@ impl ParsedUsfm {
     ) -> Result<JsValue, JsError> {
         let baseline = native_parse(&self.source);
         let current = native_parse(&current.source);
-        let baseline = baseline.tokens.iter().map(format_token_with_identity).collect::<Vec<_>>();
-        let current = current.tokens.iter().map(format_token_with_identity).collect::<Vec<_>>();
+        let baseline = baseline
+            .tokens
+            .iter()
+            .map(format_token_with_identity)
+            .collect::<Vec<_>>();
+        let current = current
+            .tokens
+            .iter()
+            .map(format_token_with_identity)
+            .collect::<Vec<_>>();
         let reverted = apply_revert_by_block_id(
             block_id,
             &baseline,
@@ -1252,14 +1263,20 @@ pub fn wasm_format_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<J
 }
 
 #[wasm_bindgen(skip_typescript, js_name = formatTokensMut)]
-pub fn wasm_format_tokens_mut(tokens: JsValue, options: Option<JsValue>) -> Result<JsValue, JsError> {
+pub fn wasm_format_tokens_mut(
+    tokens: JsValue,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
     let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
     let mut native_tokens = values
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Result<Vec<_>, JsError>>()?;
     native_format_tokens(&mut native_tokens, parse_format_options(options)?);
-    let formatted = native_tokens.iter().map(map_format_token).collect::<Vec<_>>();
+    let formatted = native_tokens
+        .iter()
+        .map(map_format_token)
+        .collect::<Vec<_>>();
     to_js_value(&formatted)
 }
 
@@ -1301,7 +1318,11 @@ pub fn wasm_tokens_to_html(tokens: JsValue, options: Option<JsValue>) -> Result<
 }
 
 #[wasm_bindgen(skip_typescript, js_name = diffUsfm)]
-pub fn wasm_diff_usfm(left: &str, right: &str, options: Option<JsValue>) -> Result<JsValue, JsError> {
+pub fn wasm_diff_usfm(
+    left: &str,
+    right: &str,
+    options: Option<JsValue>,
+) -> Result<JsValue, JsError> {
     let options = parse_build_options(options)?;
     let diffs = diff_usfm_sources(left, right, &options);
     to_js_value(&map_chapter_diffs(&diffs))
@@ -1444,7 +1465,12 @@ fn parse_lint_options(value: Option<JsValue>) -> Result<NativeLintOptions, JsErr
     Ok(NativeLintOptions {
         enabled_codes: value
             .enabled_codes
-            .map(|codes| codes.into_iter().map(parse_lint_code).collect::<Result<Vec<_>, _>>())
+            .map(|codes| {
+                codes
+                    .into_iter()
+                    .map(parse_lint_code)
+                    .collect::<Result<Vec<_>, _>>()
+            })
             .transpose()?,
         disabled_codes: value
             .disabled_codes
@@ -1469,12 +1495,18 @@ fn parse_format_options(value: Option<JsValue>) -> Result<NativeFormatOptions, J
     let value = value.unwrap_or(JsValue::UNDEFINED);
     let value: FormatOptionsValue = from_js_or_default(value)?;
     let mut options = NativeFormatOptions::default();
-    apply_opt(&mut options.recover_malformed_markers, value.recover_malformed_markers);
+    apply_opt(
+        &mut options.recover_malformed_markers,
+        value.recover_malformed_markers,
+    );
     apply_opt(
         &mut options.collapse_whitespace_in_text,
         value.collapse_whitespace_in_text,
     );
-    apply_opt(&mut options.ensure_inline_separators, value.ensure_inline_separators);
+    apply_opt(
+        &mut options.ensure_inline_separators,
+        value.ensure_inline_separators,
+    );
     apply_opt(
         &mut options.remove_duplicate_verse_numbers,
         value.remove_duplicate_verse_numbers,
@@ -1507,7 +1539,10 @@ fn parse_format_options(value: Option<JsValue>) -> Result<NativeFormatOptions, J
         &mut options.insert_default_paragraph_after_chapter_intro,
         value.insert_default_paragraph_after_chapter_intro,
     );
-    apply_opt(&mut options.remove_empty_paragraphs, value.remove_empty_paragraphs);
+    apply_opt(
+        &mut options.remove_empty_paragraphs,
+        value.remove_empty_paragraphs,
+    );
     apply_opt(
         &mut options.insert_structural_linebreaks,
         value.insert_structural_linebreaks,
@@ -1597,7 +1632,9 @@ fn token_value_to_format_token(value: TokenValue) -> Result<NativeFormatToken, J
 
 fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
     let mut owned = NativeFormatToken::from(token);
-    owned.sid = token.sid.map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse));
+    owned.sid = token
+        .sid
+        .map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse));
     owned.id = Some(format!("{}-{}", token.id.book_code, token.id.index));
     owned
 }
@@ -1660,7 +1697,9 @@ fn parse_token_template(value: TokenTemplateValue) -> Result<usfm_onion::TokenTe
     })
 }
 
-fn parse_structural_info(value: StructuralMarkerInfoValue) -> Result<StructuralMarkerInfo, JsError> {
+fn parse_structural_info(
+    value: StructuralMarkerInfoValue,
+) -> Result<StructuralMarkerInfo, JsError> {
     Ok(StructuralMarkerInfo {
         scope_kind: parse_scope_kind(value.scope_kind.as_str())?,
         inline_context: value
@@ -1676,8 +1715,14 @@ fn parse_structural_info(value: StructuralMarkerInfoValue) -> Result<StructuralM
     })
 }
 
-fn parse_number_info(value: NumberInfoValue) -> Result<(u32, Option<u32>, NativeNumberRangeKind), JsError> {
-    Ok((value.start, value.end, parse_number_kind(value.kind.as_str())?))
+fn parse_number_info(
+    value: NumberInfoValue,
+) -> Result<(u32, Option<u32>, NativeNumberRangeKind), JsError> {
+    Ok((
+        value.start,
+        value.end,
+        parse_number_kind(value.kind.as_str())?,
+    ))
 }
 
 fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<TokenValue> {
@@ -1690,7 +1735,9 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
         kind: token_kind_str(token.kind()).to_string(),
         text: token.source.to_string(),
         span: Some(map_span(token.span)),
-        sid: token.sid.map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse)),
+        sid: token
+            .sid
+            .map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse)),
         marker: token.marker_name().map(ToOwned::to_owned),
         nested: None,
         marker_metadata: None,
@@ -1719,7 +1766,9 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
             value.structural = Some(map_structural_info(*structural));
         }
         NativeTokenData::Milestone {
-            metadata, structural, ..
+            metadata,
+            structural,
+            ..
         } => {
             value.marker_metadata = Some(map_marker_metadata(*metadata));
             value.structural = Some(map_structural_info(*structural));
@@ -1781,16 +1830,28 @@ fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItemValue {
 fn map_marker_metadata(metadata: NativeMarkerMetadata) -> MarkerMetadataValue {
     MarkerMetadataValue {
         canonical: metadata.canonical.map(ToOwned::to_owned),
-        kind: metadata.kind.map(spec_marker_kind_str).map(ToOwned::to_owned),
-        family: metadata.family.map(marker_family_str).map(ToOwned::to_owned),
+        kind: metadata
+            .kind
+            .map(spec_marker_kind_str)
+            .map(ToOwned::to_owned),
+        family: metadata
+            .family
+            .map(marker_family_str)
+            .map(ToOwned::to_owned),
     }
 }
 
 fn map_structural_info(info: StructuralMarkerInfo) -> StructuralMarkerInfoValue {
     StructuralMarkerInfoValue {
         scope_kind: scope_kind_str(info.scope_kind).to_string(),
-        inline_context: info.inline_context.map(inline_context_str).map(ToOwned::to_owned),
-        note_context: info.note_context.map(spec_context_str).map(ToOwned::to_owned),
+        inline_context: info
+            .inline_context
+            .map(inline_context_str)
+            .map(ToOwned::to_owned),
+        note_context: info
+            .note_context
+            .map(spec_context_str)
+            .map(ToOwned::to_owned),
     }
 }
 
@@ -1913,11 +1974,15 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssueValue {
     }
 }
 
-fn map_chapter_diffs(diffs: &[NativeChapterTokenDiff<NativeToken<'_>>]) -> Vec<ChapterTokenDiffValue> {
+fn map_chapter_diffs(
+    diffs: &[NativeChapterTokenDiff<NativeToken<'_>>],
+) -> Vec<ChapterTokenDiffValue> {
     diffs.iter().map(map_native_chapter_diff).collect()
 }
 
-fn map_native_chapter_diff(diff: &NativeChapterTokenDiff<NativeToken<'_>>) -> ChapterTokenDiffValue {
+fn map_native_chapter_diff(
+    diff: &NativeChapterTokenDiff<NativeToken<'_>>,
+) -> ChapterTokenDiffValue {
     ChapterTokenDiffValue {
         block_id: diff.block_id.clone(),
         semantic_sid: diff.semantic_sid.clone(),
@@ -2025,7 +2090,8 @@ fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignmentValue {
 
 fn map_diffs_by_chapter(
     diffs: &NativeDiffsByChapterMap<NativeChapterTokenDiff<NativeToken<'_>>>,
-) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiffValue>>> {
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiffValue>>>
+{
     diffs
         .iter()
         .map(|(book, chapters)| {
@@ -2175,7 +2241,9 @@ fn lint_code_str(code: NativeLintCode) -> &'static str {
         NativeLintCode::MissingSeparatorAfterMarker => "missing-separator-after-marker",
         NativeLintCode::EmptyParagraph => "empty-paragraph",
         NativeLintCode::NumberRangeAfterChapterMarker => "number-range-after-chapter-marker",
-        NativeLintCode::VerseRangeExpectedAfterVerseMarker => "verse-range-expected-after-verse-marker",
+        NativeLintCode::VerseRangeExpectedAfterVerseMarker => {
+            "verse-range-expected-after-verse-marker"
+        }
         NativeLintCode::VerseContentNotEmpty => "verse-content-not-empty",
         NativeLintCode::UnknownToken => "unknown-token",
         NativeLintCode::CharNotClosed => "char-not-closed",
@@ -2537,9 +2605,7 @@ fn marker_note_family_str(family: NativeMarkerNoteFamily) -> &'static str {
 fn marker_note_subkind_str(kind: NativeMarkerNoteSubkind) -> &'static str {
     match kind {
         NativeMarkerNoteSubkind::Structural => "structural",
-        NativeMarkerNoteSubkind::StructuralKeepsNestedCharsOpen => {
-            "structuralKeepsNestedCharsOpen"
-        }
+        NativeMarkerNoteSubkind::StructuralKeepsNestedCharsOpen => "structuralKeepsNestedCharsOpen",
     }
 }
 

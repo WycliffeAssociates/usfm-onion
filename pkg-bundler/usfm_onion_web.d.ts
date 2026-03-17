@@ -292,7 +292,7 @@ export type TokenFix =
     targetTokenId: string;
     insert: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
 };
-}
+
 
 export interface FormatOptions {
     recoverMalformedMarkers?: boolean;
