@@ -17,12 +17,11 @@ export class ParsedUsfm {
         wasm.__wbg_parsedusfm_free(ptr, 0);
     }
     /**
-     * @param {any | null} [lint_options]
-     * @param {any | null} [format_options]
+     * @param {any} fix
      * @returns {any}
      */
-    applyTokenFixes(lint_options, format_options) {
-        const ret = wasm.parsedusfm_applyTokenFixes(this.__wbg_ptr, isLikeNone(lint_options) ? 0 : addToExternrefTable0(lint_options), isLikeNone(format_options) ? 0 : addToExternrefTable0(format_options));
+    applyTokenFix(fix) {
+        const ret = wasm.parsedusfm_applyTokenFix(this.__wbg_ptr, fix);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -371,12 +370,11 @@ if (Symbol.dispose) UsfmMarkerCatalog.prototype[Symbol.dispose] = UsfmMarkerCata
 
 /**
  * @param {any} tokens
- * @param {any | null} [lint_options]
- * @param {any | null} [format_options]
+ * @param {any} fix
  * @returns {any}
  */
-export function applyTokenFixes(tokens, lint_options, format_options) {
-    const ret = wasm.applyTokenFixes(tokens, isLikeNone(lint_options) ? 0 : addToExternrefTable0(lint_options), isLikeNone(format_options) ? 0 : addToExternrefTable0(format_options));
+export function applyTokenFix(tokens, fix) {
+    const ret = wasm.applyTokenFix(tokens, fix);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -732,6 +730,12 @@ export function __wbg_String_8564e559799eccda(arg0, arg1) {
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
 }
+export function __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda(arg0, arg1) {
+    const v = arg1;
+    const ret = typeof(v) === 'bigint' ? v : undefined;
+    getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
+    getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+}
 export function __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1(arg0) {
     const v = arg0;
     const ret = typeof(v) === 'boolean' ? v : undefined;
@@ -746,6 +750,10 @@ export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
 }
 export function __wbg___wbindgen_in_41dbb8413020e076(arg0, arg1) {
     const ret = arg0 in arg1;
+    return ret;
+}
+export function __wbg___wbindgen_is_bigint_e2141d4f045b7eda(arg0) {
+    const ret = typeof(arg0) === 'bigint';
     return ret;
 }
 export function __wbg___wbindgen_is_function_3c846841762788c1(arg0) {
@@ -767,6 +775,10 @@ export function __wbg___wbindgen_is_string_7ef6b97b02428fae(arg0) {
 }
 export function __wbg___wbindgen_is_undefined_52709e72fb9f179c(arg0) {
     const ret = arg0 === undefined;
+    return ret;
+}
+export function __wbg___wbindgen_jsval_eq_ee31bfad3e536463(arg0, arg1) {
+    const ret = arg0 === arg1;
     return ret;
 }
 export function __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b(arg0, arg1) {
@@ -798,10 +810,18 @@ export function __wbg_done_08ce71ee07e3bd17(arg0) {
     const ret = arg0.done;
     return ret;
 }
+export function __wbg_entries_e8a20ff8c9757101(arg0) {
+    const ret = Object.entries(arg0);
+    return ret;
+}
 export function __wbg_get_326e41e095fb2575() { return handleError(function (arg0, arg1) {
     const ret = Reflect.get(arg0, arg1);
     return ret;
 }, arguments); }
+export function __wbg_get_a8ee5c45dabc1b3b(arg0, arg1) {
+    const ret = arg0[arg1 >>> 0];
+    return ret;
+}
 export function __wbg_get_unchecked_329cfe50afab7352(arg0, arg1) {
     const ret = arg0[arg1 >>> 0];
     return ret;
@@ -814,6 +834,16 @@ export function __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6(arg0) {
     let result;
     try {
         result = arg0 instanceof ArrayBuffer;
+    } catch (_) {
+        result = false;
+    }
+    const ret = result;
+    return ret;
+}
+export function __wbg_instanceof_Map_f194b366846aca0c(arg0) {
+    let result;
+    try {
+        result = arg0 instanceof Map;
     } catch (_) {
         result = false;
     }
@@ -908,12 +938,17 @@ export function __wbindgen_cast_0000000000000001(arg0) {
     const ret = arg0;
     return ret;
 }
-export function __wbindgen_cast_0000000000000002(arg0, arg1) {
+export function __wbindgen_cast_0000000000000002(arg0) {
+    // Cast intrinsic for `I64 -> Externref`.
+    const ret = arg0;
+    return ret;
+}
+export function __wbindgen_cast_0000000000000003(arg0, arg1) {
     // Cast intrinsic for `Ref(String) -> Externref`.
     const ret = getStringFromWasm0(arg0, arg1);
     return ret;
 }
-export function __wbindgen_cast_0000000000000003(arg0) {
+export function __wbindgen_cast_0000000000000004(arg0) {
     // Cast intrinsic for `U64 -> Externref`.
     const ret = BigInt.asUintN(64, arg0);
     return ret;

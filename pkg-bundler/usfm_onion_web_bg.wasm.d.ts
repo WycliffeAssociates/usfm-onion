@@ -4,7 +4,7 @@ export const memory: WebAssembly.Memory;
 export const __wbg_parsedusfm_free: (a: number, b: number) => void;
 export const __wbg_parsedusfmbatch_free: (a: number, b: number) => void;
 export const __wbg_usfmmarkercatalog_free: (a: number, b: number) => void;
-export const applyTokenFixes: (a: any, b: number, c: number) => [number, number, number];
+export const applyTokenFix: (a: any, b: any) => [number, number, number];
 export const diffTokens: (a: any, b: any, c: number) => [number, number, number];
 export const diffUsfm: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
 export const diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -23,7 +23,7 @@ export const lintUsfm: (a: number, b: number, c: number) => [number, number, num
 export const markerInfo: (a: number, b: number) => [number, number, number];
 export const parse: (a: number, b: number) => number;
 export const parseBatch: (a: any) => [number, number, number];
-export const parsedusfm_applyTokenFixes: (a: number, b: number, c: number) => [number, number, number];
+export const parsedusfm_applyTokenFix: (a: number, b: any) => [number, number, number];
 export const parsedusfm_cst: (a: number) => [number, number, number];
 export const parsedusfm_diff: (a: number, b: number, c: number) => [number, number, number];
 export const parsedusfm_diffByChapter: (a: number, b: number, c: number) => [number, number, number];

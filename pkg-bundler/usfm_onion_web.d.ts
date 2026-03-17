@@ -253,6 +253,7 @@ export interface LintIssue {
     relatedTokenId?: string;
     sid?: string;
     marker?: string;
+    fix?: TokenFix;
 }
 
 export interface LintSummary {
@@ -267,19 +268,30 @@ export interface LintResult {
     summary: LintSummary;
 }
 
-export interface AppliedTokenFix {
-    code: LintCode;
-    tokenId?: string;
-    sid?: string;
-    marker?: string;
+export type TokenFix =
+| {
+    type: "replaceToken";
+    code: string;
+    label: string;
+    labelParams: Record<string, string>;
+    targetTokenId: string;
+    replacements: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
 }
-
-export interface ApplyTokenFixesResult {
-    tokens: FormatToken[];
-    usfm: string;
-    appliedFixes: AppliedTokenFix[];
-    remainingIssues: LintIssue[];
-    remainingSummary: LintSummary;
+| {
+    type: "deleteToken";
+    code: string;
+    label: string;
+    labelParams: Record<string, string>;
+    targetTokenId: string;
+}
+| {
+    type: "insertAfter";
+    code: string;
+    label: string;
+    labelParams: Record<string, string>;
+    targetTokenId: string;
+    insert: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
+};
 }
 
 export interface FormatOptions {
@@ -426,7 +438,7 @@ export class ParsedUsfm {
     tokens(): Token[];
     cst(): CstDocument;
     lint(options?: LintOptions): LintResult;
-    applyTokenFixes(lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+    applyTokenFix(fix: TokenFix): Token[];
     revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
     format(options?: FormatOptions): string;
     toUsfm(): string;
@@ -462,7 +474,7 @@ export function parse(source: string): ParsedUsfm;
 export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
-export function applyTokenFixes(tokens: Token[], lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
 export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;

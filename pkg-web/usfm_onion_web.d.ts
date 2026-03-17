@@ -253,6 +253,7 @@ export interface LintIssue {
     relatedTokenId?: string;
     sid?: string;
     marker?: string;
+    fix?: TokenFix;
 }
 
 export interface LintSummary {
@@ -267,19 +268,30 @@ export interface LintResult {
     summary: LintSummary;
 }
 
-export interface AppliedTokenFix {
-    code: LintCode;
-    tokenId?: string;
-    sid?: string;
-    marker?: string;
+export type TokenFix =
+| {
+    type: "replaceToken";
+    code: string;
+    label: string;
+    labelParams: Record<string, string>;
+    targetTokenId: string;
+    replacements: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
 }
-
-export interface ApplyTokenFixesResult {
-    tokens: FormatToken[];
-    usfm: string;
-    appliedFixes: AppliedTokenFix[];
-    remainingIssues: LintIssue[];
-    remainingSummary: LintSummary;
+| {
+    type: "deleteToken";
+    code: string;
+    label: string;
+    labelParams: Record<string, string>;
+    targetTokenId: string;
+}
+| {
+    type: "insertAfter";
+    code: string;
+    label: string;
+    labelParams: Record<string, string>;
+    targetTokenId: string;
+    insert: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
+};
 }
 
 export interface FormatOptions {
@@ -426,7 +438,7 @@ export class ParsedUsfm {
     tokens(): Token[];
     cst(): CstDocument;
     lint(options?: LintOptions): LintResult;
-    applyTokenFixes(lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+    applyTokenFix(fix: TokenFix): Token[];
     revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
     format(options?: FormatOptions): string;
     toUsfm(): string;
@@ -462,7 +474,7 @@ export function parse(source: string): ParsedUsfm;
 export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
-export function applyTokenFixes(tokens: Token[], lintOptions?: LintOptions, formatOptions?: FormatOptions): ApplyTokenFixesResult;
+export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
 export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
@@ -492,7 +504,7 @@ export interface InitOutput {
     readonly __wbg_parsedusfm_free: (a: number, b: number) => void;
     readonly __wbg_parsedusfmbatch_free: (a: number, b: number) => void;
     readonly __wbg_usfmmarkercatalog_free: (a: number, b: number) => void;
-    readonly applyTokenFixes: (a: any, b: number, c: number) => [number, number, number];
+    readonly applyTokenFix: (a: any, b: any) => [number, number, number];
     readonly diffTokens: (a: any, b: any, c: number) => [number, number, number];
     readonly diffUsfm: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -511,7 +523,7 @@ export interface InitOutput {
     readonly markerInfo: (a: number, b: number) => [number, number, number];
     readonly parse: (a: number, b: number) => number;
     readonly parseBatch: (a: any) => [number, number, number];
-    readonly parsedusfm_applyTokenFixes: (a: number, b: number, c: number) => [number, number, number];
+    readonly parsedusfm_applyTokenFix: (a: number, b: any) => [number, number, number];
     readonly parsedusfm_cst: (a: number) => [number, number, number];
     readonly parsedusfm_diff: (a: number, b: number, c: number) => [number, number, number];
     readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => [number, number, number];
