@@ -81,6 +81,10 @@ harness = false
 name = "diff"
 harness = false
 
+[[bench]]
+name = "html"
+harness = false
+
 [profile.profiling]
 inherits = "release"
 debug = 2

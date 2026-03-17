@@ -16,8 +16,12 @@ fn main() {
     // dump_lint();
     // dump_format();
     // dump_diff();
+    // dump_html();
     // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| {
     //     usfm_onion::format_usfm(source, usfm_onion::FormatOptions::default())
+    // });
+    // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| {
+    //     usfm_onion::usfm_to_html(source, usfm_onion::HtmlOptions::default())
     // });
     // dump_file("example-corpora/examples.bsb/19PSABSB.usfm", |source| usfm_onion::parse(source));
     // 1. Load the actual USFM data into memory first
@@ -200,6 +204,18 @@ fn dump_diff() {
         "{}",
         serde_json::to_string_pretty(&diffs).expect("diff result should serialize")
     );
+}
+
+#[allow(dead_code)]
+fn dump_html() {
+    let source = std::fs::read_to_string("example-corpora/examples.bsb/19PSABSB.usfm").unwrap();
+    let html = usfm_onion::usfm_to_html(&source, usfm_onion::HtmlOptions::default());
+
+    let output_path = std::path::Path::new("playgroundOut.html");
+    std::fs::write(output_path, &html)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", output_path.display()));
+
+    println!("{html}");
 }
 
 #[derive(serde::Serialize)]

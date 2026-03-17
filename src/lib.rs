@@ -3,6 +3,7 @@ pub mod cst;
 pub mod diff;
 mod export_tree;
 pub mod format;
+pub mod html;
 pub mod lexer;
 mod lint_impl;
 pub mod lint {
@@ -35,6 +36,9 @@ pub use format::{
     FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatToken, FormattableToken,
     MessageParams, TokenTemplate, format, format_mut, format_tokens, format_tokens_profile,
     format_tokens_to_usfm, format_usfm, into_format_tokens,
+};
+pub use html::{
+    HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, tokens_to_html, usfm_to_html,
 };
 pub use lint_impl::{
     LintCategory, LintCode, LintIssue, LintOptions, LintResult, LintSeverity, LintSummary,
