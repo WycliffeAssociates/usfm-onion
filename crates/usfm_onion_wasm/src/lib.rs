@@ -2641,3 +2641,90 @@ fn closing_behavior_str(behavior: ClosingBehavior) -> &'static str {
 fn format_sid(book: &str, chapter: u32, verse: u32) -> String {
     format!("{book} {chapter}:{verse}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lint_tokens_accepts_parsed_footnote_submarker_streams() {
+        let source = "\\id GEN\n\\c 1\n\\pi1\n\\v 26 Then God said, “Let Us make man in Our image, after Our likeness, to rule over the fish of the sea and the birds of the air, over the livestock, and over all the earth itself\\f + \\fr 1:26 \\ft MT; Syriac \\fqa and over all the beasts of the earth\\f* and every creature that crawls upon it.”\n\\q1\n";
+        let token_values = map_tokens(&native_parse(source).tokens);
+        let adapter_tokens = parse_adapter_tokens_from_values(token_values).expect("adapter tokens");
+        let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
+
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == NativeLintCode::StrayCloseMarker),
+            "unexpected stray-close issues: {:?}",
+            result.issues
+        );
+    }
+
+    #[test]
+    fn lint_tokens_accepts_reduced_public_token_payload_without_structural_fields() {
+        let source = "\\id GEN\n\\c 1\n\\pi1\n\\v 26 Then God said, “Let Us make man in Our image, after Our likeness, to rule over the fish of the sea and the birds of the air, over the livestock, and over all the earth itself\\f + \\fr 1:26 \\ft MT; Syriac \\fqa and over all the beasts of the earth\\f* and every creature that crawls upon it.”\n\\q1\n\\v 27 So God created man in His own image;\\f + \\fr 1:27 \\ft note \\x + \\xo 1:27 \\xt cross ref \\+xt nested\\+xt* tail\\x*\\f*\n";
+        let mut token_values = map_tokens(&native_parse(source).tokens);
+        for token in &mut token_values {
+            token.structural = None;
+            token.marker_metadata = None;
+            token.nested = None;
+        }
+        let adapter_tokens = parse_adapter_tokens_from_values(token_values).expect("adapter tokens");
+        let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
+
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == NativeLintCode::StrayCloseMarker),
+            "unexpected stray-close issues: {:?}",
+            result.issues
+        );
+    }
+
+    #[test]
+    fn lint_tokens_accepts_parsed_nested_cross_reference_char_streams() {
+        let source = "\\id GEN\n\\c 1\n\\v 1 In the beginning\\x + \\xo 1:1 \\xt cross ref \\+xt nested\\+xt* tail\\x*\n";
+        let token_values = map_tokens(&native_parse(source).tokens);
+        let adapter_tokens = parse_adapter_tokens_from_values(token_values).expect("adapter tokens");
+        let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
+
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == NativeLintCode::StrayCloseMarker),
+            "unexpected stray-close issues: {:?}",
+            result.issues
+        );
+    }
+
+    #[test]
+    fn lint_token_batch_accepts_parsed_source_faithful_streams() {
+        let sources = [
+            "\\id GEN\n\\c 1\n\\pi1\n\\v 26 Then God said\\f + \\fr 1:26 \\ft MT; Syriac \\fqa and over all the beasts of the earth\\f*\n",
+            "\\id GEN\n\\c 1\n\\v 1 In the beginning\\x + \\xo 1:1 \\xt cross ref \\+xt nested\\+xt* tail\\x*\n",
+        ];
+        let batches = sources
+            .iter()
+            .map(|source| map_tokens(&native_parse(source).tokens))
+            .map(parse_adapter_tokens_from_values)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("adapter token batches");
+
+        let results = batches
+            .iter()
+            .map(|tokens| lint_tokens(tokens, NativeLintOptions::default()))
+            .collect::<Vec<_>>();
+
+        assert!(results.iter().all(|result| {
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == NativeLintCode::StrayCloseMarker)
+        }));
+    }
+}

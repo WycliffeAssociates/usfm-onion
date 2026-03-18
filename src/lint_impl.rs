@@ -7,7 +7,7 @@ use crate::format::FormattableToken;
 use crate::marker_defs::{
     InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
     marker_allows_effective_context, marker_inline_context, marker_note_context,
-    marker_note_subkind,
+    marker_note_subkind, lookup_marker_metadata, structural_marker_info,
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
@@ -1340,7 +1340,7 @@ fn lint_marker_balance_rules<T: LintableToken>(
                         valid_in_note: marker_note_subkind(marker.unwrap_or_default()).is_some(),
                     });
                 }
-                if let Some(structural) = token.structural()
+                if let Some(structural) = token_structural_info(token)
                     && matches!(
                         structural.scope_kind,
                         StructuralScopeKind::Note
@@ -1909,8 +1909,18 @@ fn note_context_for_marker(marker: &str) -> SpecContext {
     marker_note_context(marker).unwrap_or(SpecContext::Footnote)
 }
 
+fn token_structural_info<T: LintableToken>(token: &T) -> Option<StructuralMarkerInfo> {
+    token.structural().or_else(|| match token.kind() {
+        TokenKind::Marker | TokenKind::EndMarker => token.marker().map(|marker| {
+            let kind = lookup_marker_metadata(marker).map(|(_, kind, _)| kind);
+            structural_marker_info(marker, kind)
+        }),
+        _ => None,
+    })
+}
+
 fn token_marker_kind<T: LintableToken>(token: &T) -> MarkerKind {
-    if let Some(structural) = token.structural() {
+    if let Some(structural) = token_structural_info(token) {
         return match structural.scope_kind {
             StructuralScopeKind::Unknown => MarkerKind::Unknown,
             StructuralScopeKind::Header => MarkerKind::Header,
