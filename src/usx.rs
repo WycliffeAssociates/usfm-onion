@@ -1,6 +1,6 @@
-use std::io::Cursor;
 #[cfg(test)]
 use std::fs;
+use std::io::Cursor;
 #[cfg(test)]
 use std::path::Path;
 #[cfg(test)]
@@ -132,10 +132,7 @@ pub fn usx_to_usj(source: &str) -> Result<UsjDocument, UsxError> {
                     push_node(&mut content, &mut stack, UsjNode::Text(value));
                 }
             }
-            Event::Decl(_)
-            | Event::PI(_)
-            | Event::Comment(_)
-            | Event::DocType(_) => {}
+            Event::Decl(_) | Event::PI(_) | Event::Comment(_) | Event::DocType(_) => {}
             Event::Eof => break,
         }
         buf.clear();
@@ -195,7 +192,10 @@ fn read_attrs(
 }
 
 fn decode_text(reader: &Reader<&[u8]>, bytes: &[u8]) -> Result<Option<String>, UsxError> {
-    let decoded = reader.decoder().decode(bytes).map_err(quick_xml::Error::from)?;
+    let decoded = reader
+        .decoder()
+        .decode(bytes)
+        .map_err(quick_xml::Error::from)?;
     let unescaped = quick_xml::escape::unescape(&decoded)
         .map_err(quick_xml::Error::from)?
         .into_owned();
@@ -523,7 +523,11 @@ impl<'a> UsxSerializer<'a> {
                 self.write_container("sidebar", elem, content)?;
                 self.current_verse_sid = saved_verse;
             }
-            UsjElement::Periph { content, alt, extra } => {
+            UsjElement::Periph {
+                content,
+                alt,
+                extra,
+            } => {
                 let mut elem = BytesStart::new("periph");
                 if let Some(alt) = alt.as_deref() {
                     elem.push_attribute(("alt", alt));
@@ -583,7 +587,8 @@ impl<'a> UsxSerializer<'a> {
                 self.writer.write_event(Event::Empty(elem))?;
             }
             UsjElement::OptBreak {} => {
-                self.writer.write_event(Event::Empty(BytesStart::new("optbreak")))?;
+                self.writer
+                    .write_event(Event::Empty(BytesStart::new("optbreak")))?;
             }
         }
         Ok(())
@@ -673,7 +678,10 @@ fn fixture_is_validated_pass(path: &Path) -> bool {
 
 #[cfg(test)]
 fn normalize_usfm_fixture_text(source: &str) -> String {
-    source.replace("\r\n", "\n").trim_end_matches('\n').to_string()
+    source
+        .replace("\r\n", "\n")
+        .trim_end_matches('\n')
+        .to_string()
 }
 
 #[cfg(test)]
@@ -739,13 +747,22 @@ mod tests {
         for (usfm_path, usx_path) in collect_usx_fixture_pairs(Path::new("testData")) {
             let source = fs::read_to_string(&usfm_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
-            let actual = usfm_to_usx(&source)
-                .unwrap_or_else(|error| panic!("USX export failed for {}: {error}", usfm_path.display()));
+            let actual = usfm_to_usx(&source).unwrap_or_else(|error| {
+                panic!("USX export failed for {}: {error}", usfm_path.display())
+            });
             let expected = fs::read_to_string(&usx_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usx_path.display()));
 
-            assert!(xml_is_well_formed(&actual), "generated xml invalid for {}", usfm_path.display());
-            assert!(xml_is_well_formed(&expected), "fixture xml invalid for {}", usx_path.display());
+            assert!(
+                xml_is_well_formed(&actual),
+                "generated xml invalid for {}",
+                usfm_path.display()
+            );
+            assert!(
+                xml_is_well_formed(&expected),
+                "fixture xml invalid for {}",
+                usx_path.display()
+            );
         }
     }
 
@@ -754,11 +771,16 @@ mod tests {
         for (usfm_path, usx_path) in collect_usx_fixture_pairs(Path::new("testData")) {
             let xml = fs::read_to_string(&usx_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usx_path.display()));
-            let actual = from_usx_str(&xml)
-                .unwrap_or_else(|error| panic!("USX import failed for {}: {error}", usx_path.display()));
+            let actual = from_usx_str(&xml).unwrap_or_else(|error| {
+                panic!("USX import failed for {}: {error}", usx_path.display())
+            });
 
-            let reparsed = usfm_to_usj(&actual)
-                .unwrap_or_else(|error| panic!("reverse USFM should parse for {}: {error}", usx_path.display()));
+            let reparsed = usfm_to_usj(&actual).unwrap_or_else(|error| {
+                panic!(
+                    "reverse USFM should parse for {}: {error}",
+                    usx_path.display()
+                )
+            });
 
             assert!(
                 !actual.is_empty(),
@@ -784,14 +806,18 @@ mod tests {
 
             let expected = fs::read_to_string(&usfm_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
-            let usj = usfm_to_usj(&expected)
-                .unwrap_or_else(|error| panic!("USFM -> USJ failed for {}: {error}", usfm_path.display()));
-            let usx = crate::usx::usj_to_usx(&usj)
-                .unwrap_or_else(|error| panic!("USJ -> USX failed for {}: {error}", usfm_path.display()));
-            let roundtripped_usj = crate::usx::usx_to_usj(&usx)
-                .unwrap_or_else(|error| panic!("USX -> USJ failed for {}: {error}", usfm_path.display()));
-            let actual = crate::usj::from_usj(&roundtripped_usj)
-                .unwrap_or_else(|error| panic!("USJ -> USFM failed for {}: {error}", usfm_path.display()));
+            let usj = usfm_to_usj(&expected).unwrap_or_else(|error| {
+                panic!("USFM -> USJ failed for {}: {error}", usfm_path.display())
+            });
+            let usx = crate::usx::usj_to_usx(&usj).unwrap_or_else(|error| {
+                panic!("USJ -> USX failed for {}: {error}", usfm_path.display())
+            });
+            let roundtripped_usj = crate::usx::usx_to_usj(&usx).unwrap_or_else(|error| {
+                panic!("USX -> USJ failed for {}: {error}", usfm_path.display())
+            });
+            let actual = crate::usj::from_usj(&roundtripped_usj).unwrap_or_else(|error| {
+                panic!("USJ -> USFM failed for {}: {error}", usfm_path.display())
+            });
 
             assert_eq!(
                 normalize_usfm_fixture_text(&actual),
@@ -837,7 +863,9 @@ mod tests {
                         }
                     }
                 }
-                UsjNode::Element(element) => normalized.push(UsjNode::Element(normalize_element(element))),
+                UsjNode::Element(element) => {
+                    normalized.push(UsjNode::Element(normalize_element(element)))
+                }
             }
         }
         normalized
@@ -945,7 +973,11 @@ mod tests {
                 category: category.clone(),
                 extra: extra.clone(),
             },
-            UsjElement::Periph { content, alt, extra } => UsjElement::Periph {
+            UsjElement::Periph {
+                content,
+                alt,
+                extra,
+            } => UsjElement::Periph {
                 content: normalize_nodes(content),
                 alt: alt.clone(),
                 extra: extra.clone(),

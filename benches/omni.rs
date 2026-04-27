@@ -4,7 +4,7 @@ use common::{batch_label, case_label, selected_corpus_batches, standard_corpus_c
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use usfm_onion::cst::build_cst;
 use usfm_onion::diff::{BuildSidBlocksOptions, diff_chapter_token_streams, diff_usfm_sources};
-use usfm_onion::format::{FormatOptions, format_tokens, into_format_tokens, format_usfm};
+use usfm_onion::format::{FormatOptions, format_tokens, format_usfm, into_format_tokens};
 use usfm_onion::html::{HtmlOptions, tokens_to_html, usfm_to_html};
 use usfm_onion::lexer::lex;
 use usfm_onion::lint::{LintOptions, lint_tokens, lint_usfm};
@@ -24,83 +24,145 @@ fn benchmark_omni(c: &mut Criterion) {
 
         group.throughput(Throughput::Bytes(case.total_bytes as u64));
 
-        group.bench_with_input(BenchmarkId::new("lex", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(lex(case.source.as_str())));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("lex", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(lex(case.source.as_str())));
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("parse", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(parse_lexemes(case.source.as_str(), &lexed.tokens)));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("parse", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(parse_lexemes(case.source.as_str(), &lexed.tokens)));
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("cst", case_label(case)), case, |b, _case| {
-            b.iter(|| black_box(build_cst(parsed.tokens.clone())));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("cst", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| black_box(build_cst(parsed.tokens.clone())));
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("cst_walk", case_label(case)), case, |b, _case| {
-            b.iter(|| {
-                for item in cst.iter_walk() {
-                    black_box(item.token.kind());
-                }
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("cst_walk", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| {
+                    for item in cst.iter_walk() {
+                        black_box(item.token.kind());
+                    }
+                });
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("usj", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(usfm_to_usj(case.source.as_str()).expect("USJ export should succeed")));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("usj", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| {
+                    black_box(usfm_to_usj(case.source.as_str()).expect("USJ export should succeed"))
+                });
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("usx", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(usfm_to_usx(case.source.as_str()).expect("USX export should succeed")));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("usx", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| {
+                    black_box(usfm_to_usx(case.source.as_str()).expect("USX export should succeed"))
+                });
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("lint_tokens", case_label(case)), case, |b, _case| {
-            b.iter(|| black_box(lint_tokens(&parsed.tokens, LintOptions::default())));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("lint_tokens", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| black_box(lint_tokens(&parsed.tokens, LintOptions::default())));
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("lint_usfm", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(lint_usfm(case.source.as_str(), LintOptions::default())));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("lint_usfm", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(lint_usfm(case.source.as_str(), LintOptions::default())));
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("format_tokens", case_label(case)), case, |b, _case| {
-            b.iter(|| {
-                let mut working = format_tokens_case.clone();
-                format_tokens(&mut working, FormatOptions::default());
-                black_box(working);
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("format_tokens", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| {
+                    let mut working = format_tokens_case.clone();
+                    format_tokens(&mut working, FormatOptions::default());
+                    black_box(working);
+                });
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("format_usfm", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(format_usfm(case.source.as_str(), FormatOptions::default())));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("format_usfm", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(format_usfm(case.source.as_str(), FormatOptions::default())));
+            },
+        );
 
         if case.name != "xl" {
-            group.bench_with_input(BenchmarkId::new("html_tokens", case_label(case)), case, |b, _case| {
-                b.iter(|| black_box(tokens_to_html(&parsed.tokens, HtmlOptions::default())));
-            });
+            group.bench_with_input(
+                BenchmarkId::new("html_tokens", case_label(case)),
+                case,
+                |b, _case| {
+                    b.iter(|| black_box(tokens_to_html(&parsed.tokens, HtmlOptions::default())));
+                },
+            );
 
-            group.bench_with_input(BenchmarkId::new("html_usfm", case_label(case)), case, |b, case| {
-                b.iter(|| black_box(usfm_to_html(case.source.as_str(), HtmlOptions::default())));
-            });
+            group.bench_with_input(
+                BenchmarkId::new("html_usfm", case_label(case)),
+                case,
+                |b, case| {
+                    b.iter(|| {
+                        black_box(usfm_to_html(case.source.as_str(), HtmlOptions::default()))
+                    });
+                },
+            );
         }
 
-        group.bench_with_input(BenchmarkId::new("diff_tokens", case_label(case)), case, |b, _case| {
-            b.iter(|| {
-                black_box(diff_chapter_token_streams(
-                    &parsed.tokens,
-                    &parsed.tokens,
-                    &BuildSidBlocksOptions::default(),
-                ))
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("diff_tokens", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| {
+                    black_box(diff_chapter_token_streams(
+                        &parsed.tokens,
+                        &parsed.tokens,
+                        &BuildSidBlocksOptions::default(),
+                    ))
+                });
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("diff_usfm", case_label(case)), case, |b, case| {
-            b.iter(|| {
-                black_box(diff_usfm_sources(
-                    case.source.as_str(),
-                    case.source.as_str(),
-                    &BuildSidBlocksOptions::default(),
-                ))
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("diff_usfm", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| {
+                    black_box(diff_usfm_sources(
+                        case.source.as_str(),
+                        case.source.as_str(),
+                        &BuildSidBlocksOptions::default(),
+                    ))
+                });
+            },
+        );
     }
     group.finish();
 

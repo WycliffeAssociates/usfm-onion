@@ -99,9 +99,7 @@ impl FormatRule {
                 "format.rule.normalizeSpacingAfterParagraphMarkers"
             }
             Self::RemoveUnwantedLinebreaks => "format.rule.removeUnwantedLinebreaks",
-            Self::BridgeConsecutiveVerseMarkers => {
-                "format.rule.bridgeConsecutiveVerseMarkers"
-            }
+            Self::BridgeConsecutiveVerseMarkers => "format.rule.bridgeConsecutiveVerseMarkers",
             Self::RemoveOrphanEmptyVerseBeforeContentfulVerse => {
                 "format.rule.removeOrphanEmptyVerseBeforeContentfulVerse"
             }
@@ -555,7 +553,10 @@ where
     scratch.clear();
 }
 
-fn format_tokens_owned<T: FormattableToken>(tokens: &mut Vec<T>, options: FormatOptions) -> FormatProfile {
+fn format_tokens_owned<T: FormattableToken>(
+    tokens: &mut Vec<T>,
+    options: FormatOptions,
+) -> FormatProfile {
     let profile = FormatProfile::default();
     let mut scratch = Vec::new();
 
@@ -573,15 +574,22 @@ fn format_tokens_owned<T: FormattableToken>(tokens: &mut Vec<T>, options: Format
         );
     }
 
-    if options.move_chapter_label_after_chapter_marker || options.insert_default_paragraph_after_chapter_intro
+    if options.move_chapter_label_after_chapter_marker
+        || options.insert_default_paragraph_after_chapter_intro
     {
-        if options.move_chapter_label_after_chapter_marker && has_movable_chapter_label(tokens.as_slice()) {
+        if options.move_chapter_label_after_chapter_marker
+            && has_movable_chapter_label(tokens.as_slice())
+        {
             rewrite_tokens(tokens, &mut scratch, move_chapter_labels_after_chapter_into);
         }
         if options.insert_default_paragraph_after_chapter_intro
             && needs_default_paragraph_after_chapter_intro(tokens.as_slice())
         {
-            rewrite_tokens(tokens, &mut scratch, insert_default_paragraph_after_chapter_intro_into);
+            rewrite_tokens(
+                tokens,
+                &mut scratch,
+                insert_default_paragraph_after_chapter_intro_into,
+            );
         }
     }
 
@@ -609,7 +617,10 @@ fn normalize_tokens_in_place<T: FormattableToken>(
     scratch: &mut Vec<T>,
     options: FormatOptions,
 ) {
-    let mut input = std::mem::take(tokens).into_iter().map(Some).collect::<Vec<_>>();
+    let mut input = std::mem::take(tokens)
+        .into_iter()
+        .map(Some)
+        .collect::<Vec<_>>();
     tokens.reserve(input.len());
 
     let len = input.len();
@@ -659,7 +670,10 @@ fn normalize_tokens_in_place<T: FormattableToken>(
     scratch.clear();
 }
 
-fn insert_structural_linebreaks_in_place<T: FormattableToken>(tokens: &mut Vec<T>, scratch: &mut Vec<T>) {
+fn insert_structural_linebreaks_in_place<T: FormattableToken>(
+    tokens: &mut Vec<T>,
+    scratch: &mut Vec<T>,
+) {
     std::mem::swap(tokens, scratch);
     tokens.clear();
     tokens.reserve(scratch.len().saturating_mul(2));
@@ -953,7 +967,8 @@ fn normalize_verse_sequences_in_place<T: FormattableToken>(
             continue;
         }
 
-        if enable_orphan_cleanup && let Some(next_marker_index) = orphan_next_marker_index(tokens, index)
+        if enable_orphan_cleanup
+            && let Some(next_marker_index) = orphan_next_marker_index(tokens, index)
         {
             tokens.drain(index..next_marker_index);
             continue;
@@ -968,18 +983,21 @@ fn normalize_verse_sequences_in_place<T: FormattableToken>(
 }
 
 fn is_immediate_verse_pair<T: FormattableToken>(tokens: &[T], index: usize) -> bool {
-    tokens.get(index).is_some_and(|token| {
-        token.kind() == TokenKind::Marker && token.marker() == Some("v")
-    }) && tokens
-        .get(index + 1)
-        .is_some_and(|token| token.kind() == TokenKind::Number)
+    tokens
+        .get(index)
+        .is_some_and(|token| token.kind() == TokenKind::Marker && token.marker() == Some("v"))
+        && tokens
+            .get(index + 1)
+            .is_some_and(|token| token.kind() == TokenKind::Number)
 }
 
 fn bridge_verse_run<T: FormattableToken>(tokens: &mut Vec<T>, index: usize) -> bool {
-    let Some(first_verse) = tokens
-        .get(index + 1)
-        .and_then(|token| token.number_info().map(|(start, _, _)| start).or_else(|| parse_plain_verse(token.text())))
-    else {
+    let Some(first_verse) = tokens.get(index + 1).and_then(|token| {
+        token
+            .number_info()
+            .map(|(start, _, _)| start)
+            .or_else(|| parse_plain_verse(token.text()))
+    }) else {
         return false;
     };
 
@@ -1069,7 +1087,10 @@ fn cleanup_bridge_enumerator_at<T: FormattableToken>(tokens: &mut [T], index: us
     }
 }
 
-fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(tokens: &[T], out: &mut Vec<T>) {
+fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(
+    tokens: &[T],
+    out: &mut Vec<T>,
+) {
     let mut in_chapter_intro = false;
     let mut saw_para_marker_in_intro = false;
     let mut saw_chapter_marker = false;
@@ -1247,7 +1268,11 @@ fn move_chapter_labels_after_chapter_into<T: FormattableToken>(tokens: &[T], out
             }
         }
 
-        out.extend(tokens[chapter_marker_index..chapter_block_end].iter().cloned());
+        out.extend(
+            tokens[chapter_marker_index..chapter_block_end]
+                .iter()
+                .cloned(),
+        );
         out.extend(tokens[index..chapter_marker_index].iter().cloned());
         index = chapter_block_end;
     }
@@ -1491,9 +1516,9 @@ fn remove_empty_paragraphs_in_place<T: FormattableToken>(tokens: &mut Vec<T>) {
                 TokenKind::Newline | TokenKind::OptBreak => probe += 1,
                 TokenKind::Text if next.text().trim().is_empty() => probe += 1,
                 TokenKind::Marker
-                    if next
-                        .marker()
-                        .is_some_and(|marker| is_empty_paragraph_boundary_marker_token(next, marker)) =>
+                    if next.marker().is_some_and(|marker| {
+                        is_empty_paragraph_boundary_marker_token(next, marker)
+                    }) =>
                 {
                     remove_until = Some(probe);
                     break;
@@ -1528,7 +1553,10 @@ fn is_valid_paragraph_or_heading_marker(marker: &str) -> bool {
     )
 }
 
-fn is_valid_paragraph_or_heading_marker_token<T: FormattableToken>(token: &T, marker: &str) -> bool {
+fn is_valid_paragraph_or_heading_marker_token<T: FormattableToken>(
+    token: &T,
+    marker: &str,
+) -> bool {
     token
         .marker_profile()
         .map(|profile| profile.valid_paragraph_or_heading)
@@ -1700,7 +1728,10 @@ fn build_marker_profile(
         )
     ) || matches!(
         looked_up_kind,
-        MarkerKind::Character | MarkerKind::Note | MarkerKind::MilestoneStart | MarkerKind::MilestoneEnd
+        MarkerKind::Character
+            | MarkerKind::Note
+            | MarkerKind::MilestoneStart
+            | MarkerKind::MilestoneEnd
     );
 
     let linebreak_behavior = if contains_marker(LINEBREAK_BEFORE_AND_AFTER_MARKERS, marker)
@@ -1920,7 +1951,10 @@ mod tests {
             token(TokenKind::Marker, "\\c", Some("c")),
         ];
 
-        let result = format(&tokens, FormatOptions::only(&[FormatRule::RemoveEmptyParagraphs]));
+        let result = format(
+            &tokens,
+            FormatOptions::only(&[FormatRule::RemoveEmptyParagraphs]),
+        );
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].marker(), Some("c"));
     }

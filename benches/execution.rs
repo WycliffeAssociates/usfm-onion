@@ -200,7 +200,6 @@ fn benchmark_execution(c: &mut Criterion) {
                 });
             },
         );
-
     }
     group.finish();
 }

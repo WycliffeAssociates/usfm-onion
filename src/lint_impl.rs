@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::format::FormatToken;
 use crate::format::FormattableToken;
 use crate::marker_defs::{
-    InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
+    InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind, lookup_marker_metadata,
     marker_allows_effective_context, marker_inline_context, marker_note_context,
-    marker_note_subkind, lookup_marker_metadata, structural_marker_info,
+    marker_note_subkind, structural_marker_info,
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
@@ -128,6 +128,13 @@ pub enum LintSeverity {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum LintIssueType {
+    Usfm,
+    Content,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum LintCode {
     MissingIdMarker,
     MissingSeparatorAfterMarker,
@@ -137,7 +144,7 @@ pub enum LintCode {
     VerseContentNotEmpty,
     UnknownToken,
     CharNotClosed,
-    NoteNotClosed,
+    UnclosedNote,
     ParagraphBeforeFirstChapter,
     VerseBeforeFirstChapter,
     NoteSubmarkerOutsideNote,
@@ -151,8 +158,7 @@ pub enum LintCode {
     ImplicitlyClosedMarker,
     StrayCloseMarker,
     MisnestedCloseMarker,
-    UnclosedNote,
-    UnclosedMarkerAtEof,
+    UnclosedMarker,
     DuplicateChapterNumber,
     ChapterExpectedIncreaseByOne,
     DuplicateVerseNumber,
@@ -178,7 +184,7 @@ impl LintCode {
             Self::VerseContentNotEmpty => "verse-content-not-empty",
             Self::UnknownToken => "unknown-token",
             Self::CharNotClosed => "char-not-closed",
-            Self::NoteNotClosed => "note-not-closed",
+            Self::UnclosedNote => "unclosed-note",
             Self::ParagraphBeforeFirstChapter => "paragraph-before-first-chapter",
             Self::VerseBeforeFirstChapter => "verse-before-first-chapter",
             Self::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
@@ -192,8 +198,7 @@ impl LintCode {
             Self::ImplicitlyClosedMarker => "implicitly-closed-marker",
             Self::StrayCloseMarker => "stray-close-marker",
             Self::MisnestedCloseMarker => "misnested-close-marker",
-            Self::UnclosedNote => "unclosed-note",
-            Self::UnclosedMarkerAtEof => "unclosed-marker-at-eof",
+            Self::UnclosedMarker => "unclosed-marker",
             Self::DuplicateChapterNumber => "duplicate-chapter-number",
             Self::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
             Self::DuplicateVerseNumber => "duplicate-verse-number",
@@ -225,15 +230,14 @@ impl LintCode {
             | Self::VerseContentNotEmpty
             | Self::UnknownToken
             | Self::CharNotClosed
-            | Self::NoteNotClosed
+            | Self::UnclosedNote
             | Self::MissingChapterNumber
             | Self::MissingVerseNumber
             | Self::MissingMilestoneSelfClose
             | Self::ImplicitlyClosedMarker
             | Self::StrayCloseMarker
             | Self::MisnestedCloseMarker
-            | Self::UnclosedNote
-            | Self::UnclosedMarkerAtEof
+            | Self::UnclosedMarker
             | Self::UnknownMarker
             | Self::UnknownCloseMarker => LintCategory::Structure,
             Self::NoteSubmarkerOutsideNote
@@ -258,6 +262,46 @@ impl LintCode {
             _ => LintSeverity::Error,
         }
     }
+
+    pub fn issue_type(self) -> LintIssueType {
+        match self {
+            Self::NumberRangeAfterChapterMarker
+            | Self::VerseRangeExpectedAfterVerseMarker
+            | Self::VerseContentNotEmpty
+            | Self::MissingChapterNumber
+            | Self::MissingVerseNumber
+            | Self::DuplicateChapterNumber
+            | Self::ChapterExpectedIncreaseByOne
+            | Self::DuplicateVerseNumber
+            | Self::VerseExpectedIncreaseByOne
+            | Self::InvalidNumberRange
+            | Self::NumberRangeNotPrecededByMarkerExpectingNumber
+            | Self::VerseTextFollowsVerseRange
+            | Self::InconsistentChapterLabel => LintIssueType::Content,
+            Self::MissingIdMarker
+            | Self::MissingSeparatorAfterMarker
+            | Self::EmptyParagraph
+            | Self::UnknownToken
+            | Self::CharNotClosed
+            | Self::UnclosedNote
+            | Self::ParagraphBeforeFirstChapter
+            | Self::VerseBeforeFirstChapter
+            | Self::NoteSubmarkerOutsideNote
+            | Self::DuplicateIdMarker
+            | Self::IdMarkerNotAtFileStart
+            | Self::ChapterMetadataOutsideChapter
+            | Self::VerseMetadataOutsideVerse
+            | Self::MissingMilestoneSelfClose
+            | Self::ImplicitlyClosedMarker
+            | Self::StrayCloseMarker
+            | Self::MisnestedCloseMarker
+            | Self::UnclosedMarker
+            | Self::UnknownMarker
+            | Self::UnknownCloseMarker
+            | Self::MarkerNotValidInContext
+            | Self::VerseOutsideExplicitParagraph => LintIssueType::Usfm,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -265,7 +309,9 @@ pub struct LintIssue {
     pub code: LintCode,
     pub category: LintCategory,
     pub severity: LintSeverity,
+    pub issue_type: LintIssueType,
     pub message: String,
+    pub message_params: MessageParams,
     pub span: Option<Span>,
     pub related_span: Option<Span>,
     pub token_id: Option<String>,
@@ -279,6 +325,7 @@ pub struct LintIssue {
 pub struct LintSummary {
     pub by_category: BTreeMap<LintCategory, usize>,
     pub by_severity: BTreeMap<LintSeverity, usize>,
+    pub by_issue_type: BTreeMap<LintIssueType, usize>,
     pub total_count: usize,
     pub suppressed_count: usize,
 }
@@ -290,6 +337,13 @@ pub struct LintResult {
 }
 
 pub type MessageParams = BTreeMap<String, String>;
+
+fn message_params<const N: usize>(pairs: [(&str, String); N]) -> MessageParams {
+    pairs
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum TokenFix {
@@ -586,6 +640,7 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
         LintCode::IdMarkerNotAtFileStart,
         LintCode::ChapterMetadataOutsideChapter,
         LintCode::VerseMetadataOutsideVerse,
+        LintCode::MarkerNotValidInContext,
         LintCode::VerseOutsideExplicitParagraph,
     ]) {
         lint_structure_rules(tokens, &options, &enabled, &mut issues);
@@ -614,12 +669,11 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     }
     if enabled.has_any(&[
         LintCode::CharNotClosed,
-        LintCode::NoteNotClosed,
         LintCode::StrayCloseMarker,
         LintCode::MisnestedCloseMarker,
         LintCode::MissingMilestoneSelfClose,
         LintCode::UnclosedNote,
-        LintCode::UnclosedMarkerAtEof,
+        LintCode::UnclosedMarker,
     ]) {
         lint_marker_balance_rules(tokens, &enabled, &mut issues);
     }
@@ -1003,6 +1057,7 @@ fn lint_structure_rules<T: LintableToken>(
             };
 
             if enabled.has(LintCode::MarkerNotValidInContext)
+                && token_marker_kind(token) != MarkerKind::Unknown
                 && !marker_allows_effective_context(marker, validation_context)
             {
                 issues.push(simple_issue(
@@ -1046,7 +1101,9 @@ fn lint_structure_rules<T: LintableToken>(
             code: LintCode::MissingIdMarker,
             category: LintCode::MissingIdMarker.category(),
             severity: LintCode::MissingIdMarker.severity(),
+            issue_type: LintCode::MissingIdMarker.issue_type(),
             message: "document is missing required \\id marker".to_string(),
+            message_params: MessageParams::default(),
             span: None,
             related_span: None,
             token_id: None,
@@ -1125,12 +1182,21 @@ fn lint_chapter_rules<T: LintableToken>(
             if enabled.has(LintCode::ChapterExpectedIncreaseByOne) {
                 let expected = last_chapter.map_or(1, |last| last + 1);
                 if chapter != expected {
-                    issues.push(simple_issue_with_marker(
-                        LintCode::ChapterExpectedIncreaseByOne,
-                        format!("expected chapter number {expected}, found {chapter}"),
-                        "c",
-                        &tokens[number_index],
-                    ));
+                    issues.push(
+                        simple_issue_with_marker(
+                            LintCode::ChapterExpectedIncreaseByOne,
+                            format!("expected chapter number {expected}, found {chapter}"),
+                            "c",
+                            &tokens[number_index],
+                        )
+                        .with_message_params(message_params([
+                            ("expected", expected.to_string()),
+                            ("found", chapter.to_string()),
+                            ("chapter", chapter.to_string()),
+                            ("marker", "c".to_string()),
+                            ("context", "chapter-number".to_string()),
+                        ])),
+                    );
                 }
             }
             seen_chapters.insert(chapter);
@@ -1172,9 +1238,16 @@ fn lint_chapter_rules<T: LintableToken>(
                         code: LintCode::InconsistentChapterLabel,
                         category: LintCode::InconsistentChapterLabel.category(),
                         severity: LintCode::InconsistentChapterLabel.severity(),
+                        issue_type: LintCode::InconsistentChapterLabel.issue_type(),
                         message: format!(
                             "inconsistent chapter label '{label}', expected the canonical label '{canonical}'"
                         ),
+                        message_params: message_params([
+                            ("expected", canonical.clone()),
+                            ("found", label.clone()),
+                            ("marker", "cl".to_string()),
+                            ("context", "chapter-label".to_string()),
+                        ]),
                         span,
                         related_span: None,
                         token_id,
@@ -1226,12 +1299,20 @@ fn lint_number_and_verse_rules<T: LintableToken>(
         let parsed_range = token_number_range(number_token).or_else(|| parse_number_range(value));
 
         if enabled.has(LintCode::InvalidNumberRange) && parsed_range.is_none() {
-            issues.push(simple_issue_with_marker(
-                LintCode::InvalidNumberRange,
-                format!("invalid verse range {value}"),
-                "v",
-                number_token,
-            ));
+            issues.push(
+                simple_issue_with_marker(
+                    LintCode::InvalidNumberRange,
+                    format!("invalid verse range {value}"),
+                    "v",
+                    number_token,
+                )
+                .with_message_params(message_params([
+                    ("found", value.to_string()),
+                    ("verse", value.to_string()),
+                    ("marker", "v".to_string()),
+                    ("context", "verse-range".to_string()),
+                ])),
+            );
             continue;
         }
 
@@ -1265,12 +1346,22 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 } else {
                     format!("expected verse {expected} here, found {start}")
                 };
-                issues.push(simple_issue_with_marker(
-                    LintCode::VerseExpectedIncreaseByOne,
-                    message,
-                    "v",
-                    number_token,
-                ));
+                issues.push(
+                    simple_issue_with_marker(
+                        LintCode::VerseExpectedIncreaseByOne,
+                        message,
+                        "v",
+                        number_token,
+                    )
+                    .with_message_params(message_params([
+                        ("expected", expected.to_string()),
+                        ("found", start.to_string()),
+                        ("chapter", chapter.to_string()),
+                        ("verse", value.to_string()),
+                        ("marker", "v".to_string()),
+                        ("context", "verse-number".to_string()),
+                    ])),
+                );
             }
         }
 
@@ -1406,13 +1497,14 @@ fn lint_marker_balance_rules<T: LintableToken>(
             let code = if frame.kind == StructuralScopeKind::Note {
                 LintCode::UnclosedNote
             } else {
-                LintCode::UnclosedMarkerAtEof
+                LintCode::UnclosedMarker
             };
             if enabled.has(code) {
                 issues.push(LintIssue {
                     code,
                     category: code.category(),
                     severity: code.severity(),
+                    issue_type: code.issue_type(),
                     message: if code == LintCode::UnclosedNote {
                         format!(
                             "note \\{} was not closed before paragraph or chapter boundary",
@@ -1421,6 +1513,7 @@ fn lint_marker_balance_rules<T: LintableToken>(
                     } else {
                         format!("\\{} was still open at end of file", frame.marker)
                     },
+                    message_params: MessageParams::default(),
                     span: tokens[frame.token_index].span(),
                     related_span: anchor.span(),
                     token_id: tokens[frame.token_index].id(),
@@ -1535,7 +1628,7 @@ fn close_open_frames_for_boundary<T: LintableToken>(
             continue;
         }
         let code = match frame.kind {
-            MarkerKind::Note => LintCode::NoteNotClosed,
+            MarkerKind::Note => LintCode::UnclosedNote,
             MarkerKind::Character => LintCode::CharNotClosed,
             _ => continue,
         };
@@ -1692,7 +1785,7 @@ fn close_structural_frames_for_boundary<T: LintableToken>(
     while let Some(frame) = stack.pop() {
         let code = match frame.kind {
             StructuralScopeKind::Note => LintCode::UnclosedNote,
-            StructuralScopeKind::Character => LintCode::UnclosedMarkerAtEof,
+            StructuralScopeKind::Character => LintCode::UnclosedMarker,
             _ => continue,
         };
         if enabled.has(code) {
@@ -1701,6 +1794,7 @@ fn close_structural_frames_for_boundary<T: LintableToken>(
                 code,
                 category: code.category(),
                 severity: code.severity(),
+                issue_type: code.issue_type(),
                 message: if code == LintCode::UnclosedNote {
                     format!(
                         "note \\{} was not closed before paragraph or chapter boundary",
@@ -1712,6 +1806,7 @@ fn close_structural_frames_for_boundary<T: LintableToken>(
                         frame.marker
                     )
                 },
+                message_params: MessageParams::default(),
                 span: open.span(),
                 related_span: boundary.span(),
                 token_id: open.id(),
@@ -1731,9 +1826,9 @@ fn unclosed_marker_issue<T: LintableToken>(
     at_eof: bool,
 ) -> LintIssue {
     let code = match frame.kind {
-        MarkerKind::Note => LintCode::NoteNotClosed,
+        MarkerKind::Note => LintCode::UnclosedNote,
         MarkerKind::Character => LintCode::CharNotClosed,
-        _ => LintCode::UnclosedMarkerAtEof,
+        _ => LintCode::UnclosedMarker,
     };
     let location = if at_eof {
         "before end of file"
@@ -1745,7 +1840,9 @@ fn unclosed_marker_issue<T: LintableToken>(
         code,
         category: code.category(),
         severity: code.severity(),
+        issue_type: code.issue_type(),
         message: format!("marker \\{} was not closed {}", frame.marker, location),
+        message_params: MessageParams::default(),
         span: open.span(),
         related_span: anchor.span(),
         token_id: open.id(),
@@ -2148,7 +2245,9 @@ fn issue<T: LintableToken, U: LintableToken>(
         code,
         category: code.category(),
         severity: code.severity(),
+        issue_type: code.issue_type(),
         message,
+        message_params: MessageParams::default(),
         span: token.span(),
         related_span: related.and_then(LintableToken::span),
         token_id: token.id(),
@@ -2160,6 +2259,11 @@ fn issue<T: LintableToken, U: LintableToken>(
 }
 
 impl LintIssue {
+    fn with_message_params(mut self, message_params: MessageParams) -> Self {
+        self.message_params = message_params;
+        self
+    }
+
     fn with_fix(mut self, fix: TokenFix) -> Self {
         self.fix = Some(fix);
         self
@@ -2240,15 +2344,18 @@ fn apply_suppressions(
 fn summarize(issues: &[LintIssue], suppressed_count: usize) -> LintSummary {
     let mut by_category = BTreeMap::new();
     let mut by_severity = BTreeMap::new();
+    let mut by_issue_type = BTreeMap::new();
 
     for issue in issues {
         *by_category.entry(issue.category).or_insert(0) += 1;
         *by_severity.entry(issue.severity).or_insert(0) += 1;
+        *by_issue_type.entry(issue.issue_type).or_insert(0) += 1;
     }
 
     LintSummary {
         by_category,
         by_severity,
+        by_issue_type,
         total_count: issues.len(),
         suppressed_count,
     }
@@ -2416,6 +2523,36 @@ mod tests {
     }
 
     #[test]
+    fn unknown_markers_do_not_also_report_context_errors() {
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\zzz bogus\n", LintOptions::default());
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::UnknownMarker)
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::MarkerNotValidInContext)
+        );
+    }
+
+    #[test]
+    fn marker_not_valid_in_context_can_run_as_a_standalone_rule() {
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\fr orphan\n",
+            LintOptions {
+                enabled_codes: Some(vec![LintCode::MarkerNotValidInContext]),
+                ..LintOptions::default()
+            },
+        );
+        assert_eq!(result.issues.len(), 1);
+        assert_eq!(result.issues[0].code, LintCode::MarkerNotValidInContext);
+    }
+
+    #[test]
     fn missing_chapter_and_verse_numbers_are_reported() {
         let result = lint_usfm("\\id GEN\n\\c\n\\v text", LintOptions::default());
         assert!(
@@ -2484,16 +2621,146 @@ mod tests {
     }
 
     #[test]
+    fn numbering_message_params_are_exposed_for_localized_rendering() {
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\v 1 text\n\\v 3 text\n\\v 4-2 text\n\\c 4\n\\cl Chapter 4\n\\c 5\n\\cl Chapitre 5\n",
+            LintOptions::default(),
+        );
+
+        let chapter_issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::ChapterExpectedIncreaseByOne)
+            .expect("expected chapter-number issue");
+        assert_eq!(
+            chapter_issue.message_params.get("expected"),
+            Some(&"2".to_string())
+        );
+        assert_eq!(
+            chapter_issue.message_params.get("found"),
+            Some(&"4".to_string())
+        );
+        assert_eq!(
+            chapter_issue.message_params.get("chapter"),
+            Some(&"4".to_string())
+        );
+        assert_eq!(
+            chapter_issue.message_params.get("marker"),
+            Some(&"c".to_string())
+        );
+        assert_eq!(
+            chapter_issue.message_params.get("context"),
+            Some(&"chapter-number".to_string())
+        );
+
+        let verse_issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::VerseExpectedIncreaseByOne)
+            .expect("expected verse-number issue");
+        assert_eq!(
+            verse_issue.message_params.get("expected"),
+            Some(&"2".to_string())
+        );
+        assert_eq!(
+            verse_issue.message_params.get("found"),
+            Some(&"3".to_string())
+        );
+        assert_eq!(
+            verse_issue.message_params.get("chapter"),
+            Some(&"1".to_string())
+        );
+        assert_eq!(
+            verse_issue.message_params.get("verse"),
+            Some(&"3".to_string())
+        );
+        assert_eq!(
+            verse_issue.message_params.get("marker"),
+            Some(&"v".to_string())
+        );
+        assert_eq!(
+            verse_issue.message_params.get("context"),
+            Some(&"verse-number".to_string())
+        );
+
+        let invalid_range_tokens = vec![
+            crate::FormatToken {
+                kind: TokenKind::Marker,
+                text: "\\v".to_string(),
+                marker: Some("v".to_string()),
+                sid: Some("GEN 1:4".to_string()),
+                id: Some("GEN-v".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+            crate::FormatToken {
+                kind: TokenKind::Number,
+                text: "4-2".to_string(),
+                marker: None,
+                sid: Some("GEN 1:4".to_string()),
+                id: Some("GEN-n".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+        ];
+        let invalid_range_result = lint_tokens(&invalid_range_tokens, LintOptions::default());
+        let range_issue = invalid_range_result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::InvalidNumberRange)
+            .expect("expected invalid-range issue");
+        assert_eq!(
+            range_issue.message_params.get("found"),
+            Some(&"4-2".to_string())
+        );
+        assert_eq!(
+            range_issue.message_params.get("verse"),
+            Some(&"4-2".to_string())
+        );
+        assert_eq!(
+            range_issue.message_params.get("marker"),
+            Some(&"v".to_string())
+        );
+        assert_eq!(
+            range_issue.message_params.get("context"),
+            Some(&"verse-range".to_string())
+        );
+
+        let label_issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::InconsistentChapterLabel)
+            .expect("expected inconsistent-label issue");
+        assert_eq!(
+            label_issue.message_params.get("expected"),
+            Some(&"Chapter".to_string())
+        );
+        assert_eq!(
+            label_issue.message_params.get("found"),
+            Some(&"Chapitre".to_string())
+        );
+        assert_eq!(
+            label_issue.message_params.get("marker"),
+            Some(&"cl".to_string())
+        );
+        assert_eq!(
+            label_issue.message_params.get("context"),
+            Some(&"chapter-label".to_string())
+        );
+    }
+
+    #[test]
     fn structural_balance_rules_are_reported() {
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text",
             LintOptions::default(),
         );
         assert!(result.issues.iter().any(|issue| {
-            matches!(
-                issue.code,
-                LintCode::UnclosedNote | LintCode::NoteNotClosed | LintCode::CharNotClosed
-            )
+            matches!(issue.code, LintCode::UnclosedNote | LintCode::CharNotClosed)
         }));
     }
 

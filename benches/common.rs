@@ -114,14 +114,14 @@ fn load_corpus_batch(name: &str) -> CorpusBatch {
         .collect::<Vec<_>>();
 
     let total_bytes = docs.iter().map(|doc| doc.source.len()).sum::<usize>();
-    let total_chars = docs.iter().map(|doc| doc.source.chars().count()).sum::<usize>();
+    let total_chars = docs
+        .iter()
+        .map(|doc| doc.source.chars().count())
+        .sum::<usize>();
 
     CorpusBatch {
         name: name.to_string(),
-        label: format!(
-            "{name} ({} files, {total_chars} chars)",
-            docs.len()
-        ),
+        label: format!("{name} ({} files, {total_chars} chars)", docs.len()),
         docs,
         total_chars,
         total_bytes,

@@ -1,8 +1,8 @@
 use logos::Logos;
 
 use crate::token::{
-    AttributeEntryToken, BookCodeToken, MarkerToken, NumberRangeKind, NumberRangeToken,
-    ScanResult, ScanToken, ScanTokenKind, Span, TriviaToken, marker_metadata, marker_text_name,
+    AttributeEntryToken, BookCodeToken, MarkerToken, NumberRangeKind, NumberRangeToken, ScanResult,
+    ScanToken, ScanTokenKind, Span, TriviaToken, marker_metadata, marker_text_name,
 };
 
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,7 +242,10 @@ fn consume_attribute_entry<'a>(
     None
 }
 
-fn consume_inline_whitespace<'a>(source: &'a str, start: usize) -> Option<(TriviaToken<'a>, usize)> {
+fn consume_inline_whitespace<'a>(
+    source: &'a str,
+    start: usize,
+) -> Option<(TriviaToken<'a>, usize)> {
     let slice = &source[start..];
     let len = slice
         .chars()
@@ -261,7 +264,6 @@ fn consume_inline_whitespace<'a>(source: &'a str, start: usize) -> Option<(Trivi
         start + len,
     ))
 }
-
 
 fn pending_payload_for(kind: RawTokenKind, marker_name: &str) -> Option<PendingPayload> {
     match kind {
@@ -419,7 +421,9 @@ fn consume_number_suffix(slice: &str, cursor: &mut usize) {
         let Some(ch) = next.chars().next() else {
             break;
         };
-        if ch.is_alphabetic() || matches!(ch, '\u{0300}'..='\u{036f}' | '\u{1ab0}'..='\u{1aff}' | '\u{1dc0}'..='\u{1dff}' | '\u{20d0}'..='\u{20ff}' | '\u{fe20}'..='\u{fe2f}') {
+        if ch.is_alphabetic()
+            || matches!(ch, '\u{0300}'..='\u{036f}' | '\u{1ab0}'..='\u{1aff}' | '\u{1dc0}'..='\u{1dff}' | '\u{20d0}'..='\u{20ff}' | '\u{fe20}'..='\u{fe2f}')
+        {
             *cursor += ch.len_utf8();
         } else {
             break;
@@ -589,14 +593,25 @@ mod tests {
                 ScanTokenKind::Newline,
             ]
         );
-        assert_eq!(result.tokens.iter().map(ScanToken::lexeme).collect::<String>(), "\\id GEN Genesis\n");
+        assert_eq!(
+            result
+                .tokens
+                .iter()
+                .map(ScanToken::lexeme)
+                .collect::<String>(),
+            "\\id GEN Genesis\n"
+        );
     }
 
     #[test]
     fn recognizes_number_range_after_contextual_markers() {
         let result = lex("\\v 12-14a text");
         assert_eq!(
-            result.tokens.iter().map(ScanToken::kind).collect::<Vec<_>>(),
+            result
+                .tokens
+                .iter()
+                .map(ScanToken::kind)
+                .collect::<Vec<_>>(),
             vec![
                 ScanTokenKind::Marker,
                 ScanTokenKind::Whitespace,
@@ -634,7 +649,10 @@ mod tests {
 
         assert_eq!(marker.name, "q1");
         assert_eq!(marker.metadata.canonical, Some("q1"));
-        assert_eq!(marker.metadata.kind, Some(crate::marker_defs::SpecMarkerKind::Paragraph));
+        assert_eq!(
+            marker.metadata.kind,
+            Some(crate::marker_defs::SpecMarkerKind::Paragraph)
+        );
     }
 
     #[test]
@@ -660,7 +678,11 @@ mod tests {
     fn splits_pipe_and_attribute_entries() {
         let result = lex("\\zaln-s |x-strong=\"G42450\" x-lemma=\"πρεσβύτερος\"");
         assert_eq!(
-            result.tokens.iter().map(ScanToken::kind).collect::<Vec<_>>(),
+            result
+                .tokens
+                .iter()
+                .map(ScanToken::kind)
+                .collect::<Vec<_>>(),
             vec![
                 ScanTokenKind::Milestone,
                 ScanTokenKind::Whitespace,
@@ -684,7 +706,11 @@ mod tests {
             "\\zaln-s |x-strong=\"G42450\" x-content=\"πρεσβύτερος\"\\*\\w elder|x-occurrence=\"1\" x-occurrences=\"1\"\\w*\\zaln-e\\*,",
         );
         assert_eq!(
-            result.tokens.iter().map(ScanToken::kind).collect::<Vec<_>>(),
+            result
+                .tokens
+                .iter()
+                .map(ScanToken::kind)
+                .collect::<Vec<_>>(),
             vec![
                 ScanTokenKind::Milestone,
                 ScanTokenKind::Whitespace,

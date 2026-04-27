@@ -168,7 +168,10 @@ pub(crate) fn build_export_document<'a>(tokens: &'a [Token<'a>]) -> ExportDocume
 
     for (index, token) in tokens.iter().enumerate() {
         if state.pending_milestone.is_some()
-            && !matches!(token.kind(), TokenKind::AttributeList | TokenKind::MilestoneEnd)
+            && !matches!(
+                token.kind(),
+                TokenKind::AttributeList | TokenKind::MilestoneEnd
+            )
         {
             state.close_pending_milestone(false, None);
         }
@@ -262,7 +265,10 @@ fn handle_open(index: usize, token: &Token<'_>, state: &mut BuilderState, tokens
                 if let Some(top) = state.stack.last_mut() {
                     top.marker_name = marker.to_string();
                 }
-            } else if marker == "rem" && !in_note_context(&state.stack) && has_open_paragraph(&state.stack) {
+            } else if marker == "rem"
+                && !in_note_context(&state.stack)
+                && has_open_paragraph(&state.stack)
+            {
                 close_inline_above_paragraph(state);
                 state.push_open(index, info.kind);
                 if let Some(top) = state.stack.last_mut() {

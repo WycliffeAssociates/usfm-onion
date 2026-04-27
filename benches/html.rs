@@ -28,9 +28,13 @@ fn benchmark_html(c: &mut Criterion) {
     let mut source_group = c.benchmark_group("html/source");
     for case in &corpus_cases {
         source_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        source_group.bench_with_input(BenchmarkId::new("usfm_to_html", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(usfm_to_html(case.source.as_str(), HtmlOptions::default())));
-        });
+        source_group.bench_with_input(
+            BenchmarkId::new("usfm_to_html", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(usfm_to_html(case.source.as_str(), HtmlOptions::default())));
+            },
+        );
     }
     source_group.finish();
 

@@ -1,4 +1,7 @@
-use crate::marker_defs::{InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind, marker_allows_effective_context};
+use crate::marker_defs::{
+    InlineContext, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
+    marker_allows_effective_context,
+};
 use crate::token::{Token, TokenData};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,14 +24,18 @@ pub(crate) enum StructuralToken<'a> {
 pub(crate) fn structural_token<'a>(tokens: &[Token<'a>], index: usize) -> StructuralToken<'a> {
     let token = &tokens[index];
     match &token.data {
-        TokenData::Marker { name, structural, .. } => {
+        TokenData::Marker {
+            name, structural, ..
+        } => {
             if structural.scope_kind == StructuralScopeKind::Unknown {
                 return StructuralToken::UnknownMarker(name);
             }
 
             open_token(tokens, index, name, *structural)
         }
-        TokenData::Milestone { name, structural, .. } => open_token(tokens, index, name, *structural),
+        TokenData::Milestone {
+            name, structural, ..
+        } => open_token(tokens, index, name, *structural),
         TokenData::EndMarker { name, .. } => StructuralToken::CloseMarker(name),
         TokenData::MilestoneEnd => StructuralToken::MilestoneEnd,
         TokenData::Newline
@@ -49,7 +56,10 @@ fn open_token<'a>(
     match structural.scope_kind {
         StructuralScopeKind::Unknown => StructuralToken::UnknownMarker(name),
         StructuralScopeKind::Chapter | StructuralScopeKind::Verse => {
-            if matches!(tokens.get(index + 1).map(|token| &token.data), Some(TokenData::Number { .. })) {
+            if matches!(
+                tokens.get(index + 1).map(|token| &token.data),
+                Some(TokenData::Number { .. })
+            ) {
                 StructuralToken::Open(ScopeSpec {
                     kind: structural.scope_kind,
                     marker: name,
@@ -74,7 +84,7 @@ pub(crate) fn effective_context(stack: &[ScopeSpec<'_>]) -> Option<SpecContext> 
         match scope.kind {
             StructuralScopeKind::Note => return scope.note_context,
             StructuralScopeKind::TableRow | StructuralScopeKind::TableCell => {
-                return Some(SpecContext::Table)
+                return Some(SpecContext::Table);
             }
             StructuralScopeKind::Block => {
                 return match scope.inline_context {
@@ -90,7 +100,7 @@ pub(crate) fn effective_context(stack: &[ScopeSpec<'_>]) -> Option<SpecContext> 
             StructuralScopeKind::Periph => return Some(SpecContext::PeripheralContent),
             StructuralScopeKind::Sidebar => return Some(SpecContext::Sidebar),
             StructuralScopeKind::Header | StructuralScopeKind::Meta => {
-                return Some(SpecContext::Scripture)
+                return Some(SpecContext::Scripture);
             }
             StructuralScopeKind::Character | StructuralScopeKind::Milestone => continue,
             StructuralScopeKind::Unknown => continue,

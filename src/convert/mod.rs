@@ -1,6 +1,6 @@
+pub use crate::html::HtmlOptions;
 pub use crate::usj::{UsjDocument, UsjError};
 pub use crate::usx::UsxError;
-pub use crate::html::HtmlOptions;
 
 pub fn usfm_to_usj(source: &str) -> Result<UsjDocument, UsjError> {
     crate::usj::usfm_to_usj(source)

@@ -1,6 +1,8 @@
 use serde::Serialize;
 
-use crate::marker_defs::{MarkerFamily, SpecMarkerKind, StructuralMarkerInfo, lookup_marker_metadata};
+use crate::marker_defs::{
+    MarkerFamily, SpecMarkerKind, StructuralMarkerInfo, lookup_marker_metadata,
+};
 
 pub type BytePos = u32;
 

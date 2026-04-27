@@ -345,7 +345,11 @@ pub fn lookup_marker_metadata(
 
     let normalized = normalized_marker(marker)?;
     let spec = lookup_spec_marker(normalized.canonical)?;
-    Some((spec.marker, spec.kind, marker_family_for(spec.marker, spec.kind)))
+    Some((
+        spec.marker,
+        spec.kind,
+        marker_family_for(spec.marker, spec.kind),
+    ))
 }
 
 pub fn lookup_marker_id(marker: &str) -> Option<MarkerId> {
@@ -811,27 +815,111 @@ fn fast_marker_metadata(
         "q3" => Some(("q3", SpecMarkerKind::Paragraph, None)),
         "q4" => Some(("q4", SpecMarkerKind::Paragraph, None)),
         "f" | "fe" | "ef" => Some(("f", SpecMarkerKind::Note, Some(MarkerFamily::Footnote))),
-        "x" | "ex" => Some(("x", SpecMarkerKind::Note, Some(MarkerFamily::CrossReference))),
-        "ft" => Some(("ft", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fr" => Some(("fr", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fq" => Some(("fq", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fqa" => Some(("fqa", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fk" => Some(("fk", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fl" => Some(("fl", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fw" => Some(("fw", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fp" => Some(("fp", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fv" => Some(("fv", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fdc" => Some(("fdc", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "fm" => Some(("fm", SpecMarkerKind::Character, Some(MarkerFamily::Footnote))),
-        "xo" => Some(("xo", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xop" => Some(("xop", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xk" => Some(("xk", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xq" => Some(("xq", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xt" => Some(("xt", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xta" => Some(("xta", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xot" => Some(("xot", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xnt" => Some(("xnt", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
-        "xdc" => Some(("xdc", SpecMarkerKind::Character, Some(MarkerFamily::CrossReference))),
+        "x" | "ex" => Some((
+            "x",
+            SpecMarkerKind::Note,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "ft" => Some((
+            "ft",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fr" => Some((
+            "fr",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fq" => Some((
+            "fq",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fqa" => Some((
+            "fqa",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fk" => Some((
+            "fk",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fl" => Some((
+            "fl",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fw" => Some((
+            "fw",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fp" => Some((
+            "fp",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fv" => Some((
+            "fv",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fdc" => Some((
+            "fdc",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "fm" => Some((
+            "fm",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::Footnote),
+        )),
+        "xo" => Some((
+            "xo",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xop" => Some((
+            "xop",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xk" => Some((
+            "xk",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xq" => Some((
+            "xq",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xt" => Some((
+            "xt",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xta" => Some((
+            "xta",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xot" => Some((
+            "xot",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xnt" => Some((
+            "xnt",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
+        "xdc" => Some((
+            "xdc",
+            SpecMarkerKind::Character,
+            Some(MarkerFamily::CrossReference),
+        )),
         "w" => Some(("w", SpecMarkerKind::Character, None)),
         "jmp" => Some(("jmp", SpecMarkerKind::Character, None)),
         "ref" => Some(("ref", SpecMarkerKind::Character, None)),
@@ -938,8 +1026,7 @@ fn is_section_marker_name(marker: &str) -> bool {
 fn is_para_marker_name(marker: &str) -> bool {
     matches!(
         marker,
-        "p"
-            | "m"
+        "p" | "m"
             | "po"
             | "pr"
             | "cls"
@@ -973,9 +1060,35 @@ fn is_para_marker_name(marker: &str) -> bool {
 fn is_non_inline_paragraph_marker_name(marker: &str) -> bool {
     matches!(
         marker,
-        "h" | "toc" | "toca" | "imt" | "imte" | "is" | "ip" | "ipi" | "im" | "imi" | "imq"
-            | "ipq" | "ipr" | "ib" | "ili" | "iot" | "io" | "iex" | "mt" | "mte" | "ms"
-            | "mr" | "cl" | "cd" | "s" | "sr" | "r" | "d" | "sp" | "restore"
+        "h" | "toc"
+            | "toca"
+            | "imt"
+            | "imte"
+            | "is"
+            | "ip"
+            | "ipi"
+            | "im"
+            | "imi"
+            | "imq"
+            | "ipq"
+            | "ipr"
+            | "ib"
+            | "ili"
+            | "iot"
+            | "io"
+            | "iex"
+            | "mt"
+            | "mte"
+            | "ms"
+            | "mr"
+            | "cl"
+            | "cd"
+            | "s"
+            | "sr"
+            | "r"
+            | "d"
+            | "sp"
+            | "restore"
     ) || marker.starts_with("mt")
         || marker.starts_with("mte")
         || marker.starts_with("is")

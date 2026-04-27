@@ -68,7 +68,12 @@ pub fn build_cst_roots<'a>(tokens: &[Token<'a>]) -> Vec<CstNode> {
     for index in 0..tokens.len() {
         recover_stack(&tokens, index, &mut stack);
 
-        let node_index = append_node(&mut arena, &mut root_indexes, current_parent_index(&stack), index);
+        let node_index = append_node(
+            &mut arena,
+            &mut root_indexes,
+            current_parent_index(&stack),
+            index,
+        );
 
         if let StructuralToken::Open(scope) = structural_token(&tokens, index)
             && !matches!(
@@ -155,10 +160,12 @@ pub fn cst_to_usfm(document: &CstDocument<'_>) -> String {
 fn recover_stack<'a>(tokens: &[Token<'a>], index: usize, stack: &mut Vec<OpenFrame<'a>>) {
     match structural_token(tokens, index) {
         StructuralToken::CloseMarker(name) => {
-            if let Some(match_pos) = stack
-                .iter()
-                .rposition(|frame| matches!(frame.scope.kind, StructuralScopeKind::Note | StructuralScopeKind::Character) && frame.scope.marker == name)
-            {
+            if let Some(match_pos) = stack.iter().rposition(|frame| {
+                matches!(
+                    frame.scope.kind,
+                    StructuralScopeKind::Note | StructuralScopeKind::Character
+                ) && frame.scope.marker == name
+            }) {
                 stack.truncate(match_pos);
             }
         }
@@ -201,15 +208,25 @@ fn pop_for_open_scope<'a>(stack: &mut Vec<OpenFrame<'a>>, incoming: ScopeSpec<'a
     match incoming.kind {
         StructuralScopeKind::Chapter => stack.clear(),
         StructuralScopeKind::Verse => {
-            pop_while(stack, |kind| is_inline_scope(kind) || kind == StructuralScopeKind::Verse);
             pop_while(stack, |kind| {
-                matches!(kind, StructuralScopeKind::Header | StructuralScopeKind::Meta)
+                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
+            });
+            pop_while(stack, |kind| {
+                matches!(
+                    kind,
+                    StructuralScopeKind::Header | StructuralScopeKind::Meta
+                )
             });
         }
         StructuralScopeKind::TableCell => {
-            pop_while(stack, |kind| is_inline_scope(kind) || kind == StructuralScopeKind::Verse);
             pop_while(stack, |kind| {
-                matches!(kind, StructuralScopeKind::TableCell | StructuralScopeKind::Block)
+                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
+            });
+            pop_while(stack, |kind| {
+                matches!(
+                    kind,
+                    StructuralScopeKind::TableCell | StructuralScopeKind::Block
+                )
             });
             pop_to_structural_parent(stack, |kind| {
                 matches!(
@@ -222,7 +239,9 @@ fn pop_for_open_scope<'a>(stack: &mut Vec<OpenFrame<'a>>, incoming: ScopeSpec<'a
             });
         }
         StructuralScopeKind::TableRow => {
-            pop_while(stack, |kind| is_inline_scope(kind) || kind == StructuralScopeKind::Verse);
+            pop_while(stack, |kind| {
+                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
+            });
             pop_while(stack, |kind| {
                 matches!(
                     kind,
@@ -240,14 +259,16 @@ fn pop_for_open_scope<'a>(stack: &mut Vec<OpenFrame<'a>>, incoming: ScopeSpec<'a
                 )
             });
         }
-        StructuralScopeKind::Header
-        | StructuralScopeKind::Meta
-        | StructuralScopeKind::Periph => stack.clear(),
+        StructuralScopeKind::Header | StructuralScopeKind::Meta | StructuralScopeKind::Periph => {
+            stack.clear()
+        }
         StructuralScopeKind::Sidebar => {
             pop_while(stack, |kind| kind != StructuralScopeKind::Chapter);
         }
         StructuralScopeKind::Block => {
-            pop_while(stack, |kind| is_inline_scope(kind) || kind == StructuralScopeKind::Verse);
+            pop_while(stack, |kind| {
+                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
+            });
             pop_while(stack, |kind| {
                 matches!(
                     kind,
@@ -280,8 +301,10 @@ fn marker_needs_note_recovery(stack: &[OpenFrame<'_>], incoming_marker: &str) ->
         return false;
     };
 
-    matches!(context, crate::marker_defs::SpecContext::Footnote | crate::marker_defs::SpecContext::CrossReference)
-        && !marker_valid_in_current_context(incoming_marker, &active)
+    matches!(
+        context,
+        crate::marker_defs::SpecContext::Footnote | crate::marker_defs::SpecContext::CrossReference
+    ) && !marker_valid_in_current_context(incoming_marker, &active)
 }
 
 fn pop_to_structural_parent<'a, F>(stack: &mut Vec<OpenFrame<'a>>, keep: F)
@@ -297,7 +320,10 @@ fn pop_while<'a, F>(stack: &mut Vec<OpenFrame<'a>>, predicate: F)
 where
     F: Fn(StructuralScopeKind) -> bool,
 {
-    while stack.last().is_some_and(|frame| predicate(frame.scope.kind)) {
+    while stack
+        .last()
+        .is_some_and(|frame| predicate(frame.scope.kind))
+    {
         stack.pop();
     }
 }
@@ -369,7 +395,12 @@ mod tests {
             let source = fs::read_to_string(&path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
             let document = parse_cst(&source);
-            assert_eq!(cst_to_usfm(&document), source, "roundtrip failed for {}", path.display());
+            assert_eq!(
+                cst_to_usfm(&document),
+                source,
+                "roundtrip failed for {}",
+                path.display()
+            );
             assert_eq!(
                 tokens_to_usfm(&cst_to_tokens(&document)),
                 source,
@@ -387,16 +418,27 @@ mod tests {
         let chapter_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "c", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "c", .. }
+                )
+            })
             .expect("chapter marker");
         let paragraph_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "p", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "p", .. }
+                )
+            })
             .expect("paragraph marker");
 
         let chapter_path = find_node_path(&document.roots, chapter_index).expect("chapter path");
-        let paragraph_path = find_node_path(&document.roots, paragraph_index).expect("paragraph path");
+        let paragraph_path =
+            find_node_path(&document.roots, paragraph_index).expect("paragraph path");
 
         assert_eq!(chapter_path.len(), 1);
         assert_eq!(paragraph_path.len(), 1);
@@ -410,12 +452,19 @@ mod tests {
         let chapter_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "c", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "c", .. }
+                )
+            })
             .expect("chapter marker");
         let number_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Number { start: 1, .. }))
+            .position(|token| {
+                matches!(token.data, crate::token::TokenData::Number { start: 1, .. })
+            })
             .expect("chapter number");
 
         let chapter_path = find_node_path(&document.roots, chapter_index).expect("chapter path");
@@ -434,12 +483,22 @@ mod tests {
         let footnote_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "f", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "f", .. }
+                )
+            })
             .expect("footnote marker");
         let boundary_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "s5", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "s5", .. }
+                )
+            })
             .expect("boundary marker");
 
         let footnote_path = find_node_path(&document.roots, footnote_index).expect("footnote path");
@@ -457,16 +516,27 @@ mod tests {
         let ft_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "ft", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "ft", .. }
+                )
+            })
             .expect("ft marker");
         let paragraph_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "p", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "p", .. }
+                )
+            })
             .expect("paragraph marker");
 
         let ft_path = find_node_path(&document.roots, ft_index).expect("ft path");
-        let paragraph_path = find_node_path(&document.roots, paragraph_index).expect("paragraph path");
+        let paragraph_path =
+            find_node_path(&document.roots, paragraph_index).expect("paragraph path");
 
         assert!(!path_is_ancestor(&ft_path, &paragraph_path));
     }
@@ -480,12 +550,22 @@ mod tests {
         let m_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "m", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "m", .. }
+                )
+            })
             .expect("m marker");
         let p_index = parsed
             .tokens
             .iter()
-            .position(|token| matches!(token.data, crate::token::TokenData::Marker { name: "p", .. }))
+            .position(|token| {
+                matches!(
+                    token.data,
+                    crate::token::TokenData::Marker { name: "p", .. }
+                )
+            })
             .expect("p marker");
 
         let m_path = find_node_path(&document.roots, m_index).expect("m path");
@@ -500,7 +580,14 @@ mod tests {
         let document = parse_cst("\\p text \\f + \\ft note\\f*");
         let walked: Vec<_> = document
             .iter_walk()
-            .map(|item| (item.token.kind(), item.token.source.to_string(), item.depth, item.ancestor_token_indexes))
+            .map(|item| {
+                (
+                    item.token.kind(),
+                    item.token.source.to_string(),
+                    item.depth,
+                    item.ancestor_token_indexes,
+                )
+            })
             .collect();
 
         assert_eq!(walked[0].0, crate::token::TokenKind::Marker);

@@ -32,13 +32,14 @@ pub use diff::{
     apply_revert_by_block_id, apply_reverts_by_block_id,
 };
 pub use format::{
-    FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatToken, FormattableToken,
-    MessageParams, TokenTemplate,
+    FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatToken,
+    FormattableToken, MessageParams, TokenTemplate,
 };
 pub use html::{HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions};
 pub use lint_impl::{
-    LintCategory, LintCode, LintIssue, LintOptions, LintResult, LintSeverity, LintSummary,
-    LintSuppression, LintableToken, MessageParams as LintMessageParams, TokenFix, apply_token_fix,
+    LintCategory, LintCode, LintIssue, LintIssueType, LintOptions, LintResult, LintSeverity,
+    LintSummary, LintSuppression, LintableToken, MessageParams as LintMessageParams, TokenFix,
+    apply_token_fix,
 };
 pub use markers::{
     MarkerCategory, MarkerInlineContext, MarkerKind, MarkerNoteFamily, MarkerNoteSubkind,

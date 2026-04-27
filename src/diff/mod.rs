@@ -2,7 +2,7 @@ use crate::format::FormatToken;
 use crate::parse::parse;
 use crate::token::{Token, TokenKind};
 use serde::Serialize;
-use similar::{capture_diff_slices, Algorithm, ChangeTag};
+use similar::{Algorithm, ChangeTag, capture_diff_slices};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 
@@ -222,7 +222,10 @@ pub fn build_sid_blocks<T: DiffableToken>(
     blocks
 }
 
-pub fn diff_sid_blocks(original_blocks: &[SidBlock], current_blocks: &[SidBlock]) -> Vec<SidBlockDiff> {
+pub fn diff_sid_blocks(
+    original_blocks: &[SidBlock],
+    current_blocks: &[SidBlock],
+) -> Vec<SidBlockDiff> {
     let original_seq = original_blocks
         .iter()
         .map(|block| block.block_id.clone())
@@ -242,11 +245,21 @@ pub fn diff_sid_blocks(original_blocks: &[SidBlock], current_blocks: &[SidBlock]
         .collect::<HashMap<_, _>>();
     let original_text_by_id = original_blocks
         .iter()
-        .map(|block| (block.block_id.as_str(), normalize_block_text(&block.text_full)))
+        .map(|block| {
+            (
+                block.block_id.as_str(),
+                normalize_block_text(&block.text_full),
+            )
+        })
         .collect::<HashMap<_, _>>();
     let current_text_by_id = current_blocks
         .iter()
-        .map(|block| (block.block_id.as_str(), normalize_block_text(&block.text_full)))
+        .map(|block| {
+            (
+                block.block_id.as_str(),
+                normalize_block_text(&block.text_full),
+            )
+        })
         .collect::<HashMap<_, _>>();
 
     let mut out = Vec::new();
@@ -528,7 +541,8 @@ fn align_token_sequences<T: DiffableToken>(
                 for offset in 0..part_len {
                     let original_index = original_cursor + offset;
                     let current_index = current_cursor + offset;
-                    if original_index >= original_tokens.len() || current_index >= current_tokens.len()
+                    if original_index >= original_tokens.len()
+                        || current_index >= current_tokens.len()
                     {
                         continue;
                     }
@@ -545,7 +559,9 @@ fn align_token_sequences<T: DiffableToken>(
                 current_cursor += part_len;
             }
             DiffStatus::Deleted => {
-                if let Some(next) = seq.get(index + 1) && next.tag == DiffStatus::Added {
+                if let Some(next) = seq.get(index + 1)
+                    && next.tag == DiffStatus::Added
+                {
                     align_removed_added_chunk(
                         original_tokens,
                         current_tokens,
@@ -609,8 +625,14 @@ fn align_removed_added_chunk<T: DiffableToken>(
     let original_slice =
         &original_tokens[original_start..original_start.saturating_add(original_len)];
     let current_slice = &current_tokens[current_start..current_start.saturating_add(current_len)];
-    let original_shapes = original_slice.iter().map(token_shape_key).collect::<Vec<_>>();
-    let current_shapes = current_slice.iter().map(token_shape_key).collect::<Vec<_>>();
+    let original_shapes = original_slice
+        .iter()
+        .map(token_shape_key)
+        .collect::<Vec<_>>();
+    let current_shapes = current_slice
+        .iter()
+        .map(token_shape_key)
+        .collect::<Vec<_>>();
     let seq = diff_sequences(&original_shapes, &current_shapes);
 
     let mut original_cursor = 0usize;
@@ -787,14 +809,20 @@ pub fn apply_revert_by_block_id<T: DiffableToken>(
             next
         }
         (Some(baseline_block), None) => {
-            let baseline_slice = baseline_tokens[baseline_block.start..baseline_block.end_exclusive].to_vec();
-            let insertion_index = find_insertion_index(baseline_block, &baseline_by_id, &current_by_id);
+            let baseline_slice =
+                baseline_tokens[baseline_block.start..baseline_block.end_exclusive].to_vec();
+            let insertion_index =
+                find_insertion_index(baseline_block, &baseline_by_id, &current_by_id);
             next.splice(insertion_index..insertion_index, baseline_slice);
             next
         }
         (Some(baseline_block), Some(current_block)) => {
-            let baseline_slice = baseline_tokens[baseline_block.start..baseline_block.end_exclusive].to_vec();
-            next.splice(current_block.start..current_block.end_exclusive, baseline_slice);
+            let baseline_slice =
+                baseline_tokens[baseline_block.start..baseline_block.end_exclusive].to_vec();
+            next.splice(
+                current_block.start..current_block.end_exclusive,
+                baseline_slice,
+            );
             next
         }
         (None, None) => next,
@@ -943,7 +971,9 @@ where
                 continue;
             }
 
-            if let Some(last) = out.last_mut() && last.tag == tag {
+            if let Some(last) = out.last_mut()
+                && last.tag == tag
+            {
                 last.ids.extend(ids);
                 continue;
             }
@@ -1009,8 +1039,16 @@ fn build_modified_diff_with_normalized(
         current_text,
         original_text_only: original_normalized.text_only.clone(),
         current_text_only: current_normalized.text_only.clone(),
-        is_whitespace_change: if is_unchanged { false } else { is_whitespace_change },
-        is_usfm_structure_change: if is_unchanged { false } else { is_usfm_structure_change },
+        is_whitespace_change: if is_unchanged {
+            false
+        } else {
+            is_whitespace_change
+        },
+        is_usfm_structure_change: if is_unchanged {
+            false
+        } else {
+            is_usfm_structure_change
+        },
     }
 }
 
@@ -1384,7 +1422,10 @@ mod tests {
         let verse_token = parsed
             .tokens
             .iter()
-            .find(|token| token.kind() == TokenKind::Number && token.sid_string() == Some("GEN 1:1".to_string()))
+            .find(|token| {
+                token.kind() == TokenKind::Number
+                    && token.sid_string() == Some("GEN 1:1".to_string())
+            })
             .expect("verse token should exist");
 
         assert_eq!(verse_token.sid_string().as_deref(), Some("GEN 1:1"));
@@ -1395,11 +1436,8 @@ mod tests {
     fn source_diff_by_chapter_groups_overlap_and_missing_chapters() {
         let baseline = "\\id GEN\n\\c 1\n\\p\n\\v 1 Alpha\n\\c 2\n\\p\n\\v 1 Beta\n";
         let current = "\\id GEN\n\\c 1\n\\p\n\\v 1 Alpha edited\n\\c 3\n\\p\n\\v 1 Gamma\n";
-        let diffs = diff_usfm_sources_by_chapter(
-            baseline,
-            current,
-            &BuildSidBlocksOptions::default(),
-        );
+        let diffs =
+            diff_usfm_sources_by_chapter(baseline, current, &BuildSidBlocksOptions::default());
 
         let gen_chapters = diffs.get("GEN").unwrap();
         assert!(gen_chapters.contains_key(&1));

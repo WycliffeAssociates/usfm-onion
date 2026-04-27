@@ -300,14 +300,15 @@ fn is_table_cell_marker(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        MarkerCategory, MarkerNoteFamily, is_known_marker, marker_catalog, marker_info,
-    };
+    use super::{MarkerCategory, MarkerNoteFamily, is_known_marker, marker_catalog, marker_info};
 
     #[test]
     fn note_container_and_note_submarker_are_distinct() {
         assert!(is_known_marker("f"));
-        assert_eq!(marker_info("f").note_family, Some(MarkerNoteFamily::Footnote));
+        assert_eq!(
+            marker_info("f").note_family,
+            Some(MarkerNoteFamily::Footnote)
+        );
         assert_eq!(marker_info("ft").category, MarkerCategory::NoteSubmarker);
         assert_eq!(marker_info("nd").category, MarkerCategory::Character);
     }

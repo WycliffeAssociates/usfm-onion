@@ -23,7 +23,8 @@ use usfm_onion::html::{
 };
 use usfm_onion::lint::{
     LintCategory as NativeLintCategory, LintCode as NativeLintCode,
-    LintOptions as NativeLintOptions, LintResult as NativeLintResult,
+    LintIssueType as NativeLintIssueType, LintOptions as NativeLintOptions,
+    LintResult as NativeLintResult,
     LintSeverity as NativeLintSeverity, LintSuppression as NativeLintSuppression, LintableToken,
     TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
 };
@@ -165,6 +166,7 @@ export type StructuralScopeKind =
   | "meta";
 export type LintCategory = "document" | "structure" | "context" | "numbering";
 export type LintSeverity = "error" | "warning";
+export type LintIssueType = "usfm" | "content";
 export type LintCode =
   | "missing-id-marker"
   | "missing-separator-after-marker"
@@ -174,7 +176,7 @@ export type LintCode =
   | "verse-content-not-empty"
   | "unknown-token"
   | "char-not-closed"
-  | "note-not-closed"
+  | "unclosed-note"
   | "paragraph-before-first-chapter"
   | "verse-before-first-chapter"
   | "note-submarker-outside-note"
@@ -188,8 +190,7 @@ export type LintCode =
   | "implicitly-closed-marker"
   | "stray-close-marker"
   | "misnested-close-marker"
-  | "unclosed-note"
-  | "unclosed-marker-at-eof"
+  | "unclosed-marker"
   | "duplicate-chapter-number"
   | "chapter-expected-increase-by-one"
   | "duplicate-verse-number"
@@ -294,7 +295,9 @@ export interface LintIssue {
   code: LintCode;
   category: LintCategory;
   severity: LintSeverity;
+  issueType: LintIssueType;
   message: string;
+  messageParams: Record<string, string>;
   span?: Span;
   relatedSpan?: Span;
   tokenId?: string;
@@ -307,6 +310,7 @@ export interface LintIssue {
 export interface LintSummary {
   byCategory: Partial<Record<LintCategory, number>>;
   bySeverity: Partial<Record<LintSeverity, number>>;
+  byIssueType: Partial<Record<LintIssueType, number>>;
   totalCount: number;
   suppressedCount: number;
 }
@@ -452,6 +456,7 @@ export interface LintCodeMeta {
   code: LintCode;
   category: LintCategory;
   severity: LintSeverity;
+  issueType: LintIssueType;
 }
 
 export interface FormatRuleMeta {
@@ -658,7 +663,9 @@ struct LintIssueValue {
     code: String,
     category: String,
     severity: String,
+    issue_type: String,
     message: String,
+    message_params: std::collections::BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     span: Option<SpanValue>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -680,6 +687,7 @@ struct LintIssueValue {
 struct LintSummaryValue {
     by_category: std::collections::BTreeMap<String, usize>,
     by_severity: std::collections::BTreeMap<String, usize>,
+    by_issue_type: std::collections::BTreeMap<String, usize>,
     total_count: usize,
     suppressed_count: usize,
 }
@@ -840,6 +848,7 @@ struct LintCodeMetaValue {
     code: String,
     category: String,
     severity: String,
+    issue_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1433,6 +1442,7 @@ pub fn wasm_lint_code_meta() -> Result<JsValue, JsError> {
             code: lint_code_str(code).to_string(),
             category: lint_category_str(code.category()).to_string(),
             severity: lint_severity_str(code.severity()).to_string(),
+            issue_type: lint_issue_type_str(code.issue_type()).to_string(),
         })
         .collect::<Vec<_>>();
     to_js_value(&meta)
@@ -1902,6 +1912,11 @@ fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummaryValue {
             .into_iter()
             .map(|(severity, count)| (lint_severity_str(severity).to_string(), count))
             .collect(),
+        by_issue_type: summary
+            .by_issue_type
+            .into_iter()
+            .map(|(issue_type, count)| (lint_issue_type_str(issue_type).to_string(), count))
+            .collect(),
         total_count: summary.total_count,
         suppressed_count: summary.suppressed_count,
     }
@@ -1963,7 +1978,9 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssueValue {
         code: lint_code_str(issue.code).to_string(),
         category: lint_category_str(issue.category).to_string(),
         severity: lint_severity_str(issue.severity).to_string(),
+        issue_type: lint_issue_type_str(issue.issue_type).to_string(),
         message: issue.message,
+        message_params: issue.message_params,
         span: issue.span.map(map_span),
         related_span: issue.related_span.map(map_span),
         token_id: issue.token_id,
@@ -2204,7 +2221,7 @@ fn lint_code_variants() -> Vec<NativeLintCode> {
         NativeLintCode::VerseContentNotEmpty,
         NativeLintCode::UnknownToken,
         NativeLintCode::CharNotClosed,
-        NativeLintCode::NoteNotClosed,
+        NativeLintCode::UnclosedNote,
         NativeLintCode::ParagraphBeforeFirstChapter,
         NativeLintCode::VerseBeforeFirstChapter,
         NativeLintCode::NoteSubmarkerOutsideNote,
@@ -2218,8 +2235,7 @@ fn lint_code_variants() -> Vec<NativeLintCode> {
         NativeLintCode::ImplicitlyClosedMarker,
         NativeLintCode::StrayCloseMarker,
         NativeLintCode::MisnestedCloseMarker,
-        NativeLintCode::UnclosedNote,
-        NativeLintCode::UnclosedMarkerAtEof,
+        NativeLintCode::UnclosedMarker,
         NativeLintCode::DuplicateChapterNumber,
         NativeLintCode::ChapterExpectedIncreaseByOne,
         NativeLintCode::DuplicateVerseNumber,
@@ -2247,7 +2263,7 @@ fn lint_code_str(code: NativeLintCode) -> &'static str {
         NativeLintCode::VerseContentNotEmpty => "verse-content-not-empty",
         NativeLintCode::UnknownToken => "unknown-token",
         NativeLintCode::CharNotClosed => "char-not-closed",
-        NativeLintCode::NoteNotClosed => "note-not-closed",
+        NativeLintCode::UnclosedNote => "unclosed-note",
         NativeLintCode::ParagraphBeforeFirstChapter => "paragraph-before-first-chapter",
         NativeLintCode::VerseBeforeFirstChapter => "verse-before-first-chapter",
         NativeLintCode::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
@@ -2261,8 +2277,7 @@ fn lint_code_str(code: NativeLintCode) -> &'static str {
         NativeLintCode::ImplicitlyClosedMarker => "implicitly-closed-marker",
         NativeLintCode::StrayCloseMarker => "stray-close-marker",
         NativeLintCode::MisnestedCloseMarker => "misnested-close-marker",
-        NativeLintCode::UnclosedNote => "unclosed-note",
-        NativeLintCode::UnclosedMarkerAtEof => "unclosed-marker-at-eof",
+        NativeLintCode::UnclosedMarker => "unclosed-marker",
         NativeLintCode::DuplicateChapterNumber => "duplicate-chapter-number",
         NativeLintCode::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
         NativeLintCode::DuplicateVerseNumber => "duplicate-verse-number",
@@ -2293,6 +2308,13 @@ fn lint_severity_str(severity: NativeLintSeverity) -> &'static str {
     match severity {
         NativeLintSeverity::Error => "error",
         NativeLintSeverity::Warning => "warning",
+    }
+}
+
+fn lint_issue_type_str(issue_type: NativeLintIssueType) -> &'static str {
+    match issue_type {
+        NativeLintIssueType::Usfm => "usfm",
+        NativeLintIssueType::Content => "content",
     }
 }
 
@@ -2726,5 +2748,36 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == NativeLintCode::StrayCloseMarker)
         }));
+    }
+
+    #[test]
+    fn lint_issue_types_and_mapping_include_message_params() {
+        let declarations = include_str!("../../../pkg-web/usfm_onion_web.d.ts");
+        assert!(declarations.contains("messageParams: Record<string, string>;"));
+        assert!(declarations.contains("issueType: LintIssueType;"));
+
+        let issue = usfm_onion::LintIssue {
+            code: usfm_onion::LintCode::VerseExpectedIncreaseByOne,
+            category: usfm_onion::LintCode::VerseExpectedIncreaseByOne.category(),
+            severity: usfm_onion::LintCode::VerseExpectedIncreaseByOne.severity(),
+            issue_type: usfm_onion::LintCode::VerseExpectedIncreaseByOne.issue_type(),
+            message: "expected verse 2 here, found 3".to_string(),
+            message_params: std::collections::BTreeMap::from([
+                ("expected".to_string(), "2".to_string()),
+                ("found".to_string(), "3".to_string()),
+            ]),
+            span: None,
+            related_span: None,
+            token_id: None,
+            related_token_id: None,
+            sid: None,
+            marker: Some("v".to_string()),
+            fix: None,
+        };
+
+        let mapped = map_lint_issue(issue);
+        assert_eq!(mapped.issue_type, "content");
+        assert_eq!(mapped.message_params.get("expected"), Some(&"2".to_string()));
+        assert_eq!(mapped.message_params.get("found"), Some(&"3".to_string()));
     }
 }

@@ -11,14 +11,18 @@ fn benchmark_cst_walk(c: &mut Criterion) {
     for case in &corpus_cases {
         let document = parse_cst(case.source.as_str());
         corpus_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        corpus_group.bench_with_input(BenchmarkId::new("iter_walk", case_label(case)), case, |b, _case| {
-            b.iter(|| {
-                let visited = document
-                    .iter_walk()
-                    .fold(0usize, |acc, item| acc + item.depth + item.ancestor_token_indexes.len());
-                black_box(visited)
-            });
-        });
+        corpus_group.bench_with_input(
+            BenchmarkId::new("iter_walk", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| {
+                    let visited = document.iter_walk().fold(0usize, |acc, item| {
+                        acc + item.depth + item.ancestor_token_indexes.len()
+                    });
+                    black_box(visited)
+                });
+            },
+        );
     }
     corpus_group.finish();
 

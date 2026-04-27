@@ -3,12 +3,14 @@ use std::path::{Path, PathBuf};
 
 use crate::cst::{CstDocument, parse_cst};
 use crate::diff::{
-    BuildSidBlocksOptions, ChapterTokenDiff, DiffsByChapterMap, DiffableToken,
+    BuildSidBlocksOptions, ChapterTokenDiff, DiffableToken, DiffsByChapterMap,
     diff_chapter_token_streams, diff_usfm_sources, diff_usfm_sources_by_chapter,
 };
 use crate::format::{FormatOptions, FormatToken, FormattableToken, format, format_mut};
 use crate::html::{HtmlOptions, tokens_to_html, usfm_to_html};
-use crate::lint::{LintOptions, LintResult, LintableToken, TokenFix, apply_token_fix, lint_tokens, lint_usfm};
+use crate::lint::{
+    LintOptions, LintResult, LintableToken, TokenFix, apply_token_fix, lint_tokens, lint_usfm,
+};
 use crate::parse::parse;
 use crate::token::{ParseAnalysis, Sid, Token, TokenId};
 use crate::usj::{UsjDocument, UsjError, from_usj_str, usfm_to_usj};
@@ -275,7 +277,10 @@ impl UsfmBatch {
         }
     }
 
-    pub fn diff_by_chapter<'a>(&'a self, other: &'a UsfmBatch) -> UsfmBatchDiffByChapterBuilder<'a> {
+    pub fn diff_by_chapter<'a>(
+        &'a self,
+        other: &'a UsfmBatch,
+    ) -> UsfmBatchDiffByChapterBuilder<'a> {
         UsfmBatchDiffByChapterBuilder {
             left: self,
             right: other,
@@ -291,7 +296,11 @@ impl ParsedUsfm {
         Self {
             path: doc.path.clone(),
             source: doc.source.clone(),
-            tokens: parsed.tokens.iter().map(format_token_with_identity).collect(),
+            tokens: parsed
+                .tokens
+                .iter()
+                .map(format_token_with_identity)
+                .collect(),
             analysis: OwnedParseAnalysis::from_borrowed(&parsed.analysis),
         }
     }
@@ -360,7 +369,10 @@ impl ParsedUsfm {
         }
     }
 
-    pub fn diff_by_chapter<'a>(&'a self, other: &'a ParsedUsfm) -> ParsedUsfmDiffByChapterBuilder<'a> {
+    pub fn diff_by_chapter<'a>(
+        &'a self,
+        other: &'a ParsedUsfm,
+    ) -> ParsedUsfmDiffByChapterBuilder<'a> {
         ParsedUsfmDiffByChapterBuilder {
             left: self,
             right: other,
@@ -374,7 +386,12 @@ impl ParsedUsfm {
         diff_block_id: &str,
         options: BuildSidBlocksOptions,
     ) -> Vec<FormatToken> {
-        crate::diff::apply_revert_by_block_id(diff_block_id, &self.tokens, &current.tokens, &options)
+        crate::diff::apply_revert_by_block_id(
+            diff_block_id,
+            &self.tokens,
+            &current.tokens,
+            &options,
+        )
     }
 
     pub fn revert_diff_blocks(
@@ -383,7 +400,12 @@ impl ParsedUsfm {
         diff_block_ids: &[String],
         options: BuildSidBlocksOptions,
     ) -> Vec<FormatToken> {
-        crate::diff::apply_reverts_by_block_id(diff_block_ids, &self.tokens, &current.tokens, &options)
+        crate::diff::apply_reverts_by_block_id(
+            diff_block_ids,
+            &self.tokens,
+            &current.tokens,
+            &options,
+        )
     }
 }
 
@@ -634,7 +656,12 @@ impl<T: DiffableToken> TokenStream<T> {
         diff_block_id: &str,
         options: BuildSidBlocksOptions,
     ) -> Vec<T> {
-        crate::diff::apply_revert_by_block_id(diff_block_id, &self.tokens, &current.tokens, &options)
+        crate::diff::apply_revert_by_block_id(
+            diff_block_id,
+            &self.tokens,
+            &current.tokens,
+            &options,
+        )
     }
 
     pub fn revert_diff_blocks(
@@ -643,7 +670,12 @@ impl<T: DiffableToken> TokenStream<T> {
         diff_block_ids: &[String],
         options: BuildSidBlocksOptions,
     ) -> Vec<T> {
-        crate::diff::apply_reverts_by_block_id(diff_block_ids, &self.tokens, &current.tokens, &options)
+        crate::diff::apply_reverts_by_block_id(
+            diff_block_ids,
+            &self.tokens,
+            &current.tokens,
+            &options,
+        )
     }
 }
 
@@ -957,14 +989,19 @@ impl<'a> UsfmBatchDiffBuilder<'a> {
             self.right.docs.len(),
             "UsfmBatch::diff requires equal batch lengths"
         );
-        map_batch_pairs(&self.left.docs, &self.right.docs, self.execution, |(left, right)| BatchItem {
-            path: left.path.clone().or_else(|| right.path.clone()),
-            value: diff_chapter_token_streams(
-                &ParsedUsfm::from_usfm(left).tokens,
-                &ParsedUsfm::from_usfm(right).tokens,
-                &self.options,
-            ),
-        })
+        map_batch_pairs(
+            &self.left.docs,
+            &self.right.docs,
+            self.execution,
+            |(left, right)| BatchItem {
+                path: left.path.clone().or_else(|| right.path.clone()),
+                value: diff_chapter_token_streams(
+                    &ParsedUsfm::from_usfm(left).tokens,
+                    &ParsedUsfm::from_usfm(right).tokens,
+                    &self.options,
+                ),
+            },
+        )
     }
 }
 
@@ -992,18 +1029,23 @@ impl<'a> UsfmBatchDiffByChapterBuilder<'a> {
             self.right.docs.len(),
             "UsfmBatch::diff_by_chapter requires equal batch lengths"
         );
-        map_batch_pairs(&self.left.docs, &self.right.docs, self.execution, |(left, right)| {
-            let left = ParsedUsfm::from_usfm(left);
-            let right = ParsedUsfm::from_usfm(right);
-            BatchItem {
-                path: left.path.clone().or_else(|| right.path.clone()),
-                value: group_chapter_diffs(diff_chapter_token_streams(
-                    &left.tokens,
-                    &right.tokens,
-                    &self.options,
-                )),
-            }
-        })
+        map_batch_pairs(
+            &self.left.docs,
+            &self.right.docs,
+            self.execution,
+            |(left, right)| {
+                let left = ParsedUsfm::from_usfm(left);
+                let right = ParsedUsfm::from_usfm(right);
+                BatchItem {
+                    path: left.path.clone().or_else(|| right.path.clone()),
+                    value: group_chapter_diffs(diff_chapter_token_streams(
+                        &left.tokens,
+                        &right.tokens,
+                        &self.options,
+                    )),
+                }
+            },
+        )
     }
 }
 
@@ -1166,12 +1208,15 @@ impl<'a, T: DiffableToken + Sync + Send> TokenBatchDiffBuilder<'a, T> {
             self.other.streams.len(),
             "TokenBatch::diff requires equal batch lengths"
         );
-        map_batch_pairs(&self.batch.streams, &self.other.streams, self.execution, |(left, right)| {
-            BatchItem {
+        map_batch_pairs(
+            &self.batch.streams,
+            &self.other.streams,
+            self.execution,
+            |(left, right)| BatchItem {
                 path: left.path.clone().or_else(|| right.path.clone()),
                 value: diff_chapter_token_streams(&left.tokens, &right.tokens, &self.options),
-            }
-        })
+            },
+        )
     }
 }
 
@@ -1312,8 +1357,14 @@ mod tests {
     #[test]
     fn usfm_singular_methods_match_engines() {
         let doc = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n");
-        assert_eq!(doc.lint(LintOptions::default()), lint_usfm(doc.source(), LintOptions::default()));
-        assert_eq!(doc.to_html(HtmlOptions::default()), usfm_to_html(doc.source(), HtmlOptions::default()));
+        assert_eq!(
+            doc.lint(LintOptions::default()),
+            lint_usfm(doc.source(), LintOptions::default())
+        );
+        assert_eq!(
+            doc.to_html(HtmlOptions::default()),
+            usfm_to_html(doc.source(), HtmlOptions::default())
+        );
         assert_eq!(
             doc.to_usj().expect("usj"),
             usfm_to_usj(doc.source()).expect("usj direct")
@@ -1326,8 +1377,12 @@ mod tests {
 
     #[test]
     fn reverse_import_facades_work() {
-        let usj = Usj::from_str("{\"type\":\"USJ\",\"version\":\"3.1\",\"content\":[{\"type\":\"book\",\"marker\":\"id\",\"code\":\"GEN\"},{\"type\":\"chapter\",\"marker\":\"c\",\"number\":\"1\"},{\"type\":\"para\",\"marker\":\"p\",\"content\":[{\"type\":\"verse\",\"marker\":\"v\",\"number\":\"1\"},\"Text\"]}]}");
-        let usx = Usx::from_str("<usx version=\"3.0\"><book code=\"GEN\" style=\"id\"/><chapter number=\"1\" style=\"c\" sid=\"GEN 1\"/><para style=\"p\"><verse number=\"1\" style=\"v\" sid=\"GEN 1:1\"/>Text<verse eid=\"GEN 1:1\"/></para><chapter eid=\"GEN 1\"/></usx>");
+        let usj = Usj::from_str(
+            "{\"type\":\"USJ\",\"version\":\"3.1\",\"content\":[{\"type\":\"book\",\"marker\":\"id\",\"code\":\"GEN\"},{\"type\":\"chapter\",\"marker\":\"c\",\"number\":\"1\"},{\"type\":\"para\",\"marker\":\"p\",\"content\":[{\"type\":\"verse\",\"marker\":\"v\",\"number\":\"1\"},\"Text\"]}]}",
+        );
+        let usx = Usx::from_str(
+            "<usx version=\"3.0\"><book code=\"GEN\" style=\"id\"/><chapter number=\"1\" style=\"c\" sid=\"GEN 1\"/><para style=\"p\"><verse number=\"1\" style=\"v\" sid=\"GEN 1:1\"/>Text<verse eid=\"GEN 1:1\"/></para><chapter eid=\"GEN 1\"/></usx>",
+        );
 
         assert!(usj.to_usfm().expect("usj -> usfm").contains("\\v 1 Text"));
         assert_eq!(
@@ -1376,8 +1431,14 @@ mod tests {
 
         let parsed = left.parse().with_execution(ExecutionMode::Serial).run();
         assert_eq!(parsed.items().len(), 2);
-        assert_eq!(parsed.items()[0].analysis().book_code.as_deref(), Some("GEN"));
-        assert_eq!(parsed.items()[1].analysis().book_code.as_deref(), Some("EXO"));
+        assert_eq!(
+            parsed.items()[0].analysis().book_code.as_deref(),
+            Some("GEN")
+        );
+        assert_eq!(
+            parsed.items()[1].analysis().book_code.as_deref(),
+            Some("EXO")
+        );
 
         let diffs = left
             .diff(&right)
@@ -1431,7 +1492,9 @@ mod tests {
         let diffs = baseline_parsed.diff(&changed_parsed).run();
         let verse_diff = diffs
             .iter()
-            .find(|diff| diff.status == crate::DiffStatus::Modified && diff.semantic_sid.ends_with("1:1"))
+            .find(|diff| {
+                diff.status == crate::DiffStatus::Modified && diff.semantic_sid.ends_with("1:1")
+            })
             .expect("expected modified verse diff");
         let reverted = baseline_parsed.revert_diff_block(
             &changed_parsed,
@@ -1469,15 +1532,12 @@ mod tests {
         let left = TokenBatch::from_token_streams(vec![left_first.clone(), left_second.clone()]);
         let right = TokenBatch::from_token_streams(vec![right_first.clone(), right_second.clone()]);
 
-        let batch_output = left.diff(&right).with_execution(ExecutionMode::Serial).run();
-        assert_eq!(
-            batch_output[0].value,
-            left_first.diff(&right_first).run()
-        );
-        assert_eq!(
-            batch_output[1].value,
-            left_second.diff(&right_second).run()
-        );
+        let batch_output = left
+            .diff(&right)
+            .with_execution(ExecutionMode::Serial)
+            .run();
+        assert_eq!(batch_output[0].value, left_first.diff(&right_first).run());
+        assert_eq!(batch_output[1].value, left_second.diff(&right_second).run());
     }
 
     #[cfg(not(feature = "rayon"))]

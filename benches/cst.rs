@@ -12,15 +12,27 @@ fn benchmark_cst(c: &mut Criterion) {
     for case in &corpus_cases {
         let parsed = parse(case.source.as_str());
         corpus_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        corpus_group.bench_with_input(BenchmarkId::new("clone_tokens", case_label(case)), case, |b, _case| {
-            b.iter(|| black_box(parsed.tokens.clone()));
-        });
-        corpus_group.bench_with_input(BenchmarkId::new("build_roots", case_label(case)), case, |b, _case| {
-            b.iter(|| black_box(build_cst_roots(&parsed.tokens)));
-        });
-        corpus_group.bench_with_input(BenchmarkId::new("build_document", case_label(case)), case, |b, _case| {
-            b.iter(|| black_box(build_cst(parsed.tokens.clone())));
-        });
+        corpus_group.bench_with_input(
+            BenchmarkId::new("clone_tokens", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| black_box(parsed.tokens.clone()));
+            },
+        );
+        corpus_group.bench_with_input(
+            BenchmarkId::new("build_roots", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| black_box(build_cst_roots(&parsed.tokens)));
+            },
+        );
+        corpus_group.bench_with_input(
+            BenchmarkId::new("build_document", case_label(case)),
+            case,
+            |b, _case| {
+                b.iter(|| black_box(build_cst(parsed.tokens.clone())));
+            },
+        );
     }
     corpus_group.finish();
 

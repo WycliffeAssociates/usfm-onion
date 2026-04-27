@@ -117,6 +117,7 @@ export type StructuralScopeKind =
 | "meta";
 export type LintCategory = "document" | "structure" | "context" | "numbering";
 export type LintSeverity = "error" | "warning";
+export type LintIssueType = "usfm" | "content";
 export type LintCode =
 | "missing-id-marker"
 | "missing-separator-after-marker"
@@ -126,7 +127,7 @@ export type LintCode =
 | "verse-content-not-empty"
 | "unknown-token"
 | "char-not-closed"
-| "note-not-closed"
+| "unclosed-note"
 | "paragraph-before-first-chapter"
 | "verse-before-first-chapter"
 | "note-submarker-outside-note"
@@ -140,8 +141,7 @@ export type LintCode =
 | "implicitly-closed-marker"
 | "stray-close-marker"
 | "misnested-close-marker"
-| "unclosed-note"
-| "unclosed-marker-at-eof"
+| "unclosed-marker"
 | "duplicate-chapter-number"
 | "chapter-expected-increase-by-one"
 | "duplicate-verse-number"
@@ -246,7 +246,9 @@ export interface LintIssue {
     code: LintCode;
     category: LintCategory;
     severity: LintSeverity;
+    issueType: LintIssueType;
     message: string;
+    messageParams: Record<string, string>;
     span?: Span;
     relatedSpan?: Span;
     tokenId?: string;
@@ -259,6 +261,7 @@ export interface LintIssue {
 export interface LintSummary {
     byCategory: Partial<Record<LintCategory, number>>;
     bySeverity: Partial<Record<LintSeverity, number>>;
+    byIssueType: Partial<Record<LintIssueType, number>>;
     totalCount: number;
     suppressedCount: number;
 }
@@ -404,6 +407,7 @@ export interface LintCodeMeta {
     code: LintCode;
     category: LintCategory;
     severity: LintSeverity;
+    issueType: LintIssueType;
 }
 
 export interface FormatRuleMeta {

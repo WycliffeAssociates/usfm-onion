@@ -30,9 +30,13 @@ fn benchmark_format(c: &mut Criterion) {
     let mut source_group = c.benchmark_group("format/source");
     for case in &corpus_cases {
         source_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        source_group.bench_with_input(BenchmarkId::new("format_usfm", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(format_usfm(case.source.as_str(), FormatOptions::default())));
-        });
+        source_group.bench_with_input(
+            BenchmarkId::new("format_usfm", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(format_usfm(case.source.as_str(), FormatOptions::default())));
+            },
+        );
     }
     source_group.finish();
 

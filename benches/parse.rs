@@ -12,9 +12,13 @@ fn benchmark_parse(c: &mut Criterion) {
     for case in &corpus_cases {
         let lexed = lex(case.source.as_str());
         corpus_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        corpus_group.bench_with_input(BenchmarkId::new("parse", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(parse_lexemes(case.source.as_str(), &lexed.tokens)));
-        });
+        corpus_group.bench_with_input(
+            BenchmarkId::new("parse", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(parse_lexemes(case.source.as_str(), &lexed.tokens)));
+            },
+        );
     }
     corpus_group.finish();
 

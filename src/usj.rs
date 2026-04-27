@@ -9,8 +9,7 @@ use crate::export_tree::{
     ExportContainerKind, ExportContainerNode, ExportDocument, ExportNode, build_export_document,
 };
 use crate::marker_defs::{
-    NoteSubkind, SpecMarkerKind, marker_default_attribute, marker_is_note_sub,
-    marker_note_subkind,
+    NoteSubkind, SpecMarkerKind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
 };
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, TokenData};
@@ -279,7 +278,9 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                 match &token.data {
                     TokenData::Text => (vec![UsjNode::Text(token.source.to_string())], index + 1),
                     TokenData::Newline => (Vec::new(), index + 1),
-                    TokenData::OptBreak => (vec![UsjNode::Element(UsjElement::OptBreak {})], index + 1),
+                    TokenData::OptBreak => {
+                        (vec![UsjNode::Element(UsjElement::OptBreak {})], index + 1)
+                    }
                     TokenData::EndMarker { name, .. } => (
                         vec![UsjNode::Element(UsjElement::Unmatched {
                             marker: name.to_string(),
@@ -297,13 +298,15 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                 closed: _,
                 end_index: _,
             } => {
-                let TokenData::Milestone { name, .. } = &self.document.tokens[*marker_index].data else {
+                let TokenData::Milestone { name, .. } = &self.document.tokens[*marker_index].data
+                else {
                     return (Vec::new(), index + 1);
                 };
                 let marker_name = export_marker_name(name);
                 let mut extra = BTreeMap::new();
                 if let Some(attribute_index) = attribute_index {
-                    extra.extend(self.attribute_map_from_token(*attribute_index, Some(marker_name)));
+                    extra
+                        .extend(self.attribute_map_from_token(*attribute_index, Some(marker_name)));
                 }
                 (
                     vec![UsjNode::Element(UsjElement::Milestone {
@@ -317,14 +320,18 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                 marker_index,
                 number_index,
             } => (
-                vec![UsjNode::Element(self.export_chapter(*marker_index, *number_index))],
+                vec![UsjNode::Element(
+                    self.export_chapter(*marker_index, *number_index),
+                )],
                 index + 1,
             ),
             ExportNode::Verse {
                 marker_index,
                 number_index,
             } => (
-                vec![UsjNode::Element(self.export_verse(*marker_index, *number_index))],
+                vec![UsjNode::Element(
+                    self.export_verse(*marker_index, *number_index),
+                )],
                 index + 1,
             ),
             ExportNode::Container(container) => {
@@ -341,39 +348,59 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                     return (Vec::new(), index + 1);
                 }
                 match metadata_kind {
-                    Some(SpecMarkerKind::Header) if name == "id" => {
-                        (vec![UsjNode::Element(self.export_book(container))], index + 1)
-                    }
-                    Some(SpecMarkerKind::Note) => {
-                        (vec![UsjNode::Element(self.export_note(container, name))], index + 1)
-                    }
+                    Some(SpecMarkerKind::Header) if name == "id" => (
+                        vec![UsjNode::Element(self.export_book(container))],
+                        index + 1,
+                    ),
+                    Some(SpecMarkerKind::Note) => (
+                        vec![UsjNode::Element(self.export_note(container, name))],
+                        index + 1,
+                    ),
                     Some(SpecMarkerKind::Character) => {
                         (self.export_character_sequence(container, name), index + 1)
                     }
-                    Some(SpecMarkerKind::Figure) => {
-                        (vec![UsjNode::Element(self.export_figure(container, name))], index + 1)
-                    }
-                    Some(SpecMarkerKind::Periph) => {
-                        (vec![UsjNode::Element(self.export_periph(container))], index + 1)
-                    }
-                    Some(SpecMarkerKind::Sidebar) => {
-                        (vec![UsjNode::Element(self.export_sidebar(container, name))], index + 1)
-                    }
-                    Some(SpecMarkerKind::TableRow) => {
-                        (vec![UsjNode::Element(self.export_table_row(container, name))], index + 1)
-                    }
-                    Some(SpecMarkerKind::TableCell) => {
-                        (vec![UsjNode::Element(self.export_table_cell(container, name))], index + 1)
-                    }
-                    Some(SpecMarkerKind::Paragraph) | Some(SpecMarkerKind::Header) | Some(SpecMarkerKind::Meta) => {
-                        (vec![UsjNode::Element(self.export_para(container, name))], index + 1)
-                    }
+                    Some(SpecMarkerKind::Figure) => (
+                        vec![UsjNode::Element(self.export_figure(container, name))],
+                        index + 1,
+                    ),
+                    Some(SpecMarkerKind::Periph) => (
+                        vec![UsjNode::Element(self.export_periph(container))],
+                        index + 1,
+                    ),
+                    Some(SpecMarkerKind::Sidebar) => (
+                        vec![UsjNode::Element(self.export_sidebar(container, name))],
+                        index + 1,
+                    ),
+                    Some(SpecMarkerKind::TableRow) => (
+                        vec![UsjNode::Element(self.export_table_row(container, name))],
+                        index + 1,
+                    ),
+                    Some(SpecMarkerKind::TableCell) => (
+                        vec![UsjNode::Element(self.export_table_cell(container, name))],
+                        index + 1,
+                    ),
+                    Some(SpecMarkerKind::Paragraph)
+                    | Some(SpecMarkerKind::Header)
+                    | Some(SpecMarkerKind::Meta) => (
+                        vec![UsjNode::Element(self.export_para(container, name))],
+                        index + 1,
+                    ),
                     None if matches!(
                         container.kind,
-                        ExportContainerKind::Paragraph | ExportContainerKind::Header | ExportContainerKind::Meta
-                    ) => (vec![UsjNode::Element(self.export_para(container, name))], index + 1),
+                        ExportContainerKind::Paragraph
+                            | ExportContainerKind::Header
+                            | ExportContainerKind::Meta
+                    ) =>
+                    {
+                        (
+                            vec![UsjNode::Element(self.export_para(container, name))],
+                            index + 1,
+                        )
+                    }
                     _ => (
-                        vec![UsjNode::Element(self.export_unknown(container, name, false))],
+                        vec![UsjNode::Element(
+                            self.export_unknown(container, name, false),
+                        )],
                         index + 1,
                     ),
                 }
@@ -387,27 +414,32 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
 
         for child in &node.children {
             match child {
-                ExportNode::Leaf { token_index } => match &self.document.tokens[*token_index].data {
-                    TokenData::BookCode { code: book_code, .. } if code.is_empty() => {
-                        code = (*book_code).to_string();
-                    }
-                    TokenData::Text if code.is_empty() => {
-                        let (maybe_code, remainder) = extract_book_code_from_text(
-                            self.document.tokens[*token_index].source,
-                        );
-                        if let Some(book_code) = maybe_code {
-                            code = book_code;
+                ExportNode::Leaf { token_index } => {
+                    match &self.document.tokens[*token_index].data {
+                        TokenData::BookCode {
+                            code: book_code, ..
+                        } if code.is_empty() => {
+                            code = (*book_code).to_string();
                         }
-                        if let Some(remainder) = remainder {
-                            content.push(UsjNode::Text(remainder));
+                        TokenData::Text if code.is_empty() => {
+                            let (maybe_code, remainder) = extract_book_code_from_text(
+                                self.document.tokens[*token_index].source,
+                            );
+                            if let Some(book_code) = maybe_code {
+                                code = book_code;
+                            }
+                            if let Some(remainder) = remainder {
+                                content.push(UsjNode::Text(remainder));
+                            }
+                        }
+                        TokenData::AttributeList { .. } => {}
+                        _ => {
+                            let (mut exported, _) =
+                                self.export_node(std::slice::from_ref(child), 0);
+                            content.append(&mut exported);
                         }
                     }
-                    TokenData::AttributeList { .. } => {}
-                    _ => {
-                        let (mut exported, _) = self.export_node(std::slice::from_ref(child), 0);
-                        content.append(&mut exported);
-                    }
-                },
+                }
                 _ => {
                     let (mut exported, _) = self.export_node(std::slice::from_ref(child), 0);
                     content.append(&mut exported);
@@ -469,7 +501,8 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         let mut caller = "+".to_string();
         let mut content = Vec::new();
         let mut category = None;
-        let mut attrs = self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
+        let mut attrs =
+            self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
 
         let mut started_content = false;
         for child in &node.children {
@@ -539,10 +572,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         let (content, extra) =
             self.export_inline_content_and_attributes(marker, children, own_attribute_index);
         if marker == "ref" {
-            UsjElement::Ref {
-                content,
-                extra,
-            }
+            UsjElement::Ref { content, extra }
         } else {
             UsjElement::Char {
                 marker: marker.to_string(),
@@ -572,13 +602,11 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             return vec![UsjNode::Element(self.export_character_like(node, marker))];
         };
 
-        let mut exported = vec![UsjNode::Element(
-            self.export_character_like_from_children(
-                marker,
-                &node.children[..split_index],
-                node.attribute_index,
-            ),
-        )];
+        let mut exported = vec![UsjNode::Element(self.export_character_like_from_children(
+            marker,
+            &node.children[..split_index],
+            node.attribute_index,
+        ))];
         exported.extend(self.export_non_attribute_children(&node.children[split_index..]));
         exported
     }
@@ -610,7 +638,10 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         if let Some(attribute_index) = node.attribute_index {
             parts.push((
                 self.document.tokens[attribute_index].span.start,
-                FigurePart::Attr(format!("{} ", self.document.tokens[attribute_index].source.trim())),
+                FigurePart::Attr(format!(
+                    "{} ",
+                    self.document.tokens[attribute_index].source.trim()
+                )),
             ));
         }
         parts.sort_by_key(|(start, _)| *start);
@@ -619,7 +650,8 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         for (_, part) in parts {
             match part {
                 FigurePart::Child(child) => {
-                    content.extend(self.export_non_attribute_children(std::slice::from_ref(&child)));
+                    content
+                        .extend(self.export_non_attribute_children(std::slice::from_ref(&child)));
                 }
                 FigurePart::Attr(source) => content.push(UsjNode::Text(source)),
             }
@@ -636,12 +668,16 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
     fn export_sidebar(&self, node: &ExportContainerNode, marker: &str) -> UsjElement {
         let mut category = None;
         let mut content = Vec::new();
-        let mut attrs = self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
+        let mut attrs =
+            self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
 
         for child in &node.children {
             match child {
                 ExportNode::Leaf { token_index }
-                    if matches!(self.document.tokens[*token_index].data, TokenData::AttributeList { .. }) =>
+                    if matches!(
+                        self.document.tokens[*token_index].data,
+                        TokenData::AttributeList { .. }
+                    ) =>
                 {
                     continue;
                 }
@@ -694,7 +730,8 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                     }
                 }
                 _ => {
-                    let mut exported = self.export_non_attribute_children(std::slice::from_ref(child));
+                    let mut exported =
+                        self.export_non_attribute_children(std::slice::from_ref(child));
                     content.append(&mut exported);
                 }
             }
@@ -743,7 +780,12 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         }
     }
 
-    fn export_unknown(&self, node: &ExportContainerNode, marker: &str, unmatched: bool) -> UsjElement {
+    fn export_unknown(
+        &self,
+        node: &ExportContainerNode,
+        marker: &str,
+        unmatched: bool,
+    ) -> UsjElement {
         let content = self.export_non_attribute_children(&node.children);
         let extra = self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
         if unmatched {
@@ -773,7 +815,8 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         }
         for child in children {
             if let ExportNode::Leaf { token_index } = child
-                && let TokenData::AttributeList { entries } = &self.document.tokens[*token_index].data
+                && let TokenData::AttributeList { entries } =
+                    &self.document.tokens[*token_index].data
             {
                 for entry in entries {
                     extra.insert(entry.key.to_string(), entry.value.to_string());
@@ -809,7 +852,10 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                 }
             }
             for entry in entries {
-                extra.insert(rename_attribute_key_for_usj(marker, entry.key), entry.value.to_string());
+                extra.insert(
+                    rename_attribute_key_for_usj(marker, entry.key),
+                    entry.value.to_string(),
+                );
             }
         }
         extra
@@ -820,7 +866,10 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         for child in children {
             match child {
                 ExportNode::Leaf { token_index }
-                    if matches!(self.document.tokens[*token_index].data, TokenData::AttributeList { .. }) => {}
+                    if matches!(
+                        self.document.tokens[*token_index].data,
+                        TokenData::AttributeList { .. }
+                    ) => {}
                 _ => filtered.push(child.clone()),
             }
         }
@@ -849,7 +898,12 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             }
             parts.push((
                 self.document.tokens[attribute_index].span.start,
-                InlinePart::Text(self.document.tokens[attribute_index].source.trim().to_string()),
+                InlinePart::Text(
+                    self.document.tokens[attribute_index]
+                        .source
+                        .trim()
+                        .to_string(),
+                ),
             ));
             parts.sort_by_key(|(start, _)| *start);
 
@@ -857,7 +911,9 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             for (_, part) in parts {
                 match part {
                     InlinePart::Node(node) => {
-                        content.extend(self.export_non_attribute_children(std::slice::from_ref(&node)));
+                        content.extend(
+                            self.export_non_attribute_children(std::slice::from_ref(&node)),
+                        );
                     }
                     InlinePart::Text(text) => content.push(UsjNode::Text(text)),
                 }
@@ -899,7 +955,10 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         {
             let value = self.document.tokens[*token_index].source.trim().to_string();
             if !value.is_empty() {
-                extra.insert(rename_attribute_key_for_usj(Some(marker), default_key), value);
+                extra.insert(
+                    rename_attribute_key_for_usj(Some(marker), default_key),
+                    value,
+                );
             }
         }
 
@@ -934,11 +993,9 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
     fn number_from_token(&self, token_index: usize) -> Option<String> {
         let token = self.document.tokens.get(token_index)?;
         match &token.data {
-            TokenData::Number {
-                start,
-                end,
-                kind,
-            } => Some(number_source_to_usj(token.source, *start, *end, *kind)),
+            TokenData::Number { start, end, kind } => {
+                Some(number_source_to_usj(token.source, *start, *end, *kind))
+            }
             _ => None,
         }
     }
@@ -958,8 +1015,12 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             ExportNode::Leaf { token_index } => self.document.tokens[*token_index].span.start,
             ExportNode::Chapter { marker_index, .. }
             | ExportNode::Verse { marker_index, .. }
-            | ExportNode::Milestone { marker_index, .. } => self.document.tokens[*marker_index].span.start,
-            ExportNode::Container(container) => self.document.tokens[container.token_index].span.start,
+            | ExportNode::Milestone { marker_index, .. } => {
+                self.document.tokens[*marker_index].span.start
+            }
+            ExportNode::Container(container) => {
+                self.document.tokens[container.token_index].span.start
+            }
         }
     }
 }
@@ -1009,7 +1070,11 @@ impl UsjSerializer {
         }
     }
 
-    fn serialize_element(&mut self, element: &UsjElement, next: Option<&UsjNode>) -> Result<(), UsjError> {
+    fn serialize_element(
+        &mut self,
+        element: &UsjElement,
+        next: Option<&UsjNode>,
+    ) -> Result<(), UsjError> {
         match element {
             UsjElement::Book {
                 marker,
@@ -1404,7 +1469,11 @@ impl UsjSerializer {
             if !first {
                 self.output.push(' ');
             }
-            let out_key = if key == "file" || key == "src" { "src" } else { key };
+            let out_key = if key == "file" || key == "src" {
+                "src"
+            } else {
+                key
+            };
             self.output.push_str(out_key);
             self.output.push_str("=\"");
             self.output.push_str(value);
@@ -1413,7 +1482,10 @@ impl UsjSerializer {
         }
 
         for (key, value) in extra {
-            if matches!(key.as_str(), "alt" | "src" | "file" | "size" | "loc" | "copy" | "ref" | "rotate") {
+            if matches!(
+                key.as_str(),
+                "alt" | "src" | "file" | "size" | "loc" | "copy" | "ref" | "rotate"
+            ) {
                 continue;
             }
             if !first {
@@ -1595,10 +1667,9 @@ fn extract_book_code_from_text(text: &str) -> (Option<String>, Option<String>) {
 fn document_uses_alternate_texts_book_code(document: &ExportDocument<'_>) -> bool {
     document.tokens.iter().enumerate().any(|(index, token)| {
         matches!(token.data, TokenData::Marker { name: "mt1", .. })
-            && document
-                .tokens
-                .get(index + 1)
-                .is_some_and(|next| matches!(next.data, TokenData::Text) && next.source.trim() == "Alternate Texts")
+            && document.tokens.get(index + 1).is_some_and(|next| {
+                matches!(next.data, TokenData::Text) && next.source.trim() == "Alternate Texts"
+            })
     })
 }
 
@@ -1636,7 +1707,10 @@ fn fixture_is_validated_pass(path: &Path) -> bool {
 
 #[cfg(test)]
 fn normalize_usfm_fixture_text(source: &str) -> String {
-    source.replace("\r\n", "\n").trim_end_matches('\n').to_string()
+    source
+        .replace("\r\n", "\n")
+        .trim_end_matches('\n')
+        .to_string()
 }
 
 fn collect_usj_fixture_pairs_into(root: &Path, pairs: &mut Vec<(PathBuf, PathBuf)>) {
@@ -1756,16 +1830,23 @@ mod tests {
         for (usfm_path, usj_path) in collect_usj_fixture_pairs(Path::new("testData")) {
             let source = fs::read_to_string(&usfm_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
-            let actual = usfm_to_usj(&source)
-                .unwrap_or_else(|error| panic!("USJ export failed for {}: {error}", usfm_path.display()));
-            let expected: UsjDocument = serde_json::from_str(
-                &fs::read_to_string(&usj_path)
-                    .unwrap_or_else(|error| panic!("failed to read {}: {error}", usj_path.display())),
-            )
-            .unwrap_or_else(|error| panic!("failed to parse {}: {error}", usj_path.display()));
+            let actual = usfm_to_usj(&source).unwrap_or_else(|error| {
+                panic!("USJ export failed for {}: {error}", usfm_path.display())
+            });
+            let expected: UsjDocument =
+                serde_json::from_str(&fs::read_to_string(&usj_path).unwrap_or_else(|error| {
+                    panic!("failed to read {}: {error}", usj_path.display())
+                }))
+                .unwrap_or_else(|error| panic!("failed to parse {}: {error}", usj_path.display()));
             let json = serde_json::to_string(&actual).expect("USJ should serialize");
-            let reparsed: UsjDocument = serde_json::from_str(&json).expect("USJ should deserialize");
-            assert_eq!(actual, reparsed, "typed USJ roundtrip failed for {}", usfm_path.display());
+            let reparsed: UsjDocument =
+                serde_json::from_str(&json).expect("USJ should deserialize");
+            assert_eq!(
+                actual,
+                reparsed,
+                "typed USJ roundtrip failed for {}",
+                usfm_path.display()
+            );
             let _ = expected;
         }
     }
@@ -1783,11 +1864,11 @@ mod tests {
             let source = fs::read_to_string(&usfm_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
             let actual = usfm_to_usj(&source).expect("USJ export should succeed");
-            let expected: UsjDocument = serde_json::from_str(
-                &fs::read_to_string(&usj_path)
-                    .unwrap_or_else(|error| panic!("failed to read {}: {error}", usj_path.display())),
-            )
-            .unwrap_or_else(|error| panic!("failed to parse {}: {error}", usj_path.display()));
+            let expected: UsjDocument =
+                serde_json::from_str(&fs::read_to_string(&usj_path).unwrap_or_else(|error| {
+                    panic!("failed to read {}: {error}", usj_path.display())
+                }))
+                .unwrap_or_else(|error| panic!("failed to parse {}: {error}", usj_path.display()));
 
             assert_eq!(
                 normalize_document(&actual),
@@ -1803,11 +1884,16 @@ mod tests {
         for (usfm_path, usj_path) in collect_usj_fixture_pairs(Path::new("testData")) {
             let json = fs::read_to_string(&usj_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usj_path.display()));
-            let actual = from_usj_str(&json)
-                .unwrap_or_else(|error| panic!("USJ import failed for {}: {error}", usj_path.display()));
+            let actual = from_usj_str(&json).unwrap_or_else(|error| {
+                panic!("USJ import failed for {}: {error}", usj_path.display())
+            });
 
-            let reparsed = usfm_to_usj(&actual)
-                .unwrap_or_else(|error| panic!("reverse USFM should parse for {}: {error}", usj_path.display()));
+            let reparsed = usfm_to_usj(&actual).unwrap_or_else(|error| {
+                panic!(
+                    "reverse USFM should parse for {}: {error}",
+                    usj_path.display()
+                )
+            });
 
             assert!(
                 !actual.is_empty(),
@@ -1838,14 +1924,18 @@ mod tests {
 
             let expected = fs::read_to_string(&usfm_path)
                 .unwrap_or_else(|error| panic!("failed to read {}: {error}", usfm_path.display()));
-            let usj = usfm_to_usj(&expected)
-                .unwrap_or_else(|error| panic!("USFM -> USJ failed for {}: {error}", usfm_path.display()));
-            let usx = crate::usx::usj_to_usx(&usj)
-                .unwrap_or_else(|error| panic!("USJ -> USX failed for {}: {error}", usfm_path.display()));
-            let roundtripped_usj = crate::usx::usx_to_usj(&usx)
-                .unwrap_or_else(|error| panic!("USX -> USJ failed for {}: {error}", usfm_path.display()));
-            let actual = from_usj(&roundtripped_usj)
-                .unwrap_or_else(|error| panic!("USJ -> USFM failed for {}: {error}", usfm_path.display()));
+            let usj = usfm_to_usj(&expected).unwrap_or_else(|error| {
+                panic!("USFM -> USJ failed for {}: {error}", usfm_path.display())
+            });
+            let usx = crate::usx::usj_to_usx(&usj).unwrap_or_else(|error| {
+                panic!("USJ -> USX failed for {}: {error}", usfm_path.display())
+            });
+            let roundtripped_usj = crate::usx::usx_to_usj(&usx).unwrap_or_else(|error| {
+                panic!("USX -> USJ failed for {}: {error}", usfm_path.display())
+            });
+            let actual = from_usj(&roundtripped_usj).unwrap_or_else(|error| {
+                panic!("USJ -> USFM failed for {}: {error}", usfm_path.display())
+            });
 
             assert_eq!(
                 normalize_usfm_fixture_text(&actual),
@@ -1878,7 +1968,9 @@ mod tests {
                         }
                     }
                 }
-                UsjNode::Element(element) => normalized.push(UsjNode::Element(normalize_element(element))),
+                UsjNode::Element(element) => {
+                    normalized.push(UsjNode::Element(normalize_element(element)))
+                }
             }
         }
         normalized
@@ -1986,7 +2078,11 @@ mod tests {
                 category: category.clone(),
                 extra: extra.clone(),
             },
-            UsjElement::Periph { content, alt, extra } => UsjElement::Periph {
+            UsjElement::Periph {
+                content,
+                alt,
+                extra,
+            } => UsjElement::Periph {
                 content: normalize_nodes(content),
                 alt: alt.clone(),
                 extra: extra.clone(),

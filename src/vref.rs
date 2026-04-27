@@ -39,10 +39,13 @@ pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
                 }
 
                 if structural.scope_kind == crate::marker_defs::StructuralScopeKind::Block {
-                    state.current_block_supports_verse = Some(marker_paragraph_supports_verse(name));
+                    state.current_block_supports_verse =
+                        Some(marker_paragraph_supports_verse(name));
                 }
             }
-            TokenData::EndMarker { name, structural, .. } => {
+            TokenData::EndMarker {
+                name, structural, ..
+            } => {
                 pending_marker_name = None;
 
                 if structural.scope_kind == crate::marker_defs::StructuralScopeKind::Note {
@@ -130,14 +133,8 @@ fn push_text(current: &mut String, fragment: &str) {
         return;
     }
 
-    let current_ends_with_ws = current
-        .chars()
-        .last()
-        .is_some_and(char::is_whitespace);
-    let fragment_starts_with_ws = fragment
-        .chars()
-        .next()
-        .is_some_and(char::is_whitespace);
+    let current_ends_with_ws = current.chars().last().is_some_and(char::is_whitespace);
+    let fragment_starts_with_ws = fragment.chars().next().is_some_and(char::is_whitespace);
 
     if current_ends_with_ws && fragment_starts_with_ws {
         current.push_str(fragment.trim_start());
@@ -176,8 +173,9 @@ mod tests {
 
     #[test]
     fn footnotes_are_stripped() {
-        let map =
-            usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 Text \\f + \\fr 1:1 \\ft note text \\f* rest.");
+        let map = usfm_to_vref_map(
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 Text \\f + \\fr 1:1 \\ft note text \\f* rest.",
+        );
         let verse = map.get("GEN 1:1").map(String::as_str).unwrap_or("");
 
         assert!(verse.contains("Text"));
@@ -187,17 +185,24 @@ mod tests {
 
     #[test]
     fn section_headings_are_skipped() {
-        let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\s1 The Creation\n\\p\n\\v 1 In the beginning.");
+        let map =
+            usfm_to_vref_map("\\id GEN\n\\c 1\n\\s1 The Creation\n\\p\n\\v 1 In the beginning.");
 
         assert_eq!(map.len(), 1);
-        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some("In the beginning."));
+        assert_eq!(
+            map.get("GEN 1:1").map(String::as_str),
+            Some("In the beginning.")
+        );
     }
 
     #[test]
     fn verse_spanning_paragraphs_is_concatenated() {
         let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 First part.\n\\q1 Second part.");
 
-        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some("First part. Second part."));
+        assert_eq!(
+            map.get("GEN 1:1").map(String::as_str),
+            Some("First part. Second part.")
+        );
     }
 
     #[test]
@@ -205,8 +210,14 @@ mod tests {
         let parsed = parse("\\id GEN\n\\c 1\n\\v 1 In the beginning.\n\\v 2 And God said.");
         let map = tokens_to_vref_map(&parsed.tokens);
 
-        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some("In the beginning."));
-        assert_eq!(map.get("GEN 1:2").map(String::as_str), Some("And God said."));
+        assert_eq!(
+            map.get("GEN 1:1").map(String::as_str),
+            Some("In the beginning.")
+        );
+        assert_eq!(
+            map.get("GEN 1:2").map(String::as_str),
+            Some("And God said.")
+        );
     }
 
     #[test]

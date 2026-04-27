@@ -10,9 +10,13 @@ fn benchmark_lexer(c: &mut Criterion) {
     let mut corpus_group = c.benchmark_group("lexer/corpus");
     for case in &corpus_cases {
         corpus_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        corpus_group.bench_with_input(BenchmarkId::new("lex", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(lex(case.source.as_str())));
-        });
+        corpus_group.bench_with_input(
+            BenchmarkId::new("lex", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| black_box(lex(case.source.as_str())));
+            },
+        );
     }
     corpus_group.finish();
 

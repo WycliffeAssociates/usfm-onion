@@ -53,7 +53,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                 cursor += 1;
             }
             ScanToken::Marker(marker) => {
-                if let Some((next_cursor, book_code)) = try_consume_book_code(lexemes, cursor, &mut state)
+                if let Some((next_cursor, book_code)) =
+                    try_consume_book_code(lexemes, cursor, &mut state)
                 {
                     analysis.book_code = Some(book_code.lexeme);
                     let marker_token = token_with_current_ws_and_sid(
@@ -194,8 +195,12 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                 cursor += 1;
             }
             ScanToken::MilestoneEnd(token) => {
-                let token =
-                    token_with_current_ws_and_sid(source, &mut state, token.span, TokenData::MilestoneEnd);
+                let token = token_with_current_ws_and_sid(
+                    source,
+                    &mut state,
+                    token.span,
+                    TokenData::MilestoneEnd,
+                );
                 push_token(source, &mut tokens, token);
                 cursor += 1;
             }
@@ -232,12 +237,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                 cursor += 1;
             }
             ScanToken::Text(text) => {
-                let token = token_with_current_ws_and_sid(
-                    source,
-                    &mut state,
-                    text.span,
-                    TokenData::Text,
-                );
+                let token =
+                    token_with_current_ws_and_sid(source, &mut state, text.span, TokenData::Text);
                 push_token(source, &mut tokens, token);
                 cursor += 1;
             }
@@ -386,7 +387,10 @@ fn build_attribute_list<'a>(
         }
     }
 
-    let start_span = state.pending_ws.map(|ws| ws.start).unwrap_or(pipe.span.start);
+    let start_span = state
+        .pending_ws
+        .map(|ws| ws.start)
+        .unwrap_or(pipe.span.start);
     let span = Span::new(start_span, end_span.end);
     let token = Token {
         id: TokenId::new("", 0),
@@ -455,7 +459,11 @@ fn token_with_current_ws<'a>(
     }
 }
 
-fn flush_pending_whitespace<'a>(source: &'a str, state: &mut ParseState<'a>, tokens: &mut Vec<Token<'a>>) {
+fn flush_pending_whitespace<'a>(
+    source: &'a str,
+    state: &mut ParseState<'a>,
+    tokens: &mut Vec<Token<'a>>,
+) {
     let Some(ws) = state.pending_ws.take() else {
         return;
     };
@@ -496,10 +504,7 @@ fn assign_ids(tokens: &mut [Token<'_>]) {
         .unwrap_or("unknown");
 
     for (index, token) in tokens.iter_mut().enumerate() {
-        let book = token
-            .sid
-            .map(|sid| sid.book_code)
-            .unwrap_or(default_book);
+        let book = token.sid.map(|sid| sid.book_code).unwrap_or(default_book);
         token.id = TokenId::new(book, index as u32);
     }
 }
@@ -516,7 +521,10 @@ mod tests {
     fn parse_assigns_ids_and_sids() {
         let parsed = parse("\\id GEN\n\\c 1\n\\v 2 text\n");
         assert_eq!(parsed.analysis.book_code, Some("GEN"));
-        assert_eq!(parsed.tokens.first().map(|token| token.id), Some(TokenId::new("GEN", 0)));
+        assert_eq!(
+            parsed.tokens.first().map(|token| token.id),
+            Some(TokenId::new("GEN", 0))
+        );
 
         let book = parsed
             .tokens
@@ -543,17 +551,25 @@ mod tests {
     #[test]
     fn parse_groups_attribute_list() {
         let parsed = parse("\\w gracious|lemma=\"grace\" strong=\"H1\"\\w*.");
-        assert!(parsed
-            .tokens
-            .iter()
-            .any(|token| matches!(token.data, TokenData::AttributeList { .. })));
-        assert_eq!(into_usfm_from_tokens(&parsed.tokens), "\\w gracious|lemma=\"grace\" strong=\"H1\"\\w*.");
+        assert!(
+            parsed
+                .tokens
+                .iter()
+                .any(|token| matches!(token.data, TokenData::AttributeList { .. }))
+        );
+        assert_eq!(
+            into_usfm_from_tokens(&parsed.tokens),
+            "\\w gracious|lemma=\"grace\" strong=\"H1\"\\w*."
+        );
     }
 
     #[test]
     fn parse_keeps_marker_number_split() {
         let parsed = parse("\\v 12 text");
-        assert!(matches!(parsed.tokens[0].data, TokenData::Marker { name: "v", .. }));
+        assert!(matches!(
+            parsed.tokens[0].data,
+            TokenData::Marker { name: "v", .. }
+        ));
         assert!(matches!(
             parsed.tokens[1].data,
             TokenData::Number {

@@ -10,9 +10,15 @@ fn benchmark_usx(c: &mut Criterion) {
     let mut corpus_group = c.benchmark_group("usx/corpus");
     for case in &corpus_cases {
         corpus_group.throughput(Throughput::Bytes(case.total_bytes as u64));
-        corpus_group.bench_with_input(BenchmarkId::new("export", case_label(case)), case, |b, case| {
-            b.iter(|| black_box(usfm_to_usx(case.source.as_str()).expect("USX export should succeed")));
-        });
+        corpus_group.bench_with_input(
+            BenchmarkId::new("export", case_label(case)),
+            case,
+            |b, case| {
+                b.iter(|| {
+                    black_box(usfm_to_usx(case.source.as_str()).expect("USX export should succeed"))
+                });
+            },
+        );
     }
     corpus_group.finish();
 
@@ -27,7 +33,10 @@ fn benchmark_usx(c: &mut Criterion) {
                 |b, batch| {
                     b.iter(|| {
                         for doc in &batch.docs {
-                            black_box(usfm_to_usx(doc.source.as_str()).expect("USX export should succeed"));
+                            black_box(
+                                usfm_to_usx(doc.source.as_str())
+                                    .expect("USX export should succeed"),
+                            );
                         }
                     });
                 },

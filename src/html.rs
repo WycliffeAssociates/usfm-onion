@@ -1,7 +1,6 @@
 use crate::marker_defs::{
-    BlockBehavior, NoteFamily, NoteSubkind, SpecMarkerKind, StructuralScopeKind,
-    lookup_marker_def, marker_block_behavior, marker_is_note_container, marker_note_family,
-    marker_note_subkind,
+    BlockBehavior, NoteFamily, NoteSubkind, SpecMarkerKind, StructuralScopeKind, lookup_marker_def,
+    marker_block_behavior, marker_is_note_container, marker_note_family, marker_note_subkind,
 };
 use crate::parse::parse;
 use crate::token::{AttributeItem, Token, TokenData};
@@ -158,11 +157,9 @@ impl HtmlRenderer {
                 }
                 TokenData::Number { .. } => {}
                 TokenData::MilestoneEnd => {
-                    close_top_matching_scope(
-                        &mut output,
-                        &mut stack,
-                        |item| item.scope_kind == StructuralScopeKind::Milestone,
-                    );
+                    close_top_matching_scope(&mut output, &mut stack, |item| {
+                        item.scope_kind == StructuralScopeKind::Milestone
+                    });
                 }
                 TokenData::EndMarker { name, .. } => {
                     close_for_end_marker(&mut output, &mut stack, name);
@@ -175,7 +172,8 @@ impl HtmlRenderer {
                     if in_note_body {
                         close_for_note_structural(&mut output, &mut stack, name);
                     }
-                    let mut attrs = common_marker_attrs(marker_data_type(name, metadata.kind), name);
+                    let mut attrs =
+                        common_marker_attrs(marker_data_type(name, metadata.kind), name);
                     if let Some(entries) = next_attribute_list(tokens, index) {
                         push_attribute_entries(&mut attrs, entries);
                     }
@@ -197,11 +195,9 @@ impl HtmlRenderer {
                     ..
                 } => {
                     if marker_is_sidebar_end(name, metadata.kind) {
-                        close_top_matching_scope(
-                            &mut output,
-                            &mut stack,
-                            |item| item.scope_kind == StructuralScopeKind::Sidebar,
-                        );
+                        close_top_matching_scope(&mut output, &mut stack, |item| {
+                            item.scope_kind == StructuralScopeKind::Sidebar
+                        });
                         index += 1;
                         continue;
                     }
@@ -255,11 +251,7 @@ impl HtmlRenderer {
                             let mut caller_html = String::from("<sup><a");
                             push_attr(&mut caller_html, "href", &format!("#{note_id}"));
                             push_attr(&mut caller_html, "id", &call_id);
-                            push_attr(
-                                &mut caller_html,
-                                "data-usfm-note-kind",
-                                note_kind.as_str(),
-                            );
+                            push_attr(&mut caller_html, "data-usfm-note-kind", note_kind.as_str());
                             push_attr(&mut caller_html, "data-usfm-caller", &label);
                             push_attr(
                                 &mut caller_html,
@@ -410,13 +402,20 @@ fn open_marker_element<'a>(
                 close_for_note_structural(output, stack, name);
             }
         }
-        StructuralScopeKind::Unknown | StructuralScopeKind::Chapter | StructuralScopeKind::Verse | StructuralScopeKind::Note => {}
+        StructuralScopeKind::Unknown
+        | StructuralScopeKind::Chapter
+        | StructuralScopeKind::Verse
+        | StructuralScopeKind::Note => {}
     }
 
-    let (tag, data_type) = tag_and_type_for_marker(name, kind, structural.scope_kind, prefer_native_elements);
+    let (tag, data_type) =
+        tag_and_type_for_marker(name, kind, structural.scope_kind, prefer_native_elements);
     let mut attrs = common_marker_attrs(data_type, name);
     if structural.scope_kind == StructuralScopeKind::TableCell {
-        attrs.push(("data-usfm-align".to_string(), table_cell_align(name).to_string()));
+        attrs.push((
+            "data-usfm-align".to_string(),
+            table_cell_align(name).to_string(),
+        ));
     }
     if let Some(entries) = next_attribute_list(tokens, index) {
         push_attribute_entries(&mut attrs, entries);
@@ -479,15 +478,26 @@ fn next_number_text(tokens: &[Token<'_>], marker_index: usize) -> Option<String>
     }
 }
 
-fn next_attribute_list<'a>(tokens: &'a [Token<'a>], marker_index: usize) -> Option<&'a [AttributeItem<'a>]> {
+fn next_attribute_list<'a>(
+    tokens: &'a [Token<'a>],
+    marker_index: usize,
+) -> Option<&'a [AttributeItem<'a>]> {
     match tokens.get(marker_index + 1).map(|token| &token.data) {
         Some(TokenData::AttributeList { entries }) => Some(entries.as_slice()),
         _ => None,
     }
 }
 
-fn open_book_element<'a>(marker: &'a str, code: &'a str, prefer_native_elements: bool) -> OpenElement<'a> {
-    let tag = if prefer_native_elements { "section" } else { "div" };
+fn open_book_element<'a>(
+    marker: &'a str,
+    code: &'a str,
+    prefer_native_elements: bool,
+) -> OpenElement<'a> {
+    let tag = if prefer_native_elements {
+        "section"
+    } else {
+        "div"
+    };
     let mut attrs = common_marker_attrs("book", marker);
     attrs.push(("data-usfm-code".to_string(), code.to_string()));
     OpenElement {
@@ -531,10 +541,11 @@ fn synthetic_table_row() -> OpenElement<'static> {
 
 fn ensure_table_open(stack: &mut Vec<OpenElement<'_>>, prefer_native_elements: bool) {
     let _ = prefer_native_elements;
-    if !stack
-        .iter()
-        .any(|item| item.attrs.iter().any(|(key, value)| key == "data-usfm-type" && value == "table"))
-    {
+    if !stack.iter().any(|item| {
+        item.attrs
+            .iter()
+            .any(|(key, value)| key == "data-usfm-type" && value == "table")
+    }) {
         stack.push(synthetic_table(prefer_native_elements));
     }
 }
@@ -586,10 +597,12 @@ fn close_for_new_block(output: &mut String, stack: &mut Vec<OpenElement<'_>>, ke
     close_inline_scopes(output, stack);
     close_non_book_table_block_scopes(output, stack);
     if !keep_book {
-        while matches!(stack.last().map(|item| item.scope_kind), Some(StructuralScopeKind::Header))
-            && stack
-                .last()
-                .is_some_and(|item| !item.synthetic && item.marker == Some("id"))
+        while matches!(
+            stack.last().map(|item| item.scope_kind),
+            Some(StructuralScopeKind::Header)
+        ) && stack
+            .last()
+            .is_some_and(|item| !item.synthetic && item.marker == Some("id"))
         {
             let item = stack.pop().expect("book wrapper present");
             append_closed_element(output, stack, item);
@@ -599,7 +612,11 @@ fn close_for_new_block(output: &mut String, stack: &mut Vec<OpenElement<'_>>, ke
 
 fn close_non_book_table_block_scopes(output: &mut String, stack: &mut Vec<OpenElement<'_>>) {
     while let Some(top) = stack.last() {
-        if top.synthetic && top.attrs.iter().any(|(key, value)| key == "data-usfm-type" && value == "table")
+        if top.synthetic
+            && top
+                .attrs
+                .iter()
+                .any(|(key, value)| key == "data-usfm-type" && value == "table")
         {
             let item = stack.pop().expect("table wrapper present");
             append_closed_element(output, stack, item);
@@ -635,7 +652,11 @@ fn close_inline_scopes(output: &mut String, stack: &mut Vec<OpenElement<'_>>) {
     }
 }
 
-fn close_for_note_structural(output: &mut String, stack: &mut Vec<OpenElement<'_>>, next_marker: &str) {
+fn close_for_note_structural(
+    output: &mut String,
+    stack: &mut Vec<OpenElement<'_>>,
+    next_marker: &str,
+) {
     if marker_note_subkind(next_marker).is_none() {
         return;
     }
@@ -679,7 +700,11 @@ where
     }
 }
 
-fn append_closed_element(output: &mut String, stack: &mut [OpenElement<'_>], item: OpenElement<'_>) {
+fn append_closed_element(
+    output: &mut String,
+    stack: &mut [OpenElement<'_>],
+    item: OpenElement<'_>,
+) {
     let mut html = String::new();
     html.push('<');
     html.push_str(item.tag);
@@ -801,10 +826,7 @@ fn marker_is_sidebar_end(marker: &str, kind: Option<SpecMarkerKind>) -> bool {
 }
 
 fn table_cell_align(marker: &str) -> &'static str {
-    if marker.starts_with("thr")
-        || marker.starts_with("tcr")
-        || marker.ends_with('r')
-    {
+    if marker.starts_with("thr") || marker.starts_with("tcr") || marker.ends_with('r') {
         "end"
     } else if marker.starts_with("thc") || marker.starts_with("tcc") || marker.ends_with('c') {
         "center"
