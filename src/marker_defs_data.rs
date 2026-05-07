@@ -14,7 +14,199 @@
 
 #![allow(dead_code)]
 
-use crate::marker_defs::{MarkerDefKind, MarkerSpec, SpecContext};
+use crate::marker_defs::{MarkerDefKind, MarkerSpec, MarkerWhitespace, SpecContext};
+use crate::whitespace::{
+    FormatWhitespacePreference, StructuralWhitespaceRequirement as Req, WhitespaceFormatCategory,
+};
+
+/// Per-marker structural-whitespace rules. Hand-curated; rows derived from
+/// `whitespace.md` in the repo root, which itself follows the USFM 3.1 spec.
+///
+/// Markers not listed here have no documented structural-WS rule and the
+/// formatter / linter treat them as `NotRequired` everywhere by default.
+/// Add rows as new spec rules are encoded.
+pub(crate) static MARKER_WHITESPACE: &[MarkerWhitespace] = &[
+    MarkerWhitespace {
+        marker: "c",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    MarkerWhitespace {
+        marker: "v",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::AtLeastOneWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    MarkerWhitespace {
+        marker: "p",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    MarkerWhitespace {
+        marker: "m",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    MarkerWhitespace {
+        marker: "q",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    MarkerWhitespace {
+        marker: "s",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    // Blank-line marker — must be on its own newline, no content allowed.
+    MarkerWhitespace {
+        marker: "b",
+        required_before_open: Req::SingleNewline,
+        required_after_open_name: Req::SingleNewline,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleNewline),
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    // Footnote container — opens any-WS, ends with explicit `\f*`.
+    MarkerWhitespace {
+        marker: "f",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::OptionalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    // Cross-reference container — same shape as `\f`.
+    MarkerWhitespace {
+        marker: "x",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::OptionalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    // Quotation milestone — start form `qt-s`. Spec: `\\ + MILESTONE + Hs + ...`.
+    MarkerWhitespace {
+        marker: "qt",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::AtLeastOneHorizontalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    // Standalone-or-paired translator-section milestone.
+    MarkerWhitespace {
+        marker: "ts",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::AtLeastOneWhitespace,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    // Sidebar open. Spec: structural before, `(SP|TAGEND)` after.
+    MarkerWhitespace {
+        marker: "esb",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::TagEndDelimiter,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+    // Note category. Spec: `\\cat$ws OR /\\cat${Hs}/ ... \\cat\*${HS}/`.
+    MarkerWhitespace {
+        marker: "cat",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::AtLeastOneHorizontalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    // Verse alternate number / publication number — same WS shape.
+    MarkerWhitespace {
+        marker: "va",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::OptionalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    MarkerWhitespace {
+        marker: "vp",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::OptionalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: None,
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    // Chapter alternate.
+    MarkerWhitespace {
+        marker: "ca",
+        required_before_open: Req::OptionalWhitespace,
+        required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::OptionalWhitespace,
+        format_preference_before_open: None,
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
+        category_for_profiles: WhitespaceFormatCategory::Inline,
+    },
+    // Chapter publication number.
+    MarkerWhitespace {
+        marker: "cp",
+        required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+        required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
+        required_before_close: Req::NotRequired,
+        required_after_close: Req::NotRequired,
+        format_preference_before_open: Some(FormatWhitespacePreference::PreferSingleNewline),
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
+        category_for_profiles: WhitespaceFormatCategory::Block,
+    },
+];
 
 pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
     MarkerSpec {

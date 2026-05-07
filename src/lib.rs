@@ -20,6 +20,7 @@ pub mod token;
 pub mod usj;
 pub mod usx;
 pub mod vref;
+pub mod whitespace;
 
 pub use api::{OwnedParseAnalysis, ParsedUsfm, SourceTokenText, TokenStream, Usfm, Usj, Usx};
 pub use cst::{CstDocument, CstNode, CstWalkIter, WalkItem};
@@ -29,7 +30,7 @@ pub use diff::{
     apply_revert_by_block_id, apply_reverts_by_block_id,
 };
 pub use format::{
-    FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatToken,
+    FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatTimings, FormatToken,
     FormattableToken, MessageParams, TokenTemplate,
 };
 pub use html::{HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions};
@@ -38,7 +39,12 @@ pub use lint_impl::{
     LintSummary, LintSuppression, LintableToken, MessageParams as LintMessageParams, TokenFix,
     apply_token_fix,
 };
-pub use marker_defs::{InlineContext, NoteFamily, NoteSubkind};
+pub use marker_defs::{
+    InlineContext, MarkerWhitespace, NoteFamily, NoteSubkind, lookup_marker_whitespace,
+};
+pub use whitespace::{
+    FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
+};
 pub use markers::{
     MarkerCategory, MarkerKind, UsfmMarkerCatalog, UsfmMarkerInfo, is_known_marker,
     marker_catalog, marker_info,

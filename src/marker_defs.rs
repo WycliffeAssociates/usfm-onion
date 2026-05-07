@@ -24,6 +24,9 @@
 use serde::Serialize;
 
 use crate::markers::MarkerKind;
+use crate::whitespace::{
+    FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
+};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -249,6 +252,31 @@ pub struct NormalizedMarkerRef<'a> {
     pub family_role: MarkerFamilyRole,
 }
 
+/// Per-marker structural-whitespace rules.
+///
+/// Declarative companion to [`MarkerSpec`] / [`MarkerDef`] keyed by canonical
+/// marker name. Each row says what whitespace is required at each position
+/// around the marker (before the open marker, after the marker name, before
+/// and after the closing form), what the formatter should insert when
+/// normalizing, and which format-profile category the marker belongs to
+/// (block markers get their own line in the code-editor profile; inline
+/// markers never do).
+///
+/// See `whitespace.md` in the repo root for the source-of-truth rules,
+/// and [`crate::whitespace`] for the requirement / preference / category
+/// types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct MarkerWhitespace {
+    pub marker: &'static str,
+    pub required_before_open: StructuralWhitespaceRequirement,
+    pub required_after_open_name: StructuralWhitespaceRequirement,
+    pub required_before_close: StructuralWhitespaceRequirement,
+    pub required_after_close: StructuralWhitespaceRequirement,
+    pub format_preference_before_open: Option<FormatWhitespacePreference>,
+    pub format_preference_after_open_name: Option<FormatWhitespacePreference>,
+    pub category_for_profiles: WhitespaceFormatCategory,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MarkerDef {
     pub id: MarkerId,
@@ -270,7 +298,28 @@ pub struct MarkerDef {
 #[path = "marker_defs_data.rs"]
 mod marker_defs_data;
 
-pub(crate) use marker_defs_data::MARKER_SPECS;
+pub(crate) use marker_defs_data::{MARKER_SPECS, MARKER_WHITESPACE};
+
+/// Look up the structural-whitespace rule row for a marker by name.
+///
+/// Performs the same normalization as [`lookup_spec_marker`] (strips a
+/// leading `+`, resolves milestone `-s`/`-e` suffixes back to the base
+/// marker name, resolves numbered variants), so callers can pass a marker
+/// as it appears in source.
+pub fn lookup_marker_whitespace(marker: &str) -> Option<&'static MarkerWhitespace> {
+    let canonical = lookup_spec_marker(marker)?.marker;
+    whitespace_index().get(canonical).copied()
+}
+
+fn whitespace_index() -> &'static HashMap<&'static str, &'static MarkerWhitespace> {
+    static INDEX: OnceLock<HashMap<&'static str, &'static MarkerWhitespace>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        MARKER_WHITESPACE
+            .iter()
+            .map(|row| (row.marker, row))
+            .collect::<HashMap<_, _>>()
+    })
+}
 
 fn exact_spec_index() -> &'static HashMap<&'static str, &'static MarkerSpec> {
     static INDEX: OnceLock<HashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
@@ -1129,10 +1178,40 @@ fn is_non_inline_paragraph_marker_name(marker: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        SpecContext, MarkerDefKind, lookup_spec_marker, marker_allows_context,
-        marker_allows_effective_context,
+        MarkerDefKind, SpecContext, lookup_marker_whitespace, lookup_spec_marker,
+        marker_allows_context, marker_allows_effective_context,
+    };
+    use crate::whitespace::{
+        FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
     };
     use std::path::PathBuf;
+
+    #[test]
+    fn marker_whitespace_lookup_resolves_canonical_and_variants() {
+        let chapter = lookup_marker_whitespace("c").expect("c whitespace row should exist");
+        assert_eq!(
+            chapter.required_after_open_name,
+            StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
+        );
+        assert_eq!(
+            chapter.format_preference_before_open,
+            Some(FormatWhitespacePreference::PreferSingleNewline)
+        );
+        assert_eq!(
+            chapter.category_for_profiles,
+            WhitespaceFormatCategory::Block
+        );
+
+        let nested = lookup_marker_whitespace("+f")
+            .expect("+ prefix should resolve to canonical f row");
+        assert_eq!(nested.marker, "f");
+        assert_eq!(nested.category_for_profiles, WhitespaceFormatCategory::Inline);
+
+        assert!(
+            lookup_marker_whitespace("zzzzz").is_none(),
+            "unknown marker should return None"
+        );
+    }
 
     #[test]
     fn official_markers_exist_in_spec_lookup() {

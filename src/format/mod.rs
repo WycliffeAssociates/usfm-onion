@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::marker_defs::StructuralMarkerInfo;
 use crate::markers::{MarkerKind, lookup_marker};
@@ -120,6 +120,26 @@ impl FormatRule {
     }
 }
 
+/// A named format profile that selects a curated set of format rules.
+///
+/// Profiles are the user-facing way to ask for a specific kind of formatted
+/// output without having to know which individual `FormatRule`s to enable.
+/// They are inspired by USFM 3.1's distinction between source-readability
+/// concerns (code-editor view) and content-readability concerns (preview /
+/// WYSIWYG view). Both profiles collapse excess whitespace and normalize
+/// intra-content whitespace by default; see [`FormatOptions::for_profile`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FormatProfile {
+    /// Marker-per-line for block markers; preserves inline markers
+    /// (characters and notes) inline. Optimized for reading USFM in a
+    /// code editor.
+    CodeEditor,
+    /// Removes non-required structural newlines so paragraph blocks render
+    /// as continuous text. Optimized for previewing what a WYSIWYG editor
+    /// would show.
+    Reading,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct FormatOptions {
     pub recover_malformed_markers: bool,
@@ -202,6 +222,63 @@ impl FormatOptions {
         options
     }
 
+    /// Build a curated `FormatOptions` for a named [`FormatProfile`].
+    ///
+    /// Both profiles enable the structural whitespace cleanup rules
+    /// (collapse excess whitespace, normalize tag-end delimiters, collapse
+    /// consecutive linebreaks, normalize marker whitespace at line start)
+    /// and intra-content collapse, since neither view wants noisy artifact
+    /// whitespace. They differ on whether block markers should sit on their
+    /// own line:
+    ///
+    /// - [`FormatProfile::CodeEditor`] inserts structural linebreaks before
+    ///   block markers — paragraph, chapter, sidebar, etc. each start a
+    ///   new line, which is what you want when reading USFM source.
+    /// - [`FormatProfile::Reading`] removes non-required structural linebreaks
+    ///   so paragraph blocks read as continuous text — the way a WYSIWYG
+    ///   preview would render them.
+    ///
+    /// Inline markers (character markers and note containers) never get
+    /// their own line in either profile.
+    pub const fn for_profile(profile: FormatProfile) -> Self {
+        match profile {
+            FormatProfile::CodeEditor => Self {
+                recover_malformed_markers: true,
+                collapse_whitespace_in_text: true,
+                ensure_inline_separators: true,
+                remove_duplicate_verse_numbers: true,
+                normalize_spacing_after_paragraph_markers: true,
+                remove_unwanted_linebreaks: false,
+                bridge_consecutive_verse_markers: true,
+                remove_orphan_empty_verse_before_contentful_verse: true,
+                remove_bridge_verse_enumerators: true,
+                move_chapter_label_after_chapter_marker: true,
+                insert_default_paragraph_after_chapter_intro: true,
+                remove_empty_paragraphs: false,
+                insert_structural_linebreaks: true,
+                collapse_consecutive_linebreaks: true,
+                normalize_marker_whitespace_at_line_start: true,
+            },
+            FormatProfile::Reading => Self {
+                recover_malformed_markers: true,
+                collapse_whitespace_in_text: true,
+                ensure_inline_separators: true,
+                remove_duplicate_verse_numbers: true,
+                normalize_spacing_after_paragraph_markers: true,
+                remove_unwanted_linebreaks: true,
+                bridge_consecutive_verse_markers: true,
+                remove_orphan_empty_verse_before_contentful_verse: true,
+                remove_bridge_verse_enumerators: true,
+                move_chapter_label_after_chapter_marker: true,
+                insert_default_paragraph_after_chapter_intro: true,
+                remove_empty_paragraphs: false,
+                insert_structural_linebreaks: false,
+                collapse_consecutive_linebreaks: true,
+                normalize_marker_whitespace_at_line_start: true,
+            },
+        }
+    }
+
     pub fn set(&mut self, rule: FormatRule, enabled: bool) {
         match rule {
             FormatRule::RecoverMalformedMarkers => self.recover_malformed_markers = enabled,
@@ -281,7 +358,7 @@ pub enum FormatFix {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
-pub struct FormatProfile {
+pub struct FormatTimings {
     #[serde(skip)]
     pub normalize: Duration,
     #[serde(skip)]
@@ -511,7 +588,7 @@ pub fn format_tokens<T: FormattableToken>(tokens: &mut Vec<T>, options: FormatOp
 pub fn format_tokens_profile<T: FormattableToken>(
     tokens: &[T],
     options: FormatOptions,
-) -> (Vec<T>, FormatProfile) {
+) -> (Vec<T>, FormatTimings) {
     let mut working = tokens.to_vec();
     let profile = format_tokens_owned(&mut working, options);
     (working, profile)
@@ -556,8 +633,8 @@ where
 fn format_tokens_owned<T: FormattableToken>(
     tokens: &mut Vec<T>,
     options: FormatOptions,
-) -> FormatProfile {
-    let profile = FormatProfile::default();
+) -> FormatTimings {
+    let profile = FormatTimings::default();
     let mut scratch = Vec::new();
 
     normalize_tokens_in_place(tokens, &mut scratch, options);
@@ -1979,5 +2056,26 @@ mod tests {
             rule.label_key(),
             "format.rule.insertDefaultParagraphAfterChapterIntro"
         );
+    }
+
+    #[test]
+    fn format_profiles_differ_on_structural_linebreaks_only() {
+        let editor = FormatOptions::for_profile(FormatProfile::CodeEditor);
+        let reading = FormatOptions::for_profile(FormatProfile::Reading);
+
+        // CodeEditor inserts structural linebreaks; Reading strips
+        // unwanted ones to keep paragraphs flowing.
+        assert!(editor.insert_structural_linebreaks);
+        assert!(!reading.insert_structural_linebreaks);
+        assert!(reading.remove_unwanted_linebreaks);
+        assert!(!editor.remove_unwanted_linebreaks);
+
+        // Both profiles share the structural-WS cleanup defaults.
+        for opts in [editor, reading] {
+            assert!(opts.collapse_whitespace_in_text);
+            assert!(opts.collapse_consecutive_linebreaks);
+            assert!(opts.normalize_marker_whitespace_at_line_start);
+            assert!(opts.ensure_inline_separators);
+        }
     }
 }
