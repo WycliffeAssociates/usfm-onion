@@ -38,9 +38,10 @@ pub use lint_impl::{
     LintSummary, LintSuppression, LintableToken, MessageParams as LintMessageParams, TokenFix,
     apply_token_fix,
 };
+pub use marker_defs::{InlineContext, NoteFamily, NoteSubkind};
 pub use markers::{
-    MarkerCategory, MarkerInlineContext, MarkerKind, MarkerNoteFamily, MarkerNoteSubkind,
-    UsfmMarkerCatalog, UsfmMarkerInfo, is_known_marker, marker_catalog, marker_info,
+    MarkerCategory, MarkerKind, UsfmMarkerCatalog, UsfmMarkerInfo, is_known_marker,
+    marker_catalog, marker_info,
 };
 pub use token::{
     AttributeEntryToken, AttributeItem, BookCodeToken, LexResult, Lexeme, LexemeKind,

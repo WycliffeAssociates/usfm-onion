@@ -1,5 +1,5 @@
 use crate::marker_defs::{
-    BlockBehavior, NoteFamily, NoteSubkind, SpecMarkerKind, StructuralScopeKind, lookup_marker_def,
+    BlockBehavior, NoteFamily, NoteSubkind, MarkerDefKind, StructuralScopeKind, lookup_marker_def,
     marker_block_behavior, marker_is_note_container, marker_note_family, marker_note_subkind,
 };
 use crate::parse::parse;
@@ -211,7 +211,10 @@ impl HtmlRenderer {
 
                         if in_note_body || matches!(self.options.note_mode, HtmlNoteMode::Inline) {
                             let mut attrs = common_marker_attrs("note", name);
-                            attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
+                            attrs.push((
+                                "data-usfm-id".to_string(),
+                                token_id_str(&tokens[index].id),
+                            ));
                             attrs.push(("data-usfm-caller".to_string(), label.clone()));
                             attrs.push((
                                 "data-usfm-source-caller".to_string(),
@@ -287,32 +290,46 @@ impl HtmlRenderer {
                         }
 
                         index = note_end;
-                    } else if matches!(metadata.kind, Some(SpecMarkerKind::Chapter)) {
+                    } else if matches!(metadata.kind, Some(MarkerDefKind::Chapter)) {
                         close_for_new_block(&mut output, &mut stack, true);
                         self.current_verse = None;
                         self.note_count_in_verse = 0;
                         let number = next_number_text(tokens, index).unwrap_or_default();
-                        let chapter_sid = tokens[index].sid.as_ref().map(|s| {
-                            format!("{} {}", s.book_code, s.chapter)
-                        });
+                        let chapter_sid = tokens[index]
+                            .sid
+                            .as_ref()
+                            .map(|s| format!("{} {}", s.book_code, s.chapter));
                         let chapter_token_id = token_id_str(&tokens[index].id);
                         push_fragment(
                             &mut output,
                             &mut stack,
-                            &empty_marker_span("chapter", name, &number, chapter_sid.as_deref(), &chapter_token_id),
+                            &empty_marker_span(
+                                "chapter",
+                                name,
+                                &number,
+                                chapter_sid.as_deref(),
+                                &chapter_token_id,
+                            ),
                         );
-                    } else if matches!(metadata.kind, Some(SpecMarkerKind::Verse)) {
+                    } else if matches!(metadata.kind, Some(MarkerDefKind::Verse)) {
                         let number = next_number_text(tokens, index).unwrap_or_default();
                         self.current_verse = (!number.is_empty()).then_some(number.clone());
                         self.note_count_in_verse = 0;
-                        let verse_sid = tokens[index].sid.as_ref().map(|s| {
-                            format!("{} {}:{}", s.book_code, s.chapter, s.verse)
-                        });
+                        let verse_sid = tokens[index]
+                            .sid
+                            .as_ref()
+                            .map(|s| format!("{} {}:{}", s.book_code, s.chapter, s.verse));
                         let verse_token_id = token_id_str(&tokens[index].id);
                         push_fragment(
                             &mut output,
                             &mut stack,
-                            &empty_marker_span("verse", name, &number, verse_sid.as_deref(), &verse_token_id),
+                            &empty_marker_span(
+                                "verse",
+                                name,
+                                &number,
+                                verse_sid.as_deref(),
+                                &verse_token_id,
+                            ),
                         );
                     } else {
                         open_marker_element(
@@ -374,7 +391,7 @@ fn open_marker_element<'a>(
     tokens: &'a [Token<'a>],
     index: usize,
     name: &'a str,
-    kind: Option<SpecMarkerKind>,
+    kind: Option<MarkerDefKind>,
     structural: crate::marker_defs::StructuralMarkerInfo,
     in_note_body: bool,
     prefer_native_elements: bool,
@@ -569,26 +586,26 @@ fn ensure_table_open(stack: &mut Vec<OpenElement<'_>>, prefer_native_elements: b
 
 fn tag_and_type_for_marker(
     marker: &str,
-    kind: Option<SpecMarkerKind>,
+    kind: Option<MarkerDefKind>,
     scope_kind: StructuralScopeKind,
     prefer_native_elements: bool,
 ) -> (&'static str, &'static str) {
     match kind {
-        Some(SpecMarkerKind::Figure) => {
+        Some(MarkerDefKind::Figure) => {
             if prefer_native_elements {
                 ("figure", "figure")
             } else {
                 ("div", "figure")
             }
         }
-        Some(SpecMarkerKind::Periph) => ("div", "periph"),
-        Some(SpecMarkerKind::Sidebar) => ("div", "sidebar"),
-        Some(SpecMarkerKind::TableRow) => ("tr", "table:row"),
-        Some(SpecMarkerKind::TableCell) => ("td", "table:cell"),
-        Some(SpecMarkerKind::Character) if marker == "ref" => ("span", "ref"),
-        Some(SpecMarkerKind::Character) => ("span", "char"),
-        Some(SpecMarkerKind::Milestone) => ("span", "ms"),
-        Some(SpecMarkerKind::Header | SpecMarkerKind::Paragraph | SpecMarkerKind::Meta) => {
+        Some(MarkerDefKind::Periph) => ("div", "periph"),
+        Some(MarkerDefKind::Sidebar) => ("div", "sidebar"),
+        Some(MarkerDefKind::TableRow) => ("tr", "table:row"),
+        Some(MarkerDefKind::TableCell) => ("td", "table:cell"),
+        Some(MarkerDefKind::Character) if marker == "ref" => ("span", "ref"),
+        Some(MarkerDefKind::Character) => ("span", "char"),
+        Some(MarkerDefKind::Milestone) => ("span", "ms"),
+        Some(MarkerDefKind::Header | MarkerDefKind::Paragraph | MarkerDefKind::Meta) => {
             if marker == "id" {
                 if prefer_native_elements {
                     ("section", "book")
@@ -838,23 +855,23 @@ fn note_kind(marker: &str) -> NoteKind {
     }
 }
 
-fn marker_data_type(marker: &str, kind: Option<SpecMarkerKind>) -> &'static str {
+fn marker_data_type(marker: &str, kind: Option<MarkerDefKind>) -> &'static str {
     match kind {
-        Some(SpecMarkerKind::Figure) => "figure",
-        Some(SpecMarkerKind::Periph) => "periph",
-        Some(SpecMarkerKind::Sidebar) => "sidebar",
-        Some(SpecMarkerKind::TableRow) => "table:row",
-        Some(SpecMarkerKind::TableCell) => "table:cell",
-        Some(SpecMarkerKind::Milestone) => "ms",
-        Some(SpecMarkerKind::Character) if marker == "ref" => "ref",
-        Some(SpecMarkerKind::Character) => "char",
-        Some(SpecMarkerKind::Header | SpecMarkerKind::Paragraph | SpecMarkerKind::Meta) => "para",
+        Some(MarkerDefKind::Figure) => "figure",
+        Some(MarkerDefKind::Periph) => "periph",
+        Some(MarkerDefKind::Sidebar) => "sidebar",
+        Some(MarkerDefKind::TableRow) => "table:row",
+        Some(MarkerDefKind::TableCell) => "table:cell",
+        Some(MarkerDefKind::Milestone) => "ms",
+        Some(MarkerDefKind::Character) if marker == "ref" => "ref",
+        Some(MarkerDefKind::Character) => "char",
+        Some(MarkerDefKind::Header | MarkerDefKind::Paragraph | MarkerDefKind::Meta) => "para",
         _ => "unknown",
     }
 }
 
-fn marker_is_sidebar_end(marker: &str, kind: Option<SpecMarkerKind>) -> bool {
-    matches!(kind, Some(SpecMarkerKind::Sidebar))
+fn marker_is_sidebar_end(marker: &str, kind: Option<MarkerDefKind>) -> bool {
+    matches!(kind, Some(MarkerDefKind::Sidebar))
         || matches!(marker_block_behavior(marker), BlockBehavior::SidebarEnd)
 }
 

@@ -651,7 +651,7 @@ mod tests {
         assert_eq!(marker.metadata.canonical, Some("q1"));
         assert_eq!(
             marker.metadata.kind,
-            Some(crate::marker_defs::SpecMarkerKind::Paragraph)
+            Some(crate::marker_defs::MarkerDefKind::Paragraph)
         );
     }
 

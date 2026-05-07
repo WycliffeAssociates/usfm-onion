@@ -28,14 +28,12 @@ use usfm_onion::lint::{
     TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
 };
 use usfm_onion::marker_defs::{
-    BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, SpecContext,
-    StructuralMarkerInfo, StructuralScopeKind,
+    BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, NoteFamily,
+    NoteSubkind, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
 };
 use usfm_onion::markers::{
-    MarkerCategory as NativeMarkerCategory, MarkerInlineContext as NativeMarkerInlineContext,
-    MarkerKind as NativeMarkerKind, MarkerNoteFamily as NativeMarkerNoteFamily,
-    MarkerNoteSubkind as NativeMarkerNoteSubkind, UsfmMarkerInfo as NativeUsfmMarkerInfo,
-    is_known_marker, marker_catalog, marker_info,
+    MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
+    UsfmMarkerInfo as NativeUsfmMarkerInfo, is_known_marker, marker_catalog, marker_info,
 };
 use usfm_onion::parse::parse as native_parse;
 use usfm_onion::token::{
@@ -1983,7 +1981,7 @@ fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfoValue {
             .map(ToOwned::to_owned),
         inline_context: info
             .inline_context
-            .map(marker_inline_context_str)
+            .map(inline_context_str)
             .map(ToOwned::to_owned),
         default_attribute: info.default_attribute,
         contexts: info
@@ -2344,21 +2342,21 @@ fn spec_context_str(context: SpecContext) -> &'static str {
     }
 }
 
-fn spec_marker_kind_str(kind: usfm_onion::marker_defs::SpecMarkerKind) -> &'static str {
+fn spec_marker_kind_str(kind: usfm_onion::marker_defs::MarkerDefKind) -> &'static str {
     match kind {
-        usfm_onion::marker_defs::SpecMarkerKind::Paragraph => "paragraph",
-        usfm_onion::marker_defs::SpecMarkerKind::Character => "character",
-        usfm_onion::marker_defs::SpecMarkerKind::Note => "note",
-        usfm_onion::marker_defs::SpecMarkerKind::Chapter => "chapter",
-        usfm_onion::marker_defs::SpecMarkerKind::Verse => "verse",
-        usfm_onion::marker_defs::SpecMarkerKind::Milestone => "milestone",
-        usfm_onion::marker_defs::SpecMarkerKind::Figure => "figure",
-        usfm_onion::marker_defs::SpecMarkerKind::Sidebar => "sidebar",
-        usfm_onion::marker_defs::SpecMarkerKind::Periph => "periph",
-        usfm_onion::marker_defs::SpecMarkerKind::Meta => "meta",
-        usfm_onion::marker_defs::SpecMarkerKind::TableRow => "tableRow",
-        usfm_onion::marker_defs::SpecMarkerKind::TableCell => "tableCell",
-        usfm_onion::marker_defs::SpecMarkerKind::Header => "header",
+        usfm_onion::marker_defs::MarkerDefKind::Paragraph => "paragraph",
+        usfm_onion::marker_defs::MarkerDefKind::Character => "character",
+        usfm_onion::marker_defs::MarkerDefKind::Note => "note",
+        usfm_onion::marker_defs::MarkerDefKind::Chapter => "chapter",
+        usfm_onion::marker_defs::MarkerDefKind::Verse => "verse",
+        usfm_onion::marker_defs::MarkerDefKind::Milestone => "milestone",
+        usfm_onion::marker_defs::MarkerDefKind::Figure => "figure",
+        usfm_onion::marker_defs::MarkerDefKind::Sidebar => "sidebar",
+        usfm_onion::marker_defs::MarkerDefKind::Periph => "periph",
+        usfm_onion::marker_defs::MarkerDefKind::Meta => "meta",
+        usfm_onion::marker_defs::MarkerDefKind::TableRow => "tableRow",
+        usfm_onion::marker_defs::MarkerDefKind::TableCell => "tableCell",
+        usfm_onion::marker_defs::MarkerDefKind::Header => "header",
     }
 }
 
@@ -2454,28 +2452,20 @@ fn marker_family_role_str(role: MarkerFamilyRole) -> &'static str {
     }
 }
 
-fn marker_note_family_str(family: NativeMarkerNoteFamily) -> &'static str {
+fn marker_note_family_str(family: NoteFamily) -> &'static str {
     match family {
-        NativeMarkerNoteFamily::Footnote => "footnote",
-        NativeMarkerNoteFamily::CrossReference => "crossReference",
+        NoteFamily::Footnote => "footnote",
+        NoteFamily::CrossReference => "crossReference",
     }
 }
 
-fn marker_note_subkind_str(kind: NativeMarkerNoteSubkind) -> &'static str {
+fn marker_note_subkind_str(kind: NoteSubkind) -> &'static str {
     match kind {
-        NativeMarkerNoteSubkind::Structural => "structural",
-        NativeMarkerNoteSubkind::StructuralKeepsNestedCharsOpen => "structuralKeepsNestedCharsOpen",
+        NoteSubkind::Structural => "structural",
+        NoteSubkind::StructuralKeepsNestedCharsOpen => "structuralKeepsNestedCharsOpen",
     }
 }
 
-fn marker_inline_context_str(context: NativeMarkerInlineContext) -> &'static str {
-    match context {
-        NativeMarkerInlineContext::Para => "para",
-        NativeMarkerInlineContext::Section => "section",
-        NativeMarkerInlineContext::List => "list",
-        NativeMarkerInlineContext::Table => "table",
-    }
-}
 
 fn block_behavior_str(behavior: BlockBehavior) -> &'static str {
     match behavior {

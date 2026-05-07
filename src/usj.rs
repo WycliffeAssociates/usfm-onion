@@ -9,7 +9,7 @@ use crate::export_tree::{
     ExportContainerKind, ExportContainerNode, ExportDocument, ExportNode, build_export_document,
 };
 use crate::marker_defs::{
-    NoteSubkind, SpecMarkerKind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
+    NoteSubkind, MarkerDefKind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
 };
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, TokenData};
@@ -348,40 +348,40 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                     return (Vec::new(), index + 1);
                 }
                 match metadata_kind {
-                    Some(SpecMarkerKind::Header) if name == "id" => (
+                    Some(MarkerDefKind::Header) if name == "id" => (
                         vec![UsjNode::Element(self.export_book(container))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::Note) => (
+                    Some(MarkerDefKind::Note) => (
                         vec![UsjNode::Element(self.export_note(container, name))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::Character) => {
+                    Some(MarkerDefKind::Character) => {
                         (self.export_character_sequence(container, name), index + 1)
                     }
-                    Some(SpecMarkerKind::Figure) => (
+                    Some(MarkerDefKind::Figure) => (
                         vec![UsjNode::Element(self.export_figure(container, name))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::Periph) => (
+                    Some(MarkerDefKind::Periph) => (
                         vec![UsjNode::Element(self.export_periph(container))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::Sidebar) => (
+                    Some(MarkerDefKind::Sidebar) => (
                         vec![UsjNode::Element(self.export_sidebar(container, name))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::TableRow) => (
+                    Some(MarkerDefKind::TableRow) => (
                         vec![UsjNode::Element(self.export_table_row(container, name))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::TableCell) => (
+                    Some(MarkerDefKind::TableCell) => (
                         vec![UsjNode::Element(self.export_table_cell(container, name))],
                         index + 1,
                     ),
-                    Some(SpecMarkerKind::Paragraph)
-                    | Some(SpecMarkerKind::Header)
-                    | Some(SpecMarkerKind::Meta) => (
+                    Some(MarkerDefKind::Paragraph)
+                    | Some(MarkerDefKind::Header)
+                    | Some(MarkerDefKind::Meta) => (
                         vec![UsjNode::Element(self.export_para(container, name))],
                         index + 1,
                     ),

@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::marker_defs::{
-    MarkerFamily, SpecMarkerKind, StructuralMarkerInfo, lookup_marker_metadata,
+    MarkerFamily, MarkerDefKind, StructuralMarkerInfo, lookup_marker_metadata,
 };
 
 pub type BytePos = u32;
@@ -49,7 +49,7 @@ pub struct TriviaToken<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MarkerMetadata {
     pub canonical: Option<&'static str>,
-    pub kind: Option<SpecMarkerKind>,
+    pub kind: Option<MarkerDefKind>,
     pub family: Option<MarkerFamily>,
 }
 

@@ -1,3 +1,23 @@
+//! Public marker catalog and consumer-facing marker info.
+//!
+//! This module is the public face of the marker model. It re-exports the
+//! spec-level types from [`crate::marker_defs`] and adds the *instance-level*
+//! view that downstream code (HTML renderer, lint, format, conversions)
+//! actually queries:
+//!
+//! - [`MarkerKind`] — the resolved kind of a marker *as it appears in a
+//!   document*. Distinguishes `MilestoneStart`/`MilestoneEnd` and
+//!   `SidebarStart`/`SidebarEnd`, which the spec-level
+//!   [`crate::marker_defs::MarkerDefKind`] does not (definition-level
+//!   sees `qt` and `esb` as single Milestone/Sidebar markers).
+//! - [`MarkerCategory`] — coarse classification used by export tooling.
+//! - [`UsfmMarkerInfo`] / [`UsfmMarkerCatalog`] — the catalog every consumer
+//!   eventually reaches through `marker_info()` / `marker_catalog()`.
+//!
+//! Definition-level types and predicate helpers live in
+//! [`crate::marker_defs`]. The static data table they query lives in
+//! [`crate::marker_defs_data`] and is hand-curated.
+
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -9,6 +29,14 @@ use crate::marker_defs::{
 };
 use crate::marker_defs_data::MARKER_SPECS;
 
+/// The kind of a marker as it appears in a document (instance-level / resolved).
+///
+/// Differs from [`crate::marker_defs::MarkerDefKind`] (definition-level) in
+/// that this enum splits `Milestone` into `MilestoneStart`/`MilestoneEnd` and
+/// `Sidebar` into `SidebarStart`/`SidebarEnd`, plus an `Unknown` variant for
+/// markers not in the catalog. That split is what consumers (HTML, lint,
+/// format) need when they're handed a specific token; the spec-level kind
+/// alone wouldn't tell them whether `\esbe` opens or closes a sidebar.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum MarkerKind {
     Paragraph,
@@ -73,26 +101,6 @@ pub fn lookup_marker(name: &str) -> MarkerInfo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MarkerNoteFamily {
-    Footnote,
-    CrossReference,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MarkerNoteSubkind {
-    Structural,
-    StructuralKeepsNestedCharsOpen,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MarkerInlineContext {
-    Para,
-    Section,
-    List,
-    Table,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MarkerCategory {
     Document,
     Paragraph,
@@ -124,9 +132,9 @@ pub struct UsfmMarkerInfo {
     pub kind: MarkerKind,
     pub family: Option<MarkerFamily>,
     pub family_role: Option<MarkerFamilyRole>,
-    pub note_family: Option<MarkerNoteFamily>,
-    pub note_subkind: Option<MarkerNoteSubkind>,
-    pub inline_context: Option<MarkerInlineContext>,
+    pub note_family: Option<NoteFamily>,
+    pub note_subkind: Option<NoteSubkind>,
+    pub inline_context: Option<InlineContext>,
     pub default_attribute: Option<String>,
     pub contexts: Vec<SpecContext>,
     pub block_behavior: Option<BlockBehavior>,
@@ -220,9 +228,9 @@ fn marker_def_to_info(def: MarkerDef) -> UsfmMarkerInfo {
         kind: def.kind.to_marker_kind(def.marker),
         family: def.family,
         family_role: Some(def.family_role),
-        note_family: def.note_family.map(map_note_family),
-        note_subkind: def.note_subkind.map(map_note_subkind),
-        inline_context: def.inline_context.map(map_inline_context),
+        note_family: def.note_family,
+        note_subkind: def.note_subkind,
+        inline_context: def.inline_context,
         default_attribute: def.default_attribute.map(ToOwned::to_owned),
         contexts: def.contexts.to_vec(),
         block_behavior: Some(def.block_behavior),
@@ -258,31 +266,6 @@ fn classify_category(marker: &str, kind: MarkerKind) -> MarkerCategory {
     }
 }
 
-fn map_note_family(family: NoteFamily) -> MarkerNoteFamily {
-    match family {
-        NoteFamily::Footnote => MarkerNoteFamily::Footnote,
-        NoteFamily::CrossReference => MarkerNoteFamily::CrossReference,
-    }
-}
-
-fn map_note_subkind(subkind: NoteSubkind) -> MarkerNoteSubkind {
-    match subkind {
-        NoteSubkind::Structural => MarkerNoteSubkind::Structural,
-        NoteSubkind::StructuralKeepsNestedCharsOpen => {
-            MarkerNoteSubkind::StructuralKeepsNestedCharsOpen
-        }
-    }
-}
-
-fn map_inline_context(context: InlineContext) -> MarkerInlineContext {
-    match context {
-        InlineContext::Para => MarkerInlineContext::Para,
-        InlineContext::Section => MarkerInlineContext::Section,
-        InlineContext::List => MarkerInlineContext::List,
-        InlineContext::Table => MarkerInlineContext::Table,
-    }
-}
-
 fn is_document_marker(marker: &str) -> bool {
     matches!(marker.strip_prefix('+').unwrap_or(marker), "id" | "usfm")
 }
@@ -300,14 +283,14 @@ fn is_table_cell_marker(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{MarkerCategory, MarkerNoteFamily, is_known_marker, marker_catalog, marker_info};
+    use super::{MarkerCategory, NoteFamily, is_known_marker, marker_catalog, marker_info};
 
     #[test]
     fn note_container_and_note_submarker_are_distinct() {
         assert!(is_known_marker("f"));
         assert_eq!(
             marker_info("f").note_family,
-            Some(MarkerNoteFamily::Footnote)
+            Some(NoteFamily::Footnote)
         );
         assert_eq!(marker_info("ft").category, MarkerCategory::NoteSubmarker);
         assert_eq!(marker_info("nd").category, MarkerCategory::Character);
