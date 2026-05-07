@@ -21,10 +21,7 @@ pub mod usj;
 pub mod usx;
 pub mod vref;
 
-pub use api::{
-    BatchItem, ExecutionMode, OwnedParseAnalysis, ParsedUsfm, ParsedUsfmBatch, SourceTokenText,
-    TokenBatch, TokenStream, Usfm, UsfmBatch, Usj, UsjBatch, Usx, UsxBatch,
-};
+pub use api::{OwnedParseAnalysis, ParsedUsfm, SourceTokenText, TokenStream, Usfm, Usj, Usx};
 pub use cst::{CstDocument, CstNode, CstWalkIter, WalkItem};
 pub use diff::{
     BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,

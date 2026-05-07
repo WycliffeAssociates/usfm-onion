@@ -1,4 +1,3 @@
-use js_sys::Array;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_wasm_bindgen::{from_value as from_js_value, to_value as swb_to_js_value};
 use wasm_bindgen::prelude::*;
@@ -44,7 +43,7 @@ use usfm_onion::token::{
     NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
     TokenData as NativeTokenData, TokenKind as NativeTokenKind, tokens_to_usfm,
 };
-use usfm_onion::usj::{UsjDocument, usfm_to_usj};
+use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
 use usfm_onion::vref::{VrefMap, usfm_to_vref_map};
 
@@ -503,19 +502,6 @@ export class ParsedUsfm {
   diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions): DiffsByChapterMap;
 }
 
-export class ParsedUsfmBatch {
-  private constructor();
-  items(): ParsedUsfm[];
-  tokens(): Token[][];
-  lint(options?: LintOptions): LintResult[];
-  format(options?: FormatOptions): string[];
-  toUsfm(): string[];
-  toUsj(): UsjDocument[];
-  toUsx(): string[];
-  toHtml(options?: HtmlOptions): string[];
-  toVref(): VrefMap[];
-}
-
 export class UsfmMarkerCatalog {
   private constructor();
   all(): MarkerInfo[];
@@ -524,15 +510,12 @@ export class UsfmMarkerCatalog {
 }
 
 export function parse(source: string): ParsedUsfm;
-export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
 export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
-export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
 export function formatTokensMut(tokens: FormatToken[], options?: FormatOptions): FormatToken[];
-export function formatTokenBatch(tokenBatches: FormatToken[][], options?: FormatOptions): FormatResult[];
 export function tokensToUsfm(tokens: Token[]): string;
 export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
@@ -963,11 +946,6 @@ pub struct ParsedUsfm {
 }
 
 #[wasm_bindgen(skip_typescript)]
-pub struct ParsedUsfmBatch {
-    sources: Vec<String>,
-}
-
-#[wasm_bindgen(skip_typescript)]
 pub struct UsfmMarkerCatalog;
 
 #[wasm_bindgen]
@@ -1079,100 +1057,6 @@ impl ParsedUsfm {
 }
 
 #[wasm_bindgen]
-impl ParsedUsfmBatch {
-    fn new(sources: Vec<String>) -> Self {
-        Self { sources }
-    }
-
-    pub fn items(&self) -> Array {
-        self.sources
-            .iter()
-            .cloned()
-            .map(ParsedUsfm::new)
-            .map(JsValue::from)
-            .collect()
-    }
-
-    pub fn tokens(&self) -> Result<JsValue, JsError> {
-        let batches = self
-            .sources
-            .iter()
-            .map(|source| map_tokens(&native_parse(source).tokens))
-            .collect::<Vec<_>>();
-        to_js_value(&batches)
-    }
-
-    pub fn lint(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
-        let options = parse_lint_options(options)?;
-        let results = self
-            .sources
-            .iter()
-            .map(|source| map_lint_result(lint_usfm(source, options.clone())))
-            .collect::<Vec<_>>();
-        to_js_value(&results)
-    }
-
-    pub fn format(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
-        let options = parse_format_options(options)?;
-        let values = self
-            .sources
-            .iter()
-            .map(|source| format_usfm(source, options))
-            .collect::<Vec<_>>();
-        to_js_value(&values)
-    }
-
-    pub fn to_usfm(&self) -> Result<JsValue, JsError> {
-        let values = self
-            .sources
-            .iter()
-            .map(|source| {
-                let parsed = native_parse(source);
-                tokens_to_usfm(&parsed.tokens)
-            })
-            .collect::<Vec<_>>();
-        to_js_value(&values)
-    }
-
-    pub fn to_usj(&self) -> Result<JsValue, JsError> {
-        let values = self
-            .sources
-            .iter()
-            .map(|source| usfm_to_usj(source).map_err(js_error))
-            .collect::<Result<Vec<UsjDocument>, JsError>>()?;
-        to_js_value(&values)
-    }
-
-    pub fn to_usx(&self) -> Result<JsValue, JsError> {
-        let values = self
-            .sources
-            .iter()
-            .map(|source| usfm_to_usx(source).map_err(js_error))
-            .collect::<Result<Vec<String>, JsError>>()?;
-        to_js_value(&values)
-    }
-
-    pub fn to_html(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
-        let options = parse_html_options(options)?;
-        let values = self
-            .sources
-            .iter()
-            .map(|source| usfm_to_html(source, options))
-            .collect::<Vec<_>>();
-        to_js_value(&values)
-    }
-
-    pub fn to_vref(&self) -> Result<JsValue, JsError> {
-        let values = self
-            .sources
-            .iter()
-            .map(|source| vref_to_object(usfm_to_vref_map(source)))
-            .collect::<Vec<_>>();
-        to_js_value(&values)
-    }
-}
-
-#[wasm_bindgen]
 impl UsfmMarkerCatalog {
     fn new() -> Self {
         Self
@@ -1203,12 +1087,6 @@ pub fn wasm_parse(source: &str) -> ParsedUsfm {
     ParsedUsfm::new(source.to_string())
 }
 
-#[wasm_bindgen(skip_typescript, js_name = parseBatch)]
-pub fn wasm_parse_batch(sources: JsValue) -> Result<ParsedUsfmBatch, JsError> {
-    let sources = from_js_or_default::<Vec<String>>(sources)?;
-    Ok(ParsedUsfmBatch::new(sources))
-}
-
 #[wasm_bindgen(skip_typescript, js_name = lintUsfm)]
 pub fn wasm_lint_usfm(source: &str, options: Option<JsValue>) -> Result<JsValue, JsError> {
     let options = parse_lint_options(options)?;
@@ -1232,23 +1110,6 @@ pub fn wasm_apply_token_fix(tokens: JsValue, fix: JsValue) -> Result<JsValue, Js
     let fix = parse_token_fix(fix)?;
     let result = apply_token_fix(&native_tokens, &fix);
     to_js_value(&result.iter().map(map_format_token).collect::<Vec<_>>())
-}
-
-#[wasm_bindgen(skip_typescript, js_name = lintTokenBatch)]
-pub fn wasm_lint_token_batch(
-    token_batches: JsValue,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let token_batches = from_js_or_default::<Vec<Vec<TokenValue>>>(token_batches)?;
-    let options = parse_lint_options(options)?;
-    let results = token_batches
-        .into_iter()
-        .map(parse_adapter_tokens_from_values)
-        .collect::<Result<Vec<_>, JsError>>()?
-        .into_iter()
-        .map(|tokens| map_lint_result(lint_tokens(&tokens, options.clone())))
-        .collect::<Vec<_>>();
-    to_js_value(&results)
 }
 
 #[wasm_bindgen(skip_typescript, js_name = formatUsfm)]
@@ -1287,30 +1148,6 @@ pub fn wasm_format_tokens_mut(
         .map(map_format_token)
         .collect::<Vec<_>>();
     to_js_value(&formatted)
-}
-
-#[wasm_bindgen(skip_typescript, js_name = formatTokenBatch)]
-pub fn wasm_format_token_batch(
-    token_batches: JsValue,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let batches = from_js_or_default::<Vec<Vec<TokenValue>>>(token_batches)?;
-    let options = parse_format_options(options)?;
-    let results = batches
-        .into_iter()
-        .map(|batch| {
-            let mut native_tokens = batch
-                .into_iter()
-                .map(token_value_to_format_token)
-                .collect::<Result<Vec<_>, JsError>>()?;
-            native_format_tokens(&mut native_tokens, options);
-            Ok(FormatResultValue {
-                tokens: native_tokens.iter().map(map_format_token).collect(),
-                usfm: format_tokens_to_usfm(&native_tokens),
-            })
-        })
-        .collect::<Result<Vec<_>, JsError>>()?;
-    to_js_value(&results)
 }
 
 #[wasm_bindgen(skip_typescript, js_name = tokensToUsfm)]
