@@ -2,7 +2,6 @@
 name = "usfm_onion"
 autobins = true
 autobenches = false
-autotests = false
 version = "0.1.0"
 edition = "2024"
 description = "Rust-first USFM parsing, linting, formatting, conversion, and diffing"
@@ -42,49 +41,14 @@ wasm-opt = ["-Oz", "--enable-bulk-memory"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+rayon = "1.10"
 
 [[bench]]
-name = "lexer"
+name = "operations"
 harness = false
 
 [[bench]]
-name = "parse"
-harness = false
-
-[[bench]]
-name = "cst"
-harness = false
-
-[[bench]]
-name = "cst_walk"
-harness = false
-
-[[bench]]
-name = "usj"
-harness = false
-
-[[bench]]
-name = "usx"
-harness = false
-
-[[bench]]
-name = "lint"
-harness = false
-
-[[bench]]
-name = "format"
-harness = false
-
-[[bench]]
-name = "diff"
-harness = false
-
-[[bench]]
-name = "html"
-harness = false
-
-[[bench]]
-name = "omni"
+name = "parallelism"
 harness = false
 
 [profile.profiling]

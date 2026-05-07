@@ -1,54 +1,58 @@
 # Benchmarks
 
-This folder now only contains active Criterion benches for the current engine surface.
+Two criterion harnesses, each answering one question.
 
-Focused benches:
+## `operations` — String vs. Tokens, per operation
 
-- `lexer`
-- `parse`
-- `cst`
-- `cst_walk`
-- `usj`
-- `usx`
-- `lint`
-- `format`
-- `diff`
-- `html`
-
-Convenience bench:
-
-- `omni`
-
-`omni` is the broad sweep. It does not replace the focused benches; it is just the fastest way to get one pass over the main operations.
-
-## Corpus Selection
-
-Whole-corpus runs use the `USFM_BENCH_CORPORA` environment variable.
-
-Examples:
+Runs every supported operation against a single representative book
+(`example-corpora/en_ulb/43-LUK.usfm`). For operations that accept either
+a USFM source string or pre-parsed tokens, both forms are measured side
+by side so the cost of re-parsing on the string path is visible.
 
 ```bash
-USFM_BENCH_CORPORA=examples.bsb cargo bench --bench lint
-USFM_BENCH_CORPORA="en_ulb en_ult" cargo bench --bench format
-USFM_BENCH_CORPORA=all cargo bench --bench omni
+cargo bench --bench operations
 ```
 
-## Typical Commands
+Bench IDs you'll see (under the `operations` group):
 
-Run one focused bench:
+| Operation | Input forms |
+|-----------|-------------|
+| `lex`     | `string` |
+| `parse`   | `string` |
+| `cst`     | `tokens` |
+| `usj`     | `string` |
+| `usx`     | `string` |
+| `lint`    | `string`, `tokens` |
+| `format`  | `string`, `tokens` |
+| `html`    | `string`, `tokens` |
+| `diff`    | `string`, `tokens` |
+
+The matrix tells you which operations recoup their parse cost on the
+token path — useful for deciding whether to keep both surface forms on
+each operation as the library evolves.
+
+## `parallelism` — serial vs. rayon, on en_ulb
+
+Loads the full English ULB corpus (~66 books) and runs each major
+operation twice: once iterating with `.iter()`, once with `.par_iter()`.
+Demonstrates what a host gets by parallelizing at the file level — the
+core library is single-threaded by design, so any parallel speedup
+belongs to the caller.
 
 ```bash
-cargo bench --bench diff
+cargo bench --bench parallelism
 ```
 
-Run the broad sweep:
+Operations covered: `parse`, `lint`, `format`, `usj`, `usx`, `html`.
+Each shows up as `<op>/serial` and `<op>/rayon` in the
+`parallelism/en_ulb` group.
 
-```bash
-cargo bench --bench omni
-```
+## Notes
 
-Run a whole-corpus convenience sweep:
-
-```bash
-USFM_BENCH_CORPORA=examples.bsb cargo bench --bench omni
-```
+- `rayon` is a `[dev-dependencies]` entry. The library itself does not
+  depend on it; it is only here so the parallelism bench can demonstrate
+  the comparison.
+- Both benches use `criterion` with custom harness (no `#[bench]`
+  attribute). HTML reports land under `target/criterion/`.
+- If you want to sample a different book or corpus, edit
+  `benches/common.rs` (`load_luke` / `load_en_ulb`).

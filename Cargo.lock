@@ -498,6 +498,7 @@ dependencies = [
  "criterion",
  "logos",
  "quick-xml",
+ "rayon",
  "regex",
  "serde",
  "serde_json",
