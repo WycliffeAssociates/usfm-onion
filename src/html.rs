@@ -3,7 +3,7 @@ use crate::marker_defs::{
     marker_block_behavior, marker_is_note_container, marker_note_family, marker_note_subkind,
 };
 use crate::parse::parse;
-use crate::token::{AttributeItem, Token, TokenData};
+use crate::token::{AttributeItem, Token, TokenData, TokenId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HtmlNoteMode {
@@ -152,6 +152,7 @@ impl HtmlRenderer {
                             "id",
                             code,
                             self.options.prefer_native_elements,
+                            token_id_str(&tokens[index].id),
                         ));
                     }
                 }
@@ -174,6 +175,7 @@ impl HtmlRenderer {
                     }
                     let mut attrs =
                         common_marker_attrs(marker_data_type(name, metadata.kind), name);
+                    attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
                     if let Some(entries) = next_attribute_list(tokens, index) {
                         push_attribute_entries(&mut attrs, entries);
                     }
@@ -209,6 +211,7 @@ impl HtmlRenderer {
 
                         if in_note_body || matches!(self.options.note_mode, HtmlNoteMode::Inline) {
                             let mut attrs = common_marker_attrs("note", name);
+                            attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
                             attrs.push(("data-usfm-caller".to_string(), label.clone()));
                             attrs.push((
                                 "data-usfm-source-caller".to_string(),
@@ -229,6 +232,7 @@ impl HtmlRenderer {
                             html.push_str("</span>");
                             push_fragment(&mut output, &mut stack, &html);
                         } else {
+                            let note_token_id = token_id_str(&tokens[index].id);
                             let id_index = match note_kind {
                                 NoteKind::Footnote => {
                                     self.footnote_id += 1;
@@ -251,6 +255,7 @@ impl HtmlRenderer {
                             let mut caller_html = String::from("<sup><a");
                             push_attr(&mut caller_html, "href", &format!("#{note_id}"));
                             push_attr(&mut caller_html, "id", &call_id);
+                            push_attr(&mut caller_html, "data-usfm-id", &note_token_id);
                             push_attr(&mut caller_html, "data-usfm-note-kind", note_kind.as_str());
                             push_attr(&mut caller_html, "data-usfm-caller", &label);
                             push_attr(
@@ -271,6 +276,7 @@ impl HtmlRenderer {
                                 &label,
                                 &call_id,
                                 &note_id,
+                                &note_token_id,
                                 &body,
                             );
 
@@ -286,19 +292,27 @@ impl HtmlRenderer {
                         self.current_verse = None;
                         self.note_count_in_verse = 0;
                         let number = next_number_text(tokens, index).unwrap_or_default();
+                        let chapter_sid = tokens[index].sid.as_ref().map(|s| {
+                            format!("{} {}", s.book_code, s.chapter)
+                        });
+                        let chapter_token_id = token_id_str(&tokens[index].id);
                         push_fragment(
                             &mut output,
                             &mut stack,
-                            &empty_marker_span("chapter", name, &number),
+                            &empty_marker_span("chapter", name, &number, chapter_sid.as_deref(), &chapter_token_id),
                         );
                     } else if matches!(metadata.kind, Some(SpecMarkerKind::Verse)) {
                         let number = next_number_text(tokens, index).unwrap_or_default();
                         self.current_verse = (!number.is_empty()).then_some(number.clone());
                         self.note_count_in_verse = 0;
+                        let verse_sid = tokens[index].sid.as_ref().map(|s| {
+                            format!("{} {}:{}", s.book_code, s.chapter, s.verse)
+                        });
+                        let verse_token_id = token_id_str(&tokens[index].id);
                         push_fragment(
                             &mut output,
                             &mut stack,
-                            &empty_marker_span("verse", name, &number),
+                            &empty_marker_span("verse", name, &number, verse_sid.as_deref(), &verse_token_id),
                         );
                     } else {
                         open_marker_element(
@@ -411,6 +425,7 @@ fn open_marker_element<'a>(
     let (tag, data_type) =
         tag_and_type_for_marker(name, kind, structural.scope_kind, prefer_native_elements);
     let mut attrs = common_marker_attrs(data_type, name);
+    attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
     if structural.scope_kind == StructuralScopeKind::TableCell {
         attrs.push((
             "data-usfm-align".to_string(),
@@ -492,6 +507,7 @@ fn open_book_element<'a>(
     marker: &'a str,
     code: &'a str,
     prefer_native_elements: bool,
+    token_id: String,
 ) -> OpenElement<'a> {
     let tag = if prefer_native_elements {
         "section"
@@ -499,6 +515,7 @@ fn open_book_element<'a>(
         "div"
     };
     let mut attrs = common_marker_attrs("book", marker);
+    attrs.push(("data-usfm-id".to_string(), token_id));
     attrs.push(("data-usfm-code".to_string(), code.to_string()));
     OpenElement {
         marker: Some(marker),
@@ -729,6 +746,10 @@ fn push_fragment(output: &mut String, stack: &mut Vec<OpenElement<'_>>, html: &s
     }
 }
 
+fn token_id_str(id: &TokenId<'_>) -> String {
+    format!("{}-{}", id.book_code, id.index)
+}
+
 fn common_marker_attrs(data_type: &str, marker: &str) -> Vec<(String, String)> {
     vec![
         ("data-usfm-type".to_string(), data_type.to_string()),
@@ -736,12 +757,22 @@ fn common_marker_attrs(data_type: &str, marker: &str) -> Vec<(String, String)> {
     ]
 }
 
-fn empty_marker_span(data_type: &str, marker: &str, number: &str) -> String {
+fn empty_marker_span(
+    data_type: &str,
+    marker: &str,
+    number: &str,
+    sid: Option<&str>,
+    token_id: &str,
+) -> String {
     let mut out = String::from("<span");
     push_attr(&mut out, "data-usfm-type", data_type);
     push_attr(&mut out, "data-usfm-marker", marker);
+    push_attr(&mut out, "data-usfm-id", token_id);
     if !number.is_empty() {
         push_attr(&mut out, "data-usfm-number", number);
+    }
+    if let Some(s) = sid {
+        push_attr(&mut out, "data-usfm-sid", s);
     }
     out.push_str("></span>");
     out
@@ -763,12 +794,14 @@ fn render_extracted_note(
     label: &str,
     call_id: &str,
     note_id: &str,
+    token_id: &str,
     body: &str,
 ) -> String {
     let mut out = String::from("<aside");
     push_attr(&mut out, "id", note_id);
     push_attr(&mut out, "data-usfm-type", "note");
     push_attr(&mut out, "data-usfm-marker", marker);
+    push_attr(&mut out, "data-usfm-id", token_id);
     push_attr(&mut out, "data-usfm-caller", label);
     push_attr(&mut out, "data-usfm-source-caller", source_caller);
     push_attr(&mut out, "data-usfm-note-kind", note_kind.as_str());
