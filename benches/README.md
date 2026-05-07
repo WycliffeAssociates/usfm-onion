@@ -47,12 +47,32 @@ Operations covered: `parse`, `lint`, `format`, `usj`, `usx`, `html`.
 Each shows up as `<op>/serial` and `<op>/rayon` in the
 `parallelism/en_ulb` group.
 
+## Snapshotting results to `BENCH_RESULTS.md`
+
+After running both benches, regenerate the human-readable summary at
+the repo root:
+
+```bash
+cargo bench --bench operations
+cargo bench --bench parallelism
+cargo run --release --example bench_report > BENCH_RESULTS.md
+```
+
+The example reads `target/criterion/**/new/{benchmark,estimates}.json`
+and emits markdown tables (operations matrix, serial-vs-rayon speedups).
+Commit `BENCH_RESULTS.md` whenever you want to put a pin in current
+performance — it diffs cleanly across runs and is the easiest way to
+say "here's where we stand".
+
 ## Notes
 
 - `rayon` is a `[dev-dependencies]` entry. The library itself does not
   depend on it; it is only here so the parallelism bench can demonstrate
   the comparison.
 - Both benches use `criterion` with custom harness (no `#[bench]`
-  attribute). HTML reports land under `target/criterion/`.
+  attribute). Detailed HTML reports land under `target/criterion/`.
+- `[profile.bench]` overrides the inherited `[profile.release]` (which
+  is tuned for wasm-pack size, not native speed). If you change this,
+  update the label in `examples/bench_report.rs`.
 - If you want to sample a different book or corpus, edit
   `benches/common.rs` (`load_luke` / `load_en_ulb`).

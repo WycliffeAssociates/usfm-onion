@@ -36,6 +36,16 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
+# `cargo bench` would otherwise inherit `[profile.release]`, which is tuned
+# for wasm-pack output (size, single codegen unit). That hurts native bench
+# numbers — especially HTML rendering and other branch-heavy paths. Override
+# for speed instead.
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = false
+
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-Oz", "--enable-bulk-memory"]
 
