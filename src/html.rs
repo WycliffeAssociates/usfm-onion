@@ -433,8 +433,10 @@ fn open_marker_element<'a>(
                 close_for_note_structural(output, stack, name);
             }
         }
-        StructuralScopeKind::Unknown
-        | StructuralScopeKind::Chapter
+        StructuralScopeKind::Unknown => {
+            close_for_new_block(output, stack, false);
+        }
+        StructuralScopeKind::Chapter
         | StructuralScopeKind::Verse
         | StructuralScopeKind::Note => {}
     }
@@ -442,6 +444,9 @@ fn open_marker_element<'a>(
     let (tag, data_type) =
         tag_and_type_for_marker(name, kind, structural.scope_kind, prefer_native_elements);
     let mut attrs = common_marker_attrs(data_type, name);
+    if structural.scope_kind == StructuralScopeKind::Unknown {
+        attrs.push(("data-unknown-marker".to_string(), name.to_string()));
+    }
     attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
     if structural.scope_kind == StructuralScopeKind::TableCell {
         attrs.push((
