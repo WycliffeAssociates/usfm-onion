@@ -2132,4 +2132,28 @@ mod tests {
             UsjElement::OptBreak {} => UsjElement::OptBreak {},
         }
     }
+
+    #[test]
+    fn unclosed_footnote_does_not_swallow_subsequent_verses() {
+        let src = "\\id GEN Sample\n\
+                   \\c 1\n\\p\n\
+                   \\v 1 First.\\f + \\ft Note never terminated.\n\
+                   \\v 2 Second verse — should still appear.\n\
+                   \\c 2\n\\p\n\
+                   \\v 1 Chapter 2 should also still appear.\n";
+        let usj = usfm_to_usj(src).expect("usj export should succeed");
+        let json = serde_json::to_string(&usj).expect("usj should serialize");
+        assert!(
+            json.contains(r#""sid":"GEN 1:2""#),
+            "v2 sid missing from usj: {json}"
+        );
+        assert!(
+            json.contains(r#""sid":"GEN 2""#),
+            "ch2 sid missing from usj: {json}"
+        );
+        assert!(
+            json.contains(r#""sid":"GEN 2:1""#),
+            "v1 of ch2 sid missing from usj: {json}"
+        );
+    }
 }

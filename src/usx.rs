@@ -1038,4 +1038,27 @@ mod tests {
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect()
     }
+
+    #[test]
+    fn unclosed_footnote_does_not_swallow_subsequent_verses() {
+        let src = "\\id GEN Sample\n\
+                   \\c 1\n\\p\n\
+                   \\v 1 First.\\f + \\ft Note never terminated.\n\
+                   \\v 2 Second verse — should still appear.\n\
+                   \\c 2\n\\p\n\
+                   \\v 1 Chapter 2 should also still appear.\n";
+        let xml = usfm_to_usx(src).expect("usx export should succeed");
+        assert!(
+            xml.contains(r#"sid="GEN 1:2""#),
+            "v2 sid missing from usx: {xml}"
+        );
+        assert!(
+            xml.contains(r#"sid="GEN 2""#),
+            "ch2 sid missing from usx: {xml}"
+        );
+        assert!(
+            xml.contains(r#"sid="GEN 2:1""#),
+            "v1 of ch2 sid missing from usx: {xml}"
+        );
+    }
 }

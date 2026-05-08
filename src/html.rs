@@ -205,7 +205,8 @@ impl HtmlRenderer {
                     }
 
                     if marker_is_note_container(name) {
-                        let (caller, content_start, note_end) = parse_note_tokens(tokens, index);
+                        let (caller, content_start, note_end, resume_at) =
+                            parse_note_tokens(tokens, index);
                         let label = self.note_label(caller.as_deref().unwrap_or_default());
                         let note_kind = note_kind(name);
 
@@ -289,7 +290,8 @@ impl HtmlRenderer {
                             }
                         }
 
-                        index = note_end;
+                        index = resume_at;
+                        continue;
                     } else if matches!(metadata.kind, Some(MarkerDefKind::Chapter)) {
                         close_for_new_block(&mut output, &mut stack, true);
                         self.current_verse = None;
@@ -470,7 +472,18 @@ fn open_marker_element<'a>(
     });
 }
 
-fn parse_note_tokens(tokens: &[Token<'_>], start: usize) -> (Option<String>, usize, usize) {
+/// Returns `(caller, content_start, body_end_exclusive, resume_index)`.
+///
+/// `body_end_exclusive` bounds the slice rendered as the note body.
+/// `resume_index` is where the outer render loop should continue after
+/// the note: one past the `\f*` close for an explicit close, or the
+/// index of the boundary marker itself for the unclosed-note recovery
+/// path (so the boundary marker — `\v`, `\c`, `\p`, etc. — gets
+/// rendered normally as the next iteration).
+fn parse_note_tokens(
+    tokens: &[Token<'_>],
+    start: usize,
+) -> (Option<String>, usize, usize, usize) {
     let mut content_start = start + 1;
     let mut caller = None;
 
@@ -488,13 +501,29 @@ fn parse_note_tokens(tokens: &[Token<'_>], start: usize) -> (Option<String>, usi
     let mut index = start;
     while index < tokens.len() {
         match &tokens[index].data {
-            TokenData::Marker { name, .. } if marker_is_note_container(name) => {
-                depth += 1;
+            TokenData::Marker {
+                name, structural, ..
+            } => {
+                // Recovery for an unclosed note: any block-scope marker
+                // implicitly closes the open note. Without this, an unclosed
+                // \f at the start of a chapter swallows every subsequent
+                // verse and chapter into the note body. Mirrors the rule
+                // used by vref::tokens_to_vref_map and the export tree's
+                // force_close_notes. Lint still reports UnclosedNote.
+                if index > start
+                    && depth > 0
+                    && note_recovery_boundary(structural.scope_kind)
+                {
+                    return (caller, content_start, index, index);
+                }
+                if marker_is_note_container(name) {
+                    depth += 1;
+                }
             }
             TokenData::EndMarker { name, .. } if marker_is_note_container(name) => {
                 depth = depth.saturating_sub(1);
                 if depth == 0 {
-                    return (caller, content_start, index);
+                    return (caller, content_start, index, index + 1);
                 }
             }
             _ => {}
@@ -502,7 +531,21 @@ fn parse_note_tokens(tokens: &[Token<'_>], start: usize) -> (Option<String>, usi
         index += 1;
     }
 
-    (caller, content_start, tokens.len())
+    (caller, content_start, tokens.len(), tokens.len())
+}
+
+fn note_recovery_boundary(kind: StructuralScopeKind) -> bool {
+    matches!(
+        kind,
+        StructuralScopeKind::Block
+            | StructuralScopeKind::Chapter
+            | StructuralScopeKind::Verse
+            | StructuralScopeKind::Sidebar
+            | StructuralScopeKind::TableRow
+            | StructuralScopeKind::TableCell
+            | StructuralScopeKind::Header
+            | StructuralScopeKind::Periph
+    )
 }
 
 fn next_number_text(tokens: &[Token<'_>], marker_index: usize) -> Option<String> {
@@ -1045,5 +1088,50 @@ mod tests {
 
         assert!(html.contains(r#"data-usfm-lemma="grace""#));
         assert!(html.contains(r#"data-usfm-strong="H1""#));
+    }
+
+    #[test]
+    fn unclosed_footnote_does_not_swallow_subsequent_verses_in_html() {
+        // Pre-fix, an unclosed \f swallowed every following verse and
+        // chapter into the <aside> note element. After recovery, the
+        // note ends at the next block-scope marker (here, the \v 2),
+        // and v2 + the chapter-2 paragraph render in the main flow.
+        let src = "\\id GEN Sample\n\
+                   \\c 1\n\\p\n\
+                   \\v 1 First verse with an unclosed footnote.\\f + \\ft Note text never terminated.\n\
+                   \\v 2 Second verse — should still appear.\n\
+                   \\c 2\n\\p\n\
+                   \\v 1 Chapter 2 should also still appear.\n";
+        let html = usfm_to_html(src, HtmlOptions::default());
+        assert!(
+            html.contains(r#"data-usfm-sid="GEN 1:2""#),
+            "v2 of ch1 missing from html: {html}"
+        );
+        assert!(
+            html.contains(r#"data-usfm-sid="GEN 2""#),
+            "ch2 chapter marker missing from html: {html}"
+        );
+        assert!(
+            html.contains(r#"data-usfm-sid="GEN 2:1""#),
+            "v1 of ch2 missing from html: {html}"
+        );
+        // The note's <aside> should not contain the v2 marker — that is
+        // exactly the bug. Locate the aside and assert v2 lives outside.
+        let aside_start = html
+            .find("<aside")
+            .expect("expected an aside element for the extracted note");
+        let aside_end = html[aside_start..]
+            .find("</aside>")
+            .map(|relative| aside_start + relative)
+            .expect("expected the aside to close");
+        let aside = &html[aside_start..aside_end];
+        assert!(
+            !aside.contains(r#"data-usfm-sid="GEN 1:2""#),
+            "v2 marker leaked into note body: {aside}"
+        );
+        assert!(
+            !aside.contains(r#"data-usfm-sid="GEN 2""#),
+            "chapter-2 marker leaked into note body: {aside}"
+        );
     }
 }
