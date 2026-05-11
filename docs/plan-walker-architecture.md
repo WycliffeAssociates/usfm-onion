@@ -335,12 +335,35 @@ then cheapest bug-fix-delivers-value second, then the rest.
    Original step 3 also included `export_tree`; deferred to step 4
    because USJ/USX migration retires `export_tree.rs` entirely and
    making it a walker visitor in between would be wasted work.
-4. **USJ + USX** — replace `export_tree.rs` together; they share
-   enough that doing them sequentially is wasted work. Once they
-   land, `export_tree.rs` deletes. The latent Verse drift bug
-   (`export_tree.rs:226` vs `marker_defs.rs:236`) is fixed here as
-   a side effect, since USJ/USX no longer route through
-   `export_tree`'s buggy dispatch.
+4. ✅ **USJ + USX** (commit `<step 4>`) — `export_tree::build_export_document`
+   is now a walker visitor (`ExportTreeBuilder`). The previous
+   ad-hoc state machine — `BuilderState`, `handle_open`,
+   `force_close_notes`, `close_paragraph`, `close_open_meta`,
+   `close_sidebar`, `close_table_cell_in_row`, `close_table_row`,
+   `close_character_in_note`, `close_inline_above_paragraph`,
+   `in_note_context`, `unknown_marker_starts_new_block`, and the
+   imperative `MarkerKind`-keyed dispatch — is deleted. The
+   `ExportNode` / `ExportContainerNode` types are unchanged, so
+   `UsjExporter` and `UsxExporter` (the actual format-specific
+   serializers) are untouched. The latent Verse drift bug
+   (`export_tree.rs:226` vs `marker_defs.rs:236`) is fixed as a
+   side effect — Verse pops via the walker's unified precedence
+   rules now. The plan's original framing said "export_tree.rs
+   deletes" — in practice it shrank to the visitor + the type
+   definitions consumed by UsjExporter / UsxExporter. The
+   duplication is gone; the file remains as a useful intermediate
+   AST.
+
+   Walker change required at this step: `handle_milestone` now
+   overrides `scope_kind` to `Milestone` for every `TokenData::Milestone`
+   token, regardless of spec data. Alignment milestones like
+   `\zaln-s` / `\zaln-e` are not in the marker spec table, so the
+   prior path classified them as `Unknown` scope, which prevented
+   `handle_milestone_end` from pairing them with their `\*`
+   closer — they accumulated on the walker's stack indefinitely
+   in alignment-heavy corpora (acts_1_11.aligned, en_ult). The
+   `TokenData::Milestone` variant is syntactic truth; the walker
+   now honors it.
 5. **vref** — trivial port once the API is settled by the harder
    consumers above.
 6. **lint** — last. Largest rule surface and most demanding state

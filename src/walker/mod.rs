@@ -567,14 +567,23 @@ impl<'a> WalkerState<'a> {
             return;
         };
 
+        // A `TokenData::Milestone` is syntactically a milestone
+        // regardless of whether the spec data has a row for the
+        // marker. Unknown-but-milestone-shaped markers (custom `\z…`
+        // milestones, alignment `\zaln-s` / `\zaln-e`) still need to
+        // pair with their `\*` closer, which `handle_milestone_end`
+        // locates by `scope_kind == Milestone`. Override the spec
+        // kind here so the pairing works.
+        let scope_kind = StructuralScopeKind::Milestone;
+
         // Apply precedence (e.g. an inline-scope close would pop
         // higher inline scopes). `pop_for_open_scope`'s Milestone
         // branch only handles note-recovery for invalid markers
         // inside notes — same as Note/Character. We mirror that.
-        self.apply_open_precedence(info.scope_kind, marker, visitor);
+        self.apply_open_precedence(scope_kind, marker, visitor);
 
         let frame = ScopeFrame {
-            scope_kind: info.scope_kind,
+            scope_kind,
             marker,
             source_token_index: index,
             paragraph_category: None,

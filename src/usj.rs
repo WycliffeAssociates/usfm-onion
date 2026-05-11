@@ -1664,8 +1664,9 @@ mod tests {
                 }))
                 .unwrap_or_else(|error| panic!("failed to parse {}: {error}", usj_path.display()));
             let json = serde_json::to_string(&actual).expect("USJ should serialize");
-            let reparsed: UsjDocument =
-                serde_json::from_str(&json).expect("USJ should deserialize");
+            let reparsed: UsjDocument = serde_json::from_str(&json).unwrap_or_else(|err| {
+                panic!("USJ deserialize failed for {}: {err}", usfm_path.display())
+            });
             assert_eq!(
                 actual,
                 reparsed,
