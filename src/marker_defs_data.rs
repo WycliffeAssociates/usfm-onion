@@ -14,7 +14,7 @@
 
 #![allow(dead_code)]
 
-use crate::marker_defs::{MarkerDefKind, MarkerSpec, MarkerWhitespace, SpecContext};
+use crate::marker_defs::{MarkerDefKind, MarkerSpec, MarkerWhitespace, ParagraphCategory, SpecContext};
 use crate::whitespace::{
     FormatWhitespacePreference, StructuralWhitespaceRequirement as Req, WhitespaceFormatCategory,
 };
@@ -224,6 +224,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/optbreak.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "add",
@@ -239,6 +240,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/add.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "addpn",
@@ -254,6 +256,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: true,
         source: "repos_to_compare/tcdocs-main/markers/char/addpn.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "b",
@@ -261,6 +264,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/b.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "bd",
@@ -277,6 +281,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/bd.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "bdit",
@@ -293,6 +298,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/bdit.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "bk",
@@ -308,6 +314,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/bk.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "c",
@@ -315,6 +322,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Scripture, SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/c.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ca",
@@ -322,6 +330,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Chapter],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/ca.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "cat",
@@ -333,6 +342,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cat/cat.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "cd",
@@ -340,6 +350,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/cd.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "cl",
@@ -347,6 +358,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/cl.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "cls",
@@ -354,6 +366,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/cls.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "cp",
@@ -361,6 +374,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Chapter],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/cp.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "d",
@@ -368,6 +382,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/d.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "dc",
@@ -383,6 +398,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/dc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ef",
@@ -396,6 +412,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/note/ef.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "em",
@@ -412,6 +429,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/em.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "esb",
@@ -419,6 +437,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent, SpecContext::PeripheralContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/sbar/esb.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "esbe",
@@ -426,6 +445,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent, SpecContext::PeripheralContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/sbar/esb.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ex",
@@ -439,6 +459,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/note/ex.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "f",
@@ -452,6 +473,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/note/f.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fdc",
@@ -459,6 +481,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: true,
         source: "repos_to_compare/tcdocs-main/markers/char/fdc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fe",
@@ -472,6 +495,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/note/fe.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fig",
@@ -485,6 +509,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/fig/fig.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fk",
@@ -492,6 +517,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fk.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fl",
@@ -499,6 +525,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fl.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fm",
@@ -514,6 +541,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fm.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fp",
@@ -521,6 +549,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fp.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fq",
@@ -528,6 +557,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fq.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fqa",
@@ -535,6 +565,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fqa.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fr",
@@ -542,6 +573,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fr.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ft",
@@ -549,6 +581,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/ft.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fv",
@@ -556,6 +589,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fv.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "fw",
@@ -563,6 +597,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Footnote],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/fw.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "h",
@@ -570,6 +605,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/h.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "ib",
@@ -577,6 +613,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ib.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "id",
@@ -584,6 +621,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/doc/id.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ide",
@@ -591,6 +629,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ide.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "ie",
@@ -598,6 +637,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ie.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "iex",
@@ -605,6 +645,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/iex.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ili",
@@ -612,6 +653,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ili.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ili1",
@@ -619,6 +661,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ili.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ili2",
@@ -626,6 +669,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ili.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "im",
@@ -633,6 +677,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/im.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imi",
@@ -640,6 +685,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imi.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imq",
@@ -647,6 +693,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imq.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imt",
@@ -658,6 +705,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imt.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imt1",
@@ -669,6 +717,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imt.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imt2",
@@ -680,6 +729,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imt.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imt3",
@@ -691,6 +741,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imt.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imt4",
@@ -702,6 +753,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imt.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imte",
@@ -709,6 +761,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imte.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imte1",
@@ -716,6 +769,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imte.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "imte2",
@@ -723,6 +777,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/imte.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "io",
@@ -730,6 +785,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/io.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "io1",
@@ -737,6 +793,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/io.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "io2",
@@ -744,6 +801,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/io.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "io3",
@@ -751,6 +809,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/io.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "io4",
@@ -758,6 +817,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/io.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ior",
@@ -765,6 +825,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/ior.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "iot",
@@ -772,6 +833,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/iot.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ip",
@@ -779,6 +841,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction, SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ip.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ipc",
@@ -786,6 +849,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ipc.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ipi",
@@ -793,6 +857,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ipi.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ipq",
@@ -800,6 +865,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ipq.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "ipr",
@@ -807,6 +873,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ipr.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "iq",
@@ -814,6 +881,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/iq.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "iq1",
@@ -821,6 +889,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/iq.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "iq2",
@@ -828,6 +897,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/iq.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "iq3",
@@ -835,6 +905,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/iq.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "iqt",
@@ -842,6 +913,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/iqt.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "is",
@@ -849,6 +921,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/is.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "is1",
@@ -856,6 +929,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/is.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "is2",
@@ -863,6 +937,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/is.adoc",
+        paragraph_category: Some(ParagraphCategory::Introduction),
     },
     MarkerSpec {
         marker: "it",
@@ -879,6 +954,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/it.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "jmp",
@@ -894,6 +970,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/jmp.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "k",
@@ -909,6 +986,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/k.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "lf",
@@ -916,6 +994,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lf.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "lh",
@@ -923,6 +1002,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lh.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "li",
@@ -930,6 +1010,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/li.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "li1",
@@ -937,6 +1018,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/li.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "li2",
@@ -944,6 +1026,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/li.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "li3",
@@ -951,6 +1034,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/li.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "li4",
@@ -958,6 +1042,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/li.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "lik",
@@ -965,6 +1050,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::List],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/lik.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "lim",
@@ -972,6 +1058,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lim.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "lim1",
@@ -979,6 +1066,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lim.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "lim2",
@@ -986,6 +1074,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lim.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
     },
     MarkerSpec {
         marker: "lim3",
@@ -993,6 +1082,15 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lim.adoc",
+        paragraph_category: Some(ParagraphCategory::List),
+    },
+    MarkerSpec {
+        marker: "list",
+        kind: MarkerDefKind::Milestone,
+        contexts: &[SpecContext::ChapterContent],
+        deprecated: false,
+        source: "https://docs.usfm.bible/usfm/3.2/ms/list.html",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "lit",
@@ -1000,6 +1098,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookIntroduction, SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/lit.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "litl",
@@ -1007,6 +1106,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::List],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/litl.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "liv",
@@ -1014,6 +1114,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::List],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/liv.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "m",
@@ -1021,6 +1122,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/m.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "mi",
@@ -1028,6 +1130,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "mi1",
@@ -1035,6 +1138,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "mi2",
@@ -1042,6 +1146,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "mi3",
@@ -1049,6 +1154,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "mr",
@@ -1056,6 +1162,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mr.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "ms",
@@ -1063,6 +1170,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ms.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "ms1",
@@ -1070,6 +1178,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ms.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "ms2",
@@ -1077,6 +1186,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ms.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "ms3",
@@ -1084,6 +1194,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/ms.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "mt",
@@ -1094,6 +1205,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mt.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mt1",
@@ -1104,6 +1216,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mt.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mt2",
@@ -1114,6 +1227,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mt.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mt3",
@@ -1124,6 +1238,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mt.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mt4",
@@ -1134,6 +1249,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mt.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mte",
@@ -1141,6 +1257,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mte.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mte1",
@@ -1148,6 +1265,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mte.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "mte2",
@@ -1155,6 +1273,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/mte.adoc",
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "nb",
@@ -1162,6 +1281,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/nb.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "nd",
@@ -1177,6 +1297,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/nd.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "no",
@@ -1193,6 +1314,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/no.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ord",
@@ -1208,6 +1330,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/ord.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "p",
@@ -1215,6 +1338,23 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/p.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
+    },
+    MarkerSpec {
+        marker: "p1",
+        kind: MarkerDefKind::Paragraph,
+        contexts: &[SpecContext::PeripheralContent],
+        deprecated: false,
+        source: "https://docs.usfm.bible/usfm/3.1.1/para/peripherals/p1.html",
+        paragraph_category: Some(ParagraphCategory::Peripheral),
+    },
+    MarkerSpec {
+        marker: "p2",
+        kind: MarkerDefKind::Paragraph,
+        contexts: &[SpecContext::PeripheralContent],
+        deprecated: false,
+        source: "https://docs.usfm.bible/usfm/3.1.1/para/peripherals/p2.html",
+        paragraph_category: Some(ParagraphCategory::Peripheral),
     },
     MarkerSpec {
         marker: "pb",
@@ -1222,6 +1362,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pb.adoc",
+        paragraph_category: Some(ParagraphCategory::Other),
     },
     MarkerSpec {
         marker: "pc",
@@ -1229,6 +1370,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pc.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "periph",
@@ -1236,6 +1378,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Peripheral],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/periph/periph.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ph",
@@ -1243,6 +1386,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: true,
         source: "repos_to_compare/tcdocs-main/markers/para/ph.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pi",
@@ -1250,6 +1394,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pi1",
@@ -1257,6 +1402,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pi2",
@@ -1264,6 +1410,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pi3",
@@ -1271,6 +1418,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pi.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pm",
@@ -1278,6 +1426,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pm.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pmc",
@@ -1285,6 +1434,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pmc.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pmo",
@@ -1292,6 +1442,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pmo.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pmr",
@@ -1299,6 +1450,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pmr.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pn",
@@ -1314,6 +1466,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/pn.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "png",
@@ -1329,6 +1482,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/png.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "po",
@@ -1336,6 +1490,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/po.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pr",
@@ -1343,6 +1498,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/pr.adoc",
+        paragraph_category: Some(ParagraphCategory::Body),
     },
     MarkerSpec {
         marker: "pro",
@@ -1358,6 +1514,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: true,
         source: "repos_to_compare/tcdocs-main/markers/char/pro.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "q",
@@ -1365,6 +1522,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/q.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "q1",
@@ -1372,6 +1530,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/q.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "q2",
@@ -1379,6 +1538,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/q.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "q3",
@@ -1386,6 +1546,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/q.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "q4",
@@ -1393,6 +1554,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/q.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qa",
@@ -1400,6 +1562,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qa.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qac",
@@ -1407,6 +1570,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Para],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/qac.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "qc",
@@ -1414,6 +1578,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qc.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qd",
@@ -1421,6 +1586,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qd.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qm",
@@ -1428,6 +1594,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qm.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qm1",
@@ -1435,6 +1602,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qm.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qm2",
@@ -1442,6 +1610,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qm.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qm3",
@@ -1449,6 +1618,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qm.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qr",
@@ -1456,6 +1626,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/qr.adoc",
+        paragraph_category: Some(ParagraphCategory::Poetry),
     },
     MarkerSpec {
         marker: "qs",
@@ -1463,6 +1634,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Para],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/qs.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "qt",
@@ -1478,6 +1650,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/qt.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "qt-e",
@@ -1493,6 +1666,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/qt.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "qt-s",
@@ -1508,6 +1682,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/qt.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "r",
@@ -1515,6 +1690,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/r.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "rb",
@@ -1530,6 +1706,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/rb.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ref",
@@ -1547,6 +1724,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/ref.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "rem",
@@ -1554,6 +1732,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/rem.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "rq",
@@ -1569,6 +1748,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/rq.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "s",
@@ -1576,6 +1756,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/s.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "s1",
@@ -1583,6 +1764,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/s.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "s2",
@@ -1590,6 +1772,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/s.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "s3",
@@ -1597,6 +1780,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/s.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "s4",
@@ -1604,6 +1788,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/s.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sc",
@@ -1620,6 +1805,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/sc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "sd",
@@ -1627,6 +1813,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sd.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sd1",
@@ -1634,6 +1821,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sd.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sd2",
@@ -1641,6 +1829,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sd.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sd3",
@@ -1648,6 +1837,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sd.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sig",
@@ -1663,6 +1853,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/sig.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "sls",
@@ -1678,6 +1869,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/sls.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "sp",
@@ -1685,6 +1877,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sp.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sr",
@@ -1692,6 +1885,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sr.adoc",
+        paragraph_category: Some(ParagraphCategory::Section),
     },
     MarkerSpec {
         marker: "sts",
@@ -1699,6 +1893,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/sts.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "sup",
@@ -1715,6 +1910,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/sup.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "ta",
@@ -1730,6 +1926,15 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/ta.adoc",
+        paragraph_category: None,
+    },
+    MarkerSpec {
+        marker: "table",
+        kind: MarkerDefKind::Milestone,
+        contexts: &[SpecContext::ChapterContent],
+        deprecated: false,
+        source: "https://docs.usfm.bible/usfm/3.2/ms/table.html",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "tc",
@@ -1737,6 +1942,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Table],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/tc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "tcc",
@@ -1744,6 +1950,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Table],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/tcc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "tcr",
@@ -1751,6 +1958,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Table],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/tcr.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "th",
@@ -1758,6 +1966,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Table],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/th.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "thc",
@@ -1765,6 +1974,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Table],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/thc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "thr",
@@ -1772,6 +1982,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Table],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/thr.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "tl",
@@ -1787,6 +1998,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/tl.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "toc",
@@ -1794,6 +2006,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toc.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toc1",
@@ -1801,6 +2014,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toc.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toc2",
@@ -1808,6 +2022,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toc.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toc3",
@@ -1815,6 +2030,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toc.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toca",
@@ -1822,6 +2038,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toca.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toca1",
@@ -1829,6 +2046,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toca.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toca2",
@@ -1836,6 +2054,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toca.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "toca3",
@@ -1843,6 +2062,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/toca.adoc",
+        paragraph_category: Some(ParagraphCategory::Identification),
     },
     MarkerSpec {
         marker: "tr",
@@ -1850,13 +2070,15 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/para/tr.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
-        marker: "ts-s / ts-e",
+        marker: "ts",
         kind: MarkerDefKind::Milestone,
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/ms/ts.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "usfm",
@@ -1864,6 +2086,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::BookHeaders],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/doc/usfm.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "v",
@@ -1877,6 +2100,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/v.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "va",
@@ -1884,6 +2108,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Verse],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/va.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "vid",
@@ -1891,6 +2116,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/ms/vid.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "vid-e",
@@ -1898,6 +2124,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/ms/vid.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "vid-s",
@@ -1905,6 +2132,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/ms/vid.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "vp",
@@ -1912,6 +2140,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::Verse],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/vp.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "w",
@@ -1927,6 +2156,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/w.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "wa",
@@ -1942,6 +2172,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/wa.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "wg",
@@ -1957,6 +2188,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/wg.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "wh",
@@ -1972,6 +2204,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/wh.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "wj",
@@ -1987,6 +2220,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/wj.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "wl",
@@ -2002,6 +2236,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/wl.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "x",
@@ -2015,6 +2250,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/note/x.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xdc",
@@ -2022,6 +2258,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: true,
         source: "repos_to_compare/tcdocs-main/markers/char/xdc.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xk",
@@ -2029,6 +2266,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xk.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xnt",
@@ -2036,6 +2274,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xnt.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xo",
@@ -2043,6 +2282,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xo.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xop",
@@ -2050,6 +2290,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xop.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xot",
@@ -2057,6 +2298,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xot.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xq",
@@ -2064,6 +2306,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xq.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xt",
@@ -2081,6 +2324,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         ],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xt.adoc",
+        paragraph_category: None,
     },
     MarkerSpec {
         marker: "xta",
@@ -2088,5 +2332,6 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         contexts: &[SpecContext::CrossReference],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/char/xta.adoc",
+        paragraph_category: None,
     },
 ];

@@ -190,3 +190,21 @@ and the issue has the `LintCategory` we'd choose for content-style.
 - ~20 lines removed (redundant helpers, generalized rule).
 
 Net: +210 lines, all in lint_impl.rs.
+
+## Adjacent rule to land alongside (USFM 3.2)
+
+`verse-not-in-section-or-other-paragraph` — USFM 3.2 release notes
+revise `\v` so it is **not allowed** inside paragraphs of category
+`Section` or `Other`. The declarative data is already in place
+(`MarkerSpec.paragraph_category`, populated per the 3.2 para index in
+`marker_defs_data.rs`). Implement once the lint visitor lands per
+`plan-walker-architecture.md`:
+
+- Trigger: walker emits `on_enter_scope` for a `Verse` while
+  `WalkContext.current_paragraph_category()` is
+  `Some(ParagraphCategory::Section | ParagraphCategory::Other)`.
+- Emit: a lint diagnostic at the `\v` token's span; no autofix
+  (structural — user has to move the verse or change the paragraph).
+- Out of scope for the six whitespace rules above, but worth
+  bundling in the same lint-visitor migration since both depend on
+  the same `WalkContext` plumbing.

@@ -1,132 +1,180 @@
-# Plan: marker data curation pass
+# Plan: marker data additions for USFM 3.1.1 / 3.1.2 / 3.2
 
-Status: deferred. The data was originally seeded by an automated pass over
-`repos_to_compare/tcdocs-main` that proved imperfect; the file is now
-hand-curated but several rows still carry artifacts from that initial
-auto-gen. This plan describes a focused curation session.
+Status: ready. Existing rows in `src/marker_defs_data.rs` are assumed
+correct. This plan is purely **additive** — bring the table up to the
+3.2 release-notes baseline.
 
-## Why this exists
+Source of truth: <https://docs.usfm.bible/usfm/3.2/release-notes.html>
+sections 3.2, 3.1.2, 3.1.1.
 
-`src/marker_defs_data.rs` is the single source of truth for which markers
-exist, what kind they are, and which contexts they're valid in. The
-queries in `src/marker_defs.rs` and the public catalog in
-`src/markers.rs` both delegate to this table. If a row is wrong, every
-consumer (HTML, lint, format, USJ/USX conversion) inherits the bug.
+Related prior art in `Bridgeconn/usfm-grammar`:
+- #394 `\ipc` — already present in our table (`src/marker_defs_data.rs:784`).
+- #393 `\list-s` / `\list-e` — **missing**.
+- #396 `\ta` — already present (`:1720`).
+- #397 `@lang` attribute on `\tl` / `\wl` — attribute, not a row.
+- #398 `\wl` — already present (`:1992`).
+- #400 inline markup in titles/headings — context audit, not a row.
 
-Two known classes of issue surfaced while building the
-`MARKER_WHITESPACE` table:
+## What's actually missing
 
-1. **Compound marker names.** At least one row encodes two markers in
-   one string: `"ts-s / ts-e"`. The lookup paths can't normalize that
-   into the start/end milestone forms. It should be one row keyed
-   `"ts"` with `MarkerDefKind::Milestone`, or two rows.
-2. **Missing milestone forms.** `qt` is registered as
-   `MarkerDefKind::Character` only. The spec also defines `qt` as a
-   milestone (`qt-s` / `qt-e`); `lookup_spec_marker("qt-s")` falls
-   through to the milestone-suffix branch and works *because* of the
-   normalization, but the spec lookup for the milestone form returns
-   the Character kind, which is incorrect for milestone-shaped
-   instances. Either `qt` needs a second `Milestone` row, or the
-   `MarkerDefKind` model needs to allow a marker to be of multiple
-   kinds depending on form.
+A grep over `marker_defs_data.rs` confirms:
 
-The 213 rows in `MARKER_SPECS` likely have more issues like these.
-A focused pass should validate each row against `whitespace.md` and the
-USFM 3.1 spec at <https://docs.usfm.bible/usfm/latest/>, not against the
-auto-generated `repos_to_compare/tcdocs-main` `.adoc` files (which is
-where the imperfections came from).
+1. **`\list` milestone (3.2).** No `list` row exists. Spec page:
+   <https://docs.usfm.bible/usfm/3.2/ms/list.html>. Should be a single
+   `Milestone` row keyed `"list"` (matching how the codebase handles
+   `qt` → `qt-s`/`qt-e` normalization).
 
-## Methodology
+2. **`\table` milestone (3.2).** Same shape as `list` — start/end
+   milestone form for tables. Single `Milestone` row keyed `"table"`.
 
-The aim is *human review*, not regeneration. The auto-gen path was
-tried and failed; this is the curation path.
+3. **`p1` / `p2` re-categorization (3.1.1).** The release notes move
+   these from `OtherPara` to `PeriphPara`. Check whether our rows (if
+   any) reflect that; if absent, decide whether we register them at all
+   (they only appear in peripherals).
 
-1. **Print the catalog.** Run a small bin (or a one-off script) that
-   serializes every `MARKER_SPECS` row as a flat table:
+4. **`@lang` attribute on `\tl` and `\wl` (3.1.2).** This is an
+   attribute schema concern, not a `MarkerSpec` row. Lives wherever the
+   attribute allow-lists per marker are encoded (post-3.1 attribute
+   commit `f1cfda1` lifted attributes onto the owning marker token —
+   confirm `tl` and `wl` accept `lang`).
 
-   | marker | kind | contexts | deprecated | source |
+## Declarative groundwork (do this here, not in the walker)
 
-   Sort by kind, then alphabetically by marker. This is the diffable
-   review surface.
+The walker plan (`plan-walker-architecture.md`) reads structural
+metadata off `WalkContext` rather than re-deriving it per visitor.
+That only works if the metadata is declarative on the marker row.
+Several 3.2 release-note items map naturally to per-row data and
+should be added **here**, ahead of the walker migration, rather than
+encoded ad-hoc in each consumer later.
 
-2. **Triage by kind.** Walk each `MarkerDefKind` group in turn:
+### 1. Paragraph category on every `Paragraph`-kind row
 
-   - `Header` (small group: `id`, `usfm`, ...): each row should be
-     trivially verifiable from the spec.
-   - `Chapter` / `Verse`: should be tiny (`c`, `v`, `ca`, `cp`, `cl`,
-     `cd`, `va`, `vp`, ...).
-   - `Note`: `f`, `fe`, `ef`, `x`, `ex`. Verify each.
-   - `Milestone`: cross-reference against the spec's milestone list.
-     **The known issue is that `qt` and `ts` should appear here** —
-     `qt` only appears as Character today, and `ts` appears as the
-     compound `"ts-s / ts-e"`. Other milestones (`zaln`, `zw`, `qt-s`,
-     `qt-e`) should also be checked.
-   - `Sidebar`: `esb`, `esbe`. Trivial.
-   - `Periph`, `Meta`, `TableRow`, `TableCell`: small groups, easy.
-   - `Paragraph`, `Character`: the bulk of the table. Group by family
-     (heading, list, poetry, attribution, etc.) and verify each
-     family's contexts as a unit rather than row-by-row.
+Per <https://docs.usfm.bible/usfm/3.2/para/index.html>, every
+paragraph marker belongs to exactly one category:
 
-3. **Verify contexts.** For each row, the `contexts: &[SpecContext]`
-   array determines where the marker is allowed. Mistakes here cause
-   `MarkerNotValidInContext` lint false-positives or false-negatives.
-   The spec's "Allowed in" sections per marker are authoritative.
+| Category           | Markers (representative)                                   |
+| ------------------ | ---------------------------------------------------------- |
+| `Identification`   | `ide`, `sts`, `rem`, `h`, `toc#`, `toca#`                  |
+| `Introduction`     | `imt#`, `is#`, `ip`, `ipi`, `im`, `imi`, `ipq`, `imq`, `ipr`, `ipc`, `iq#`, `ili#`, `ib`, `iot`, `io#`, `iex`, `imte`, `ie` |
+| `Title`            | `mt#`, `mte#`, `cl`, `cd`                                  |
+| `Section`          | `ms#`, `mr`, `s#`, `sr`, `r`, `d`, `sp`, `sd#`             |
+| `Body`             | `p`, `m`, `po`, `cls`, `pr`, `pc`, `pm`, `pmo`, `pmc`, `pmr`, `pi#`, `mi#`, `lit`, `nb`, `b`, `ph` (deprecated) |
+| `Poetry`           | `q#`, `qr`, `qc`, `qa`, `qm#`, `qd`                        |
+| `List`             | `lh`, `li#`, `lf`, `lim#`                                  |
+| `Table`            | `tr`                                                       |
+| `Peripheral`       | `p1`, `p2` (3.1.1 re-categorization), plus other peripheral-only paragraphs |
+| `Other`            | catch-all for anything not above                           |
 
-4. **Resolve compound and missing rows.**
-   - Split `"ts-s / ts-e"` into either one `"ts"` `Milestone` row
-     (preferred — matches the `qt` / `qt-s` / `qt-e` normalization
-     pattern) or two rows.
-   - Add a `Milestone` row for `qt` (in addition to its Character
-     row, if both are needed). Verify all consumers handle the
-     polysemy — `lookup_marker_def` returns one `MarkerDef`, so if a
-     marker is of two kinds we need to either pick one canonically
-     (probably Milestone, since that's the form with start/end split
-     consumers care about) or thread an "instance form" hint into
-     the lookup.
-   - Audit other potential dual-kind markers: `zaln`, custom `z`
-     markers, anything documented as both inline and milestone.
+Action: introduce `ParagraphCategory` enum and a
+`paragraph_category: Option<ParagraphCategory>` field on
+`MarkerSpec`. Populate for every existing `Paragraph`-kind row. The
+walker's `WalkContext` then exposes
+`current_paragraph_category() -> Option<ParagraphCategory>`, which
+makes the 3.2 `\v` context refinement a one-line declarative check
+instead of bespoke per-consumer code.
 
-5. **Add a one-shot validator.** Once curated, ship a `cargo test`-only
-   validator that:
-   - Asserts no row's `marker` field contains `/` or whitespace.
-   - Asserts no `Milestone`-kind row's `marker` ends in `-s` or `-e`
-     (those should be derived, not stored).
-   - Asserts each row's `source:` path exists under
-     `repos_to_compare/tcdocs-main/` *if* that directory is present
-     (already done in `marker_defs::tests`).
-   - Asserts every marker in `MARKER_WHITESPACE` resolves via
-     `lookup_spec_marker` to a row whose canonical name matches.
+### 2. New milestone rows (3.2)
 
-   These guards prevent the next regression without forcing the data
-   to be auto-regenerated.
+- `\list` — `Milestone`, spec: <https://docs.usfm.bible/usfm/3.2/ms/list.html>
+- `\table` — `Milestone`, spec: <https://docs.usfm.bible/usfm/3.2/ms/table.html>
 
-## What this is NOT
+### 3. `@lang` attribute on `\tl` and `\wl` (3.1.2)
 
-- Not a regeneration pass. The plan was approved as human-curated;
-  re-running auto-gen against tcdocs reintroduces the original
-  imperfections.
-- Not a USFM 3.1.2 release-notes pass. Adding new markers from
-  `https://docs.usfm.bible/usfm/latest/release-notes.html` is a
-  separate, additive task. Curation comes first because adding new
-  rows on top of a flawed schema multiplies the cleanup later.
-- Not a context-system redesign. The `SpecContext` enum is what it is;
-  this pass only adjusts which markers get which contexts, not the
-  set of contexts.
+Wire through whatever attribute allow-list mechanism `f1cfda1`
+introduced. Audit: do any other character markers gain a `@lang`
+attribute in 3.1.2? (Spec only lists `tl` and `wl`.)
+
+### 4. `\v` not allowed in `Section` / `Other` paragraphs (3.2)
+
+Once paragraph category is on rows, this becomes a declarative lint
+rule keyed off `WalkContext.current_paragraph_category()`. No row
+edit needed for `v` itself — just the rule, but it's only
+expressible once category lands.
+
+### 5. `\lit` allowed in book introductions (3.1.1)
+
+Audit the `lit` row's `contexts` and add introduction context if
+missing. Cheap, declarative, do it now.
+
+## What stays out of scope
+
+These 3.2 features need work outside the marker data table:
+
+- **Anchors and inline referencing** (3.2). New syntactic construct.
+  Parser/CST work; separate plan.
+- **`markers.ext` wildcard `\*`** (3.2). Extension-loading mechanism;
+  not built-in rows.
+- **`standalone` category in `markers.ext`** (3.2). Same.
+- **Generalized node initial attributes on paragraphs** (3.2).
+  Attribute-lifting pass (commit `f1cfda1`), not the marker catalog.
+- **PR #400 (titles/headings accept inline markup)**. Context-system
+  refinement at the CST/lint layer; orthogonal to row data.
+
+## Implementation steps
+
+Ordered so the declarative groundwork lands before the walker plan
+starts.
+
+1. **Add `ParagraphCategory` enum and field.** Define the enum
+   (variants from the table above). Add
+   `paragraph_category: Option<ParagraphCategory>` to `MarkerSpec`.
+   None for non-paragraph kinds; required for `Paragraph` kind.
+
+2. **Populate paragraph category for every existing `Paragraph` row.**
+   ~80 rows. Use the spec's `/usfm/3.2/para/index.html` grouping as
+   the authority. `MarkerDefKind::Paragraph` rows with no category
+   should fail a debug-assert / test.
+
+3. **Add `\list` milestone row** to `MARKER_SPECS`, keyed `"list"`,
+   kind `Milestone`. Source: `repos_to_compare/tcdocs-main/markers/ms/list.adoc`
+   if present, else point at the spec URL.
+
+4. **Add `\table` milestone row**, same shape, source
+   `…/markers/ms/table.adoc` if present.
+
+5. **`@lang` attribute on `tl` / `wl`.** Wire into the attribute
+   allow-list mechanism from `f1cfda1`. If the mechanism is also
+   declarative (per-row attribute list), update the rows; if it's
+   coded centrally, update there. Match whatever shape `f1cfda1`
+   chose.
+
+6. **`\lit` context audit** for introduction allowance (3.1.1).
+
+7. **Decide `p1` / `p2`.** Grep confirms no rows today. Recommend
+   adding as `Paragraph` kind with `Peripheral` category, since the
+   walker's category lookup will fall over if they show up in
+   peripherals and aren't registered. Cheap to add now while
+   populating the category field anyway.
+
+8. **Run existing tests.** `cargo test -p usfm_onion`. The
+   `marker_defs::tests` suite is the regression net.
 
 ## Estimated scope
 
-- 213 rows × ~30 seconds of review = ~2 hours of focused human time.
-- Code surgery: minor — splitting/adding rows, fixing kind tags.
-  Probably under 100 lines of changes to `marker_defs_data.rs`.
-- Validator: ~40 lines in `marker_defs.rs::tests`.
-- The tests in `marker_defs::tests` (line 1186 onward) are the
-  regression net. After curation they should still pass without
-  modification.
+- New enum + field: ~20 lines.
+- Populating `paragraph_category` across ~80 paragraph rows: ~80
+  lines of additions, mechanical.
+- 2 new milestone rows (`list`, `table`): ~20 lines.
+- Attribute wiring for `@lang`: depends on `f1cfda1` shape; likely
+  under 10 lines.
+- Possibly 2 new paragraph rows (`p1`, `p2`): ~15 lines.
+- Total: ~150 lines, mostly mechanical data entry.
 
 ## Sequencing
 
-If both this plan and `plan-whitespace-lint-rules.md` are queued, do
-**this one first**. Lint rules walk `MARKER_WHITESPACE`, which depends
-on `lookup_spec_marker` resolving correctly — and `lookup_spec_marker`
-is exactly where the data quality issues bite. Curating the data
-first means the lint rules land on solid ground.
+Do this **before** both `plan-walker-architecture.md` and
+`plan-whitespace-lint-rules.md`.
+
+- The walker plan's `WalkContext` exposes
+  `current_paragraph_category()`. That helper is only meaningful if
+  every paragraph row carries a category, which this plan delivers.
+  Landing the walker first and back-filling category later means
+  every visitor that wants the field has to handle `None` as "I
+  don't know yet" — exactly the kind of drift the walker plan is
+  trying to delete.
+- Whitespace lint rules walk `MARKER_WHITESPACE`; the new milestone
+  rows (`list`, `table`) need to resolve via `lookup_spec_marker`
+  before those rules can rely on them.
+
+In other words: this is the declarative-data foundation. Walker and
+lint sit on top of it.

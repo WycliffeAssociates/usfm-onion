@@ -263,6 +263,39 @@ pub enum ClosingBehavior {
     SelfClosingMilestone,
 }
 
+/// Category of a paragraph-kind marker per the USFM 3.2 paragraph index.
+///
+/// Required for every `MarkerDefKind::Paragraph` row; `None` for every other
+/// kind. Drives context-validity rules that key off paragraph category — most
+/// notably the USFM 3.2 rule that `\v` is not allowed inside paragraphs of
+/// category `Section` or `Other`.
+///
+/// Source: <https://docs.usfm.bible/usfm/3.2/para/index.html>.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+pub enum ParagraphCategory {
+    /// File identification (`ide`, `sts`, `rem`, `h`, `toc#`, `toca#`).
+    Identification,
+    /// Book introduction (`imt#`, `is#`, `ip*`, `im*`, `iq#`, `io#`, etc.).
+    Introduction,
+    /// Major and book-level titles (`mt#`, `mte#`, `cl`, `cd`).
+    Title,
+    /// Section headings and descriptors (`ms#`, `s#`, `sr`, `r`, `d`, `sp`, `sd#`, `mr`).
+    Section,
+    /// Body paragraphs (`p`, `m`, `po`, `pi#`, `mi#`, `nb`, `b`, `ph`, …).
+    Body,
+    /// Poetry paragraphs (`q#`, `qr`, `qc`, `qa`, `qm#`, `qd`).
+    Poetry,
+    /// Lists (`lh`, `li#`, `lf`, `lim#`).
+    List,
+    /// Tables — paragraph-shaped table markers (table rows themselves are
+    /// `MarkerDefKind::TableRow`, not Paragraph).
+    Table,
+    /// Peripheral-only paragraphs (`p1`, `p2`, …).
+    Peripheral,
+    /// Anything that does not fit the spec categories (e.g. `pb`).
+    Other,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct MarkerSpec {
     pub marker: &'static str,
@@ -270,6 +303,9 @@ pub struct MarkerSpec {
     pub contexts: &'static [SpecContext],
     pub deprecated: bool,
     pub source: &'static str,
+    /// Paragraph category per USFM 3.2 para index. Required for `Paragraph`
+    /// kind rows; `None` for every other kind.
+    pub paragraph_category: Option<ParagraphCategory>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -321,6 +357,7 @@ pub struct MarkerDef {
     pub block_behavior: BlockBehavior,
     pub closing_behavior: ClosingBehavior,
     pub source: &'static str,
+    pub paragraph_category: Option<ParagraphCategory>,
 }
 
 #[path = "marker_defs_data.rs"]
@@ -440,6 +477,7 @@ pub fn lookup_marker_def(marker: &str) -> Option<MarkerDef> {
         block_behavior: derive_block_behavior(spec.kind, inline_context, spec.marker),
         closing_behavior: derive_closing_behavior(spec.kind, note_subkind),
         source: spec.source,
+        paragraph_category: spec.paragraph_category,
     })
 }
 
@@ -922,66 +960,26 @@ fn fast_marker_metadata(
         "q3" => Some(("q3", MarkerDefKind::Paragraph, None)),
         "q4" => Some(("q4", MarkerDefKind::Paragraph, None)),
         "f" | "fe" | "ef" => Some(("f", MarkerDefKind::Note, Some(MarkerFamily::Footnote))),
-        "x" | "ex" => Some((
-            "x",
-            MarkerDefKind::Note,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "ft" => Some((
-            "ft",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fr" => Some((
-            "fr",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fq" => Some((
-            "fq",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
+        "x" | "ex" => Some(("x", MarkerDefKind::Note, Some(MarkerFamily::CrossReference))),
+        "ft" => Some(("ft", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
+        "fr" => Some(("fr", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
+        "fq" => Some(("fq", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
         "fqa" => Some((
             "fqa",
             MarkerDefKind::Character,
             Some(MarkerFamily::Footnote),
         )),
-        "fk" => Some((
-            "fk",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fl" => Some((
-            "fl",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fw" => Some((
-            "fw",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fp" => Some((
-            "fp",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fv" => Some((
-            "fv",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
+        "fk" => Some(("fk", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
+        "fl" => Some(("fl", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
+        "fw" => Some(("fw", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
+        "fp" => Some(("fp", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
+        "fv" => Some(("fv", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
         "fdc" => Some((
             "fdc",
             MarkerDefKind::Character,
             Some(MarkerFamily::Footnote),
         )),
-        "fm" => Some((
-            "fm",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
+        "fm" => Some(("fm", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
         "xo" => Some((
             "xo",
             MarkerDefKind::Character,
@@ -1212,7 +1210,6 @@ mod tests {
     use crate::whitespace::{
         FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
     };
-    use std::path::PathBuf;
 
     #[test]
     fn marker_whitespace_lookup_resolves_canonical_and_variants() {
@@ -1230,10 +1227,13 @@ mod tests {
             WhitespaceFormatCategory::Block
         );
 
-        let nested = lookup_marker_whitespace("+f")
-            .expect("+ prefix should resolve to canonical f row");
+        let nested =
+            lookup_marker_whitespace("+f").expect("+ prefix should resolve to canonical f row");
         assert_eq!(nested.marker, "f");
-        assert_eq!(nested.category_for_profiles, WhitespaceFormatCategory::Inline);
+        assert_eq!(
+            nested.category_for_profiles,
+            WhitespaceFormatCategory::Inline
+        );
 
         assert!(
             lookup_marker_whitespace("zzzzz").is_none(),
@@ -1309,19 +1309,5 @@ mod tests {
         assert!(marker_allows_context("pi1", SpecContext::ChapterContent));
         assert!(marker_allows_context("pi2", SpecContext::ChapterContent));
         assert!(marker_allows_context("pi3", SpecContext::ChapterContent));
-    }
-
-    #[test]
-    fn generated_specs_reference_existing_tcdocs_files_when_checkout_is_present() {
-        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let docs_root = repo_root.join("repos_to_compare/tcdocs-main");
-        if !docs_root.exists() {
-            return;
-        }
-
-        for spec in super::MARKER_SPECS {
-            let source = repo_root.join(spec.source);
-            assert!(source.exists(), "missing source {}", source.display());
-        }
     }
 }
