@@ -167,30 +167,21 @@ a `&mut Vec<ScopeFrame<'a>>` internally, and visitors receive `&'_`
 snapshots per event. It is not a limitation we can paper over; it
 shapes the visitor API.
 
-### Structural scopes only
+### Unified scope stack
 
-`WalkContext` tracks the **structural** scope stack — paragraph,
-chapter, verse, note, sidebar, table-row, table-cell, header,
-periph. It does **not** track inline-scope (character markers like
-`\nd`, `\bk`, etc.) state on the stack.
+**Revised in step 2.** `WalkContext` tracks **all** open scopes on
+a single stack: paragraphs, notes, sidebars, chapters, verses,
+table rows/cells, headers, periphs, character markers (`\nd`,
+`\bk`, …), and milestone-starts (`\zaln-s` …).
 
-Inline scopes have no recovery semantics, and only two consumers
-need to track them at all: lint (for rule context) and html (for
-buffering-and-emit decisions). Bloating `WalkContext` with a second
-stack would tax the other three consumers (CST, USJ/USX, vref) for
-two consumers' benefit. Instead, those two visitors keep their own
-inline stacks as visitor-local state, fed by the per-token
-`InlineContext` metadata already attached to every `Token` via
-`StructuralMarkerInfo`.
-
-> Implementation note: when html and lint are migrated, the
-> visitor-local inline stack code must carry **load-bearing
-> comments** explaining (a) why it exists outside `WalkContext`,
-> (b) that it is intentional duplication of *form* (a stack) but
-> not of *semantics* (no recovery; consumer-specific concerns), and
-> (c) that other visitors deliberately do not need this. The whole
-> point of this refactor is to delete drift-prone duplication;
-> anything that survives needs to advertise why.
+The original plan's "structural scopes only" framing was wrong:
+current CST pushes character markers as parent frames in its
+tree, and so does any walker-driven visitor that needs to mirror
+that shape (CST, eventually USJ/USX). Helpers like
+`current_paragraph_category()` and `current_scope_kind()` filter
+the stack by frame kind, so consumers that only care about a
+subset are unaffected. Visitor-local inline stacks are no longer
+required.
 
 ```rust
 pub struct WalkContext<'a> {
@@ -213,18 +204,26 @@ pub struct ScopeFrame<'a> {
 
 Events:
 
-| Event            | Fires on                                 | Notes                                                    |
-| ---------------- | ---------------------------------------- | -------------------------------------------------------- |
-| `on_enter_scope` | A marker opens a new structural scope    | Fires for chapter, verse, paragraph, note, sidebar, etc. |
-| `on_leave_scope` | A scope closes (explicit, recovery, EOF) | `reason: Explicit \| RecoveryClosure \| EndOfInput`      |
-| `on_text`        | A `TokenData::Text` token                | Caller can choose to skip when `ctx.in_note`             |
-| `on_chapter`     | A chapter `Number` token resolved        | Includes parsed chapter number + sid                     |
-| `on_verse`       | A verse `Number` token resolved          | Includes parsed verse lexeme + sid                       |
-| `on_milestone`   | A self-closing or paired milestone       |                                                          |
-| `on_book_code`   | A `\id` resolves a book code             |                                                          |
-| `on_opt_break`   | `TokenData::OptBreak`                    | Most visitors ignore                                     |
-| `on_newline`     | `TokenData::Newline`                     | Formatter cares; most others ignore                      |
-| `on_unknown`     | Unknown marker the walker can't classify | Lint cares; others fall back to "treat as block"         |
+| Event              | Fires on                                  | Notes                                                                          |
+| ------------------ | ----------------------------------------- | ------------------------------------------------------------------------------ |
+| `on_enter_scope`   | A marker opens any scope                  | Fires for chapter, verse, paragraph, note, sidebar, character, milestone, etc. |
+| `on_leave_scope`   | A scope closes for any reason             | `reason: Explicit \| RecoveryClosure \| ImplicitByOpen \| EndOfInput`          |
+| `on_end_marker`    | An EndMarker token (`\f*`, `\nd*`, …)     | Fires *after* `on_leave_scope(Explicit)`. Visitors append the closer as a leaf.|
+| `on_milestone`     | A milestone token without scope semantics | Fallback dispatch — most milestones fire `on_enter_scope` instead.             |
+| `on_milestone_end` | A `\*` MilestoneEnd token                 | Fires *after* `on_leave_scope(Explicit)` for the matched milestone.            |
+| `on_text`          | A `TokenData::Text` token                 | Caller can choose to skip when `ctx.in_note()`                                 |
+| `on_chapter`       | A chapter `Number` token resolved         | Walker tracks `current_chapter` sid in `WalkContext`                           |
+| `on_verse`         | A verse `Number` token resolved           | Walker tracks `current_verse` sid in `WalkContext`                             |
+| `on_book_code`     | A `\id` resolves a book code              |                                                                                |
+| `on_opt_break`     | `TokenData::OptBreak`                     | Most visitors ignore                                                           |
+| `on_newline`       | `TokenData::Newline`                      | Formatter cares; most others ignore                                            |
+| `on_other`         | Anything not above                        | Unknown markers, numbers outside chapter/verse, stray end markers, etc.        |
+
+Every event receives `token_index: usize` so visitors that build
+index-based structures (CST, USJ) can wire the triggering token
+into their output. `on_enter_scope` additionally receives the
+`ScopeFrame` and the opening token; `on_leave_scope` receives the
+frame and a `LeaveReason`.
 
 Granularity: one method per event with a no-op default
 implementation. Visitors override only what they care about. The
@@ -233,47 +232,38 @@ USJ visitor will override most of them.
 
 ## Recovery model
 
-Recovery — the implicit closure of an unclosed note when a
-block-scope marker opens — is a property of the walker, not the
-visitor. The walker is configured with a flag:
+**Revised in step 2** (commit landing alongside CST migration): the
+`apply_recovery` flag was removed. The walker always applies
+precedence rules, including the implicit closure of unclosed notes
+at block-scope boundaries. `LeaveReason::RecoveryClosure` annotates
+each note-implicit-close so consumers that care (lint at step 6)
+can subscribe to it.
 
-```rust
-walk(&tokens, WalkOptions { apply_recovery: true, .. }, &mut visitor);
-```
+The earlier framing — "CST and lint pass `false` to see
+source-as-written" — turned out to be incoherent. Current CST's
+tree shape already depended on precedence-based pops (Block closes
+Note via `pop_for_open_scope`'s third pass). Disabling those pops
+would produce a tree where unclosed notes contain every subsequent
+paragraph as a child, which neither matches current CST output nor
+is useful to any downstream consumer.
 
-The model is **eager-when-on**, a single boolean:
+The model that landed:
 
-- `apply_recovery == true`: when the walker sees a marker that
-  satisfies `closes_unclosed_note` while a note scope is open, it
-  emits `on_leave_scope` for the note with
-  `reason: RecoveryClosure` *before* emitting `on_enter_scope` for
-  the new block-scope marker. From the visitor's perspective, the
-  note simply closed.
-- `apply_recovery == false`: no recovery closures fire; the note
-  stays open until either an explicit `\f*` or end-of-input. The
-  `on_leave_scope { reason: EndOfInput }` at EOF is what lint
-  consumes to report `UnclosedNote`.
-
-> **Why not a lazy/eager tri-state?** Today's `cst.rs` uses *lazy*
-> recovery (`recover_stack()` runs *after* seeing the next marker)
-> while html does *eager* recovery (closes the note before opening
-> the new block). This is an implementation difference in *when the
-> close fires*, not a semantic difference in the resulting tree.
-> With `apply_recovery == false`, no recovery closures are
-> synthesized at all, so lazy-vs-eager is moot for CST (its
-> losslessness is preserved). With `apply_recovery == true`, eager
-> is what the exporters already do. One flag, one model.
-
-This means:
-
-- **CST, lint** pass `false`. They see source-as-written.
-- **USJ, USX, HTML, vref** pass `true`. They see the recovered
-  structure that prevents one missing `\f*` from corrupting an
-  entire chapter.
-- The recovery rule itself lives in one place (the walker), driven
-  by the existing `closes_unclosed_note` predicate — and this is
-  what fixes the latent Verse drift bug in `export_tree.rs:226`
-  for free.
+- The walker emits `LeaveScope` for every popped frame, with a
+  `LeaveReason`:
+  - `Explicit` — closed by `\f*`, `\nd*`, or milestone-end token.
+  - `RecoveryClosure` — a Note frame that was popped because an
+    opening marker satisfying `closes_unclosed_note` arrived.
+  - `ImplicitByOpen` — any non-Note frame popped because a higher-
+    precedence scope opened (e.g. `\p` popping previous `\p`).
+  - `EndOfInput` — drained at EOF.
+- All consumers behave correctly by observing events; no flag is
+  needed.
+- Lint (step 6) detects "unclosed note in source" via
+  `RecoveryClosure` events.
+- The latent Verse drift bug in `export_tree.rs:226` is fixed when
+  HTML + export_tree migrate (step 3) because the walker's single
+  precedence implementation now drives all consumers.
 
 ## What stays lossless
 
@@ -321,28 +311,42 @@ This means:
 Sequenced to minimize risk: cheapest losslessness check first,
 then cheapest bug-fix-delivers-value second, then the rest.
 
-1. **Walker + `WalkContext` skeleton** — types, traits, no
-   consumers yet. Validates the shape against existing rules.
-2. **CST** — closest to a pure structural walker. Migrating it
-   first validates the `apply_recovery: false` path and the core
-   event surface. The existing `cst_roundtrips_all_usfm_sources`
-   test is the strongest available "did you break losslessness"
-   oracle.
-3. **HTML + export_tree together** — validates the
-   `apply_recovery: true` path. These share the most recovery
-   logic, and migrating them jointly **fixes the latent Verse
-   drift bug** (`export_tree.rs:226` vs `marker_defs.rs:236`) as a
-   side effect. This step ships a concrete, user-visible bug fix.
+1. ✅ **Walker + `WalkContext` skeleton** (commit `<step 1>`) —
+   types, traits, two unit tests over hand-crafted token slices.
+2. ✅ **CST** (commit `<step 2>`) — first consumer migrated. The
+   walker absorbed the full `pop_for_open_scope` precedence
+   algorithm from `cst::recover_stack`; `cst::build_cst_roots` is
+   now a visitor that mirrors the historical tree shape exactly.
+   `src/structure.rs` deleted (orphaned). The
+   `cst_roundtrips_all_usfm_sources` test now covers the en_ult
+   alignment-heavy corpus as well (depth-400 trees), validated by
+   making `finalize_roots` and `flatten_nodes` iterative — the
+   previous recursive helpers would have overflowed on those
+   inputs.
+3. ✅ **HTML** (commit `<step 3>`) — migrated as a walker visitor.
+   `OpenElement` + buffer-stack pattern preserved; all scope
+   tracking (Block precedence, sidebar pops, inline closes) is now
+   delegated to the walker via `on_enter_scope` / `on_leave_scope`.
+   Notes are deferred: caller is captured from the first body text
+   token (mirroring `parse_note_tokens`' first-text-is-caller
+   rule); `<aside>` extraction or inline-span emission happens on
+   `on_leave_scope(Note)`. `\esbe` is modelled as a phantom frame
+   (occupies a walker scope slot but emits no HTML element).
+   Original step 3 also included `export_tree`; deferred to step 4
+   because USJ/USX migration retires `export_tree.rs` entirely and
+   making it a walker visitor in between would be wasted work.
 4. **USJ + USX** — replace `export_tree.rs` together; they share
    enough that doing them sequentially is wasted work. Once they
-   land, `export_tree.rs` deletes.
+   land, `export_tree.rs` deletes. The latent Verse drift bug
+   (`export_tree.rs:226` vs `marker_defs.rs:236`) is fixed here as
+   a side effect, since USJ/USX no longer route through
+   `export_tree`'s buggy dispatch.
 5. **vref** — trivial port once the API is settled by the harder
    consumers above.
 6. **lint** — last. Largest rule surface and most demanding state
-   (structural stack from the walker + visitor-local inline stack +
-   per-rule running state). By now the visitor API is mature
-   against five consumers; lint's idiosyncrasies fit on top without
-   forcing churn upstream.
+   (scope stack from the walker + per-rule running state). By now
+   the visitor API is mature against five consumers; lint's
+   idiosyncrasies fit on top without forcing churn upstream.
 
 Each step keeps tests passing on master. No big-bang rewrite.
 

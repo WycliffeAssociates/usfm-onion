@@ -2,11 +2,8 @@ use serde::Serialize;
 
 use crate::marker_defs::StructuralScopeKind;
 use crate::parse::parse;
-use crate::structure::{
-    ScopeSpec, StructuralToken, effective_context, is_inline_scope,
-    marker_valid_in_current_context, structural_token,
-};
 use crate::token::{Token, tokens_to_usfm};
+use crate::walker::{LeaveReason, ScopeFrame, Visitor, WalkContext, walk_tokens};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CstNode {
@@ -44,12 +41,6 @@ struct WalkFrame<'doc> {
 }
 
 #[derive(Debug, Clone)]
-struct OpenFrame<'a> {
-    node_index: usize,
-    scope: ScopeSpec<'a>,
-}
-
-#[derive(Debug, Clone)]
 struct NodeBuilder {
     token_index: usize,
     children: Vec<usize>,
@@ -60,32 +51,177 @@ pub fn build_cst<'a>(tokens: Vec<Token<'a>>) -> CstDocument<'a> {
     CstDocument { tokens, roots }
 }
 
-pub fn build_cst_roots<'a>(tokens: &[Token<'a>]) -> Vec<CstNode> {
-    let mut arena = Vec::with_capacity(tokens.len());
-    let mut root_indexes = Vec::new();
-    let mut stack: Vec<OpenFrame<'a>> = Vec::new();
+/// CST visitor: builds an arena-backed tree as the walker emits events.
+///
+/// Tree-shape invariants matched against the prior `build_cst_roots`
+/// implementation:
+///
+/// - Every token appears as exactly one node, in source order.
+/// - `Block`, `Note`, `Character`, `Milestone`, `Sidebar`, `TableRow`,
+///   `TableCell`, `Header`, `Meta`, `Periph` opens become parent nodes
+///   for subsequent content until they close.
+/// - `Chapter` and `Verse` opens are leaf nodes (not parents) — they
+///   match the historical CST behaviour where their scope is tracked
+///   semantically but children stay at the surrounding level.
+/// - Explicit closes (`\f*`, `\nd*`, milestone-end) appear as sibling
+///   leaves of their openers, not as children.
+struct CstBuilder {
+    arena: Vec<NodeBuilder>,
+    root_indexes: Vec<usize>,
+    /// Node indexes that are currently open as parents. Mutated only
+    /// for scope kinds CST treats as containers (everything except
+    /// Chapter and Verse).
+    parent_stack: Vec<usize>,
+}
 
-    for index in 0..tokens.len() {
-        recover_stack(&tokens, index, &mut stack);
-
-        let node_index = append_node(
-            &mut arena,
-            &mut root_indexes,
-            current_parent_index(&stack),
-            index,
-        );
-
-        if let StructuralToken::Open(scope) = structural_token(&tokens, index)
-            && !matches!(
-                scope.kind,
-                StructuralScopeKind::Chapter | StructuralScopeKind::Verse
-            )
-        {
-            stack.push(OpenFrame { node_index, scope });
+impl CstBuilder {
+    fn new(token_count: usize) -> Self {
+        Self {
+            arena: Vec::with_capacity(token_count),
+            root_indexes: Vec::new(),
+            parent_stack: Vec::new(),
         }
     }
 
-    finalize_roots(&arena, &root_indexes)
+    fn current_parent(&self) -> Option<usize> {
+        self.parent_stack.last().copied()
+    }
+
+    fn append_leaf(&mut self, token_index: usize) -> usize {
+        let parent = self.current_parent();
+        append_node(&mut self.arena, &mut self.root_indexes, parent, token_index)
+    }
+
+    fn is_pushed_kind(kind: StructuralScopeKind) -> bool {
+        // Chapter and Verse open scopes semantically but don't nest
+        // children. Everything else does.
+        !matches!(
+            kind,
+            StructuralScopeKind::Chapter | StructuralScopeKind::Verse
+        )
+    }
+}
+
+impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
+    fn on_enter_scope(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        frame: &ScopeFrame<'a>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        let node_index = self.append_leaf(token_index);
+        if Self::is_pushed_kind(frame.scope_kind) {
+            self.parent_stack.push(node_index);
+        }
+    }
+
+    fn on_leave_scope(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        frame: &ScopeFrame<'a>,
+        _reason: LeaveReason,
+    ) {
+        if Self::is_pushed_kind(frame.scope_kind) {
+            self.parent_stack.pop();
+        }
+    }
+
+    fn on_end_marker(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_milestone(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_milestone_end(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_text(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_chapter(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_verse(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_book_code(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_opt_break(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_newline(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+
+    fn on_other(
+        &mut self,
+        _ctx: &WalkContext<'a, '_>,
+        _token: &Token<'a>,
+        token_index: usize,
+    ) {
+        self.append_leaf(token_index);
+    }
+}
+
+pub fn build_cst_roots<'a>(tokens: &[Token<'a>]) -> Vec<CstNode> {
+    let mut builder = CstBuilder::new(tokens.len());
+    walk_tokens(tokens, &mut builder);
+    finalize_roots(&builder.arena, &builder.root_indexes)
 }
 
 pub fn parse_cst(source: &str) -> CstDocument<'_> {
@@ -157,181 +293,6 @@ pub fn cst_to_usfm(document: &CstDocument<'_>) -> String {
     tokens_to_usfm(&cst_to_tokens(document))
 }
 
-fn recover_stack<'a>(tokens: &[Token<'a>], index: usize, stack: &mut Vec<OpenFrame<'a>>) {
-    match structural_token(tokens, index) {
-        StructuralToken::CloseMarker(name) => {
-            if let Some(match_pos) = stack.iter().rposition(|frame| {
-                matches!(
-                    frame.scope.kind,
-                    StructuralScopeKind::Note | StructuralScopeKind::Character
-                ) && frame.scope.marker == name
-            }) {
-                stack.truncate(match_pos);
-            }
-        }
-        StructuralToken::MilestoneEnd => {
-            if let Some(match_pos) = stack
-                .iter()
-                .rposition(|frame| frame.scope.kind == StructuralScopeKind::Milestone)
-            {
-                stack.truncate(match_pos);
-            }
-        }
-        StructuralToken::UnknownMarker(_) => {
-            pop_to_structural_parent(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::Chapter
-                        | StructuralScopeKind::Periph
-                        | StructuralScopeKind::Sidebar
-                )
-            });
-        }
-        StructuralToken::Open(scope) => {
-            pop_for_open_scope(stack, scope);
-        }
-        StructuralToken::Leaf => {}
-    }
-}
-
-fn pop_for_open_scope<'a>(stack: &mut Vec<OpenFrame<'a>>, incoming: ScopeSpec<'a>) {
-    if matches!(
-        incoming.kind,
-        StructuralScopeKind::Note | StructuralScopeKind::Character | StructuralScopeKind::Milestone
-    ) {
-        while marker_needs_note_recovery(stack, incoming.marker) {
-            stack.pop();
-        }
-        return;
-    }
-
-    match incoming.kind {
-        StructuralScopeKind::Chapter => stack.clear(),
-        StructuralScopeKind::Verse => {
-            pop_while(stack, |kind| {
-                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
-            });
-            pop_while(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::Header | StructuralScopeKind::Meta
-                )
-            });
-        }
-        StructuralScopeKind::TableCell => {
-            pop_while(stack, |kind| {
-                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
-            });
-            pop_while(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::TableCell | StructuralScopeKind::Block
-                )
-            });
-            pop_to_structural_parent(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::TableRow
-                        | StructuralScopeKind::Chapter
-                        | StructuralScopeKind::Periph
-                        | StructuralScopeKind::Sidebar
-                )
-            });
-        }
-        StructuralScopeKind::TableRow => {
-            pop_while(stack, |kind| {
-                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
-            });
-            pop_while(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::TableCell
-                        | StructuralScopeKind::TableRow
-                        | StructuralScopeKind::Block
-                )
-            });
-            pop_to_structural_parent(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::Chapter
-                        | StructuralScopeKind::Periph
-                        | StructuralScopeKind::Sidebar
-                )
-            });
-        }
-        StructuralScopeKind::Header | StructuralScopeKind::Meta | StructuralScopeKind::Periph => {
-            stack.clear()
-        }
-        StructuralScopeKind::Sidebar => {
-            pop_while(stack, |kind| kind != StructuralScopeKind::Chapter);
-        }
-        StructuralScopeKind::Block => {
-            pop_while(stack, |kind| {
-                is_inline_scope(kind) || kind == StructuralScopeKind::Verse
-            });
-            pop_while(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::Block
-                        | StructuralScopeKind::TableCell
-                        | StructuralScopeKind::TableRow
-                        | StructuralScopeKind::Header
-                        | StructuralScopeKind::Meta
-                )
-            });
-            pop_to_structural_parent(stack, |kind| {
-                matches!(
-                    kind,
-                    StructuralScopeKind::Chapter
-                        | StructuralScopeKind::Periph
-                        | StructuralScopeKind::Sidebar
-                )
-            });
-        }
-        StructuralScopeKind::Note
-        | StructuralScopeKind::Character
-        | StructuralScopeKind::Milestone
-        | StructuralScopeKind::Unknown => {}
-    }
-}
-
-fn marker_needs_note_recovery(stack: &[OpenFrame<'_>], incoming_marker: &str) -> bool {
-    let active: Vec<ScopeSpec<'_>> = stack.iter().map(|frame| frame.scope).collect();
-    let Some(context) = effective_context(&active) else {
-        return false;
-    };
-
-    matches!(
-        context,
-        crate::marker_defs::SpecContext::Footnote | crate::marker_defs::SpecContext::CrossReference
-    ) && !marker_valid_in_current_context(incoming_marker, &active)
-}
-
-fn pop_to_structural_parent<'a, F>(stack: &mut Vec<OpenFrame<'a>>, keep: F)
-where
-    F: Fn(StructuralScopeKind) -> bool,
-{
-    while stack.last().is_some_and(|frame| !keep(frame.scope.kind)) {
-        stack.pop();
-    }
-}
-
-fn pop_while<'a, F>(stack: &mut Vec<OpenFrame<'a>>, predicate: F)
-where
-    F: Fn(StructuralScopeKind) -> bool,
-{
-    while stack
-        .last()
-        .is_some_and(|frame| predicate(frame.scope.kind))
-    {
-        stack.pop();
-    }
-}
-
-fn current_parent_index(stack: &[OpenFrame<'_>]) -> Option<usize> {
-    stack.last().map(|frame| frame.node_index)
-}
-
 fn append_node(
     arena: &mut Vec<NodeBuilder>,
     root_indexes: &mut Vec<usize>,
@@ -353,28 +314,41 @@ fn append_node(
 }
 
 fn finalize_roots(arena: &[NodeBuilder], root_indexes: &[usize]) -> Vec<CstNode> {
+    // Iterative bottom-up finalize. Children always have higher arena
+    // indexes than their parents (parents are appended before their
+    // children), so processing the arena in reverse guarantees a
+    // child's CstNode is ready when its parent looks it up.
+    let mut finalized: Vec<Option<CstNode>> = (0..arena.len()).map(|_| None).collect();
+    for i in (0..arena.len()).rev() {
+        let node = &arena[i];
+        let children = node
+            .children
+            .iter()
+            .map(|&ci| finalized[ci].take().expect("child finalized before parent"))
+            .collect();
+        finalized[i] = Some(CstNode {
+            token_index: node.token_index,
+            children,
+        });
+    }
     root_indexes
         .iter()
-        .map(|&index| finalize_node(arena, index))
+        .map(|&i| finalized[i].take().expect("root present"))
         .collect()
 }
 
-fn finalize_node(arena: &[NodeBuilder], index: usize) -> CstNode {
-    let node = &arena[index];
-    CstNode {
-        token_index: node.token_index,
-        children: node
-            .children
-            .iter()
-            .map(|&child| finalize_node(arena, child))
-            .collect(),
-    }
-}
-
 fn flatten_nodes<'a>(nodes: &[CstNode], tokens: &[Token<'a>], output: &mut Vec<Token<'a>>) {
-    for node in nodes {
-        output.push(tokens[node.token_index].clone());
-        flatten_nodes(&node.children, tokens, output);
+    // Iterative preorder traversal so depth doesn't blow the stack.
+    let mut stack: Vec<std::slice::Iter<'_, CstNode>> = vec![nodes.iter()];
+    while let Some(it) = stack.last_mut() {
+        if let Some(node) = it.next() {
+            output.push(tokens[node.token_index].clone());
+            if !node.children.is_empty() {
+                stack.push(node.children.iter());
+            }
+        } else {
+            stack.pop();
+        }
     }
 }
 
@@ -652,3 +626,4 @@ mod tests {
         ancestor.len() < descendant.len() && descendant.starts_with(ancestor)
     }
 }
+

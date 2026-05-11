@@ -15,11 +15,11 @@ mod marker_defs_data;
 #[path = "markers.rs"]
 pub mod markers;
 pub mod parse;
-mod structure;
 pub mod token;
 pub mod usj;
 pub mod usx;
 pub mod vref;
+pub mod walker;
 pub mod whitespace;
 
 pub use api::{OwnedParseAnalysis, ParsedUsfm, SourceTokenText, TokenStream, Usfm, Usj, Usx};

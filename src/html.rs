@@ -1,9 +1,33 @@
+//! HTML rendering, driven by the unified walker.
+//!
+//! Step 3 of the walker migration (see `docs/plan-walker-architecture.md`).
+//! The previous implementation maintained its own `OpenElement` stack
+//! and ad-hoc precedence logic (`close_for_new_block`,
+//! `close_inline_scopes`, `close_non_book_table_block_scopes`, etc.)
+//! that mirrored — and occasionally drifted from — the structural
+//! interpretation in CST and vref. All of that scope tracking is now
+//! delegated to `crate::walker`: this module is just a visitor that
+//! reacts to walker events with HTML emission.
+//!
+//! What remains here:
+//! - HTML option types (`HtmlOptions`, `HtmlNoteMode`, `HtmlCallerStyle`,
+//!   `HtmlCallerScope`) — unchanged public API.
+//! - The element-stack buffering pattern (`OpenElement` + buffer) so
+//!   children render into parents' buffers and the final HTML strings
+//!   compose correctly.
+//! - Note extraction: when a `Note` scope opens in `Extracted` mode,
+//!   the body buffers separately and lands in a `<aside>` in either
+//!   `linkedFootnotes` or `linkedCrossrefs` on scope close.
+//! - Table synthesis: orphan `\tr` / `\tc` markers get wrapped in
+//!   synthetic `<table>` / `<tr>` elements.
+
 use crate::marker_defs::{
-    BlockBehavior, NoteFamily, NoteSubkind, MarkerDefKind, StructuralScopeKind, lookup_marker_def,
-    marker_block_behavior, marker_is_note_container, marker_note_family, marker_note_subkind,
+    BlockBehavior, MarkerDefKind, NoteFamily, NoteSubkind, StructuralScopeKind,
+    marker_block_behavior, marker_note_family, marker_note_subkind,
 };
 use crate::parse::parse;
 use crate::token::{AttributeItem, Token, TokenData, TokenId};
+use crate::walker::{LeaveReason, ScopeFrame, Visitor, WalkContext, walk_tokens};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HtmlNoteMode {
@@ -49,8 +73,9 @@ impl Default for HtmlOptions {
 }
 
 pub fn tokens_to_html(tokens: &[Token<'_>], options: HtmlOptions) -> String {
-    let mut renderer = HtmlRenderer::new(options);
-    let body = renderer.render_root(tokens);
+    let mut visitor = HtmlVisitor::new(options);
+    walk_tokens(tokens, &mut visitor);
+    let body = visitor.finalize();
 
     if options.wrap_root {
         format!(r#"<div data-usfm-root="true">{body}</div>"#)
@@ -64,45 +89,116 @@ pub fn usfm_to_html(source: &str, options: HtmlOptions) -> String {
     tokens_to_html(&parsed.tokens, options)
 }
 
-struct HtmlRenderer {
-    options: HtmlOptions,
-    current_verse: Option<String>,
-    note_count_in_verse: usize,
-    document_note_count: usize,
-    footnote_id: usize,
-    crossref_id: usize,
-    footnotes: Vec<String>,
-    crossrefs: Vec<String>,
-}
+// =============================================================================
+// Visitor state
+// =============================================================================
 
 #[derive(Clone)]
 struct OpenElement<'a> {
+    /// How this element handles emission. See `Emission` for the cases.
+    emission: Emission,
     marker: Option<&'a str>,
     tag: &'static str,
     attrs: Vec<(String, String)>,
     buffer: String,
     scope_kind: StructuralScopeKind,
+    /// Reserved for future inspection of note-classified frames
+    /// (USJ/USX migrations may want this).
+    #[allow(dead_code)]
     note_subkind: Option<NoteSubkind>,
+    #[allow(dead_code)]
     note_family: Option<NoteFamily>,
     synthetic: bool,
 }
 
-impl HtmlRenderer {
+/// How an `OpenElement` participates in HTML emission.
+///
+/// The walker tells us when scopes open and close. HTML, though, has
+/// per-scope behavior that doesn't always correspond 1:1 to a single
+/// `<tag>…</tag>` pair — notes get rerouted; some markers (`\esbe`)
+/// open a scope in the walker but emit nothing in HTML. `Emission`
+/// records what to do when the element closes.
+#[derive(Clone)]
+enum Emission {
+    /// Standard `<tag attrs>buffer</tag>` rendered into the parent.
+    Element,
+    /// No element is emitted on close. Used for walker scope frames
+    /// that exist for structural bookkeeping but don't correspond to
+    /// any HTML element (e.g. `\esbe`, which only signals "close the
+    /// open sidebar").
+    Phantom,
+    /// Note rendered as inline `<span>` containing `<sup>label</sup>`
+    /// then the buffer.
+    InlineNote(NoteState),
+    /// Note rendered into the footnotes/crossrefs `<aside>` collection.
+    /// The caller already emitted the `<sup><a></a></sup>` link into
+    /// the parent buffer when the note opened.
+    ExtractedNote(NoteState),
+}
+
+#[derive(Clone)]
+struct NoteState {
+    marker: String,
+    kind: NoteKind,
+    label: String,
+    source_caller: String,
+    /// For `ExtractedNote`: `<sup>` anchor id and target `<aside>` id.
+    call_id: Option<String>,
+    note_id: Option<String>,
+    /// Stringified token id of the opening `\f` / `\x` marker.
+    token_id: String,
+    /// The note's leading text token (caller `"+"`, `"a"`, etc.) is
+    /// consumed for labeling. This flag lets `on_text` discard the
+    /// first non-empty text once after entering.
+    caller_consumed: bool,
+}
+
+struct HtmlVisitor<'src> {
+    options: HtmlOptions,
+    /// Top-level output (whatever isn't inside any open element).
+    output: String,
+    /// Open-element stack. Mirrors the walker's scope stack 1:1,
+    /// with the addition that markers like `\esbe` that don't emit
+    /// HTML still occupy a stack slot (with `Emission::Phantom`).
+    stack: Vec<OpenElement<'src>>,
+    /// Note collections appended at finalize time.
+    footnotes: Vec<String>,
+    crossrefs: Vec<String>,
+    /// Note label state.
+    current_verse: Option<String>,
+    note_count_in_verse: usize,
+    document_note_count: usize,
+    /// Monotonic ids for extracted-note anchors.
+    footnote_id: usize,
+    crossref_id: usize,
+}
+
+impl<'src> HtmlVisitor<'src> {
     fn new(options: HtmlOptions) -> Self {
         Self {
             options,
+            output: String::new(),
+            stack: Vec::new(),
+            footnotes: Vec::new(),
+            crossrefs: Vec::new(),
             current_verse: None,
             note_count_in_verse: 0,
             document_note_count: 0,
             footnote_id: 0,
             crossref_id: 0,
-            footnotes: Vec::new(),
-            crossrefs: Vec::new(),
         }
     }
 
-    fn render_root(&mut self, tokens: &[Token<'_>]) -> String {
-        let mut out = self.render_fragment(tokens, false);
+    fn finalize(mut self) -> String {
+        // Anything still on the stack at end of walk drains via the
+        // walker's EOF events; we just trust the events fired. But
+        // belt-and-suspenders: if anything remains (shouldn't), close
+        // it out.
+        while let Some(item) = self.stack.pop() {
+            emit_close(&mut self.output, &mut self.stack, item);
+        }
+
+        let mut out = std::mem::take(&mut self.output);
         if !self.footnotes.is_empty() {
             out.push_str(r#"<section id="linkedFootnotes" data-usfm-notes="footnotes">"#);
             for note in &self.footnotes {
@@ -120,240 +216,19 @@ impl HtmlRenderer {
         out
     }
 
-    fn render_fragment(&mut self, tokens: &[Token<'_>], in_note_body: bool) -> String {
-        let mut output = String::new();
-        let mut stack = Vec::<OpenElement<'_>>::new();
-        let mut index = 0usize;
+    /// True when the innermost active scope is a note body (whether
+    /// inline or extracted). Used to suppress the chapter/verse spans
+    /// from rendering inside note bodies, matching pre-walker behavior
+    /// where the recursive `render_fragment` call rendered notes with
+    /// `in_note_body = true`.
+    fn in_note_body(&self) -> bool {
+        self.stack
+            .iter()
+            .any(|item| matches!(item.emission, Emission::InlineNote(_) | Emission::ExtractedNote(_)))
+    }
 
-        while index < tokens.len() {
-            match &tokens[index].data {
-                TokenData::Text => {
-                    push_fragment(&mut output, &mut stack, &escape_html(tokens[index].source));
-                }
-                TokenData::Newline => {}
-                TokenData::OptBreak => {
-                    push_fragment(&mut output, &mut stack, "<wbr>");
-                }
-                TokenData::BookCode { code, .. } => {
-                    if !stack.iter().any(|item| {
-                        item.scope_kind == StructuralScopeKind::Header
-                            && item
-                                .attrs
-                                .iter()
-                                .any(|(key, value)| key == "data-usfm-type" && value == "book")
-                    }) {
-                        close_for_new_block(&mut output, &mut stack, false);
-                        stack.push(open_book_element(
-                            "id",
-                            code,
-                            self.options.prefer_native_elements,
-                            token_id_str(&tokens[index].id),
-                        ));
-                    }
-                }
-                TokenData::Number { .. } => {}
-                TokenData::MilestoneEnd => {
-                    close_top_matching_scope(&mut output, &mut stack, |item| {
-                        item.scope_kind == StructuralScopeKind::Milestone
-                    });
-                }
-                TokenData::EndMarker { name, .. } => {
-                    close_for_end_marker(&mut output, &mut stack, name);
-                }
-                TokenData::Milestone {
-                    name,
-                    metadata,
-                    structural,
-                    attributes,
-                    ..
-                } => {
-                    if in_note_body {
-                        close_for_note_structural(&mut output, &mut stack, name);
-                    }
-                    let mut attrs =
-                        common_marker_attrs(marker_data_type(name, metadata.kind), name);
-                    attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
-                    if !attributes.is_empty() {
-                        push_attribute_entries(&mut attrs, attributes);
-                    }
-                    stack.push(OpenElement {
-                        marker: Some(name),
-                        tag: "span",
-                        attrs,
-                        buffer: String::new(),
-                        scope_kind: structural.scope_kind,
-                        note_subkind: marker_note_subkind(name),
-                        note_family: marker_note_family(name),
-                        synthetic: false,
-                    });
-                }
-                TokenData::Marker {
-                    name,
-                    metadata,
-                    structural,
-                    ..
-                } => {
-                    if marker_is_sidebar_end(name, metadata.kind) {
-                        close_top_matching_scope(&mut output, &mut stack, |item| {
-                            item.scope_kind == StructuralScopeKind::Sidebar
-                        });
-                        index += 1;
-                        continue;
-                    }
-
-                    if marker_is_note_container(name) {
-                        let (caller, content_start, note_end, resume_at) =
-                            parse_note_tokens(tokens, index);
-                        let label = self.note_label(caller.as_deref().unwrap_or_default());
-                        let note_kind = note_kind(name);
-
-                        if in_note_body || matches!(self.options.note_mode, HtmlNoteMode::Inline) {
-                            let mut attrs = common_marker_attrs("note", name);
-                            attrs.push((
-                                "data-usfm-id".to_string(),
-                                token_id_str(&tokens[index].id),
-                            ));
-                            attrs.push(("data-usfm-caller".to_string(), label.clone()));
-                            attrs.push((
-                                "data-usfm-source-caller".to_string(),
-                                caller.clone().unwrap_or_default(),
-                            ));
-                            attrs.push((
-                                "data-usfm-note-kind".to_string(),
-                                note_kind.as_str().to_string(),
-                            ));
-                            let body = self.render_fragment(&tokens[content_start..note_end], true);
-                            let mut html = String::from("<span");
-                            push_attrs(&mut html, &attrs);
-                            html.push('>');
-                            html.push_str("<sup>");
-                            html.push_str(&escape_html(&label));
-                            html.push_str("</sup>");
-                            html.push_str(&body);
-                            html.push_str("</span>");
-                            push_fragment(&mut output, &mut stack, &html);
-                        } else {
-                            let note_token_id = token_id_str(&tokens[index].id);
-                            let id_index = match note_kind {
-                                NoteKind::Footnote => {
-                                    self.footnote_id += 1;
-                                    self.footnote_id
-                                }
-                                NoteKind::Crossref => {
-                                    self.crossref_id += 1;
-                                    self.crossref_id
-                                }
-                            };
-                            let (call_id, note_id) = match note_kind {
-                                NoteKind::Footnote => {
-                                    (format!("fnref-{id_index}"), format!("fn-{id_index}"))
-                                }
-                                NoteKind::Crossref => {
-                                    (format!("xrref-{id_index}"), format!("xr-{id_index}"))
-                                }
-                            };
-
-                            let mut caller_html = String::from("<sup><a");
-                            push_attr(&mut caller_html, "href", &format!("#{note_id}"));
-                            push_attr(&mut caller_html, "id", &call_id);
-                            push_attr(&mut caller_html, "data-usfm-id", &note_token_id);
-                            push_attr(&mut caller_html, "data-usfm-note-kind", note_kind.as_str());
-                            push_attr(&mut caller_html, "data-usfm-caller", &label);
-                            push_attr(
-                                &mut caller_html,
-                                "data-usfm-source-caller",
-                                caller.as_deref().unwrap_or_default(),
-                            );
-                            caller_html.push('>');
-                            caller_html.push_str(&escape_html(&label));
-                            caller_html.push_str("</a></sup>");
-                            push_fragment(&mut output, &mut stack, &caller_html);
-
-                            let body = self.render_fragment(&tokens[content_start..note_end], true);
-                            let note_html = render_extracted_note(
-                                name,
-                                note_kind,
-                                caller.as_deref().unwrap_or_default(),
-                                &label,
-                                &call_id,
-                                &note_id,
-                                &note_token_id,
-                                &body,
-                            );
-
-                            match note_kind {
-                                NoteKind::Footnote => self.footnotes.push(note_html),
-                                NoteKind::Crossref => self.crossrefs.push(note_html),
-                            }
-                        }
-
-                        index = resume_at;
-                        continue;
-                    } else if matches!(metadata.kind, Some(MarkerDefKind::Chapter)) {
-                        close_for_new_block(&mut output, &mut stack, true);
-                        self.current_verse = None;
-                        self.note_count_in_verse = 0;
-                        let number = next_number_text(tokens, index).unwrap_or_default();
-                        let chapter_sid = tokens[index]
-                            .sid
-                            .as_ref()
-                            .map(|s| format!("{} {}", s.book_code, s.chapter));
-                        let chapter_token_id = token_id_str(&tokens[index].id);
-                        push_fragment(
-                            &mut output,
-                            &mut stack,
-                            &empty_marker_span(
-                                "chapter",
-                                name,
-                                &number,
-                                chapter_sid.as_deref(),
-                                &chapter_token_id,
-                            ),
-                        );
-                    } else if matches!(metadata.kind, Some(MarkerDefKind::Verse)) {
-                        let number = next_number_text(tokens, index).unwrap_or_default();
-                        self.current_verse = (!number.is_empty()).then_some(number.clone());
-                        self.note_count_in_verse = 0;
-                        let verse_sid = tokens[index]
-                            .sid
-                            .as_ref()
-                            .map(|s| format!("{} {}:{}", s.book_code, s.chapter, s.verse));
-                        let verse_token_id = token_id_str(&tokens[index].id);
-                        push_fragment(
-                            &mut output,
-                            &mut stack,
-                            &empty_marker_span(
-                                "verse",
-                                name,
-                                &number,
-                                verse_sid.as_deref(),
-                                &verse_token_id,
-                            ),
-                        );
-                    } else {
-                        open_marker_element(
-                            &mut output,
-                            &mut stack,
-                            tokens,
-                            index,
-                            name,
-                            metadata.kind,
-                            *structural,
-                            in_note_body,
-                            self.options.prefer_native_elements,
-                        );
-                    }
-                }
-            }
-
-            index += 1;
-        }
-
-        while let Some(item) = stack.pop() {
-            append_closed_element(&mut output, &mut stack, item);
-        }
-
-        output
+    fn push_html(&mut self, html: &str) {
+        push_fragment(&mut self.output, &mut self.stack, html);
     }
 
     fn note_label(&mut self, source_caller: &str) -> String {
@@ -384,194 +259,595 @@ impl HtmlRenderer {
     }
 }
 
-fn open_marker_element<'a>(
-    output: &mut String,
-    stack: &mut Vec<OpenElement<'a>>,
-    tokens: &'a [Token<'a>],
-    index: usize,
-    name: &'a str,
-    kind: Option<MarkerDefKind>,
-    structural: crate::marker_defs::StructuralMarkerInfo,
-    in_note_body: bool,
-    prefer_native_elements: bool,
-) {
-    match structural.scope_kind {
-        StructuralScopeKind::Header
-        | StructuralScopeKind::Block
-        | StructuralScopeKind::Sidebar
-        | StructuralScopeKind::Periph
-        | StructuralScopeKind::Meta => {
-            close_for_new_block(output, stack, false);
-        }
-        StructuralScopeKind::TableRow => {
-            close_inline_scopes(output, stack);
-            close_top_matching_scope(output, stack, |item| {
-                item.scope_kind == StructuralScopeKind::TableCell
-            });
-            close_top_matching_scope(output, stack, |item| {
-                item.scope_kind == StructuralScopeKind::TableRow
-            });
-            close_non_book_table_block_scopes(output, stack);
-            ensure_table_open(stack, prefer_native_elements);
-        }
-        StructuralScopeKind::TableCell => {
-            close_inline_scopes(output, stack);
-            close_top_matching_scope(output, stack, |item| {
-                item.scope_kind == StructuralScopeKind::TableCell
-            });
-            if !stack
-                .iter()
-                .any(|item| item.scope_kind == StructuralScopeKind::TableRow)
-            {
-                ensure_table_open(stack, prefer_native_elements);
-                stack.push(synthetic_table_row());
+// =============================================================================
+// Visitor impl: each walker event maps to one HTML responsibility.
+// =============================================================================
+
+impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
+    fn on_enter_scope(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        frame: &ScopeFrame<'src>,
+        token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        let marker = frame.marker;
+        let scope_kind = frame.scope_kind;
+        let kind = match &token.data {
+            TokenData::Marker { metadata, .. } | TokenData::Milestone { metadata, .. } => {
+                metadata.kind
             }
+            _ => None,
+        };
+
+        // Sidebar end markers (`\esbe`) open a Sidebar scope in the
+        // walker, but in HTML they only signal "close the sidebar".
+        // The walker has already popped the previous Sidebar frame via
+        // its precedence rules and fired on_leave_scope for it. We
+        // record the incoming frame as a phantom so its eventual
+        // on_leave_scope is also a no-op.
+        if marker_is_sidebar_end(marker, kind) {
+            self.stack.push(OpenElement {
+                emission: Emission::Phantom,
+                marker: Some(marker),
+                tag: "",
+                attrs: Vec::new(),
+                buffer: String::new(),
+                scope_kind,
+                note_subkind: None,
+                note_family: None,
+                synthetic: false,
+            });
+            return;
         }
-        StructuralScopeKind::Character | StructuralScopeKind::Milestone => {
-            if in_note_body {
-                close_for_note_structural(output, stack, name);
+
+        // Chapter and Verse scopes don't open container elements in
+        // HTML. The corresponding empty `<span>` is emitted from
+        // `on_chapter` / `on_verse` once the number is known. We still
+        // push a phantom frame so the matching on_leave_scope is
+        // ignored (and so the walker's structural depth is mirrored).
+        if matches!(
+            scope_kind,
+            StructuralScopeKind::Chapter | StructuralScopeKind::Verse
+        ) {
+            self.stack.push(OpenElement {
+                emission: Emission::Phantom,
+                marker: Some(marker),
+                tag: "",
+                attrs: Vec::new(),
+                buffer: String::new(),
+                scope_kind,
+                note_subkind: None,
+                note_family: None,
+                synthetic: false,
+            });
+            if scope_kind == StructuralScopeKind::Chapter {
+                // Reset verse-scoped state at the chapter boundary, as
+                // the prior implementation did when handling `\c`.
+                self.current_verse = None;
+                self.note_count_in_verse = 0;
             }
+            return;
         }
-        StructuralScopeKind::Unknown => {
-            close_for_new_block(output, stack, false);
+
+        // Note scopes get diverted: build a NoteState now (so we can
+        // emit the caller HTML immediately for extracted mode), push
+        // an Emission::{Inline,Extracted}Note frame, and consume the
+        // first body text as the caller.
+        if matches!(scope_kind, StructuralScopeKind::Note) {
+            self.open_note(token, marker);
+            return;
         }
-        StructuralScopeKind::Chapter
-        | StructuralScopeKind::Verse
-        | StructuralScopeKind::Note => {}
-    }
 
-    let (tag, data_type) =
-        tag_and_type_for_marker(name, kind, structural.scope_kind, prefer_native_elements);
-    let mut attrs = common_marker_attrs(data_type, name);
-    if structural.scope_kind == StructuralScopeKind::Unknown {
-        attrs.push(("data-unknown-marker".to_string(), name.to_string()));
-    }
-    attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
-    if structural.scope_kind == StructuralScopeKind::TableCell {
-        attrs.push((
-            "data-usfm-align".to_string(),
-            table_cell_align(name).to_string(),
-        ));
-    }
-    if let Some(entries) = tokens[index].attributes()
-        && !entries.is_empty()
-    {
-        push_attribute_entries(&mut attrs, entries);
-    }
-
-    stack.push(OpenElement {
-        marker: Some(name),
-        tag,
-        attrs,
-        buffer: String::new(),
-        scope_kind: structural.scope_kind,
-        note_subkind: marker_note_subkind(name),
-        note_family: marker_note_family(name),
-        synthetic: false,
-    });
-}
-
-/// Returns `(caller, content_start, body_end_exclusive, resume_index)`.
-///
-/// `body_end_exclusive` bounds the slice rendered as the note body.
-/// `resume_index` is where the outer render loop should continue after
-/// the note: one past the `\f*` close for an explicit close, or the
-/// index of the boundary marker itself for the unclosed-note recovery
-/// path (so the boundary marker — `\v`, `\c`, `\p`, etc. — gets
-/// rendered normally as the next iteration).
-fn parse_note_tokens(
-    tokens: &[Token<'_>],
-    start: usize,
-) -> (Option<String>, usize, usize, usize) {
-    let mut content_start = start + 1;
-    let mut caller = None;
-
-    if let Some(token) = tokens.get(content_start)
-        && matches!(token.data, TokenData::Text)
-    {
-        let trimmed = token.source.trim();
-        if !trimmed.is_empty() {
-            caller = Some(trimmed.to_string());
-            content_start += 1;
-        }
-    }
-
-    let mut depth = 0usize;
-    let mut index = start;
-    while index < tokens.len() {
-        match &tokens[index].data {
-            TokenData::Marker {
-                name, structural, ..
-            } => {
-                // Recovery for an unclosed note: any block-scope marker
-                // implicitly closes the open note. Without this, an unclosed
-                // \f at the start of a chapter swallows every subsequent
-                // verse and chapter into the note body. Mirrors the rule
-                // used by vref::tokens_to_vref_map and the export tree's
-                // force_close_notes. Lint still reports UnclosedNote.
-                if index > start
-                    && depth > 0
-                    && structural.scope_kind.closes_unclosed_note()
+        // Table synthesis: orphan `\tr` and `\tc` markers need their
+        // wrapping `<table>` / `<tr>` synthesised.
+        match scope_kind {
+            StructuralScopeKind::TableRow => {
+                ensure_table_open(&mut self.stack, self.options.prefer_native_elements);
+            }
+            StructuralScopeKind::TableCell => {
+                if !self
+                    .stack
+                    .iter()
+                    .any(|item| item.scope_kind == StructuralScopeKind::TableRow)
                 {
-                    return (caller, content_start, index, index);
-                }
-                if marker_is_note_container(name) {
-                    depth += 1;
-                }
-            }
-            TokenData::EndMarker { name, .. } if marker_is_note_container(name) => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return (caller, content_start, index, index + 1);
+                    ensure_table_open(&mut self.stack, self.options.prefer_native_elements);
+                    self.stack.push(synthetic_table_row());
                 }
             }
             _ => {}
         }
-        index += 1;
+
+        // Standard element. Compute tag/attrs and push.
+        let (tag, data_type) = tag_and_type_for_marker(
+            marker,
+            kind,
+            scope_kind,
+            self.options.prefer_native_elements,
+        );
+        let mut attrs = common_marker_attrs(data_type, marker);
+        if scope_kind == StructuralScopeKind::Unknown {
+            attrs.push(("data-unknown-marker".to_string(), marker.to_string()));
+        }
+        attrs.push(("data-usfm-id".to_string(), token_id_str(&token.id)));
+        if scope_kind == StructuralScopeKind::TableCell {
+            attrs.push((
+                "data-usfm-align".to_string(),
+                table_cell_align(marker).to_string(),
+            ));
+        }
+        if let Some(entries) = token.attributes()
+            && !entries.is_empty()
+        {
+            push_attribute_entries(&mut attrs, entries);
+        }
+
+        self.stack.push(OpenElement {
+            emission: Emission::Element,
+            marker: Some(marker),
+            tag,
+            attrs,
+            buffer: String::new(),
+            scope_kind,
+            note_subkind: marker_note_subkind(marker),
+            note_family: marker_note_family(marker),
+            synthetic: false,
+        });
     }
 
-    (caller, content_start, tokens.len(), tokens.len())
-}
+    fn on_leave_scope(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _frame: &ScopeFrame<'src>,
+        _reason: LeaveReason,
+    ) {
+        let Some(item) = self.stack.pop() else { return; };
+        match item.emission {
+            Emission::ExtractedNote(ref state) => {
+                let call_id = state.call_id.as_deref().unwrap_or_default();
+                let note_id = state.note_id.as_deref().unwrap_or_default();
+                let aside = render_extracted_note(
+                    &state.marker,
+                    state.kind,
+                    &state.source_caller,
+                    &state.label,
+                    call_id,
+                    note_id,
+                    &state.token_id,
+                    &item.buffer,
+                );
+                match state.kind {
+                    NoteKind::Footnote => self.footnotes.push(aside),
+                    NoteKind::Crossref => self.crossrefs.push(aside),
+                }
+            }
+            _ => emit_close(&mut self.output, &mut self.stack, item),
+        }
+    }
 
-fn next_number_text(tokens: &[Token<'_>], marker_index: usize) -> Option<String> {
-    match tokens.get(marker_index + 1).map(|token| &token.data) {
-        Some(TokenData::Number { start, end, .. }) => Some(match end {
-            Some(end) => format!("{start}-{end}"),
-            None => start.to_string(),
-        }),
-        _ => None,
+    fn on_end_marker(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        // The corresponding `on_leave_scope(Explicit)` already closed
+        // the element. The EndMarker token itself produces no HTML.
+    }
+
+    fn on_milestone(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        // Milestone open is handled via on_enter_scope; this fallback
+        // catches stray milestones the walker didn't classify, which
+        // currently produces no HTML (matching prior behaviour).
+    }
+
+    fn on_milestone_end(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        // Same as on_end_marker — the matching close already fired.
+    }
+
+    fn on_text(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        // If we're directly inside a note whose caller hasn't been
+        // captured yet, the next Text token IS the caller. Consume
+        // it (don't add to body) and emit the caller HTML now that
+        // the label is computable. Mirrors `parse_note_tokens`'
+        // first-text-is-caller rule from the prior implementation.
+        let needs_caller = matches!(
+            self.stack.last().map(|e| &e.emission),
+            Some(Emission::InlineNote(s) | Emission::ExtractedNote(s)) if !s.caller_consumed
+        );
+        if needs_caller {
+            let raw = token.source;
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                // Pre-caller whitespace — drop, matching prior behavior.
+                return;
+            }
+            self.consume_note_caller(trimmed);
+            return;
+        }
+
+        push_fragment(
+            &mut self.output,
+            &mut self.stack,
+            &escape_html(token.source),
+        );
+    }
+
+    fn on_chapter(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        if self.in_note_body() {
+            return;
+        }
+        // Find the chapter marker just below us on the stack. The
+        // walker placed a Phantom frame for `\c` immediately before
+        // dispatching this number token.
+        let marker = self
+            .stack
+            .iter()
+            .rev()
+            .find_map(|item| {
+                (item.scope_kind == StructuralScopeKind::Chapter).then_some(item.marker)
+            })
+            .flatten()
+            .unwrap_or("c");
+        let number = number_text(token);
+        let sid = token
+            .sid
+            .as_ref()
+            .map(|s| format!("{} {}", s.book_code, s.chapter));
+        let token_id = token_id_str(&token.id);
+        // Per the prior implementation, `\c` resets verse-scoped note
+        // numbering. `on_enter_scope(Chapter)` already did that; the
+        // number itself just emits the span.
+        let html =
+            empty_marker_span("chapter", marker, &number, sid.as_deref(), &token_id);
+        self.push_html(&html);
+    }
+
+    fn on_verse(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        if self.in_note_body() {
+            return;
+        }
+        let marker = self
+            .stack
+            .iter()
+            .rev()
+            .find_map(|item| {
+                (item.scope_kind == StructuralScopeKind::Verse).then_some(item.marker)
+            })
+            .flatten()
+            .unwrap_or("v");
+        let number = number_text(token);
+        let sid = token
+            .sid
+            .as_ref()
+            .map(|s| format!("{} {}:{}", s.book_code, s.chapter, s.verse));
+        let token_id = token_id_str(&token.id);
+        self.current_verse = (!number.is_empty()).then_some(number.clone());
+        self.note_count_in_verse = 0;
+        let html =
+            empty_marker_span("verse", marker, &number, sid.as_deref(), &token_id);
+        self.push_html(&html);
+    }
+
+    fn on_book_code(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        let TokenData::BookCode { code, .. } = &token.data else {
+            return;
+        };
+        // If the current stack already has a book-Header element open
+        // (e.g. from `\id GEN`), do nothing — the existing element
+        // covers the book scope.
+        let already_in_book = self.stack.iter().any(|item| {
+            item.scope_kind == StructuralScopeKind::Header
+                && item
+                    .attrs
+                    .iter()
+                    .any(|(key, value)| key == "data-usfm-type" && value == "book")
+        });
+        if already_in_book {
+            return;
+        }
+        // Otherwise close any blocks and open a book element.
+        close_for_new_block(&mut self.output, &mut self.stack, false);
+        self.stack.push(open_book_element(
+            "id",
+            code,
+            self.options.prefer_native_elements,
+            token_id_str(&token.id),
+        ));
+    }
+
+    fn on_opt_break(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        self.push_html("<wbr>");
+    }
+
+    fn on_newline(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        // Newlines have no HTML representation.
+    }
+
+    fn on_other(
+        &mut self,
+        _ctx: &WalkContext<'src, '_>,
+        _token: &Token<'src>,
+        _token_index: usize,
+    ) {
+        // Numbers outside chapter/verse, unmatched end markers, etc.
+        // Render nothing — prior behaviour was to drop these silently
+        // unless they had a structural role.
     }
 }
 
-fn open_book_element<'a>(
-    marker: &'a str,
-    code: &'a str,
-    prefer_native_elements: bool,
-    token_id: String,
-) -> OpenElement<'a> {
-    let tag = if prefer_native_elements {
-        "section"
-    } else {
-        "div"
-    };
-    let mut attrs = common_marker_attrs("book", marker);
-    attrs.push(("data-usfm-id".to_string(), token_id));
-    attrs.push(("data-usfm-code".to_string(), code.to_string()));
-    OpenElement {
-        marker: Some(marker),
-        tag,
-        attrs,
-        buffer: String::new(),
-        scope_kind: StructuralScopeKind::Header,
-        note_subkind: None,
-        note_family: None,
-        synthetic: false,
+// =============================================================================
+// Note opening (extracted vs inline)
+// =============================================================================
+
+impl<'src> HtmlVisitor<'src> {
+    /// Push a note frame onto the stack. We do **not** emit the caller
+    /// HTML yet — the source caller is the first text token inside the
+    /// note (see `parse_note_tokens` in the pre-walker code) and we
+    /// don't know it until `on_text` fires. `consume_note_caller`
+    /// finishes the open-time work (label, id assignment, caller HTML
+    /// emission for extracted mode) when that first text arrives.
+    fn open_note(&mut self, token: &Token<'src>, marker: &'src str) {
+        let token_id = token_id_str(&token.id);
+        let note_kind_enum = note_kind(marker);
+        let inline = matches!(self.options.note_mode, HtmlNoteMode::Inline) || self.in_note_body();
+
+        let state = NoteState {
+            marker: marker.to_string(),
+            kind: note_kind_enum,
+            // Label/source-caller/ids fill in once the first text
+            // arrives. Until then they hold empty/None values.
+            label: String::new(),
+            source_caller: String::new(),
+            call_id: None,
+            note_id: None,
+            token_id,
+            caller_consumed: false,
+        };
+
+        let emission = if inline {
+            Emission::InlineNote(state)
+        } else {
+            Emission::ExtractedNote(state)
+        };
+
+        self.stack.push(OpenElement {
+            emission,
+            marker: Some(marker),
+            tag: "",
+            attrs: Vec::new(),
+            buffer: String::new(),
+            scope_kind: StructuralScopeKind::Note,
+            note_subkind: marker_note_subkind(marker),
+            note_family: marker_note_family(marker),
+            synthetic: false,
+        });
+    }
+
+    /// Called when the first non-empty text token inside an open note
+    /// arrives. Finalises the note state (label, ids), emits the
+    /// caller HTML into the parent buffer (extracted mode), and marks
+    /// the caller as consumed so subsequent text routes to the body.
+    fn consume_note_caller(&mut self, source_caller: &str) {
+        // Read what we need about the top frame without holding a
+        // mutable borrow across the label computation.
+        let stack_len = self.stack.len();
+        let (is_extracted, kind) = {
+            let top = self.stack.last().expect("note frame present");
+            match &top.emission {
+                Emission::ExtractedNote(s) => (true, s.kind),
+                Emission::InlineNote(s) => (false, s.kind),
+                _ => return,
+            }
+        };
+
+        let label = self.note_label(source_caller);
+
+        // For extracted notes, assign monotonic ids.
+        let (call_id, note_id) = if is_extracted {
+            let id_index = match kind {
+                NoteKind::Footnote => {
+                    self.footnote_id += 1;
+                    self.footnote_id
+                }
+                NoteKind::Crossref => {
+                    self.crossref_id += 1;
+                    self.crossref_id
+                }
+            };
+            let pair = match kind {
+                NoteKind::Footnote => {
+                    (format!("fnref-{id_index}"), format!("fn-{id_index}"))
+                }
+                NoteKind::Crossref => {
+                    (format!("xrref-{id_index}"), format!("xr-{id_index}"))
+                }
+            };
+            (Some(pair.0), Some(pair.1))
+        } else {
+            (None, None)
+        };
+
+        // Update the top frame's note state. Borrow scope kept tight.
+        let token_id_for_caller;
+        let label_for_caller;
+        let source_caller_for_caller;
+        let call_id_for_caller;
+        let note_id_for_caller;
+        let marker_for_inline;
+        {
+            let top = self.stack.last_mut().expect("note frame present");
+            match &mut top.emission {
+                Emission::ExtractedNote(state) | Emission::InlineNote(state) => {
+                    state.source_caller = source_caller.to_string();
+                    state.label = label.clone();
+                    state.call_id = call_id.clone();
+                    state.note_id = note_id.clone();
+                    state.caller_consumed = true;
+                    token_id_for_caller = state.token_id.clone();
+                    label_for_caller = state.label.clone();
+                    source_caller_for_caller = state.source_caller.clone();
+                    call_id_for_caller = state.call_id.clone();
+                    note_id_for_caller = state.note_id.clone();
+                }
+                _ => unreachable!("checked above"),
+            }
+            marker_for_inline = top.marker.unwrap_or("");
+        }
+
+        if is_extracted {
+            // Emit `<sup><a>…</a></sup>` into the parent buffer (the
+            // note frame is on top; parent is one below).
+            let mut caller_html = String::from("<sup><a");
+            let call_id_str = call_id_for_caller.as_deref().unwrap_or_default();
+            let note_id_str = note_id_for_caller.as_deref().unwrap_or_default();
+            push_attr(&mut caller_html, "href", &format!("#{note_id_str}"));
+            push_attr(&mut caller_html, "id", call_id_str);
+            push_attr(&mut caller_html, "data-usfm-id", &token_id_for_caller);
+            push_attr(&mut caller_html, "data-usfm-note-kind", kind.as_str());
+            push_attr(&mut caller_html, "data-usfm-caller", &label_for_caller);
+            push_attr(
+                &mut caller_html,
+                "data-usfm-source-caller",
+                &source_caller_for_caller,
+            );
+            caller_html.push('>');
+            caller_html.push_str(&escape_html(&label_for_caller));
+            caller_html.push_str("</a></sup>");
+            if stack_len >= 2 {
+                self.stack[stack_len - 2].buffer.push_str(&caller_html);
+            } else {
+                self.output.push_str(&caller_html);
+            }
+        } else {
+            // Inline mode: build attrs on the note frame now that we
+            // know the source caller. The wrapping `<span>` and
+            // `<sup>label</sup>` prefix are emitted at close time.
+            let mut attrs = common_marker_attrs("note", marker_for_inline);
+            attrs.push(("data-usfm-id".to_string(), token_id_for_caller.clone()));
+            attrs.push(("data-usfm-caller".to_string(), label_for_caller.clone()));
+            attrs.push((
+                "data-usfm-source-caller".to_string(),
+                source_caller_for_caller.clone(),
+            ));
+            attrs.push((
+                "data-usfm-note-kind".to_string(),
+                kind.as_str().to_string(),
+            ));
+            self.stack
+                .last_mut()
+                .expect("note frame present")
+                .attrs = attrs;
+        }
     }
 }
+
+// =============================================================================
+// Close emission
+// =============================================================================
+
+/// Emit the closing HTML for `item`, taking into account its
+/// `Emission` mode. Mirrors the previous `append_closed_element` for
+/// `Element`, handles phantoms as no-ops, and reroutes note bodies
+/// (inline span / extracted aside).
+fn emit_close(output: &mut String, stack: &mut Vec<OpenElement<'_>>, item: OpenElement<'_>) {
+    match item.emission {
+        Emission::Phantom => {
+            // Nothing to emit. Buffer should be empty (no text events
+            // should have targeted this frame, since it's an open
+            // marker like `\c` / `\v` / `\esbe` where text and
+            // children attach at the surrounding paragraph level).
+            // Belt-and-suspenders: if a stray bit ended up here,
+            // append it to the parent so it doesn't get lost.
+            if !item.buffer.is_empty() {
+                push_fragment(output, stack, &item.buffer);
+            }
+        }
+        Emission::Element => {
+            let mut html = String::new();
+            html.push('<');
+            html.push_str(item.tag);
+            push_attrs(&mut html, &item.attrs);
+            html.push('>');
+            html.push_str(&item.buffer);
+            html.push_str("</");
+            html.push_str(item.tag);
+            html.push('>');
+            push_fragment(output, stack, &html);
+        }
+        Emission::InlineNote(state) => {
+            // Inline note: `<span ...><sup>label</sup>BODY</span>`.
+            let mut html = String::from("<span");
+            push_attrs(&mut html, &item.attrs);
+            html.push('>');
+            html.push_str("<sup>");
+            html.push_str(&escape_html(&state.label));
+            html.push_str("</sup>");
+            html.push_str(&item.buffer);
+            html.push_str("</span>");
+            push_fragment(output, stack, &html);
+        }
+        Emission::ExtractedNote(_) => {
+            // Should not be reached: `HtmlVisitor::on_leave_scope`
+            // intercepts ExtractedNote frames before calling
+            // `emit_close`. The fallthrough exists only for
+            // `finalize()`'s belt-and-suspenders drain, which is
+            // never expected to encounter an unclosed note (the
+            // walker emits EndOfInput closures for those — which
+            // route through `on_leave_scope` first).
+            let _ = (output, stack);
+        }
+    }
+}
+
+// =============================================================================
+// Helpers preserved from the prior implementation
+// =============================================================================
 
 fn synthetic_table(prefer_native_elements: bool) -> OpenElement<'static> {
     let _ = prefer_native_elements;
     OpenElement {
+        emission: Emission::Element,
         marker: None,
         tag: "table",
         attrs: vec![("data-usfm-type".to_string(), "table".to_string())],
@@ -585,6 +861,7 @@ fn synthetic_table(prefer_native_elements: bool) -> OpenElement<'static> {
 
 fn synthetic_table_row() -> OpenElement<'static> {
     OpenElement {
+        emission: Emission::Element,
         marker: None,
         tag: "tr",
         attrs: vec![("data-usfm-type".to_string(), "table:row".to_string())],
@@ -597,7 +874,6 @@ fn synthetic_table_row() -> OpenElement<'static> {
 }
 
 fn ensure_table_open(stack: &mut Vec<OpenElement<'_>>, prefer_native_elements: bool) {
-    let _ = prefer_native_elements;
     if !stack.iter().any(|item| {
         item.attrs
             .iter()
@@ -650,9 +926,44 @@ fn tag_and_type_for_marker(
     }
 }
 
-fn close_for_new_block(output: &mut String, stack: &mut Vec<OpenElement<'_>>, keep_book: bool) {
-    close_inline_scopes(output, stack);
-    close_non_book_table_block_scopes(output, stack);
+fn close_for_new_block(
+    output: &mut String,
+    stack: &mut Vec<OpenElement<'_>>,
+    keep_book: bool,
+) {
+    // Used only by `on_book_code` for the rare BookCode-without-`\id`
+    // path. Closes inline/table/block scopes down to the book wrapper.
+    while matches!(
+        stack.last().map(|item| item.scope_kind),
+        Some(StructuralScopeKind::Character | StructuralScopeKind::Milestone)
+    ) {
+        let item = stack.pop().expect("inline scope present");
+        emit_close(output, stack, item);
+    }
+    while let Some(top) = stack.last() {
+        let is_table_wrapper = top.synthetic
+            && top
+                .attrs
+                .iter()
+                .any(|(key, value)| key == "data-usfm-type" && value == "table");
+        let should_pop = is_table_wrapper
+            || matches!(
+                top.scope_kind,
+                StructuralScopeKind::TableCell
+                    | StructuralScopeKind::TableRow
+                    | StructuralScopeKind::Block
+                    | StructuralScopeKind::Sidebar
+                    | StructuralScopeKind::Periph
+                    | StructuralScopeKind::Meta
+            )
+            || (matches!(top.scope_kind, StructuralScopeKind::Header)
+                && top.marker != Some("id"));
+        if !should_pop {
+            break;
+        }
+        let item = stack.pop().expect("block scope present");
+        emit_close(output, stack, item);
+    }
     if !keep_book {
         while matches!(
             stack.last().map(|item| item.scope_kind),
@@ -662,123 +973,39 @@ fn close_for_new_block(output: &mut String, stack: &mut Vec<OpenElement<'_>>, ke
             .is_some_and(|item| !item.synthetic && item.marker == Some("id"))
         {
             let item = stack.pop().expect("book wrapper present");
-            append_closed_element(output, stack, item);
+            emit_close(output, stack, item);
         }
     }
 }
 
-fn close_non_book_table_block_scopes(output: &mut String, stack: &mut Vec<OpenElement<'_>>) {
-    while let Some(top) = stack.last() {
-        if top.synthetic
-            && top
-                .attrs
-                .iter()
-                .any(|(key, value)| key == "data-usfm-type" && value == "table")
-        {
-            let item = stack.pop().expect("table wrapper present");
-            append_closed_element(output, stack, item);
-            continue;
-        }
-
-        match top.scope_kind {
-            StructuralScopeKind::TableCell
-            | StructuralScopeKind::TableRow
-            | StructuralScopeKind::Block
-            | StructuralScopeKind::Sidebar
-            | StructuralScopeKind::Periph
-            | StructuralScopeKind::Meta => {
-                let item = stack.pop().expect("block scope present");
-                append_closed_element(output, stack, item);
-            }
-            StructuralScopeKind::Header if top.marker != Some("id") => {
-                let item = stack.pop().expect("header scope present");
-                append_closed_element(output, stack, item);
-            }
-            _ => break,
-        }
-    }
-}
-
-fn close_inline_scopes(output: &mut String, stack: &mut Vec<OpenElement<'_>>) {
-    while matches!(
-        stack.last().map(|item| item.scope_kind),
-        Some(StructuralScopeKind::Character | StructuralScopeKind::Milestone)
-    ) {
-        let item = stack.pop().expect("inline scope present");
-        append_closed_element(output, stack, item);
-    }
-}
-
-fn close_for_note_structural(
-    output: &mut String,
-    stack: &mut Vec<OpenElement<'_>>,
-    next_marker: &str,
-) {
-    if marker_note_subkind(next_marker).is_none() {
-        return;
-    }
-
-    while let Some(top) = stack.last() {
-        if !matches!(
-            top.scope_kind,
-            StructuralScopeKind::Character | StructuralScopeKind::Milestone
-        ) {
-            break;
-        }
-        let item = stack.pop().expect("note inline scope present");
-        let should_stop = item.note_subkind.is_some() || item.note_family.is_some();
-        append_closed_element(output, stack, item);
-        if should_stop {
-            break;
-        }
-    }
-}
-
-fn close_for_end_marker(output: &mut String, stack: &mut Vec<OpenElement<'_>>, name: &str) {
-    let target = lookup_marker_def(name)
-        .map(|def| def.marker)
-        .unwrap_or(name.trim_start_matches('+'));
-    close_top_matching_scope(output, stack, |item| {
-        item.marker == Some(target) || item.marker == Some(name)
-    });
-}
-
-fn close_top_matching_scope<F>(output: &mut String, stack: &mut Vec<OpenElement<'_>>, matches: F)
-where
-    F: Fn(&OpenElement<'_>) -> bool,
-{
-    let Some(position) = stack.iter().rposition(matches) else {
-        return;
-    };
-
-    while stack.len() > position {
-        let item = stack.pop().expect("matching scope should exist");
-        append_closed_element(output, stack, item);
-    }
-}
-
-fn append_closed_element(
-    output: &mut String,
-    stack: &mut [OpenElement<'_>],
-    item: OpenElement<'_>,
-) {
-    let mut html = String::new();
-    html.push('<');
-    html.push_str(item.tag);
-    push_attrs(&mut html, &item.attrs);
-    html.push('>');
-    html.push_str(&item.buffer);
-    html.push_str("</");
-    html.push_str(item.tag);
-    html.push('>');
-    if let Some(parent) = stack.last_mut() {
-        parent.buffer.push_str(&html);
+fn open_book_element<'a>(
+    marker: &'a str,
+    code: &'a str,
+    prefer_native_elements: bool,
+    token_id: String,
+) -> OpenElement<'a> {
+    let tag = if prefer_native_elements {
+        "section"
     } else {
-        output.push_str(&html);
+        "div"
+    };
+    let mut attrs = common_marker_attrs("book", marker);
+    attrs.push(("data-usfm-id".to_string(), token_id));
+    attrs.push(("data-usfm-code".to_string(), code.to_string()));
+    OpenElement {
+        emission: Emission::Element,
+        marker: Some(marker),
+        tag,
+        attrs,
+        buffer: String::new(),
+        scope_kind: StructuralScopeKind::Header,
+        note_subkind: None,
+        note_family: None,
+        synthetic: false,
     }
 }
 
-fn push_fragment(output: &mut String, stack: &mut Vec<OpenElement<'_>>, html: &str) {
+fn push_fragment(output: &mut String, stack: &mut [OpenElement<'_>], html: &str) {
     if let Some(parent) = stack.last_mut() {
         parent.buffer.push_str(html);
     } else {
@@ -878,24 +1105,9 @@ fn note_kind(marker: &str) -> NoteKind {
     }
 }
 
-fn marker_data_type(marker: &str, kind: Option<MarkerDefKind>) -> &'static str {
-    match kind {
-        Some(MarkerDefKind::Figure) => "figure",
-        Some(MarkerDefKind::Periph) => "periph",
-        Some(MarkerDefKind::Sidebar) => "sidebar",
-        Some(MarkerDefKind::TableRow) => "table:row",
-        Some(MarkerDefKind::TableCell) => "table:cell",
-        Some(MarkerDefKind::Milestone) => "ms",
-        Some(MarkerDefKind::Character) if marker == "ref" => "ref",
-        Some(MarkerDefKind::Character) => "char",
-        Some(MarkerDefKind::Header | MarkerDefKind::Paragraph | MarkerDefKind::Meta) => "para",
-        _ => "unknown",
-    }
-}
-
 fn marker_is_sidebar_end(marker: &str, kind: Option<MarkerDefKind>) -> bool {
-    matches!(kind, Some(MarkerDefKind::Sidebar))
-        || matches!(marker_block_behavior(marker), BlockBehavior::SidebarEnd)
+    let _ = kind;
+    matches!(marker_block_behavior(marker), BlockBehavior::SidebarEnd)
 }
 
 fn table_cell_align(marker: &str) -> &'static str {
@@ -1006,6 +1218,20 @@ fn roman_label(mut index: usize, uppercase: bool) -> String {
     }
 }
 
+fn number_text(token: &Token<'_>) -> String {
+    match &token.data {
+        TokenData::Number { start, end, .. } => match end {
+            Some(end) => format!("{start}-{end}"),
+            None => start.to_string(),
+        },
+        _ => String::new(),
+    }
+}
+
+// =============================================================================
+// Tests preserved from prior implementation
+// =============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1066,11 +1292,54 @@ mod tests {
     }
 
     #[test]
+    fn sidebar_open_and_close_produces_single_sidebar_element() {
+        // `\esbe` opens a Sidebar scope in the walker but must NOT emit
+        // its own HTML element — its only job is to close `\esb`.
+        // Regression guard against the walker pushing `\esbe` as a
+        // real container.
+        let html = usfm_to_html(
+            "\\c 1\n\\esb\n\\p Sidebar body\n\\esbe\n\\p After\n",
+            HtmlOptions::default(),
+        );
+        let sidebar_count = html.matches(r#"data-usfm-type="sidebar""#).count();
+        assert_eq!(
+            sidebar_count, 1,
+            "expected exactly one sidebar element, got {sidebar_count}: {html}"
+        );
+        // No element should carry data-usfm-marker="esbe" — that
+        // would mean the phantom frame leaked into output.
+        assert!(
+            !html.contains(r#"data-usfm-marker="esbe""#),
+            "esbe phantom leaked into html: {html}"
+        );
+    }
+
+    #[test]
+    fn nested_character_markers_inside_note_render_as_nested_spans() {
+        // \nd Lord\nd* inside a footnote body must produce a nested
+        // `<span data-usfm-marker="nd">` inside the `<aside>` body.
+        let html = usfm_to_html(
+            "\\c 1\n\\p\n\\v 1 Text\\f + \\ft note about \\nd Lord\\nd* here\\f*\n",
+            HtmlOptions::default(),
+        );
+        let aside_start = html.find("<aside").expect("aside present");
+        let aside_end = html[aside_start..]
+            .find("</aside>")
+            .map(|rel| aside_start + rel)
+            .expect("aside closes");
+        let aside = &html[aside_start..aside_end];
+        assert!(
+            aside.contains(r#"data-usfm-marker="nd""#),
+            "nd character not nested in aside: {aside}"
+        );
+        assert!(
+            aside.contains("Lord"),
+            "nd content missing from aside: {aside}"
+        );
+    }
+
+    #[test]
     fn unclosed_footnote_does_not_swallow_subsequent_verses_in_html() {
-        // Pre-fix, an unclosed \f swallowed every following verse and
-        // chapter into the <aside> note element. After recovery, the
-        // note ends at the next block-scope marker (here, the \v 2),
-        // and v2 + the chapter-2 paragraph render in the main flow.
         let src = "\\id GEN Sample\n\
                    \\c 1\n\\p\n\
                    \\v 1 First verse with an unclosed footnote.\\f + \\ft Note text never terminated.\n\
@@ -1090,8 +1359,6 @@ mod tests {
             html.contains(r#"data-usfm-sid="GEN 2:1""#),
             "v1 of ch2 missing from html: {html}"
         );
-        // The note's <aside> should not contain the v2 marker — that is
-        // exactly the bug. Locate the aside and assert v2 lives outside.
         let aside_start = html
             .find("<aside")
             .expect("expected an aside element for the extracted note");
