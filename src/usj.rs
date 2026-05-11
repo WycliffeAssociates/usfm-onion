@@ -294,7 +294,6 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             }
             ExportNode::Milestone {
                 marker_index,
-                attribute_index,
                 closed: _,
                 end_index: _,
             } => {
@@ -303,11 +302,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                     return (Vec::new(), index + 1);
                 };
                 let marker_name = export_marker_name(name);
-                let mut extra = BTreeMap::new();
-                if let Some(attribute_index) = attribute_index {
-                    extra
-                        .extend(self.attribute_map_from_token(*attribute_index, Some(marker_name)));
-                }
+                let extra = self.attribute_map_from_token(*marker_index, Some(marker_name));
                 (
                     vec![UsjNode::Element(UsjElement::Milestone {
                         marker: marker_name.to_string(),
@@ -432,7 +427,6 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                                 content.push(UsjNode::Text(remainder));
                             }
                         }
-                        TokenData::AttributeList { .. } => {}
                         _ => {
                             let (mut exported, _) =
                                 self.export_node(std::slice::from_ref(child), 0);
@@ -455,7 +449,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             marker: "id".to_string(),
             code,
             content,
-            extra: self.collect_attribute_map(&node.children, node.attribute_index, Some("id")),
+            extra: self.collect_attribute_map(&node.children, Some(node.token_index), Some("id")),
         }
     }
 
@@ -493,7 +487,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         UsjElement::Para {
             marker: marker.to_string(),
             content: self.export_non_attribute_children(&node.children),
-            extra: self.collect_attribute_map(&node.children, node.attribute_index, Some(marker)),
+            extra: self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker)),
         }
     }
 
@@ -502,7 +496,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         let mut content = Vec::new();
         let mut category = None;
         let mut attrs =
-            self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
+            self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker));
 
         let mut started_content = false;
         for child in &node.children {
@@ -510,7 +504,6 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                 ExportNode::Leaf { token_index } => {
                     let token = &self.document.tokens[*token_index];
                     match &token.data {
-                        TokenData::AttributeList { .. } => continue,
                         TokenData::Text if !started_content => {
                             let (parsed_caller, remainder) = extract_note_caller(token.source);
                             caller = parsed_caller;
@@ -560,7 +553,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
     }
 
     fn export_character_like(&self, node: &ExportContainerNode, marker: &str) -> UsjElement {
-        self.export_character_like_from_children(marker, &node.children, node.attribute_index)
+        self.export_character_like_from_children(marker, &node.children, Some(node.token_index))
     }
 
     fn export_character_like_from_children(
@@ -605,7 +598,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         let mut exported = vec![UsjNode::Element(self.export_character_like_from_children(
             marker,
             &node.children[..split_index],
-            node.attribute_index,
+            Some(node.token_index),
         ))];
         exported.extend(self.export_non_attribute_children(&node.children[split_index..]));
         exported
@@ -616,7 +609,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             return self.export_unclosed_figure(node, marker);
         }
         let (content, extra) =
-            self.export_inline_content_and_attributes(marker, &node.children, node.attribute_index);
+            self.export_inline_content_and_attributes(marker, &node.children, Some(node.token_index));
         UsjElement::Figure {
             marker: marker.to_string(),
             content,
@@ -625,36 +618,26 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
     }
 
     fn export_unclosed_figure(&self, node: &ExportContainerNode, marker: &str) -> UsjElement {
-        #[derive(Clone)]
-        enum FigurePart {
-            Child(ExportNode),
-            Attr(String),
-        }
-
-        let mut parts: Vec<(u32, FigurePart)> = Vec::new();
-        for child in &node.children {
-            parts.push((self.node_start(child), FigurePart::Child(child.clone())));
-        }
-        if let Some(attribute_index) = node.attribute_index {
-            parts.push((
-                self.document.tokens[attribute_index].span.start,
-                FigurePart::Attr(format!(
-                    "{} ",
-                    self.document.tokens[attribute_index].source.trim()
-                )),
-            ));
-        }
-        parts.sort_by_key(|(start, _)| *start);
-
-        let mut content = Vec::new();
-        for (_, part) in parts {
-            match part {
-                FigurePart::Child(child) => {
-                    content
-                        .extend(self.export_non_attribute_children(std::slice::from_ref(&child)));
+        let mut content: Vec<UsjNode> = self.export_nodes(&node.children);
+        if let Some(entries) = self.document.tokens[node.token_index].attributes()
+            && !entries.is_empty()
+        {
+            let mut serialized = String::from("|");
+            for (i, entry) in entries.iter().enumerate() {
+                if i > 0 {
+                    serialized.push(' ');
                 }
-                FigurePart::Attr(source) => content.push(UsjNode::Text(source)),
+                if entry.is_default {
+                    serialized.push_str(entry.value);
+                } else {
+                    serialized.push_str(entry.key);
+                    serialized.push_str("=\"");
+                    serialized.push_str(entry.value);
+                    serialized.push('"');
+                }
             }
+            serialized.push(' ');
+            content.push(UsjNode::Text(serialized));
         }
         content = coalesce_text_nodes(content);
 
@@ -669,28 +652,17 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         let mut category = None;
         let mut content = Vec::new();
         let mut attrs =
-            self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
+            self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker));
 
         for child in &node.children {
-            match child {
-                ExportNode::Leaf { token_index }
-                    if matches!(
-                        self.document.tokens[*token_index].data,
-                        TokenData::AttributeList { .. }
-                    ) =>
-                {
-                    continue;
-                }
-                ExportNode::Container(container)
-                    if matches!(
-                        self.document.tokens[container.token_index].data,
-                        TokenData::Marker { name: "cat", .. }
-                    ) =>
-                {
-                    category = extract_inline_text(self, &container.children);
-                    continue;
-                }
-                _ => {}
+            if let ExportNode::Container(container) = child
+                && matches!(
+                    self.document.tokens[container.token_index].data,
+                    TokenData::Marker { name: "cat", .. }
+                )
+            {
+                category = extract_inline_text(self, &container.children);
+                continue;
             }
             let mut exported = self.export_non_attribute_children(std::slice::from_ref(child));
             content.append(&mut exported);
@@ -708,7 +680,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
     fn export_periph(&self, node: &ExportContainerNode) -> UsjElement {
         let mut alt = None;
         let mut content = Vec::new();
-        let attrs = self.collect_attribute_map(&node.children, node.attribute_index, None);
+        let attrs = self.collect_attribute_map(&node.children, Some(node.token_index), None);
 
         for child in &node.children {
             match child {
@@ -721,7 +693,6 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
                                 alt = Some(trimmed.to_string());
                             }
                         }
-                        TokenData::AttributeList { .. } => {}
                         _ => {
                             let mut exported =
                                 self.export_non_attribute_children(std::slice::from_ref(child));
@@ -767,7 +738,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         UsjElement::TableRow {
             marker: marker.to_string(),
             content: self.export_non_attribute_children(&node.children),
-            extra: self.collect_attribute_map(&node.children, node.attribute_index, Some(marker)),
+            extra: self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker)),
         }
     }
 
@@ -776,7 +747,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             marker: marker.to_string(),
             align: Some(table_cell_alignment(marker).to_string()),
             content: self.export_non_attribute_children(&node.children),
-            extra: self.collect_attribute_map(&node.children, node.attribute_index, Some(marker)),
+            extra: self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker)),
         }
     }
 
@@ -787,7 +758,7 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         unmatched: bool,
     ) -> UsjElement {
         let content = self.export_non_attribute_children(&node.children);
-        let extra = self.collect_attribute_map(&node.children, node.attribute_index, Some(marker));
+        let extra = self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker));
         if unmatched {
             UsjElement::Unmatched {
                 marker: marker.to_string(),
@@ -805,25 +776,14 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
 
     fn collect_attribute_map(
         &self,
-        children: &[ExportNode],
-        own_attribute_index: Option<usize>,
+        _children: &[ExportNode],
+        own_marker_token_index: Option<usize>,
         own_marker: Option<&str>,
     ) -> BTreeMap<String, String> {
-        let mut extra = BTreeMap::new();
-        if let Some(attribute_index) = own_attribute_index {
-            extra.extend(self.attribute_map_from_token(attribute_index, own_marker));
+        match own_marker_token_index {
+            Some(idx) => self.attribute_map_from_token(idx, own_marker),
+            None => BTreeMap::new(),
         }
-        for child in children {
-            if let ExportNode::Leaf { token_index } = child
-                && let TokenData::AttributeList { entries } =
-                    &self.document.tokens[*token_index].data
-            {
-                for entry in entries {
-                    extra.insert(entry.key.to_string(), entry.value.to_string());
-                }
-            }
-        }
-        extra
     }
 
     fn attribute_map_from_token(
@@ -832,162 +792,40 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         marker: Option<&str>,
     ) -> BTreeMap<String, String> {
         let mut extra = BTreeMap::new();
-        if let TokenData::AttributeList { entries } = &self.document.tokens[token_index].data {
-            if entries.is_empty() {
-                if let Some(marker_name) = marker
-                    && let Some(default_key) = marker_default_attribute(marker_name)
-                {
-                    let raw = self.document.tokens[token_index]
-                        .source
-                        .trim_start()
-                        .strip_prefix('|')
-                        .map(str::trim)
-                        .unwrap_or_default();
-                    if !raw.is_empty() {
-                        extra.insert(
-                            rename_attribute_key_for_usj(Some(marker_name), default_key),
-                            raw.to_string(),
-                        );
-                    }
-                }
-            }
-            for entry in entries {
-                extra.insert(
-                    rename_attribute_key_for_usj(marker, entry.key),
-                    entry.value.to_string(),
-                );
-            }
+        let Some(entries) = self.document.tokens[token_index].attributes() else {
+            return extra;
+        };
+        for entry in entries {
+            let key = if entry.is_default {
+                let Some(marker_name) = marker else { continue };
+                let Some(default_key) = marker_default_attribute(marker_name) else {
+                    continue;
+                };
+                rename_attribute_key_for_usj(Some(marker_name), default_key)
+            } else {
+                rename_attribute_key_for_usj(marker, entry.key)
+            };
+            extra.insert(key, entry.value.to_string());
         }
         extra
     }
 
     fn export_non_attribute_children(&self, children: &[ExportNode]) -> Vec<UsjNode> {
-        let mut filtered = Vec::new();
-        for child in children {
-            match child {
-                ExportNode::Leaf { token_index }
-                    if matches!(
-                        self.document.tokens[*token_index].data,
-                        TokenData::AttributeList { .. }
-                    ) => {}
-                _ => filtered.push(child.clone()),
-            }
-        }
-        self.export_nodes(&filtered)
+        // Attributes no longer appear as sibling tokens; all children are content.
+        self.export_nodes(children)
     }
 
     fn export_inline_content_and_attributes(
         &self,
         marker: &str,
         children: &[ExportNode],
-        own_attribute_index: Option<usize>,
+        own_marker_token_index: Option<usize>,
     ) -> (Vec<UsjNode>, BTreeMap<String, String>) {
-        #[derive(Clone)]
-        enum InlinePart {
-            Node(ExportNode),
-            Text(String),
-        }
-
-        if self.attribute_token_has_no_entries(own_attribute_index)
-            && marker_default_attribute(marker).is_none()
-            && let Some(attribute_index) = own_attribute_index
-        {
-            let mut parts: Vec<(u32, InlinePart)> = Vec::new();
-            for child in children {
-                parts.push((self.node_start(child), InlinePart::Node(child.clone())));
-            }
-            parts.push((
-                self.document.tokens[attribute_index].span.start,
-                InlinePart::Text(
-                    self.document.tokens[attribute_index]
-                        .source
-                        .trim()
-                        .to_string(),
-                ),
-            ));
-            parts.sort_by_key(|(start, _)| *start);
-
-            let mut content = Vec::new();
-            for (_, part) in parts {
-                match part {
-                    InlinePart::Node(node) => {
-                        content.extend(
-                            self.export_non_attribute_children(std::slice::from_ref(&node)),
-                        );
-                    }
-                    InlinePart::Text(text) => content.push(UsjNode::Text(text)),
-                }
-            }
-            return (content, BTreeMap::new());
-        }
-
-        let mut extra = self.collect_attribute_map(children, own_attribute_index, Some(marker));
-        let mut filtered = Vec::new();
-        let default_attr_child = if self.attribute_token_has_no_entries(own_attribute_index)
-            && marker_default_attribute(marker).is_some()
-        {
-            self.default_attribute_child_index(children)
-        } else {
-            None
+        let extra = match own_marker_token_index {
+            Some(idx) => self.attribute_map_from_token(idx, Some(marker)),
+            None => BTreeMap::new(),
         };
-
-        for (index, child) in children.iter().enumerate() {
-            if matches!(
-                child,
-                ExportNode::Leaf { token_index }
-                    if matches!(self.document.tokens[*token_index].data, TokenData::AttributeList { .. })
-            ) {
-                continue;
-            }
-
-            if Some(index) == default_attr_child {
-                continue;
-            }
-
-            filtered.push(child.clone());
-        }
-
-        if let Some(default_key) = marker_default_attribute(marker)
-            && !extra.contains_key(default_key)
-            && let Some(index) = default_attr_child
-            && let ExportNode::Leaf { token_index } = &children[index]
-            && let TokenData::Text = self.document.tokens[*token_index].data
-        {
-            let value = self.document.tokens[*token_index].source.trim().to_string();
-            if !value.is_empty() {
-                extra.insert(
-                    rename_attribute_key_for_usj(Some(marker), default_key),
-                    value,
-                );
-            }
-        }
-
-        (self.export_nodes(&filtered), extra)
-    }
-
-    fn attribute_token_has_no_entries(&self, token_index: Option<usize>) -> bool {
-        token_index
-            .and_then(|index| match &self.document.tokens[index].data {
-                TokenData::AttributeList { entries } => Some(entries.is_empty()),
-                _ => None,
-            })
-            .unwrap_or(false)
-    }
-
-    fn default_attribute_child_index(&self, children: &[ExportNode]) -> Option<usize> {
-        children
-            .iter()
-            .enumerate()
-            .rev()
-            .find(|(_, child)| {
-                matches!(
-                    child,
-                    ExportNode::Leaf { token_index }
-                        if matches!(self.document.tokens[*token_index].data, TokenData::Text)
-                            && !self.document.tokens[*token_index].source.trim().is_empty()
-                )
-            })
-            .map(|(index, _)| index)
+        (self.export_nodes(children), extra)
     }
 
     fn number_from_token(&self, token_index: usize) -> Option<String> {
@@ -1010,19 +848,6 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         )
     }
 
-    fn node_start(&self, node: &ExportNode) -> u32 {
-        match node {
-            ExportNode::Leaf { token_index } => self.document.tokens[*token_index].span.start,
-            ExportNode::Chapter { marker_index, .. }
-            | ExportNode::Verse { marker_index, .. }
-            | ExportNode::Milestone { marker_index, .. } => {
-                self.document.tokens[*marker_index].span.start
-            }
-            ExportNode::Container(container) => {
-                self.document.tokens[container.token_index].span.start
-            }
-        }
-    }
 }
 
 #[derive(Default)]
@@ -2155,5 +1980,181 @@ mod tests {
             json.contains(r#""sid":"GEN 2:1""#),
             "v1 of ch2 sid missing from usj: {json}"
         );
+    }
+}
+
+/// Conformance tests against the USFM 3.1 character-level attributes spec:
+/// https://docs.usfm.bible/usfm/3.1/char/attributes.html
+///
+/// Each test is named after a spec section and asserts both that the source
+/// round-trips byte-identically through parse → re-emit, and that the USJ
+/// representation expands default-attribute shorthand to a canonical key.
+#[cfg(test)]
+mod attributes_spec {
+    use crate::cst::{cst_to_usfm, parse_cst};
+    use crate::usj::{UsjElement, UsjNode, usfm_to_usj};
+
+    fn doc_with(body: &str) -> String {
+        format!("\\id GEN\n\\c 1\n\\p\n\\v 1 {body}\n")
+    }
+
+    fn assert_byte_identical_roundtrip(source: &str) {
+        let cst = parse_cst(source);
+        let emitted = cst_to_usfm(&cst);
+        assert_eq!(emitted, source, "USFM round-trip is not byte-identical");
+    }
+
+    fn first_char_attrs(source: &str, marker: &str) -> std::collections::BTreeMap<String, String> {
+        let usj = usfm_to_usj(source).expect("USJ export should succeed");
+        for node in walk(&usj.content) {
+            if let UsjNode::Element(UsjElement::Char { marker: m, extra, .. }) = node
+                && m == marker
+            {
+                return extra.clone();
+            }
+        }
+        panic!("no \\{marker} char element found in:\n{source}");
+    }
+
+    fn walk(nodes: &[UsjNode]) -> Vec<&UsjNode> {
+        let mut out = Vec::new();
+        fn rec<'a>(nodes: &'a [UsjNode], out: &mut Vec<&'a UsjNode>) {
+            for node in nodes {
+                out.push(node);
+                if let UsjNode::Element(element) = node {
+                    match element {
+                        UsjElement::Para { content, .. }
+                        | UsjElement::Char { content, .. }
+                        | UsjElement::Note { content, .. }
+                        | UsjElement::Book { content, .. }
+                        | UsjElement::Ref { content, .. } => rec(content, out),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        rec(nodes, &mut out);
+        out
+    }
+
+    // (1) General Syntax — `\w gracious|lemma="grace"\w*` ⇔ <char style="w" lemma="grace">gracious</char>
+    #[test]
+    fn general_syntax_named_attribute() {
+        let source = doc_with("\\w gracious|lemma=\"grace\"\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(extra.get("lemma").map(String::as_str), Some("grace"));
+    }
+
+    // (1) Backward compatibility — `\w gracious\w*` with no attributes is valid.
+    #[test]
+    fn general_syntax_no_attributes_is_valid() {
+        let source = doc_with("\\w gracious\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert!(extra.is_empty(), "expected no attributes, got {extra:?}");
+    }
+
+    // (1) Multiple named attributes preserve source order.
+    #[test]
+    fn general_syntax_multiple_named_attributes() {
+        let source = doc_with("\\w gracious|lemma=\"grace\" strong=\"H1234\"\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(extra.get("lemma").map(String::as_str), Some("grace"));
+        assert_eq!(extra.get("strong").map(String::as_str), Some("H1234"));
+    }
+
+    // (2) Default Attribute — `\w gracious|grace\w*` resolves to lemma="grace" in USJ/USX.
+    #[test]
+    fn default_attribute_w_resolves_to_lemma() {
+        let source = doc_with("\\w gracious|grace\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(
+            extra.get("lemma").map(String::as_str),
+            Some("grace"),
+            "bare default on \\w must resolve to lemma; got {extra:?}"
+        );
+    }
+
+    // (2) Default Attribute — `\rb 話|はなし\rb*` resolves to gloss="はなし".
+    #[test]
+    fn default_attribute_rb_resolves_to_gloss() {
+        let source = doc_with("\\rb 話|はなし\\rb*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "rb");
+        assert_eq!(
+            extra.get("gloss").map(String::as_str),
+            Some("はなし"),
+            "bare default on \\rb must resolve to gloss; got {extra:?}"
+        );
+    }
+
+    // (3) Multiple Attribute Values — comma-separated list within the value string.
+    #[test]
+    fn multiple_attribute_values_comma_separated() {
+        let source = doc_with("\\w gracious|strong=\"H1234,G5485\"\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(
+            extra.get("strong").map(String::as_str),
+            Some("H1234,G5485"),
+            "multi-value strong attribute must be stored verbatim"
+        );
+    }
+
+    // (4) Multiple Attribute Parts — colon-separated within the value string.
+    #[test]
+    fn multiple_attribute_parts_colon_separated() {
+        let source = doc_with("\\rb 話賄|はな:はなし\\rb*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "rb");
+        assert_eq!(extra.get("gloss").map(String::as_str), Some("はな:はなし"));
+    }
+
+    // (4) Multiple Attribute Parts — empty middle (`::`) and trailing colon preserved.
+    #[test]
+    fn multiple_attribute_parts_empty_middle() {
+        let source = doc_with("\\rb 神の子|かみ::こ\\rb*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "rb");
+        assert_eq!(extra.get("gloss").map(String::as_str), Some("かみ::こ"));
+    }
+
+    #[test]
+    fn multiple_attribute_parts_trailing_empty() {
+        let source = doc_with("\\rb 定ま|さだ:\\rb*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "rb");
+        assert_eq!(extra.get("gloss").map(String::as_str), Some("さだ:"));
+    }
+
+    // (5) User-Defined Attributes — `x-` prefix is parsed and preserved verbatim.
+    #[test]
+    fn user_defined_x_prefix_attribute() {
+        let source = doc_with("\\w gracious|x-myattr=\"value\"\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(extra.get("x-myattr").map(String::as_str), Some("value"));
+    }
+
+    // (5) User-Defined Attributes — `z-` prefix likewise accepted.
+    #[test]
+    fn user_defined_z_prefix_attribute() {
+        let source = doc_with("\\w gracious|z-tag=\"v\"\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(extra.get("z-tag").map(String::as_str), Some("v"));
+    }
+
+    // (5) User-Defined Attributes — mixed with canonical attribute, order preserved.
+    #[test]
+    fn user_defined_mixed_with_canonical() {
+        let source = doc_with("\\w gracious|lemma=\"grace\" x-myattr=\"v\"\\w*");
+        assert_byte_identical_roundtrip(&source);
+        let extra = first_char_attrs(&source, "w");
+        assert_eq!(extra.get("lemma").map(String::as_str), Some("grace"));
+        assert_eq!(extra.get("x-myattr").map(String::as_str), Some("v"));
     }
 }

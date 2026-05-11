@@ -134,11 +134,6 @@ impl HtmlRenderer {
                 TokenData::OptBreak => {
                     push_fragment(&mut output, &mut stack, "<wbr>");
                 }
-                TokenData::AttributeList { entries } => {
-                    if let Some(top) = stack.last_mut() {
-                        push_attribute_entries(&mut top.attrs, entries);
-                    }
-                }
                 TokenData::BookCode { code, .. } => {
                     if !stack.iter().any(|item| {
                         item.scope_kind == StructuralScopeKind::Header
@@ -169,6 +164,8 @@ impl HtmlRenderer {
                     name,
                     metadata,
                     structural,
+                    attributes,
+                    ..
                 } => {
                     if in_note_body {
                         close_for_note_structural(&mut output, &mut stack, name);
@@ -176,8 +173,8 @@ impl HtmlRenderer {
                     let mut attrs =
                         common_marker_attrs(marker_data_type(name, metadata.kind), name);
                     attrs.push(("data-usfm-id".to_string(), token_id_str(&tokens[index].id)));
-                    if let Some(entries) = next_attribute_list(tokens, index) {
-                        push_attribute_entries(&mut attrs, entries);
+                    if !attributes.is_empty() {
+                        push_attribute_entries(&mut attrs, attributes);
                     }
                     stack.push(OpenElement {
                         marker: Some(name),
@@ -456,7 +453,9 @@ fn open_marker_element<'a>(
             table_cell_align(name).to_string(),
         ));
     }
-    if let Some(entries) = next_attribute_list(tokens, index) {
+    if let Some(entries) = tokens[index].attributes()
+        && !entries.is_empty()
+    {
         push_attribute_entries(&mut attrs, entries);
     }
 
@@ -512,7 +511,7 @@ fn parse_note_tokens(
                 // force_close_notes. Lint still reports UnclosedNote.
                 if index > start
                     && depth > 0
-                    && note_recovery_boundary(structural.scope_kind)
+                    && structural.scope_kind.closes_unclosed_note()
                 {
                     return (caller, content_start, index, index);
                 }
@@ -534,36 +533,12 @@ fn parse_note_tokens(
     (caller, content_start, tokens.len(), tokens.len())
 }
 
-fn note_recovery_boundary(kind: StructuralScopeKind) -> bool {
-    matches!(
-        kind,
-        StructuralScopeKind::Block
-            | StructuralScopeKind::Chapter
-            | StructuralScopeKind::Verse
-            | StructuralScopeKind::Sidebar
-            | StructuralScopeKind::TableRow
-            | StructuralScopeKind::TableCell
-            | StructuralScopeKind::Header
-            | StructuralScopeKind::Periph
-    )
-}
-
 fn next_number_text(tokens: &[Token<'_>], marker_index: usize) -> Option<String> {
     match tokens.get(marker_index + 1).map(|token| &token.data) {
         Some(TokenData::Number { start, end, .. }) => Some(match end {
             Some(end) => format!("{start}-{end}"),
             None => start.to_string(),
         }),
-        _ => None,
-    }
-}
-
-fn next_attribute_list<'a>(
-    tokens: &'a [Token<'a>],
-    marker_index: usize,
-) -> Option<&'a [AttributeItem<'a>]> {
-    match tokens.get(marker_index + 1).map(|token| &token.data) {
-        Some(TokenData::AttributeList { entries }) => Some(entries.as_slice()),
         _ => None,
     }
 }

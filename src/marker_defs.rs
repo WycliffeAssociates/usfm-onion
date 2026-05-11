@@ -220,6 +220,34 @@ pub enum StructuralScopeKind {
     Meta,
 }
 
+impl StructuralScopeKind {
+    /// Single source of truth for "does opening a marker of this scope kind
+    /// terminate an unclosed footnote/cross-reference?" Lossy export surfaces
+    /// (vref, html, usj/usx via export_tree) must agree on this boundary or
+    /// they will disagree about whether content after a missing `\f*` belongs
+    /// inside the note. Lossless surfaces (token stream, CST) do not apply
+    /// this rule; they preserve source exactly.
+    ///
+    /// Note: `export_tree` currently expresses the equivalent rule
+    /// imperatively across `MarkerKind` branches rather than calling this
+    /// predicate (its dispatch is `MarkerKind`-based and has richer
+    /// per-branch logic). If this set changes, audit `export_tree::dispatch`
+    /// as well.
+    pub fn closes_unclosed_note(self) -> bool {
+        matches!(
+            self,
+            StructuralScopeKind::Block
+                | StructuralScopeKind::Chapter
+                | StructuralScopeKind::Verse
+                | StructuralScopeKind::Sidebar
+                | StructuralScopeKind::TableRow
+                | StructuralScopeKind::TableCell
+                | StructuralScopeKind::Header
+                | StructuralScopeKind::Periph
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct StructuralMarkerInfo {
     pub scope_kind: StructuralScopeKind,

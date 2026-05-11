@@ -171,3 +171,66 @@ I think can just wholesale keep things as they were unless you see a reason not 
 USFM_BENCH_CORPORA=examples.bsb cargo bench --bench lint
 USFM_BENCH_CORPORA="en_ulb en_ult" cargo bench --bench lint
 USFM_BENCH_CORPORA=all cargo bench --bench lint
+
+
+
+## Refactors
+  1. Docs folder — Right, the two plans (plan-whitespace-lint-rules.md, plan-marker-data-curation.md) are still deferred work, not done. They
+  were landed in 8040ed1 as roadmaps. The marker-data one should go first since lint rules depend on clean lookup_spec_marker resolution.
+
+  2. HTML 1.94× scaling outlier — Worth profiling. Most likely culprits in order: (a) small-string allocation churn in the renderer (each tag
+  open/close, attribute write), (b) a shared String or Vec being grown without with_capacity, (c) some accidental serialization point (Mutex,
+  or a writer the books share). Easy first check: run samply on the html op and look for alloc/realloc dominance vs. actual formatting work.
+  If it's allocs, pre-size the output buffer per book based on input size × a small multiplier.
+
+  3. Attributes as their own CST node — I think you're right to question this. For losslessness with default-attribute shorthand (\w 
+  word|lemma\w* style), the tuple-of-fragments approach is cleaner: each token carries an optional ordered attribute list where each entry is
+  either Named(key, value) or DefaultValue(value), and round-tripping is just emit-in-order. That makes the "is this the default attribute"
+  question a property of the position, not a flag on a separate node. Worth a small spike before committing — render-LTR round-trip parity is
+  the test that matters.
+
+  4. Wasm bindings — Agree, hand-written wasm_bindgen for a large surface is painful. Two paths: (a) tsify + serde-wasm-bindgen to auto-derive
+   TS types from the Rust types you already have, or (b) a single run(op: &str, input: &str, opts: JsValue) -> JsValue entry that dispatches —
+   fewer bindings, JS side gets a thin wrapper. (a) is nicer for DX, (b) is nicer for bundle size and maintenance.
+
+  5. Playground → sampling harness — Sounds like you want two separate things: a real CLI (subcommands per op, like usfm3) and a
+  samply-friendly iter harness where every op is a one-liner you toggle. I'd keep playground as the sampling harness — rename it
+  bin/sample.rs, import the crate glob, have each op be // run_lint(&doc, N_ITERS); lines you uncomment. Move the user-facing ops to a proper
+  bin/usfm.rs clap CLI. They have different jobs.
+
+  6. README audit + drop execution.ndjson/omni.ndjson — Yes, those names predate the current shape of things. Worth a pass.
+
+  7. ICU-style lint labels — Yes, that's the term — ICU MessageFormat. Friendly default messages with named placeholders ({marker}, {line},
+  etc.) and a stable rule ID separate from the human message. Lets you localize later and lets tooling group by ID while humans read the
+  message. Worth defining the shape (ID, severity, message template, placeholders) before adding more rules — ties into the
+  whitespace-lint-rules plan.
+
+  Want me to dig into any of these? My instinct on ordering: 3 (CST attributes) is the most architectural and blocks losslessness claims, so
+  worth resolving early; 2 (html profiling) is a quick win; 7 (ICU labels) should land before the whitespace rules plan starts.
+
+
+
+8. Code reuse / dedup / splitting: 
+     Audit results:
+  - USJ ✅ already correct (export tree has force_close_notes for chapter/paragraph/header/meta/periph/tablerow/sidebar; verse goes through
+   close_open_meta which catches it).
+  - USX ✅ same — uses the export tree.
+  - HTML ❌ was broken — parse_note_tokens scanned to EOF when no \f* was found, nesting everything subsequent inside <aside>. Now fixed.
+
+  The fix: parse_note_tokens now stops at the first block-scope marker when a note is open, matching the same StructuralScopeKind set vref
+  uses. Helper returns a fourth value (resume_index) so the render loop knows where to pick up — body_end + 1 for an explicit \f* close
+  (skip past it), or body_end itself for recovery (process the boundary marker normally next iteration).
+
+  Tests added on all three surfaces asserting GEN 1:2, GEN 2, and GEN 2:1 all appear after the unclosed footnote, and that none leak into
+  the note body. 98/98 pass. WASM still builds.
+
+  On your point about lossless surfaces:
+  - Token stream and CST: lossless by design, no recovery applied. Consumers that need exact source preservation use these.
+  - to_vref, to_html, to_usj, to_usx: lossy by definition, recovery now consistently applied.
+
+  The commit message documents this contract explicitly so future readers know which surfaces to reach for under what need.
+
+  Code reuse note: I noticed all three lossy paths now have the same boundary set. There's a soft case for hoisting note_recovery_boundary
+  into crate::marker_defs (next to StructuralScopeKind) so the rule lives in one place. I didn't do it because the call sites are tiny (one
+   matches! macro each) and the indirection costs more than the dedup saves at this scale. If we add a fifth surface or the boundary set
+  ever drifts, that's the moment to consolidate.

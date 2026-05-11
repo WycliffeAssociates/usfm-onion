@@ -42,8 +42,7 @@ pub(crate) fn structural_token<'a>(tokens: &[Token<'a>], index: usize) -> Struct
         | TokenData::OptBreak
         | TokenData::BookCode { .. }
         | TokenData::Number { .. }
-        | TokenData::Text
-        | TokenData::AttributeList { .. } => StructuralToken::Leaf,
+        | TokenData::Text => StructuralToken::Leaf,
     }
 }
 

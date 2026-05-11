@@ -67,6 +67,9 @@ pub struct AttributeEntryToken<'a> {
     pub lexeme: &'a str,
     pub key: &'a str,
     pub value: &'a str,
+    /// USFM 3.1 default-attribute shorthand: bare value with no `key=`.
+    /// `key` is empty when true; resolves to the marker's default attribute at serialization time.
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -238,7 +241,6 @@ pub enum TokenKind {
     BookCode,
     Number,
     Text,
-    AttributeList,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -247,6 +249,9 @@ pub struct AttributeItem<'a> {
     pub source: &'a str,
     pub key: &'a str,
     pub value: &'a str,
+    /// True when the source used USFM default-attribute shorthand (bare value, no `key=`).
+    /// `key` is empty in that case; consumers should expand via `marker_default_attribute`.
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -259,6 +264,16 @@ pub enum TokenData<'a> {
         metadata: MarkerMetadata,
         structural: StructuralMarkerInfo,
         nested: bool,
+        /// USFM 3.1 character-level attributes attached to this opening marker.
+        /// Empty when the source had no `|...` attribute list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attributes: Vec<AttributeItem<'a>>,
+        /// Verbatim `|...` attribute-list slice plus its byte span in the source,
+        /// kept so `tokens_to_usfm` can re-emit it at exactly the original
+        /// position regardless of whether this marker has an explicit closer.
+        /// `None` when no attribute list was present.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        attribute_source: Option<(Span, &'a str)>,
     },
     EndMarker {
         name: &'a str,
@@ -270,6 +285,15 @@ pub enum TokenData<'a> {
         name: &'a str,
         metadata: MarkerMetadata,
         structural: StructuralMarkerInfo,
+        /// USFM 3.1 attributes attached to a milestone-start (e.g. `\zaln-s |...\*`).
+        /// Empty for milestone-ends and milestones without an attribute list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attributes: Vec<AttributeItem<'a>>,
+        /// Verbatim `|...` attribute-list slice plus its byte span in the source,
+        /// kept so `tokens_to_usfm` can re-emit it at exactly the original position.
+        /// `None` when no attribute list was present.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        attribute_source: Option<(Span, &'a str)>,
     },
     MilestoneEnd,
     BookCode {
@@ -282,9 +306,6 @@ pub enum TokenData<'a> {
         kind: NumberRangeKind,
     },
     Text,
-    AttributeList {
-        entries: Vec<AttributeItem<'a>>,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -309,7 +330,17 @@ impl<'a> Token<'a> {
             TokenData::BookCode { .. } => TokenKind::BookCode,
             TokenData::Number { .. } => TokenKind::Number,
             TokenData::Text => TokenKind::Text,
-            TokenData::AttributeList { .. } => TokenKind::AttributeList,
+        }
+    }
+
+    /// Returns the USFM 3.1 attribute list attached to this marker/milestone, if any.
+    /// Returns `None` for tokens that cannot carry attributes (text, numbers, end markers, etc.).
+    pub fn attributes(&self) -> Option<&[AttributeItem<'a>]> {
+        match &self.data {
+            TokenData::Marker { attributes, .. } | TokenData::Milestone { attributes, .. } => {
+                Some(attributes.as_slice())
+            }
+            _ => None,
         }
     }
 
@@ -327,11 +358,54 @@ impl<'a> Token<'a> {
     }
 }
 
+/// Serialize a token stream back to USFM, lossless byte-for-byte against the
+/// original source.
+///
+/// Each marker/milestone's `attribute_source` (verbatim `|...` slice) is queued
+/// with its original byte span and emitted at the moment we reach a token whose
+/// own span starts at or past the attribute list's start position. This works
+/// uniformly for character markers (`\w word|attr\w*`), milestones
+/// (`\zaln-s |attr\*`), and paragraph-level markers (`\periph title|attr\n`)
+/// without needing to know whether the marker has an explicit closer.
 pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
-    tokens
-        .iter()
-        .map(Token::to_usfm_fragment)
-        .collect::<String>()
+    let mut output = String::new();
+    let mut pending: Vec<(Span, &str)> = Vec::new();
+
+    for token in tokens {
+        // Drain any pending attribute slices whose original position came before
+        // this token. `pending` stays sorted because attribute lists are queued
+        // in source order during the forward walk.
+        while pending
+            .first()
+            .is_some_and(|(span, _)| span.start <= token.span.start)
+        {
+            let (_, slice) = pending.remove(0);
+            output.push_str(slice);
+        }
+
+        output.push_str(token.source);
+
+        if let TokenData::Marker {
+            attribute_source: Some((span, slice)),
+            ..
+        }
+        | TokenData::Milestone {
+            attribute_source: Some((span, slice)),
+            ..
+        } = &token.data
+        {
+            pending.push((*span, slice));
+        }
+    }
+
+    // Any remaining pending slices live at or beyond the last token's start;
+    // emit them in source order.
+    pending.sort_by_key(|(span, _)| span.start);
+    for (_, slice) in pending {
+        output.push_str(slice);
+    }
+
+    output
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

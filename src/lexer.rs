@@ -67,6 +67,12 @@ pub fn lex(source: &str) -> ScanResult<'_> {
                 continue;
             }
 
+            if let Some((entry, end)) = consume_bare_default_value(source, index) {
+                tokens.push(ScanToken::AttributeEntry(entry));
+                index = end;
+                continue;
+            }
+
             in_attribute_run = false;
         }
 
@@ -227,6 +233,7 @@ fn consume_attribute_entry<'a>(
                     lexeme: &source[start..end],
                     key,
                     value: &source[value_start..cursor],
+                    is_default: false,
                 },
                 end,
             ));
@@ -240,6 +247,44 @@ fn consume_attribute_entry<'a>(
     }
 
     None
+}
+
+fn consume_bare_default_value<'a>(
+    source: &'a str,
+    start: usize,
+) -> Option<(AttributeEntryToken<'a>, usize)> {
+    let bytes = source.as_bytes();
+    let mut cursor = start;
+    while let Some(&byte) = bytes.get(cursor) {
+        match byte {
+            b'\\' | b'|' | b'\r' | b'\n' => break,
+            _ => cursor += 1,
+        }
+    }
+
+    let mut end = cursor;
+    while end > start {
+        match bytes[end - 1] {
+            b' ' | b'\t' => end -= 1,
+            _ => break,
+        }
+    }
+
+    if end == start {
+        return None;
+    }
+
+    let span = Span::new(start as u32, end as u32);
+    Some((
+        AttributeEntryToken {
+            span,
+            lexeme: &source[start..end],
+            key: "",
+            value: &source[start..end],
+            is_default: true,
+        },
+        end,
+    ))
 }
 
 fn consume_inline_whitespace<'a>(

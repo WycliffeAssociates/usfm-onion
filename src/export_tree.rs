@@ -21,7 +21,6 @@ pub(crate) enum ExportNode {
     },
     Milestone {
         marker_index: usize,
-        attribute_index: Option<usize>,
         end_index: Option<usize>,
         closed: bool,
     },
@@ -35,7 +34,6 @@ pub(crate) struct ExportContainerNode {
     pub kind: ExportContainerKind,
     pub token_index: usize,
     pub close_index: Option<usize>,
-    pub attribute_index: Option<usize>,
     pub children: Vec<ExportNode>,
 }
 
@@ -60,14 +58,12 @@ struct OpenMarker {
     kind: MarkerKind,
     token_index: usize,
     close_index: Option<usize>,
-    attribute_index: Option<usize>,
     children: Vec<ExportNode>,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct PendingMilestone {
     token_index: usize,
-    attribute_index: Option<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -98,7 +94,6 @@ impl BuilderState {
             kind: ExportContainerKind::Unknown,
             token_index,
             close_index: None,
-            attribute_index: None,
             children: Vec::new(),
         }));
     }
@@ -109,7 +104,6 @@ impl BuilderState {
             kind,
             token_index,
             close_index: None,
-            attribute_index: None,
             children: Vec::new(),
         });
     }
@@ -155,7 +149,6 @@ impl BuilderState {
         if let Some(milestone) = self.pending_milestone.take() {
             self.append_node(ExportNode::Milestone {
                 marker_index: milestone.token_index,
-                attribute_index: milestone.attribute_index,
                 end_index,
                 closed,
             });
@@ -167,12 +160,7 @@ pub(crate) fn build_export_document<'a>(tokens: &'a [Token<'a>]) -> ExportDocume
     let mut state = BuilderState::default();
 
     for (index, token) in tokens.iter().enumerate() {
-        if state.pending_milestone.is_some()
-            && !matches!(
-                token.kind(),
-                TokenKind::AttributeList | TokenKind::MilestoneEnd
-            )
-        {
+        if state.pending_milestone.is_some() && !matches!(token.kind(), TokenKind::MilestoneEnd) {
             state.close_pending_milestone(false, None);
         }
 
@@ -200,7 +188,6 @@ pub(crate) fn build_export_document<'a>(tokens: &'a [Token<'a>]) -> ExportDocume
                 state.append_leaf(index);
             }
             TokenData::Number { .. } => handle_number(index, &mut state),
-            TokenData::AttributeList { .. } => handle_attributes(index, &mut state),
         }
     }
 
@@ -220,10 +207,7 @@ fn handle_open(index: usize, token: &Token<'_>, state: &mut BuilderState, tokens
     };
 
     if matches!(token.data, TokenData::Milestone { .. }) {
-        state.pending_milestone = Some(PendingMilestone {
-            token_index: index,
-            attribute_index: None,
-        });
+        state.pending_milestone = Some(PendingMilestone { token_index: index });
         return;
     }
 
@@ -379,31 +363,11 @@ fn handle_number(index: usize, state: &mut BuilderState) {
     state.append_leaf(index);
 }
 
-fn handle_attributes(index: usize, state: &mut BuilderState) {
-    if let Some(milestone) = state.pending_milestone.as_mut() {
-        milestone.attribute_index = Some(index);
-        return;
-    }
-
-    if let Some(open) = state.stack.iter_mut().rev().find(|open| {
-        matches!(
-            open.kind,
-            MarkerKind::Character | MarkerKind::Figure | MarkerKind::Periph
-        )
-    }) {
-        open.attribute_index = Some(index);
-        return;
-    }
-
-    state.append_leaf(index);
-}
-
 fn finalize_open_marker(open: OpenMarker) -> ExportContainerNode {
     ExportContainerNode {
         kind: container_kind_from_marker_kind(open.kind, open.token_index),
         token_index: open.token_index,
         close_index: open.close_index,
-        attribute_index: open.attribute_index,
         children: open.children,
     }
 }

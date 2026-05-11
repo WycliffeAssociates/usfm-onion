@@ -1598,9 +1598,15 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
             metadata,
             structural,
             nested,
+            attributes,
             ..
+        } => {
+            value.nested = Some(*nested);
+            value.marker_metadata = Some(map_marker_metadata(*metadata));
+            value.structural = Some(map_structural_info(*structural));
+            value.attributes = attributes.iter().map(map_attribute_item).collect();
         }
-        | NativeTokenData::EndMarker {
+        NativeTokenData::EndMarker {
             metadata,
             structural,
             nested,
@@ -1613,10 +1619,12 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
         NativeTokenData::Milestone {
             metadata,
             structural,
+            attributes,
             ..
         } => {
             value.marker_metadata = Some(map_marker_metadata(*metadata));
             value.structural = Some(map_structural_info(*structural));
+            value.attributes = attributes.iter().map(map_attribute_item).collect();
         }
         NativeTokenData::BookCode { code, is_valid } => {
             value.book_code = Some((*code).to_string());
@@ -1628,9 +1636,6 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
                 end: *end,
                 kind: number_kind_str(*kind).to_string(),
             });
-        }
-        NativeTokenData::AttributeList { entries } => {
-            value.attributes = entries.iter().map(map_attribute_item).collect();
         }
         NativeTokenData::Newline
         | NativeTokenData::OptBreak
@@ -2192,7 +2197,6 @@ fn parse_token_kind(value: &str) -> Result<NativeTokenKind, JsError> {
         "bookCode" => Ok(NativeTokenKind::BookCode),
         "number" => Ok(NativeTokenKind::Number),
         "text" => Ok(NativeTokenKind::Text),
-        "attributeList" => Ok(NativeTokenKind::AttributeList),
         _ => Err(js_error(format!("unknown token kind '{value}'"))),
     }
 }
@@ -2208,7 +2212,6 @@ fn token_kind_str(kind: NativeTokenKind) -> &'static str {
         NativeTokenKind::BookCode => "bookCode",
         NativeTokenKind::Number => "number",
         NativeTokenKind::Text => "text",
-        NativeTokenKind::AttributeList => "attributeList",
     }
 }
 

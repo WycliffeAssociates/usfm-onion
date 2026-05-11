@@ -19,8 +19,28 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
     while cursor < lexemes.len() {
         if matches!(lexemes[cursor], ScanToken::Pipe(_)) {
             flush_pending_whitespace(source, &mut state, &mut tokens);
-            let (token, next_cursor) = build_attribute_list(source, lexemes, cursor, &state);
-            push_token(source, &mut tokens, token);
+            let (entries, attr_span, attr_source, next_cursor) =
+                consume_attribute_list(source, lexemes, cursor);
+            if entries.is_empty() {
+                // Malformed input (e.g. a lone `|` with no key="value" after it).
+                // Preserve the bytes as a Text token so round-trip stays lossless;
+                // do not pollute the preceding marker's `attribute_source`.
+                let token = Token {
+                    id: TokenId::new("", 0),
+                    sid: state.current_sid.clone(),
+                    span: attr_span,
+                    source: attr_source,
+                    data: TokenData::Text,
+                };
+                push_token(source, &mut tokens, token);
+            } else {
+                attach_attributes_to_preceding_marker(
+                    &mut tokens,
+                    entries,
+                    attr_span,
+                    attr_source,
+                );
+            }
             cursor = next_cursor;
             continue;
         }
@@ -66,6 +86,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                             metadata: marker.metadata,
                             structural: structural_marker_info(marker.name, marker.metadata.kind),
                             nested: false,
+                            attributes: Vec::new(),
+                            attribute_source: None,
                         },
                     );
                     push_token(source, &mut tokens, marker_token);
@@ -100,6 +122,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                             metadata: marker.metadata,
                             structural: structural_marker_info(marker.name, marker.metadata.kind),
                             nested: false,
+                            attributes: Vec::new(),
+                            attribute_source: None,
                         },
                         next_sid.clone(),
                     );
@@ -130,6 +154,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         metadata: marker.metadata,
                         structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: false,
+                        attributes: Vec::new(),
+                            attribute_source: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -145,6 +171,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         metadata: marker.metadata,
                         structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: true,
+                        attributes: Vec::new(),
+                            attribute_source: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -189,6 +217,8 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         name: marker.name,
                         metadata: marker.metadata,
                         structural: structural_marker_info(marker.name, marker.metadata.kind),
+                        attributes: Vec::new(),
+                            attribute_source: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -353,24 +383,28 @@ fn pending_whitespace_between(lexemes: &[Lexeme<'_>], start: usize, end: usize) 
     }
 }
 
-fn build_attribute_list<'a>(
+/// Consume a `|attr="v" ...` block from the lexeme stream and return the parsed
+/// entries plus the verbatim source slice (`|...`, including any internal
+/// whitespace) so the caller can attach both to the owning marker. No standalone
+/// token is emitted into the stream — `tokens_to_usfm` reproduces the source by
+/// emitting the slice at the correct position relative to the owning marker.
+fn consume_attribute_list<'a>(
     source: &'a str,
     lexemes: &[Lexeme<'a>],
     start: usize,
-    state: &ParseState<'a>,
-) -> (Token<'a>, usize) {
+) -> (Vec<AttributeItem<'a>>, Span, &'a str, usize) {
     let ScanToken::Pipe(pipe) = lexemes[start] else {
         unreachable!("attribute list must start with pipe");
     };
 
     let mut entries = Vec::new();
-    let mut end_span = pipe.span;
+    let mut end = pipe.span.end;
     let mut cursor = start + 1;
 
     while cursor < lexemes.len() {
         match lexemes[cursor] {
             ScanToken::Whitespace(ws) => {
-                end_span = ws.span;
+                end = ws.span.end;
                 cursor += 1;
             }
             ScanToken::AttributeEntry(entry) => {
@@ -379,27 +413,59 @@ fn build_attribute_list<'a>(
                     source: entry.lexeme,
                     key: entry.key,
                     value: entry.value,
+                    is_default: entry.is_default,
                 });
-                end_span = entry.span;
+                end = entry.span.end;
                 cursor += 1;
             }
             _ => break,
         }
     }
 
-    let start_span = state
-        .pending_ws
-        .map(|ws| ws.start)
-        .unwrap_or(pipe.span.start);
-    let span = Span::new(start_span, end_span.end);
-    let token = Token {
-        id: TokenId::new("", 0),
-        sid: state.current_sid.clone(),
-        span,
-        source: &source[span.as_range()],
-        data: TokenData::AttributeList { entries },
+    let span = Span::new(pipe.span.start, end);
+    let raw = &source[span.as_range()];
+    (entries, span, raw, cursor)
+}
+
+/// Attach a parsed attribute list to the most recent Marker or Milestone token.
+/// Stores both the semantic entries (for API/USJ/USX/HTML access) and the raw
+/// source slice (for byte-identical USFM round-trip via `tokens_to_usfm`).
+/// Orphan attribute lists (no preceding marker) are dropped — they are malformed
+/// USFM and there is no semantically meaningful place to attach them.
+fn attach_attributes_to_preceding_marker<'a>(
+    tokens: &mut [Token<'a>],
+    entries: Vec<AttributeItem<'a>>,
+    span: Span,
+    raw_source: &'a str,
+) {
+    let Some(target) = tokens.iter_mut().rev().find(|token| {
+        matches!(
+            token.data,
+            TokenData::Marker { .. } | TokenData::Milestone { .. }
+        )
+    }) else {
+        return;
     };
-    (token, cursor)
+    match &mut target.data {
+        TokenData::Marker {
+            attributes,
+            attribute_source,
+            ..
+        }
+        | TokenData::Milestone {
+            attributes,
+            attribute_source,
+            ..
+        } => {
+            if attributes.is_empty() {
+                *attributes = entries;
+            } else {
+                attributes.extend(entries);
+            }
+            *attribute_source = Some((span, raw_source));
+        }
+        _ => unreachable!("filtered above"),
+    }
 }
 
 fn advanced_sid<'a>(
@@ -549,14 +615,20 @@ mod tests {
     }
 
     #[test]
-    fn parse_groups_attribute_list() {
+    fn parse_attaches_attributes_to_owning_marker() {
         let parsed = parse("\\w gracious|lemma=\"grace\" strong=\"H1\"\\w*.");
-        assert!(
-            parsed
-                .tokens
-                .iter()
-                .any(|token| matches!(token.data, TokenData::AttributeList { .. }))
-        );
+        let word_marker = parsed
+            .tokens
+            .iter()
+            .find(|token| matches!(token.data, TokenData::Marker { name: "w", .. }))
+            .expect("\\w marker token");
+        let attrs = word_marker.attributes().expect("\\w carries attributes");
+        assert_eq!(attrs.len(), 2);
+        assert_eq!(attrs[0].key, "lemma");
+        assert_eq!(attrs[0].value, "grace");
+        assert!(!attrs[0].is_default);
+        assert_eq!(attrs[1].key, "strong");
+        assert_eq!(attrs[1].value, "H1");
         assert_eq!(
             into_usfm_from_tokens(&parsed.tokens),
             "\\w gracious|lemma=\"grace\" strong=\"H1\"\\w*."

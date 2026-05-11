@@ -767,7 +767,6 @@ fn token_kind_key(kind: TokenKind) -> &'static str {
         TokenKind::EndMarker => "endMarker",
         TokenKind::Milestone => "milestone",
         TokenKind::MilestoneEnd => "milestoneEnd",
-        TokenKind::AttributeList => "attributes",
         TokenKind::BookCode => "bookCode",
         TokenKind::Number => "number",
         TokenKind::Text => "text",

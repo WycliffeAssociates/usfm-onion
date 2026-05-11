@@ -1404,8 +1404,9 @@ fn lint_marker_balance_rules<T: LintableToken>(
 
         if kind == TokenKind::Milestone
             && enabled.has(LintCode::MissingMilestoneSelfClose)
-            && next_non_attribute_index(tokens, index + 1)
-                .is_none_or(|next| tokens[next].kind() != TokenKind::MilestoneEnd)
+            && tokens
+                .get(index + 1)
+                .is_none_or(|next| next.kind() != TokenKind::MilestoneEnd)
         {
             issues.push(simple_issue(
                 LintCode::MissingMilestoneSelfClose,
@@ -1868,7 +1869,6 @@ fn verse_has_text_or_note<T: LintableToken>(tokens: &[T], start: usize) -> bool 
                 }
                 return false;
             }
-            TokenKind::AttributeList => continue,
             _ => return false,
         }
     }
@@ -2076,15 +2076,6 @@ fn previous_significant_token_index<T: LintableToken>(tokens: &[T], end: usize) 
     while index > 0 {
         index -= 1;
         if tokens[index].kind() != TokenKind::Newline {
-            return Some(index);
-        }
-    }
-    None
-}
-
-fn next_non_attribute_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
-    for (index, token) in tokens.iter().enumerate().skip(start) {
-        if token.kind() != TokenKind::AttributeList {
             return Some(index);
         }
     }

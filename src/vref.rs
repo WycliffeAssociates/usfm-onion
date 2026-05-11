@@ -40,7 +40,7 @@ pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
                 // output. Lint still reports UnclosedNote, so the underlying
                 // source bug stays visible.
                 if !state.open_note_markers.is_empty()
-                    && closes_open_note(structural.scope_kind)
+                    && structural.scope_kind.closes_unclosed_note()
                 {
                     state.open_note_markers.clear();
                 }
@@ -90,8 +90,7 @@ pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
             | TokenData::OptBreak
             | TokenData::BookCode { .. }
             | TokenData::Milestone { .. }
-            | TokenData::MilestoneEnd
-            | TokenData::AttributeList { .. } => {
+            | TokenData::MilestoneEnd => {
                 pending_marker_name = None;
             }
         }
@@ -99,20 +98,6 @@ pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
 
     clear_current_verse(&mut state, &mut map);
     map
-}
-
-fn closes_open_note(kind: StructuralScopeKind) -> bool {
-    matches!(
-        kind,
-        StructuralScopeKind::Block
-            | StructuralScopeKind::Chapter
-            | StructuralScopeKind::Verse
-            | StructuralScopeKind::Sidebar
-            | StructuralScopeKind::TableRow
-            | StructuralScopeKind::TableCell
-            | StructuralScopeKind::Header
-            | StructuralScopeKind::Periph
-    )
 }
 
 pub fn vref_map_to_json_string(map: &VrefMap) -> String {
