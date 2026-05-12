@@ -33,6 +33,9 @@
     "check:wasm:web": "cargo check --manifest-path crates/usfm_onion_wasm/Cargo.toml --target wasm32-unknown-unknown",
     "test:wasm:bundler": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-web-package.mjs bundler",
     "test:wasm:web": "npm run build:wasm:web:dev && node scripts/test-web-package.mjs web",
-    "test:wasm": "npm run test:wasm:bundler && npm run test:wasm:web"
+    "test:wasm": "npm run test:wasm:bundler && npm run test:wasm:web",
+    "golden:wasm": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
+    "golden:wasm:update": "npm run build:wasm:bundler:dev && UPDATE_GOLDEN=1 node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
+    "golden:wasm:web": "npm run build:wasm:web:dev && node scripts/wasm-golden.mjs web"
   }
 }

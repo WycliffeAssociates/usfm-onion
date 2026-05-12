@@ -120,40 +120,39 @@ export type LintSeverity = "error" | "warning";
 export type LintIssueType = "usfm" | "content";
 export type LintCode =
 | "missing-id-marker"
-| "missing-separator-after-marker"
-| "empty-paragraph"
-| "number-range-after-chapter-marker"
-| "verse-range-expected-after-verse-marker"
-| "verse-content-not-empty"
-| "unknown-token"
-| "char-not-closed"
-| "unclosed-note"
-| "paragraph-before-first-chapter"
-| "verse-before-first-chapter"
-| "note-submarker-outside-note"
 | "duplicate-id-marker"
 | "id-marker-not-at-file-start"
-| "chapter-metadata-outside-chapter"
-| "verse-metadata-outside-verse"
+| "empty-paragraph"
 | "missing-chapter-number"
 | "missing-verse-number"
+| "verse-is-empty"
+| "unknown-token"
+| "unknown-marker"
+| "unknown-close-marker"
+| "content-before-first-chapter"
+| "verse-outside-explicit-paragraph"
+| "note-submarker-outside-note"
+| "metadata-outside-target"
+| "marker-not-valid-in-context"
 | "missing-milestone-self-close"
-| "implicitly-closed-marker"
 | "stray-close-marker"
 | "misnested-close-marker"
+| "implicitly-closed-marker"
 | "unclosed-marker"
 | "duplicate-chapter-number"
 | "chapter-expected-increase-by-one"
+| "inconsistent-chapter-label"
 | "duplicate-verse-number"
 | "verse-expected-increase-by-one"
 | "invalid-number-range"
 | "number-range-not-preceded-by-marker-expecting-number"
-| "verse-text-follows-verse-range"
-| "unknown-marker"
-| "unknown-close-marker"
-| "inconsistent-chapter-label"
-| "marker-not-valid-in-context"
-| "verse-outside-explicit-paragraph";
+| "missing-whitespace-before-marker"
+| "missing-horizontal-whitespace-after-marker-name"
+| "missing-tag-end-delimiter-after-marker"
+| "excess-whitespace-around-marker"
+| "excess-whitespace-in-content"
+| "missing-content-space-after-close-marker"
+| "verse-in-section-or-other-paragraph";
 export type FormatRule =
 | "recover-malformed-markers"
 | "collapse-whitespace-in-text"
@@ -454,19 +453,6 @@ export class ParsedUsfm {
     diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions): DiffsByChapterMap;
 }
 
-export class ParsedUsfmBatch {
-    private constructor();
-    items(): ParsedUsfm[];
-    tokens(): Token[][];
-    lint(options?: LintOptions): LintResult[];
-    format(options?: FormatOptions): string[];
-    toUsfm(): string[];
-    toUsj(): UsjDocument[];
-    toUsx(): string[];
-    toHtml(options?: HtmlOptions): string[];
-    toVref(): VrefMap[];
-}
-
 export class UsfmMarkerCatalog {
     private constructor();
     all(): MarkerInfo[];
@@ -475,15 +461,12 @@ export class UsfmMarkerCatalog {
 }
 
 export function parse(source: string): ParsedUsfm;
-export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
 export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
-export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
 export function formatTokensMut(tokens: FormatToken[], options?: FormatOptions): FormatToken[];
-export function formatTokenBatch(tokenBatches: FormatToken[][], options?: FormatOptions): FormatResult[];
 export function tokensToUsfm(tokens: Token[]): string;
 export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
@@ -506,7 +489,6 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_parsedusfm_free: (a: number, b: number) => void;
-    readonly __wbg_parsedusfmbatch_free: (a: number, b: number) => void;
     readonly __wbg_usfmmarkercatalog_free: (a: number, b: number) => void;
     readonly applyTokenFix: (a: any, b: any) => [number, number, number];
     readonly diffTokens: (a: any, b: any, c: number) => [number, number, number];
@@ -514,19 +496,16 @@ export interface InitOutput {
     readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly formatRuleMeta: () => [number, number, number];
     readonly formatRules: () => [number, number, number];
-    readonly formatTokenBatch: (a: any, b: number) => [number, number, number];
     readonly formatTokens: (a: any, b: number) => [number, number, number];
     readonly formatTokensMut: (a: any, b: number) => [number, number, number];
     readonly formatUsfm: (a: number, b: number, c: number) => [number, number, number, number];
     readonly isKnownMarker: (a: number, b: number) => number;
     readonly lintCodeMeta: () => [number, number, number];
     readonly lintCodes: () => [number, number, number];
-    readonly lintTokenBatch: (a: any, b: number) => [number, number, number];
     readonly lintTokens: (a: any, b: number) => [number, number, number];
     readonly lintUsfm: (a: number, b: number, c: number) => [number, number, number];
     readonly markerInfo: (a: number, b: number) => [number, number, number];
     readonly parse: (a: number, b: number) => number;
-    readonly parseBatch: (a: any) => [number, number, number];
     readonly parsedusfm_applyTokenFix: (a: number, b: any) => [number, number, number];
     readonly parsedusfm_cst: (a: number) => [number, number, number];
     readonly parsedusfm_diff: (a: number, b: number, c: number) => [number, number, number];
@@ -534,21 +513,12 @@ export interface InitOutput {
     readonly parsedusfm_format: (a: number, b: number) => [number, number, number, number];
     readonly parsedusfm_lint: (a: number, b: number) => [number, number, number];
     readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly parsedusfm_to_html: (a: number, b: number) => [number, number, number, number];
-    readonly parsedusfm_to_usfm: (a: number) => [number, number];
-    readonly parsedusfm_to_usj: (a: number) => [number, number, number];
-    readonly parsedusfm_to_usx: (a: number) => [number, number, number, number];
-    readonly parsedusfm_to_vref: (a: number) => [number, number, number];
+    readonly parsedusfm_toHtml: (a: number, b: number) => [number, number, number, number];
+    readonly parsedusfm_toUsfm: (a: number) => [number, number];
+    readonly parsedusfm_toUsj: (a: number) => [number, number, number];
+    readonly parsedusfm_toUsx: (a: number) => [number, number, number, number];
+    readonly parsedusfm_toVref: (a: number) => [number, number, number];
     readonly parsedusfm_tokens: (a: number) => [number, number, number];
-    readonly parsedusfmbatch_format: (a: number, b: number) => [number, number, number];
-    readonly parsedusfmbatch_items: (a: number) => any;
-    readonly parsedusfmbatch_lint: (a: number, b: number) => [number, number, number];
-    readonly parsedusfmbatch_to_html: (a: number, b: number) => [number, number, number];
-    readonly parsedusfmbatch_to_usfm: (a: number) => [number, number, number];
-    readonly parsedusfmbatch_to_usj: (a: number) => [number, number, number];
-    readonly parsedusfmbatch_to_usx: (a: number) => [number, number, number];
-    readonly parsedusfmbatch_to_vref: (a: number) => [number, number, number];
-    readonly parsedusfmbatch_tokens: (a: number) => [number, number, number];
     readonly revertDiffBlock: (a: any, b: any, c: number, d: number, e: number) => [number, number, number];
     readonly revertDiffBlocks: (a: any, b: any, c: any, d: number) => [number, number, number];
     readonly tokensToHtml: (a: any, b: number) => [number, number, number, number];

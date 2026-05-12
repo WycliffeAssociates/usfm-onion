@@ -31,6 +31,7 @@ use usfm_onion::marker_defs::{
     BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, NoteFamily,
     NoteSubkind, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
 };
+use usfm_onion::walker::WalkableToken;
 use usfm_onion::markers::{
     MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
     UsfmMarkerInfo as NativeUsfmMarkerInfo, is_known_marker, marker_catalog, marker_info,
@@ -166,40 +167,39 @@ export type LintSeverity = "error" | "warning";
 export type LintIssueType = "usfm" | "content";
 export type LintCode =
   | "missing-id-marker"
-  | "missing-separator-after-marker"
-  | "empty-paragraph"
-  | "number-range-after-chapter-marker"
-  | "verse-range-expected-after-verse-marker"
-  | "verse-content-not-empty"
-  | "unknown-token"
-  | "char-not-closed"
-  | "unclosed-note"
-  | "paragraph-before-first-chapter"
-  | "verse-before-first-chapter"
-  | "note-submarker-outside-note"
   | "duplicate-id-marker"
   | "id-marker-not-at-file-start"
-  | "chapter-metadata-outside-chapter"
-  | "verse-metadata-outside-verse"
+  | "empty-paragraph"
   | "missing-chapter-number"
   | "missing-verse-number"
+  | "verse-is-empty"
+  | "unknown-token"
+  | "unknown-marker"
+  | "unknown-close-marker"
+  | "content-before-first-chapter"
+  | "verse-outside-explicit-paragraph"
+  | "note-submarker-outside-note"
+  | "metadata-outside-target"
+  | "marker-not-valid-in-context"
   | "missing-milestone-self-close"
-  | "implicitly-closed-marker"
   | "stray-close-marker"
   | "misnested-close-marker"
+  | "implicitly-closed-marker"
   | "unclosed-marker"
   | "duplicate-chapter-number"
   | "chapter-expected-increase-by-one"
+  | "inconsistent-chapter-label"
   | "duplicate-verse-number"
   | "verse-expected-increase-by-one"
   | "invalid-number-range"
   | "number-range-not-preceded-by-marker-expecting-number"
-  | "verse-text-follows-verse-range"
-  | "unknown-marker"
-  | "unknown-close-marker"
-  | "inconsistent-chapter-label"
-  | "marker-not-valid-in-context"
-  | "verse-outside-explicit-paragraph";
+  | "missing-whitespace-before-marker"
+  | "missing-horizontal-whitespace-after-marker-name"
+  | "missing-tag-end-delimiter-after-marker"
+  | "excess-whitespace-around-marker"
+  | "excess-whitespace-in-content"
+  | "missing-content-space-after-close-marker"
+  | "verse-in-section-or-other-paragraph";
 export type FormatRule =
   | "recover-malformed-markers"
   | "collapse-whitespace-in-text"
@@ -882,21 +882,27 @@ struct AdapterToken {
     number_info: Option<(u32, Option<u32>, NativeNumberRangeKind)>,
 }
 
-impl LintableToken for AdapterToken {
+impl WalkableToken for AdapterToken {
     fn kind(&self) -> NativeTokenKind {
         self.kind
     }
 
-    fn span(&self) -> Option<NativeSpan> {
-        self.span
+    fn marker(&self) -> Option<&str> {
+        self.marker.as_deref()
+    }
+
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        self.structural
     }
 
     fn text(&self) -> &str {
         &self.text
     }
+}
 
-    fn marker(&self) -> Option<&str> {
-        self.marker.as_deref()
+impl LintableToken for AdapterToken {
+    fn span(&self) -> Option<NativeSpan> {
+        self.span
     }
 
     fn sid(&self) -> Option<String> {
@@ -905,10 +911,6 @@ impl LintableToken for AdapterToken {
 
     fn id(&self) -> Option<String> {
         Some(self.id.clone())
-    }
-
-    fn structural(&self) -> Option<StructuralMarkerInfo> {
-        self.structural
     }
 
     fn number_info(&self) -> Option<(u32, Option<u32>, NativeNumberRangeKind)> {
@@ -1013,25 +1015,30 @@ impl ParsedUsfm {
         Ok(format_usfm(&self.source, options))
     }
 
+    #[wasm_bindgen(js_name = toUsfm)]
     pub fn to_usfm(&self) -> String {
         let parsed = native_parse(&self.source);
         tokens_to_usfm(&parsed.tokens)
     }
 
+    #[wasm_bindgen(js_name = toUsj)]
     pub fn to_usj(&self) -> Result<JsValue, JsError> {
         let document = usfm_to_usj(&self.source).map_err(js_error)?;
         to_js_value(&document)
     }
 
+    #[wasm_bindgen(js_name = toUsx)]
     pub fn to_usx(&self) -> Result<String, JsError> {
         usfm_to_usx(&self.source).map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = toHtml)]
     pub fn to_html(&self, options: Option<JsValue>) -> Result<String, JsError> {
         let options = parse_html_options(options)?;
         Ok(usfm_to_html(&self.source, options))
     }
 
+    #[wasm_bindgen(js_name = toVref)]
     pub fn to_vref(&self) -> Result<JsValue, JsError> {
         to_js_value(&vref_to_object(usfm_to_vref_map(&self.source)))
     }
@@ -2054,85 +2061,44 @@ fn parse_lint_code(value: String) -> Result<NativeLintCode, JsError> {
 fn lint_code_variants() -> Vec<NativeLintCode> {
     vec![
         NativeLintCode::MissingIdMarker,
-        NativeLintCode::MissingSeparatorAfterMarker,
-        NativeLintCode::EmptyParagraph,
-        NativeLintCode::NumberRangeAfterChapterMarker,
-        NativeLintCode::VerseRangeExpectedAfterVerseMarker,
-        NativeLintCode::VerseContentNotEmpty,
-        NativeLintCode::UnknownToken,
-        NativeLintCode::CharNotClosed,
-        NativeLintCode::UnclosedNote,
-        NativeLintCode::ParagraphBeforeFirstChapter,
-        NativeLintCode::VerseBeforeFirstChapter,
-        NativeLintCode::NoteSubmarkerOutsideNote,
         NativeLintCode::DuplicateIdMarker,
         NativeLintCode::IdMarkerNotAtFileStart,
-        NativeLintCode::ChapterMetadataOutsideChapter,
-        NativeLintCode::VerseMetadataOutsideVerse,
+        NativeLintCode::EmptyParagraph,
         NativeLintCode::MissingChapterNumber,
         NativeLintCode::MissingVerseNumber,
+        NativeLintCode::VerseIsEmpty,
+        NativeLintCode::UnknownToken,
+        NativeLintCode::UnknownMarker,
+        NativeLintCode::UnknownCloseMarker,
+        NativeLintCode::ContentBeforeFirstChapter,
+        NativeLintCode::VerseOutsideExplicitParagraph,
+        NativeLintCode::NoteSubmarkerOutsideNote,
+        NativeLintCode::MetadataOutsideTarget,
+        NativeLintCode::MarkerNotValidInContext,
         NativeLintCode::MissingMilestoneSelfClose,
-        NativeLintCode::ImplicitlyClosedMarker,
         NativeLintCode::StrayCloseMarker,
         NativeLintCode::MisnestedCloseMarker,
+        NativeLintCode::ImplicitlyClosedMarker,
         NativeLintCode::UnclosedMarker,
         NativeLintCode::DuplicateChapterNumber,
         NativeLintCode::ChapterExpectedIncreaseByOne,
+        NativeLintCode::InconsistentChapterLabel,
         NativeLintCode::DuplicateVerseNumber,
         NativeLintCode::VerseExpectedIncreaseByOne,
         NativeLintCode::InvalidNumberRange,
         NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
-        NativeLintCode::VerseTextFollowsVerseRange,
-        NativeLintCode::UnknownMarker,
-        NativeLintCode::UnknownCloseMarker,
-        NativeLintCode::InconsistentChapterLabel,
-        NativeLintCode::MarkerNotValidInContext,
-        NativeLintCode::VerseOutsideExplicitParagraph,
+        NativeLintCode::MissingWhitespaceBeforeMarker,
+        NativeLintCode::MissingHorizontalWhitespaceAfterMarkerName,
+        NativeLintCode::MissingTagEndDelimiterAfterMarker,
+        NativeLintCode::ExcessWhitespaceAroundMarker,
+        NativeLintCode::ExcessWhitespaceInContent,
+        NativeLintCode::MissingContentSpaceAfterCloseMarker,
+        NativeLintCode::VerseInSectionOrOtherParagraph,
     ]
 }
 
 fn lint_code_str(code: NativeLintCode) -> &'static str {
-    match code {
-        NativeLintCode::MissingIdMarker => "missing-id-marker",
-        NativeLintCode::MissingSeparatorAfterMarker => "missing-separator-after-marker",
-        NativeLintCode::EmptyParagraph => "empty-paragraph",
-        NativeLintCode::NumberRangeAfterChapterMarker => "number-range-after-chapter-marker",
-        NativeLintCode::VerseRangeExpectedAfterVerseMarker => {
-            "verse-range-expected-after-verse-marker"
-        }
-        NativeLintCode::VerseContentNotEmpty => "verse-content-not-empty",
-        NativeLintCode::UnknownToken => "unknown-token",
-        NativeLintCode::CharNotClosed => "char-not-closed",
-        NativeLintCode::UnclosedNote => "unclosed-note",
-        NativeLintCode::ParagraphBeforeFirstChapter => "paragraph-before-first-chapter",
-        NativeLintCode::VerseBeforeFirstChapter => "verse-before-first-chapter",
-        NativeLintCode::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
-        NativeLintCode::DuplicateIdMarker => "duplicate-id-marker",
-        NativeLintCode::IdMarkerNotAtFileStart => "id-marker-not-at-file-start",
-        NativeLintCode::ChapterMetadataOutsideChapter => "chapter-metadata-outside-chapter",
-        NativeLintCode::VerseMetadataOutsideVerse => "verse-metadata-outside-verse",
-        NativeLintCode::MissingChapterNumber => "missing-chapter-number",
-        NativeLintCode::MissingVerseNumber => "missing-verse-number",
-        NativeLintCode::MissingMilestoneSelfClose => "missing-milestone-self-close",
-        NativeLintCode::ImplicitlyClosedMarker => "implicitly-closed-marker",
-        NativeLintCode::StrayCloseMarker => "stray-close-marker",
-        NativeLintCode::MisnestedCloseMarker => "misnested-close-marker",
-        NativeLintCode::UnclosedMarker => "unclosed-marker",
-        NativeLintCode::DuplicateChapterNumber => "duplicate-chapter-number",
-        NativeLintCode::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
-        NativeLintCode::DuplicateVerseNumber => "duplicate-verse-number",
-        NativeLintCode::VerseExpectedIncreaseByOne => "verse-expected-increase-by-one",
-        NativeLintCode::InvalidNumberRange => "invalid-number-range",
-        NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
-            "number-range-not-preceded-by-marker-expecting-number"
-        }
-        NativeLintCode::VerseTextFollowsVerseRange => "verse-text-follows-verse-range",
-        NativeLintCode::UnknownMarker => "unknown-marker",
-        NativeLintCode::UnknownCloseMarker => "unknown-close-marker",
-        NativeLintCode::InconsistentChapterLabel => "inconsistent-chapter-label",
-        NativeLintCode::MarkerNotValidInContext => "marker-not-valid-in-context",
-        NativeLintCode::VerseOutsideExplicitParagraph => "verse-outside-explicit-paragraph",
-    }
+    code.code()
 }
 
 fn lint_category_str(category: NativeLintCategory) -> &'static str {

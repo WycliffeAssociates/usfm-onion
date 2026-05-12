@@ -1,0 +1,311 @@
+{
+  "tokens": [
+    {
+      "id": "GEN-0",
+      "kind": "marker",
+      "marker": "id",
+      "span": {
+        "end": 3,
+        "start": 0
+      },
+      "structural": {
+        "scopeKind": "header"
+      },
+      "text": "\\id"
+    },
+    {
+      "id": "GEN-1",
+      "kind": "bookCode",
+      "sid": "GEN 0:0",
+      "span": {
+        "end": 7,
+        "start": 3
+      },
+      "text": " GEN"
+    },
+    {
+      "id": "GEN-2",
+      "kind": "newline",
+      "sid": "GEN 0:0",
+      "span": {
+        "end": 8,
+        "start": 7
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-3",
+      "kind": "marker",
+      "marker": "c",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 10,
+        "start": 8
+      },
+      "structural": {
+        "scopeKind": "chapter"
+      },
+      "text": "\\c"
+    },
+    {
+      "id": "GEN-4",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 12,
+        "start": 10
+      },
+      "text": " 1"
+    },
+    {
+      "id": "GEN-5",
+      "kind": "newline",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 13,
+        "start": 12
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-6",
+      "kind": "marker",
+      "marker": "p",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 15,
+        "start": 13
+      },
+      "structural": {
+        "inlineContext": "para",
+        "scopeKind": "block"
+      },
+      "text": "\\p"
+    },
+    {
+      "id": "",
+      "kind": "newline",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 15,
+        "start": 13
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-7",
+      "kind": "marker",
+      "marker": "v",
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 17,
+        "start": 15
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "GEN-8",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 19,
+        "start": 17
+      },
+      "text": " 1"
+    },
+    {
+      "id": "GEN-9",
+      "kind": "text",
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 51,
+        "start": 19
+      },
+      "text": " word with no space after marker"
+    },
+    {
+      "id": "GEN-11",
+      "kind": "marker",
+      "marker": "v",
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 54,
+        "start": 52
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": " \\v"
+    },
+    {
+      "id": "GEN-12",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 2
+      },
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 56,
+        "start": 54
+      },
+      "text": " 2"
+    },
+    {
+      "id": "GEN-13",
+      "kind": "text",
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 90,
+        "start": 56
+      },
+      "text": " verse with excess whitespace"
+    },
+    {
+      "id": "GEN-15",
+      "kind": "marker",
+      "marker": "v",
+      "sid": "GEN 1:3",
+      "span": {
+        "end": 93,
+        "start": 91
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": " \\v"
+    },
+    {
+      "id": "GEN-16",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 3
+      },
+      "sid": "GEN 1:3",
+      "span": {
+        "end": 95,
+        "start": 93
+      },
+      "text": " 3"
+    },
+    {
+      "id": "GEN-17",
+      "kind": "text",
+      "sid": "GEN 1:3",
+      "span": {
+        "end": 107,
+        "start": 95
+      },
+      "text": " verse three"
+    },
+    {
+      "id": "GEN-18",
+      "kind": "newline",
+      "sid": "GEN 1:3",
+      "span": {
+        "end": 108,
+        "start": 107
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-19",
+      "kind": "marker",
+      "marker": "c",
+      "sid": "GEN 2:0",
+      "span": {
+        "end": 110,
+        "start": 108
+      },
+      "structural": {
+        "scopeKind": "chapter"
+      },
+      "text": "\\c"
+    },
+    {
+      "id": "GEN-20",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 2
+      },
+      "sid": "GEN 2:0",
+      "span": {
+        "end": 112,
+        "start": 110
+      },
+      "text": " 2"
+    },
+    {
+      "id": "GEN-21",
+      "kind": "newline",
+      "sid": "GEN 2:0",
+      "span": {
+        "end": 113,
+        "start": 112
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-22",
+      "kind": "marker",
+      "marker": "v",
+      "sid": "GEN 2:1",
+      "span": {
+        "end": 115,
+        "start": 113
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "GEN-23",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "GEN 2:1",
+      "span": {
+        "end": 117,
+        "start": 115
+      },
+      "text": " 1"
+    },
+    {
+      "id": "GEN-24",
+      "kind": "text",
+      "sid": "GEN 2:1",
+      "span": {
+        "end": 141,
+        "start": 117
+      },
+      "text": " chapter two starts here"
+    },
+    {
+      "id": "GEN-25",
+      "kind": "newline",
+      "sid": "GEN 2:1",
+      "span": {
+        "end": 142,
+        "start": 141
+      },
+      "text": "\n"
+    }
+  ],
+  "usfm": "\\id GEN\n\\c 1\n\\p\n\\v 1 word with no space after marker \\v 2 verse with excess whitespace \\v 3 verse three\n\\c 2\n\\v 1 chapter two starts here\n"
+}

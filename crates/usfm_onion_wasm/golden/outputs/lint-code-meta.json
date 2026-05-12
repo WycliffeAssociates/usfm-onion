@@ -1,0 +1,206 @@
+[
+  {
+    "category": "document",
+    "code": "missing-id-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "document",
+    "code": "duplicate-id-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "document",
+    "code": "id-marker-not-at-file-start",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "empty-paragraph",
+    "issueType": "usfm",
+    "severity": "warning"
+  },
+  {
+    "category": "structure",
+    "code": "missing-chapter-number",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "missing-verse-number",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "verse-is-empty",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "unknown-token",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "unknown-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "unknown-close-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "document",
+    "code": "content-before-first-chapter",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "context",
+    "code": "verse-outside-explicit-paragraph",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "context",
+    "code": "note-submarker-outside-note",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "context",
+    "code": "metadata-outside-target",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "context",
+    "code": "marker-not-valid-in-context",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "missing-milestone-self-close",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "stray-close-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "misnested-close-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "implicitly-closed-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "unclosed-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "duplicate-chapter-number",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "chapter-expected-increase-by-one",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "inconsistent-chapter-label",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "duplicate-verse-number",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "verse-expected-increase-by-one",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "invalid-number-range",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "numbering",
+    "code": "number-range-not-preceded-by-marker-expecting-number",
+    "issueType": "content",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "missing-whitespace-before-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "missing-horizontal-whitespace-after-marker-name",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "missing-tag-end-delimiter-after-marker",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "excess-whitespace-around-marker",
+    "issueType": "usfm",
+    "severity": "warning"
+  },
+  {
+    "category": "structure",
+    "code": "excess-whitespace-in-content",
+    "issueType": "usfm",
+    "severity": "warning"
+  },
+  {
+    "category": "structure",
+    "code": "missing-content-space-after-close-marker",
+    "issueType": "usfm",
+    "severity": "warning"
+  },
+  {
+    "category": "context",
+    "code": "verse-in-section-or-other-paragraph",
+    "issueType": "usfm",
+    "severity": "error"
+  }
+]

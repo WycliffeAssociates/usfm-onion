@@ -1,0 +1,26 @@
+{
+  "issues": [
+    {
+      "category": "structure",
+      "code": "missing-content-space-after-close-marker",
+      "issueType": "usfm",
+      "marker": "x",
+      "message": "\\x* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.",
+      "messageParams": {},
+      "severity": "warning",
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 115,
+        "start": 112
+      },
+      "tokenId": "MAT-25"
+    }
+  ],
+  "summary": {
+    "byCategory": {},
+    "byIssueType": {},
+    "bySeverity": {},
+    "suppressedCount": 0,
+    "totalCount": 1
+  }
+}

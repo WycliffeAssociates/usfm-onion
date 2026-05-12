@@ -1,0 +1,17 @@
+[
+  "recover-malformed-markers",
+  "collapse-whitespace-in-text",
+  "ensure-inline-separators",
+  "remove-duplicate-verse-numbers",
+  "normalize-spacing-after-paragraph-markers",
+  "remove-unwanted-linebreaks",
+  "bridge-consecutive-verse-markers",
+  "remove-orphan-empty-verse-before-contentful-verse",
+  "remove-bridge-verse-enumerators",
+  "move-chapter-label-after-chapter-marker",
+  "insert-default-paragraph-after-chapter-intro",
+  "remove-empty-paragraphs",
+  "insert-structural-linebreaks",
+  "collapse-consecutive-linebreaks",
+  "normalize-marker-whitespace-at-line-start"
+]

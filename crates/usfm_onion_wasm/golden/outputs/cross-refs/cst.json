@@ -1,0 +1,503 @@
+{
+  "roots": [
+    {
+      "children": [
+        {
+          "children": [],
+          "tokenIndex": 1
+        },
+        {
+          "children": [],
+          "tokenIndex": 2
+        }
+      ],
+      "tokenIndex": 0
+    },
+    {
+      "children": [],
+      "tokenIndex": 3
+    },
+    {
+      "children": [],
+      "tokenIndex": 4
+    },
+    {
+      "children": [],
+      "tokenIndex": 5
+    },
+    {
+      "children": [
+        {
+          "children": [],
+          "tokenIndex": 7
+        },
+        {
+          "children": [],
+          "tokenIndex": 8
+        },
+        {
+          "children": [],
+          "tokenIndex": 9
+        },
+        {
+          "children": [],
+          "tokenIndex": 10
+        },
+        {
+          "children": [],
+          "tokenIndex": 11
+        },
+        {
+          "children": [],
+          "tokenIndex": 12
+        },
+        {
+          "children": [],
+          "tokenIndex": 13
+        },
+        {
+          "children": [],
+          "tokenIndex": 14
+        },
+        {
+          "children": [],
+          "tokenIndex": 15
+        },
+        {
+          "children": [],
+          "tokenIndex": 16
+        },
+        {
+          "children": [],
+          "tokenIndex": 17
+        },
+        {
+          "children": [],
+          "tokenIndex": 18
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "tokenIndex": 20
+            },
+            {
+              "children": [
+                {
+                  "children": [],
+                  "tokenIndex": 22
+                },
+                {
+                  "children": [
+                    {
+                      "children": [],
+                      "tokenIndex": 24
+                    }
+                  ],
+                  "tokenIndex": 23
+                }
+              ],
+              "tokenIndex": 21
+            }
+          ],
+          "tokenIndex": 19
+        },
+        {
+          "children": [],
+          "tokenIndex": 25
+        },
+        {
+          "children": [],
+          "tokenIndex": 26
+        }
+      ],
+      "tokenIndex": 6
+    }
+  ],
+  "tokens": [
+    {
+      "id": "MAT-0",
+      "kind": "marker",
+      "marker": "id",
+      "markerMetadata": {
+        "canonical": "id",
+        "kind": "header"
+      },
+      "nested": false,
+      "span": {
+        "end": 3,
+        "start": 0
+      },
+      "structural": {
+        "scopeKind": "header"
+      },
+      "text": "\\id"
+    },
+    {
+      "bookCode": "MAT",
+      "bookCodeValid": true,
+      "id": "MAT-1",
+      "kind": "bookCode",
+      "sid": "MAT 0:0",
+      "span": {
+        "end": 7,
+        "start": 3
+      },
+      "text": " MAT"
+    },
+    {
+      "id": "MAT-2",
+      "kind": "newline",
+      "sid": "MAT 0:0",
+      "span": {
+        "end": 8,
+        "start": 7
+      },
+      "text": "\n"
+    },
+    {
+      "id": "MAT-3",
+      "kind": "marker",
+      "marker": "c",
+      "markerMetadata": {
+        "canonical": "c",
+        "kind": "chapter"
+      },
+      "nested": false,
+      "sid": "MAT 1:0",
+      "span": {
+        "end": 10,
+        "start": 8
+      },
+      "structural": {
+        "scopeKind": "chapter"
+      },
+      "text": "\\c"
+    },
+    {
+      "id": "MAT-4",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "MAT 1:0",
+      "span": {
+        "end": 12,
+        "start": 10
+      },
+      "text": " 1"
+    },
+    {
+      "id": "MAT-5",
+      "kind": "newline",
+      "sid": "MAT 1:0",
+      "span": {
+        "end": 13,
+        "start": 12
+      },
+      "text": "\n"
+    },
+    {
+      "id": "MAT-6",
+      "kind": "marker",
+      "marker": "p",
+      "markerMetadata": {
+        "canonical": "p",
+        "kind": "paragraph"
+      },
+      "nested": false,
+      "sid": "MAT 1:0",
+      "span": {
+        "end": 15,
+        "start": 13
+      },
+      "structural": {
+        "inlineContext": "para",
+        "scopeKind": "block"
+      },
+      "text": "\\p"
+    },
+    {
+      "id": "MAT-7",
+      "kind": "newline",
+      "sid": "MAT 1:0",
+      "span": {
+        "end": 16,
+        "start": 15
+      },
+      "text": "\n"
+    },
+    {
+      "id": "MAT-8",
+      "kind": "marker",
+      "marker": "v",
+      "markerMetadata": {
+        "canonical": "v",
+        "kind": "verse"
+      },
+      "nested": false,
+      "sid": "MAT 1:1",
+      "span": {
+        "end": 18,
+        "start": 16
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "MAT-9",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "MAT 1:1",
+      "span": {
+        "end": 20,
+        "start": 18
+      },
+      "text": " 1"
+    },
+    {
+      "id": "MAT-10",
+      "kind": "text",
+      "sid": "MAT 1:1",
+      "span": {
+        "end": 36,
+        "start": 20
+      },
+      "text": " the first verse"
+    },
+    {
+      "id": "MAT-11",
+      "kind": "newline",
+      "sid": "MAT 1:1",
+      "span": {
+        "end": 37,
+        "start": 36
+      },
+      "text": "\n"
+    },
+    {
+      "id": "MAT-12",
+      "kind": "marker",
+      "marker": "v",
+      "markerMetadata": {
+        "canonical": "v",
+        "kind": "verse"
+      },
+      "nested": false,
+      "sid": "MAT 1:2",
+      "span": {
+        "end": 39,
+        "start": 37
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "MAT-13",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 2
+      },
+      "sid": "MAT 1:2",
+      "span": {
+        "end": 41,
+        "start": 39
+      },
+      "text": " 2"
+    },
+    {
+      "id": "MAT-14",
+      "kind": "text",
+      "sid": "MAT 1:2",
+      "span": {
+        "end": 58,
+        "start": 41
+      },
+      "text": " the second verse"
+    },
+    {
+      "id": "MAT-15",
+      "kind": "newline",
+      "sid": "MAT 1:2",
+      "span": {
+        "end": 59,
+        "start": 58
+      },
+      "text": "\n"
+    },
+    {
+      "id": "MAT-16",
+      "kind": "marker",
+      "marker": "v",
+      "markerMetadata": {
+        "canonical": "v",
+        "kind": "verse"
+      },
+      "nested": false,
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 61,
+        "start": 59
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "MAT-17",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 3
+      },
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 63,
+        "start": 61
+      },
+      "text": " 3"
+    },
+    {
+      "id": "MAT-18",
+      "kind": "text",
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 64,
+        "start": 63
+      },
+      "text": " "
+    },
+    {
+      "id": "MAT-19",
+      "kind": "marker",
+      "marker": "x",
+      "markerMetadata": {
+        "canonical": "x",
+        "family": "crossReference",
+        "kind": "note"
+      },
+      "nested": false,
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 66,
+        "start": 64
+      },
+      "structural": {
+        "noteContext": "crossReference",
+        "scopeKind": "note"
+      },
+      "text": "\\x"
+    },
+    {
+      "id": "MAT-20",
+      "kind": "text",
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 69,
+        "start": 66
+      },
+      "text": " - "
+    },
+    {
+      "id": "MAT-21",
+      "kind": "marker",
+      "marker": "xo",
+      "markerMetadata": {
+        "canonical": "xo",
+        "family": "crossReference",
+        "kind": "character"
+      },
+      "nested": false,
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 72,
+        "start": 69
+      },
+      "structural": {
+        "scopeKind": "character"
+      },
+      "text": "\\xo"
+    },
+    {
+      "id": "MAT-22",
+      "kind": "text",
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 79,
+        "start": 72
+      },
+      "text": " 2.23: "
+    },
+    {
+      "id": "MAT-23",
+      "kind": "marker",
+      "marker": "xt",
+      "markerMetadata": {
+        "canonical": "xt",
+        "family": "crossReference",
+        "kind": "character"
+      },
+      "nested": false,
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 82,
+        "start": 79
+      },
+      "structural": {
+        "scopeKind": "character"
+      },
+      "text": "\\xt"
+    },
+    {
+      "id": "MAT-24",
+      "kind": "text",
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 112,
+        "start": 82
+      },
+      "text": " Mrk 1.24; Luk 2.39; Jhn 1.45."
+    },
+    {
+      "id": "MAT-25",
+      "kind": "endMarker",
+      "marker": "x",
+      "markerMetadata": {
+        "canonical": "x",
+        "family": "crossReference",
+        "kind": "note"
+      },
+      "nested": false,
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 115,
+        "start": 112
+      },
+      "structural": {
+        "noteContext": "crossReference",
+        "scopeKind": "note"
+      },
+      "text": "\\x*"
+    },
+    {
+      "id": "MAT-26",
+      "kind": "text",
+      "sid": "MAT 1:3",
+      "span": {
+        "end": 158,
+        "start": 115
+      },
+      "text": "and made his home in a town named Nazareth."
+    }
+  ]
+}

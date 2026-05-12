@@ -1,0 +1,26 @@
+{
+  "issues": [
+    {
+      "category": "numbering",
+      "code": "verse-expected-increase-by-one",
+      "issueType": "content",
+      "marker": "v",
+      "message": "Verses should count up by one: expected verse 3, found verse 15.",
+      "messageParams": {},
+      "severity": "error",
+      "sid": "GEN 1:15",
+      "span": {
+        "end": 64,
+        "start": 61
+      },
+      "tokenId": "GEN-17"
+    }
+  ],
+  "summary": {
+    "byCategory": {},
+    "byIssueType": {},
+    "bySeverity": {},
+    "suppressedCount": 0,
+    "totalCount": 1
+  }
+}

@@ -120,40 +120,39 @@ export type LintSeverity = "error" | "warning";
 export type LintIssueType = "usfm" | "content";
 export type LintCode =
 | "missing-id-marker"
-| "missing-separator-after-marker"
-| "empty-paragraph"
-| "number-range-after-chapter-marker"
-| "verse-range-expected-after-verse-marker"
-| "verse-content-not-empty"
-| "unknown-token"
-| "char-not-closed"
-| "unclosed-note"
-| "paragraph-before-first-chapter"
-| "verse-before-first-chapter"
-| "note-submarker-outside-note"
 | "duplicate-id-marker"
 | "id-marker-not-at-file-start"
-| "chapter-metadata-outside-chapter"
-| "verse-metadata-outside-verse"
+| "empty-paragraph"
 | "missing-chapter-number"
 | "missing-verse-number"
+| "verse-is-empty"
+| "unknown-token"
+| "unknown-marker"
+| "unknown-close-marker"
+| "content-before-first-chapter"
+| "verse-outside-explicit-paragraph"
+| "note-submarker-outside-note"
+| "metadata-outside-target"
+| "marker-not-valid-in-context"
 | "missing-milestone-self-close"
-| "implicitly-closed-marker"
 | "stray-close-marker"
 | "misnested-close-marker"
+| "implicitly-closed-marker"
 | "unclosed-marker"
 | "duplicate-chapter-number"
 | "chapter-expected-increase-by-one"
+| "inconsistent-chapter-label"
 | "duplicate-verse-number"
 | "verse-expected-increase-by-one"
 | "invalid-number-range"
 | "number-range-not-preceded-by-marker-expecting-number"
-| "verse-text-follows-verse-range"
-| "unknown-marker"
-| "unknown-close-marker"
-| "inconsistent-chapter-label"
-| "marker-not-valid-in-context"
-| "verse-outside-explicit-paragraph";
+| "missing-whitespace-before-marker"
+| "missing-horizontal-whitespace-after-marker-name"
+| "missing-tag-end-delimiter-after-marker"
+| "excess-whitespace-around-marker"
+| "excess-whitespace-in-content"
+| "missing-content-space-after-close-marker"
+| "verse-in-section-or-other-paragraph";
 export type FormatRule =
 | "recover-malformed-markers"
 | "collapse-whitespace-in-text"
@@ -454,19 +453,6 @@ export class ParsedUsfm {
     diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions): DiffsByChapterMap;
 }
 
-export class ParsedUsfmBatch {
-    private constructor();
-    items(): ParsedUsfm[];
-    tokens(): Token[][];
-    lint(options?: LintOptions): LintResult[];
-    format(options?: FormatOptions): string[];
-    toUsfm(): string[];
-    toUsj(): UsjDocument[];
-    toUsx(): string[];
-    toHtml(options?: HtmlOptions): string[];
-    toVref(): VrefMap[];
-}
-
 export class UsfmMarkerCatalog {
     private constructor();
     all(): MarkerInfo[];
@@ -475,15 +461,12 @@ export class UsfmMarkerCatalog {
 }
 
 export function parse(source: string): ParsedUsfm;
-export function parseBatch(sources: string[]): ParsedUsfmBatch;
 export function lintUsfm(source: string, options?: LintOptions): LintResult;
 export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
 export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
-export function lintTokenBatch(tokenBatches: Token[][], options?: LintOptions): LintResult[];
 export function formatUsfm(source: string, options?: FormatOptions): string;
 export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
 export function formatTokensMut(tokens: FormatToken[], options?: FormatOptions): FormatToken[];
-export function formatTokenBatch(tokenBatches: FormatToken[][], options?: FormatOptions): FormatResult[];
 export function tokensToUsfm(tokens: Token[]): string;
 export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];

@@ -1,0 +1,62 @@
+[
+  {
+    "code": "recover-malformed-markers",
+    "labelKey": "format.rule.recoverMalformedMarkers"
+  },
+  {
+    "code": "collapse-whitespace-in-text",
+    "labelKey": "format.rule.collapseWhitespaceInText"
+  },
+  {
+    "code": "ensure-inline-separators",
+    "labelKey": "format.rule.ensureInlineSeparators"
+  },
+  {
+    "code": "remove-duplicate-verse-numbers",
+    "labelKey": "format.rule.removeDuplicateVerseNumbers"
+  },
+  {
+    "code": "normalize-spacing-after-paragraph-markers",
+    "labelKey": "format.rule.normalizeSpacingAfterParagraphMarkers"
+  },
+  {
+    "code": "remove-unwanted-linebreaks",
+    "labelKey": "format.rule.removeUnwantedLinebreaks"
+  },
+  {
+    "code": "bridge-consecutive-verse-markers",
+    "labelKey": "format.rule.bridgeConsecutiveVerseMarkers"
+  },
+  {
+    "code": "remove-orphan-empty-verse-before-contentful-verse",
+    "labelKey": "format.rule.removeOrphanEmptyVerseBeforeContentfulVerse"
+  },
+  {
+    "code": "remove-bridge-verse-enumerators",
+    "labelKey": "format.rule.removeBridgeVerseEnumerators"
+  },
+  {
+    "code": "move-chapter-label-after-chapter-marker",
+    "labelKey": "format.rule.moveChapterLabelAfterChapterMarker"
+  },
+  {
+    "code": "insert-default-paragraph-after-chapter-intro",
+    "labelKey": "format.rule.insertDefaultParagraphAfterChapterIntro"
+  },
+  {
+    "code": "remove-empty-paragraphs",
+    "labelKey": "format.rule.removeEmptyParagraphs"
+  },
+  {
+    "code": "insert-structural-linebreaks",
+    "labelKey": "format.rule.insertStructuralLinebreaks"
+  },
+  {
+    "code": "collapse-consecutive-linebreaks",
+    "labelKey": "format.rule.collapseConsecutiveLinebreaks"
+  },
+  {
+    "code": "normalize-marker-whitespace-at-line-start",
+    "labelKey": "format.rule.normalizeMarkerWhitespaceAtLineStart"
+  }
+]

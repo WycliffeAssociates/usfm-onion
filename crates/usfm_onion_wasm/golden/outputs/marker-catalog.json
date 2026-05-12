@@ -1,0 +1,3758 @@
+[
+  {
+    "blockBehavior": "none",
+    "canonical": "//",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "//",
+    "source": "repos_to_compare/tcdocs-main/markers/char/optbreak.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "add",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "add",
+    "source": "repos_to_compare/tcdocs-main/markers/char/add.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "addpn",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": true,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "addpn",
+    "source": "repos_to_compare/tcdocs-main/markers/char/addpn.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "b",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "b",
+    "source": "repos_to_compare/tcdocs-main/markers/para/b.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "bd",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "bd",
+    "source": "repos_to_compare/tcdocs-main/markers/char/bd.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "bdit",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "bdit",
+    "source": "repos_to_compare/tcdocs-main/markers/char/bdit.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "bk",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "bk",
+    "source": "repos_to_compare/tcdocs-main/markers/char/bk.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "c",
+    "category": "chapter",
+    "closingBehavior": "none",
+    "contexts": [
+      "scripture",
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "chapter",
+    "known": true,
+    "marker": "c",
+    "source": "repos_to_compare/tcdocs-main/markers/cv/c.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ca",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "chapter"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "ca",
+    "source": "repos_to_compare/tcdocs-main/markers/cv/ca.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "cat",
+    "category": "meta",
+    "closingBehavior": "none",
+    "contexts": [
+      "sidebar",
+      "footnote",
+      "crossReference"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "meta",
+    "known": true,
+    "marker": "cat",
+    "source": "repos_to_compare/tcdocs-main/markers/cat/cat.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "cd",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "cd",
+    "source": "repos_to_compare/tcdocs-main/markers/para/cd.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "cl",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "cl",
+    "source": "repos_to_compare/tcdocs-main/markers/para/cl.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "cls",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "cls",
+    "source": "repos_to_compare/tcdocs-main/markers/para/cls.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "cp",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "chapter"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "cp",
+    "source": "repos_to_compare/tcdocs-main/markers/cv/cp.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "d",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "d",
+    "source": "repos_to_compare/tcdocs-main/markers/para/d.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "dc",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "dc",
+    "source": "repos_to_compare/tcdocs-main/markers/char/dc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ef",
+    "category": "noteContainer",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "note",
+    "known": true,
+    "marker": "ef",
+    "noteFamily": "footnote",
+    "source": "repos_to_compare/tcdocs-main/markers/note/ef.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "em",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "em",
+    "source": "repos_to_compare/tcdocs-main/markers/char/em.adoc"
+  },
+  {
+    "blockBehavior": "sidebarStart",
+    "canonical": "esb",
+    "category": "sidebarStart",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "sidebar",
+    "familyRole": "canonical",
+    "kind": "sidebarStart",
+    "known": true,
+    "marker": "esb",
+    "source": "repos_to_compare/tcdocs-main/markers/sbar/esb.adoc"
+  },
+  {
+    "blockBehavior": "sidebarEnd",
+    "canonical": "esbe",
+    "category": "sidebarEnd",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "sidebar",
+    "familyRole": "alias",
+    "kind": "sidebarEnd",
+    "known": true,
+    "marker": "esbe",
+    "source": "repos_to_compare/tcdocs-main/markers/sbar/esb.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ex",
+    "category": "noteContainer",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "note",
+    "known": true,
+    "marker": "ex",
+    "noteFamily": "crossReference",
+    "source": "repos_to_compare/tcdocs-main/markers/note/ex.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "f",
+    "category": "noteContainer",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "note",
+    "known": true,
+    "marker": "f",
+    "noteFamily": "footnote",
+    "source": "repos_to_compare/tcdocs-main/markers/note/f.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fdc",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": true,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fdc",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fdc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fe",
+    "category": "noteContainer",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "note",
+    "known": true,
+    "marker": "fe",
+    "noteFamily": "footnote",
+    "source": "repos_to_compare/tcdocs-main/markers/note/fe.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fig",
+    "category": "figure",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "defaultAttribute": "src",
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "figure",
+    "known": true,
+    "marker": "fig",
+    "noteFamily": "footnote",
+    "source": "repos_to_compare/tcdocs-main/markers/fig/fig.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fk",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fk",
+    "noteFamily": "footnote",
+    "noteSubkind": "structuralKeepsNestedCharsOpen",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fk.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fl",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fl",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fl.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fm",
+    "category": "character",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fm",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fm.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fp",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fp",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fp.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fq",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fq",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fqa",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fqa",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fqa.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fr",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fr",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ft",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "ft",
+    "noteFamily": "footnote",
+    "noteSubkind": "structuralKeepsNestedCharsOpen",
+    "source": "repos_to_compare/tcdocs-main/markers/char/ft.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fv",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fv",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fv.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "fw",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "footnote",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "fw",
+    "noteFamily": "footnote",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/fw.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "h",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "h",
+    "source": "repos_to_compare/tcdocs-main/markers/para/h.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ib",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ib",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ib.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "id",
+    "category": "document",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "header",
+    "known": true,
+    "marker": "id",
+    "source": "repos_to_compare/tcdocs-main/markers/doc/id.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ide",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ide",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ide.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ie",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ie",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ie.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iex",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "iex",
+    "source": "repos_to_compare/tcdocs-main/markers/para/iex.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ili",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ili",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ili.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ili1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ili1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ili.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ili2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ili2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ili.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "im",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "im",
+    "source": "repos_to_compare/tcdocs-main/markers/para/im.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imi",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imi",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imi.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imq",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imq",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imt",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imt",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imt1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imt1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imt2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imt2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imt3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imt3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imt4",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imt4",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imte",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imte",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imte.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imte1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imte1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imte.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "imte2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "imte2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/imte.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "io",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "io",
+    "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "io1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "io1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "io2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "io2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "io3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "io3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "io4",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "io4",
+    "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ior",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "ior",
+    "source": "repos_to_compare/tcdocs-main/markers/char/ior.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iot",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "iot",
+    "source": "repos_to_compare/tcdocs-main/markers/para/iot.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "ip",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction",
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ip",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ip.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ipc",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ipc",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ipc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ipi",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ipi",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ipi.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ipq",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ipq",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ipq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ipr",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ipr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ipr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iq",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "iq",
+    "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iq1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "iq1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iq2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "iq2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iq3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "iq3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "iqt",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "iqt",
+    "source": "repos_to_compare/tcdocs-main/markers/char/iqt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "is",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "is",
+    "source": "repos_to_compare/tcdocs-main/markers/para/is.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "is1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "is1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/is.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "is2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "is2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/is.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "it",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "it",
+    "source": "repos_to_compare/tcdocs-main/markers/char/it.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "jmp",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "defaultAttribute": "link-href",
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "jmp",
+    "source": "repos_to_compare/tcdocs-main/markers/char/jmp.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "k",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "k",
+    "source": "repos_to_compare/tcdocs-main/markers/char/k.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lf",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lf",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lf.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lh",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lh",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lh.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "li",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "li",
+    "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "li1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "li1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "li2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "li2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "li3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "li3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "li4",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "li4",
+    "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "lik",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "list"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "character",
+    "known": true,
+    "marker": "lik",
+    "source": "repos_to_compare/tcdocs-main/markers/char/lik.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lim",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lim",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lim1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lim1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lim2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lim2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lim3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lim3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "list",
+    "category": "milestoneStart",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "milestoneStart",
+    "known": true,
+    "marker": "list",
+    "source": "https://docs.usfm.bible/usfm/3.2/ms/list.html"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "lit",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookIntroduction",
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "lit",
+    "source": "repos_to_compare/tcdocs-main/markers/para/lit.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "litl",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "list"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "character",
+    "known": true,
+    "marker": "litl",
+    "source": "repos_to_compare/tcdocs-main/markers/char/litl.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "liv",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "list"
+    ],
+    "deprecated": false,
+    "family": "listParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "list",
+    "kind": "character",
+    "known": true,
+    "marker": "liv",
+    "source": "repos_to_compare/tcdocs-main/markers/char/liv.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "m",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "m",
+    "source": "repos_to_compare/tcdocs-main/markers/para/m.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mi",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mi",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mi1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mi1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mi2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mi2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mi3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mi3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mr",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mr.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "ms",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ms",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "ms1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ms1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "ms2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ms2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "ms3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ms3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "mt",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mt",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "mt1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mt1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "mt2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mt2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "mt3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mt3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "mt4",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookTitles",
+      "bookIntroductionEndTitles"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mt4",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mte",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mte",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mte.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mte1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mte1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mte.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "mte2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "mte2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/mte.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "nb",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "nb",
+    "source": "repos_to_compare/tcdocs-main/markers/para/nb.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "nd",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "nd",
+    "source": "repos_to_compare/tcdocs-main/markers/char/nd.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "no",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "no",
+    "source": "repos_to_compare/tcdocs-main/markers/char/no.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ord",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "ord",
+    "source": "repos_to_compare/tcdocs-main/markers/char/ord.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "p",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "p",
+    "source": "repos_to_compare/tcdocs-main/markers/para/p.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "p1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "p1",
+    "source": "https://docs.usfm.bible/usfm/3.1.1/para/peripherals/p1.html"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "p2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "p2",
+    "source": "https://docs.usfm.bible/usfm/3.1.1/para/peripherals/p2.html"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pb",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pb",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pb.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pc",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pc",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "periph",
+    "category": "periph",
+    "closingBehavior": "none",
+    "contexts": [
+      "peripheral"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "periph",
+    "known": true,
+    "marker": "periph",
+    "source": "repos_to_compare/tcdocs-main/markers/periph/periph.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "ph",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": true,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "ph",
+    "source": "repos_to_compare/tcdocs-main/markers/para/ph.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pi",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pi",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pi1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pi1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pi2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pi2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pi3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pi3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pm",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pm",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pm.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pmc",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pmc",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pmc.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pmo",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pmo",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pmo.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pmr",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pmr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pmr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "pn",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "pn",
+    "source": "repos_to_compare/tcdocs-main/markers/char/pn.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "png",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "png",
+    "source": "repos_to_compare/tcdocs-main/markers/char/png.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "po",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "po",
+    "source": "repos_to_compare/tcdocs-main/markers/para/po.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "pr",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "pr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/pr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "pro",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": true,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "pro",
+    "source": "repos_to_compare/tcdocs-main/markers/char/pro.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "q",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "q",
+    "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "q1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "q1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "q2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "q2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "q3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "q3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "q4",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "q4",
+    "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qa",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qa",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qa.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "qac",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "para"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "qac",
+    "source": "repos_to_compare/tcdocs-main/markers/char/qac.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qc",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qc",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qc.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qd",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qd",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qd.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qm",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qm",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qm1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qm1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qm2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qm2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qm3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qm3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "qr",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "para",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "qr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/qr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "qs",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "para"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "qs",
+    "source": "repos_to_compare/tcdocs-main/markers/char/qs.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "qt",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "qt",
+    "source": "repos_to_compare/tcdocs-main/markers/char/qt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "qt-e",
+    "category": "milestoneEnd",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "defaultAttribute": "who",
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "milestoneEnd",
+    "kind": "milestoneEnd",
+    "known": true,
+    "marker": "qt-e",
+    "source": "repos_to_compare/tcdocs-main/markers/ms/qt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "qt-s",
+    "category": "milestoneStart",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "defaultAttribute": "who",
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "milestoneStart",
+    "kind": "milestoneStart",
+    "known": true,
+    "marker": "qt-s",
+    "source": "repos_to_compare/tcdocs-main/markers/ms/qt.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "r",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "r",
+    "source": "repos_to_compare/tcdocs-main/markers/para/r.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "rb",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "defaultAttribute": "gloss",
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "rb",
+    "source": "repos_to_compare/tcdocs-main/markers/char/rb.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ref",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote",
+      "crossReference"
+    ],
+    "defaultAttribute": "loc",
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "ref",
+    "source": "repos_to_compare/tcdocs-main/markers/char/ref.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "rem",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "rem",
+    "source": "repos_to_compare/tcdocs-main/markers/para/rem.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "rq",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "rq",
+    "source": "repos_to_compare/tcdocs-main/markers/char/rq.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "s",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "s",
+    "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "s1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "s1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "s2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "s2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "s3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "s3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "s4",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "s4",
+    "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "sc",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "character",
+    "known": true,
+    "marker": "sc",
+    "source": "repos_to_compare/tcdocs-main/markers/char/sc.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "sd",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sd",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "sd1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sd1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "sd2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sd2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "sd3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sd3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "sig",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "character",
+    "known": true,
+    "marker": "sig",
+    "source": "repos_to_compare/tcdocs-main/markers/char/sig.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "sls",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "character",
+    "known": true,
+    "marker": "sls",
+    "source": "repos_to_compare/tcdocs-main/markers/char/sls.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "sp",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sp",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sp.adoc"
+  },
+  {
+    "blockBehavior": "paragraph",
+    "canonical": "sr",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "sts",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "sts",
+    "source": "repos_to_compare/tcdocs-main/markers/para/sts.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "sup",
+    "category": "noteSubmarker",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote"
+    ],
+    "deprecated": false,
+    "family": "sectionParagraph",
+    "familyRole": "canonical",
+    "inlineContext": "section",
+    "kind": "character",
+    "known": true,
+    "marker": "sup",
+    "source": "repos_to_compare/tcdocs-main/markers/char/sup.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ta",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "ta",
+    "source": "repos_to_compare/tcdocs-main/markers/char/ta.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "table",
+    "category": "milestoneStart",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "canonical",
+    "kind": "milestoneStart",
+    "known": true,
+    "marker": "table",
+    "source": "https://docs.usfm.bible/usfm/3.2/ms/table.html"
+  },
+  {
+    "blockBehavior": "tableCell",
+    "canonical": "tc",
+    "category": "tableCell",
+    "closingBehavior": "none",
+    "contexts": [
+      "table"
+    ],
+    "deprecated": false,
+    "family": "tableCell",
+    "familyRole": "canonical",
+    "kind": "tableCell",
+    "known": true,
+    "marker": "tc",
+    "source": "repos_to_compare/tcdocs-main/markers/char/tc.adoc"
+  },
+  {
+    "blockBehavior": "tableCell",
+    "canonical": "tcc",
+    "category": "tableCell",
+    "closingBehavior": "none",
+    "contexts": [
+      "table"
+    ],
+    "deprecated": false,
+    "family": "tableCell",
+    "familyRole": "canonical",
+    "kind": "tableCell",
+    "known": true,
+    "marker": "tcc",
+    "source": "repos_to_compare/tcdocs-main/markers/char/tcc.adoc"
+  },
+  {
+    "blockBehavior": "tableCell",
+    "canonical": "tcr",
+    "category": "tableCell",
+    "closingBehavior": "none",
+    "contexts": [
+      "table"
+    ],
+    "deprecated": false,
+    "family": "tableCell",
+    "familyRole": "canonical",
+    "kind": "tableCell",
+    "known": true,
+    "marker": "tcr",
+    "source": "repos_to_compare/tcdocs-main/markers/char/tcr.adoc"
+  },
+  {
+    "blockBehavior": "tableCell",
+    "canonical": "th",
+    "category": "tableCell",
+    "closingBehavior": "none",
+    "contexts": [
+      "table"
+    ],
+    "deprecated": false,
+    "family": "tableCell",
+    "familyRole": "canonical",
+    "kind": "tableCell",
+    "known": true,
+    "marker": "th",
+    "source": "repos_to_compare/tcdocs-main/markers/char/th.adoc"
+  },
+  {
+    "blockBehavior": "tableCell",
+    "canonical": "thc",
+    "category": "tableCell",
+    "closingBehavior": "none",
+    "contexts": [
+      "table"
+    ],
+    "deprecated": false,
+    "family": "tableCell",
+    "familyRole": "canonical",
+    "kind": "tableCell",
+    "known": true,
+    "marker": "thc",
+    "source": "repos_to_compare/tcdocs-main/markers/char/thc.adoc"
+  },
+  {
+    "blockBehavior": "tableCell",
+    "canonical": "thr",
+    "category": "tableCell",
+    "closingBehavior": "none",
+    "contexts": [
+      "table"
+    ],
+    "deprecated": false,
+    "family": "tableCell",
+    "familyRole": "canonical",
+    "kind": "tableCell",
+    "known": true,
+    "marker": "thr",
+    "source": "repos_to_compare/tcdocs-main/markers/char/thr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "tl",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "tl",
+    "source": "repos_to_compare/tcdocs-main/markers/char/tl.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toc",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toc",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toc1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toc1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toc2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toc2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toc3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toc3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toca",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toca",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toca1",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toca1",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toca2",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toca2",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "toca3",
+    "category": "paragraph",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "paragraph",
+    "known": true,
+    "marker": "toca3",
+    "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
+  },
+  {
+    "blockBehavior": "tableRow",
+    "canonical": "tr",
+    "category": "tableRow",
+    "closingBehavior": "none",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "inlineContext": "table",
+    "kind": "tableRow",
+    "known": true,
+    "marker": "tr",
+    "source": "repos_to_compare/tcdocs-main/markers/para/tr.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "ts",
+    "category": "milestoneStart",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "canonical",
+    "kind": "milestoneStart",
+    "known": true,
+    "marker": "ts",
+    "source": "repos_to_compare/tcdocs-main/markers/ms/ts.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "usfm",
+    "category": "document",
+    "closingBehavior": "none",
+    "contexts": [
+      "bookHeaders"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "header",
+    "known": true,
+    "marker": "usfm",
+    "source": "repos_to_compare/tcdocs-main/markers/doc/usfm.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "v",
+    "category": "verse",
+    "closingBehavior": "none",
+    "contexts": [
+      "scripture",
+      "chapterContent",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "verse",
+    "known": true,
+    "marker": "v",
+    "source": "repos_to_compare/tcdocs-main/markers/cv/v.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "va",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "verse"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "va",
+    "source": "repos_to_compare/tcdocs-main/markers/cv/va.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "vid",
+    "category": "milestoneStart",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "canonical",
+    "kind": "milestoneStart",
+    "known": true,
+    "marker": "vid",
+    "source": "repos_to_compare/tcdocs-main/markers/ms/vid.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "vid-e",
+    "category": "milestoneEnd",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "milestoneEnd",
+    "kind": "milestoneEnd",
+    "known": true,
+    "marker": "vid-e",
+    "source": "repos_to_compare/tcdocs-main/markers/ms/vid.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "vid-s",
+    "category": "milestoneStart",
+    "closingBehavior": "selfClosingMilestone",
+    "contexts": [
+      "chapterContent"
+    ],
+    "deprecated": false,
+    "family": "milestone",
+    "familyRole": "milestoneStart",
+    "kind": "milestoneStart",
+    "known": true,
+    "marker": "vid-s",
+    "source": "repos_to_compare/tcdocs-main/markers/ms/vid.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "vp",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "verse"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "vp",
+    "source": "repos_to_compare/tcdocs-main/markers/cv/vp.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "w",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "defaultAttribute": "lemma",
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "w",
+    "source": "repos_to_compare/tcdocs-main/markers/char/w.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "wa",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "wa",
+    "source": "repos_to_compare/tcdocs-main/markers/char/wa.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "wg",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "wg",
+    "source": "repos_to_compare/tcdocs-main/markers/char/wg.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "wh",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "wh",
+    "source": "repos_to_compare/tcdocs-main/markers/char/wh.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "wj",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "wj",
+    "source": "repos_to_compare/tcdocs-main/markers/char/wj.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "wl",
+    "category": "character",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table"
+    ],
+    "deprecated": false,
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "wl",
+    "source": "repos_to_compare/tcdocs-main/markers/char/wl.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "x",
+    "category": "noteContainer",
+    "closingBehavior": "requiredExplicit",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "chapterContent",
+      "peripheralContent"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "note",
+    "known": true,
+    "marker": "x",
+    "noteFamily": "crossReference",
+    "source": "repos_to_compare/tcdocs-main/markers/note/x.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xdc",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": true,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xdc",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xdc.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xk",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xk",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xk.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xnt",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xnt",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xnt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xo",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xo",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xo.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xop",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xop",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xop.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xot",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xot",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xot.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xq",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xq",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structuralKeepsNestedCharsOpen",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xq.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xt",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "bookTitles",
+      "bookIntroduction",
+      "bookIntroductionEndTitles",
+      "section",
+      "para",
+      "list",
+      "table",
+      "footnote",
+      "crossReference"
+    ],
+    "defaultAttribute": "link-href",
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xt",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xt.adoc"
+  },
+  {
+    "blockBehavior": "none",
+    "canonical": "xta",
+    "category": "noteSubmarker",
+    "closingBehavior": "optionalExplicitUntilNoteEnd",
+    "contexts": [
+      "crossReference"
+    ],
+    "deprecated": false,
+    "family": "crossReference",
+    "familyRole": "canonical",
+    "kind": "character",
+    "known": true,
+    "marker": "xta",
+    "noteFamily": "crossReference",
+    "noteSubkind": "structural",
+    "source": "repos_to_compare/tcdocs-main/markers/char/xta.adoc"
+  }
+]

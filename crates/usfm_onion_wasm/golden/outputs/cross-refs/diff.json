@@ -1,0 +1,1327 @@
+[
+  {
+    "blockId": "::MAT-0",
+    "current": {
+      "blockId": "::MAT-0",
+      "endExclusive": 1,
+      "semanticSid": "",
+      "start": 0,
+      "textFull": "\\id"
+    },
+    "currentAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      }
+    ],
+    "currentText": "\\id",
+    "currentTextOnly": "",
+    "currentTokens": [
+      {
+        "id": "MAT-0",
+        "kind": "marker",
+        "marker": "id",
+        "markerMetadata": {
+          "canonical": "id",
+          "kind": "header"
+        },
+        "nested": false,
+        "span": {
+          "end": 3,
+          "start": 0
+        },
+        "structural": {
+          "scopeKind": "header"
+        },
+        "text": "\\id"
+      }
+    ],
+    "isUsfmStructureChange": false,
+    "isWhitespaceChange": false,
+    "original": {
+      "blockId": "::MAT-0",
+      "endExclusive": 1,
+      "semanticSid": "",
+      "start": 0,
+      "textFull": "\\id"
+    },
+    "originalAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      }
+    ],
+    "originalText": "\\id",
+    "originalTextOnly": "",
+    "originalTokens": [
+      {
+        "id": "MAT-0",
+        "kind": "marker",
+        "marker": "id",
+        "markerMetadata": {
+          "canonical": "id",
+          "kind": "header"
+        },
+        "nested": false,
+        "span": {
+          "end": 3,
+          "start": 0
+        },
+        "structural": {
+          "scopeKind": "header"
+        },
+        "text": "\\id"
+      }
+    ],
+    "semanticSid": "",
+    "status": "unchanged",
+    "undoSide": "current"
+  },
+  {
+    "blockId": "MAT 0:0::MAT-1",
+    "current": {
+      "blockId": "MAT 0:0::MAT-1",
+      "endExclusive": 3,
+      "prevBlockId": "::MAT-0",
+      "semanticSid": "MAT 0:0",
+      "start": 1,
+      "textFull": " MAT\n"
+    },
+    "currentAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      }
+    ],
+    "currentText": " MAT\n",
+    "currentTextOnly": "MAT",
+    "currentTokens": [
+      {
+        "bookCode": "MAT",
+        "bookCodeValid": true,
+        "id": "MAT-1",
+        "kind": "bookCode",
+        "sid": "MAT 0:0",
+        "span": {
+          "end": 7,
+          "start": 3
+        },
+        "text": " MAT"
+      },
+      {
+        "id": "MAT-2",
+        "kind": "newline",
+        "sid": "MAT 0:0",
+        "span": {
+          "end": 8,
+          "start": 7
+        },
+        "text": "\n"
+      }
+    ],
+    "isUsfmStructureChange": false,
+    "isWhitespaceChange": false,
+    "original": {
+      "blockId": "MAT 0:0::MAT-1",
+      "endExclusive": 3,
+      "prevBlockId": "::MAT-0",
+      "semanticSid": "MAT 0:0",
+      "start": 1,
+      "textFull": " MAT\n"
+    },
+    "originalAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      }
+    ],
+    "originalText": " MAT\n",
+    "originalTextOnly": "MAT",
+    "originalTokens": [
+      {
+        "bookCode": "MAT",
+        "bookCodeValid": true,
+        "id": "MAT-1",
+        "kind": "bookCode",
+        "sid": "MAT 0:0",
+        "span": {
+          "end": 7,
+          "start": 3
+        },
+        "text": " MAT"
+      },
+      {
+        "id": "MAT-2",
+        "kind": "newline",
+        "sid": "MAT 0:0",
+        "span": {
+          "end": 8,
+          "start": 7
+        },
+        "text": "\n"
+      }
+    ],
+    "semanticSid": "MAT 0:0",
+    "status": "unchanged",
+    "undoSide": "current"
+  },
+  {
+    "blockId": "MAT 1:0::MAT-3",
+    "current": {
+      "blockId": "MAT 1:0::MAT-3",
+      "endExclusive": 8,
+      "prevBlockId": "MAT 0:0::MAT-1",
+      "semanticSid": "MAT 1:0",
+      "start": 3,
+      "textFull": "\\c 1\n\\p\n"
+    },
+    "currentAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 4
+      }
+    ],
+    "currentText": "\\c 1\n\\p\n",
+    "currentTextOnly": "1",
+    "currentTokens": [
+      {
+        "id": "MAT-3",
+        "kind": "marker",
+        "marker": "c",
+        "markerMetadata": {
+          "canonical": "c",
+          "kind": "chapter"
+        },
+        "nested": false,
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 10,
+          "start": 8
+        },
+        "structural": {
+          "scopeKind": "chapter"
+        },
+        "text": "\\c"
+      },
+      {
+        "id": "MAT-4",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 1
+        },
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 12,
+          "start": 10
+        },
+        "text": " 1"
+      },
+      {
+        "id": "MAT-5",
+        "kind": "newline",
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 13,
+          "start": 12
+        },
+        "text": "\n"
+      },
+      {
+        "id": "MAT-6",
+        "kind": "marker",
+        "marker": "p",
+        "markerMetadata": {
+          "canonical": "p",
+          "kind": "paragraph"
+        },
+        "nested": false,
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 15,
+          "start": 13
+        },
+        "structural": {
+          "inlineContext": "para",
+          "scopeKind": "block"
+        },
+        "text": "\\p"
+      },
+      {
+        "id": "MAT-7",
+        "kind": "newline",
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 16,
+          "start": 15
+        },
+        "text": "\n"
+      }
+    ],
+    "isUsfmStructureChange": false,
+    "isWhitespaceChange": false,
+    "original": {
+      "blockId": "MAT 1:0::MAT-3",
+      "endExclusive": 8,
+      "prevBlockId": "MAT 0:0::MAT-1",
+      "semanticSid": "MAT 1:0",
+      "start": 3,
+      "textFull": "\\c 1\n\\p\n"
+    },
+    "originalAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 4
+      }
+    ],
+    "originalText": "\\c 1\n\\p\n",
+    "originalTextOnly": "1",
+    "originalTokens": [
+      {
+        "id": "MAT-3",
+        "kind": "marker",
+        "marker": "c",
+        "markerMetadata": {
+          "canonical": "c",
+          "kind": "chapter"
+        },
+        "nested": false,
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 10,
+          "start": 8
+        },
+        "structural": {
+          "scopeKind": "chapter"
+        },
+        "text": "\\c"
+      },
+      {
+        "id": "MAT-4",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 1
+        },
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 12,
+          "start": 10
+        },
+        "text": " 1"
+      },
+      {
+        "id": "MAT-5",
+        "kind": "newline",
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 13,
+          "start": 12
+        },
+        "text": "\n"
+      },
+      {
+        "id": "MAT-6",
+        "kind": "marker",
+        "marker": "p",
+        "markerMetadata": {
+          "canonical": "p",
+          "kind": "paragraph"
+        },
+        "nested": false,
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 15,
+          "start": 13
+        },
+        "structural": {
+          "inlineContext": "para",
+          "scopeKind": "block"
+        },
+        "text": "\\p"
+      },
+      {
+        "id": "MAT-7",
+        "kind": "newline",
+        "sid": "MAT 1:0",
+        "span": {
+          "end": 16,
+          "start": 15
+        },
+        "text": "\n"
+      }
+    ],
+    "semanticSid": "MAT 1:0",
+    "status": "unchanged",
+    "undoSide": "current"
+  },
+  {
+    "blockId": "MAT 1:1::MAT-8",
+    "current": {
+      "blockId": "MAT 1:1::MAT-8",
+      "endExclusive": 12,
+      "prevBlockId": "MAT 1:0::MAT-3",
+      "semanticSid": "MAT 1:1",
+      "start": 8,
+      "textFull": "\\v 1 the first verse\n"
+    },
+    "currentAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      }
+    ],
+    "currentText": "\\v 1 the first verse\n",
+    "currentTextOnly": "1 the first verse",
+    "currentTokens": [
+      {
+        "id": "MAT-8",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 18,
+          "start": 16
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-9",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 1
+        },
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 20,
+          "start": 18
+        },
+        "text": " 1"
+      },
+      {
+        "id": "MAT-10",
+        "kind": "text",
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 36,
+          "start": 20
+        },
+        "text": " the first verse"
+      },
+      {
+        "id": "MAT-11",
+        "kind": "newline",
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 37,
+          "start": 36
+        },
+        "text": "\n"
+      }
+    ],
+    "isUsfmStructureChange": false,
+    "isWhitespaceChange": false,
+    "original": {
+      "blockId": "MAT 1:1::MAT-8",
+      "endExclusive": 12,
+      "prevBlockId": "MAT 1:0::MAT-3",
+      "semanticSid": "MAT 1:1",
+      "start": 8,
+      "textFull": "\\v 1 the first verse\n"
+    },
+    "originalAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      }
+    ],
+    "originalText": "\\v 1 the first verse\n",
+    "originalTextOnly": "1 the first verse",
+    "originalTokens": [
+      {
+        "id": "MAT-8",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 18,
+          "start": 16
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-9",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 1
+        },
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 20,
+          "start": 18
+        },
+        "text": " 1"
+      },
+      {
+        "id": "MAT-10",
+        "kind": "text",
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 36,
+          "start": 20
+        },
+        "text": " the first verse"
+      },
+      {
+        "id": "MAT-11",
+        "kind": "newline",
+        "sid": "MAT 1:1",
+        "span": {
+          "end": 37,
+          "start": 36
+        },
+        "text": "\n"
+      }
+    ],
+    "semanticSid": "MAT 1:1",
+    "status": "unchanged",
+    "undoSide": "current"
+  },
+  {
+    "blockId": "MAT 1:2::MAT-12",
+    "current": {
+      "blockId": "MAT 1:2::MAT-12",
+      "endExclusive": 16,
+      "prevBlockId": "MAT 1:1::MAT-8",
+      "semanticSid": "MAT 1:2",
+      "start": 12,
+      "textFull": "\\v 2 the second verse\n"
+    },
+    "currentAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      }
+    ],
+    "currentText": "\\v 2 the second verse\n",
+    "currentTextOnly": "2 the second verse",
+    "currentTokens": [
+      {
+        "id": "MAT-12",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 39,
+          "start": 37
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-13",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 2
+        },
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 41,
+          "start": 39
+        },
+        "text": " 2"
+      },
+      {
+        "id": "MAT-14",
+        "kind": "text",
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 58,
+          "start": 41
+        },
+        "text": " the second verse"
+      },
+      {
+        "id": "MAT-15",
+        "kind": "newline",
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 59,
+          "start": 58
+        },
+        "text": "\n"
+      }
+    ],
+    "isUsfmStructureChange": false,
+    "isWhitespaceChange": false,
+    "original": {
+      "blockId": "MAT 1:2::MAT-12",
+      "endExclusive": 16,
+      "prevBlockId": "MAT 1:1::MAT-8",
+      "semanticSid": "MAT 1:2",
+      "start": 12,
+      "textFull": "\\v 2 the second verse\n"
+    },
+    "originalAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      }
+    ],
+    "originalText": "\\v 2 the second verse\n",
+    "originalTextOnly": "2 the second verse",
+    "originalTokens": [
+      {
+        "id": "MAT-12",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 39,
+          "start": 37
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-13",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 2
+        },
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 41,
+          "start": 39
+        },
+        "text": " 2"
+      },
+      {
+        "id": "MAT-14",
+        "kind": "text",
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 58,
+          "start": 41
+        },
+        "text": " the second verse"
+      },
+      {
+        "id": "MAT-15",
+        "kind": "newline",
+        "sid": "MAT 1:2",
+        "span": {
+          "end": 59,
+          "start": 58
+        },
+        "text": "\n"
+      }
+    ],
+    "semanticSid": "MAT 1:2",
+    "status": "unchanged",
+    "undoSide": "current"
+  },
+  {
+    "blockId": "MAT 1:3::MAT-16",
+    "current": {
+      "blockId": "MAT 1:3::MAT-16",
+      "endExclusive": 29,
+      "prevBlockId": "MAT 1:2::MAT-12",
+      "semanticSid": "MAT 1:3",
+      "start": 16,
+      "textFull": "\\v 3 \\x - \\xo 2.23: \\xt Mrk 1.24; Luk 2.39; Jhn 1.45.\\x*and made his home in a town named Nazareth.\\p\n"
+    },
+    "currentAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 4
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 5
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 6
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 7
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 8
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 9
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 10
+      },
+      {
+        "change": "added"
+      },
+      {
+        "change": "added"
+      }
+    ],
+    "currentText": "\\v 3 \\x - \\xo 2.23: \\xt Mrk 1.24; Luk 2.39; Jhn 1.45.\\x*and made his home in a town named Nazareth.\\p\n",
+    "currentTextOnly": "3 - 2.23: Mrk 1.24; Luk 2.39; Jhn 1.45.and made his home in a town named Nazareth.",
+    "currentTokens": [
+      {
+        "id": "MAT-16",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 61,
+          "start": 59
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-17",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 3
+        },
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 63,
+          "start": 61
+        },
+        "text": " 3"
+      },
+      {
+        "id": "MAT-18",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 64,
+          "start": 63
+        },
+        "text": " "
+      },
+      {
+        "id": "MAT-19",
+        "kind": "marker",
+        "marker": "x",
+        "markerMetadata": {
+          "canonical": "x",
+          "family": "crossReference",
+          "kind": "note"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 66,
+          "start": 64
+        },
+        "structural": {
+          "noteContext": "crossReference",
+          "scopeKind": "note"
+        },
+        "text": "\\x"
+      },
+      {
+        "id": "MAT-20",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 69,
+          "start": 66
+        },
+        "text": " - "
+      },
+      {
+        "id": "MAT-21",
+        "kind": "marker",
+        "marker": "xo",
+        "markerMetadata": {
+          "canonical": "xo",
+          "family": "crossReference",
+          "kind": "character"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 72,
+          "start": 69
+        },
+        "structural": {
+          "scopeKind": "character"
+        },
+        "text": "\\xo"
+      },
+      {
+        "id": "MAT-22",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 79,
+          "start": 72
+        },
+        "text": " 2.23: "
+      },
+      {
+        "id": "MAT-23",
+        "kind": "marker",
+        "marker": "xt",
+        "markerMetadata": {
+          "canonical": "xt",
+          "family": "crossReference",
+          "kind": "character"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 82,
+          "start": 79
+        },
+        "structural": {
+          "scopeKind": "character"
+        },
+        "text": "\\xt"
+      },
+      {
+        "id": "MAT-24",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 112,
+          "start": 82
+        },
+        "text": " Mrk 1.24; Luk 2.39; Jhn 1.45."
+      },
+      {
+        "id": "MAT-25",
+        "kind": "endMarker",
+        "marker": "x",
+        "markerMetadata": {
+          "canonical": "x",
+          "family": "crossReference",
+          "kind": "note"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 115,
+          "start": 112
+        },
+        "structural": {
+          "noteContext": "crossReference",
+          "scopeKind": "note"
+        },
+        "text": "\\x*"
+      },
+      {
+        "id": "MAT-26",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 158,
+          "start": 115
+        },
+        "text": "and made his home in a town named Nazareth."
+      },
+      {
+        "id": "MAT-27",
+        "kind": "marker",
+        "marker": "p",
+        "markerMetadata": {
+          "canonical": "p",
+          "kind": "paragraph"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 160,
+          "start": 158
+        },
+        "structural": {
+          "inlineContext": "para",
+          "scopeKind": "block"
+        },
+        "text": "\\p"
+      },
+      {
+        "id": "MAT-28",
+        "kind": "newline",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 161,
+          "start": 160
+        },
+        "text": "\n"
+      }
+    ],
+    "isUsfmStructureChange": true,
+    "isWhitespaceChange": false,
+    "original": {
+      "blockId": "MAT 1:3::MAT-16",
+      "endExclusive": 27,
+      "prevBlockId": "MAT 1:2::MAT-12",
+      "semanticSid": "MAT 1:3",
+      "start": 16,
+      "textFull": "\\v 3 \\x - \\xo 2.23: \\xt Mrk 1.24; Luk 2.39; Jhn 1.45.\\x*and made his home in a town named Nazareth."
+    },
+    "originalAlignment": [
+      {
+        "change": "unchanged",
+        "counterpartIndex": 0
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 1
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 2
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 3
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 4
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 5
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 6
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 7
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 8
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 9
+      },
+      {
+        "change": "unchanged",
+        "counterpartIndex": 10
+      }
+    ],
+    "originalText": "\\v 3 \\x - \\xo 2.23: \\xt Mrk 1.24; Luk 2.39; Jhn 1.45.\\x*and made his home in a town named Nazareth.",
+    "originalTextOnly": "3 - 2.23: Mrk 1.24; Luk 2.39; Jhn 1.45.and made his home in a town named Nazareth.",
+    "originalTokens": [
+      {
+        "id": "MAT-16",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 61,
+          "start": 59
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-17",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 3
+        },
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 63,
+          "start": 61
+        },
+        "text": " 3"
+      },
+      {
+        "id": "MAT-18",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 64,
+          "start": 63
+        },
+        "text": " "
+      },
+      {
+        "id": "MAT-19",
+        "kind": "marker",
+        "marker": "x",
+        "markerMetadata": {
+          "canonical": "x",
+          "family": "crossReference",
+          "kind": "note"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 66,
+          "start": 64
+        },
+        "structural": {
+          "noteContext": "crossReference",
+          "scopeKind": "note"
+        },
+        "text": "\\x"
+      },
+      {
+        "id": "MAT-20",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 69,
+          "start": 66
+        },
+        "text": " - "
+      },
+      {
+        "id": "MAT-21",
+        "kind": "marker",
+        "marker": "xo",
+        "markerMetadata": {
+          "canonical": "xo",
+          "family": "crossReference",
+          "kind": "character"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 72,
+          "start": 69
+        },
+        "structural": {
+          "scopeKind": "character"
+        },
+        "text": "\\xo"
+      },
+      {
+        "id": "MAT-22",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 79,
+          "start": 72
+        },
+        "text": " 2.23: "
+      },
+      {
+        "id": "MAT-23",
+        "kind": "marker",
+        "marker": "xt",
+        "markerMetadata": {
+          "canonical": "xt",
+          "family": "crossReference",
+          "kind": "character"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 82,
+          "start": 79
+        },
+        "structural": {
+          "scopeKind": "character"
+        },
+        "text": "\\xt"
+      },
+      {
+        "id": "MAT-24",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 112,
+          "start": 82
+        },
+        "text": " Mrk 1.24; Luk 2.39; Jhn 1.45."
+      },
+      {
+        "id": "MAT-25",
+        "kind": "endMarker",
+        "marker": "x",
+        "markerMetadata": {
+          "canonical": "x",
+          "family": "crossReference",
+          "kind": "note"
+        },
+        "nested": false,
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 115,
+          "start": 112
+        },
+        "structural": {
+          "noteContext": "crossReference",
+          "scopeKind": "note"
+        },
+        "text": "\\x*"
+      },
+      {
+        "id": "MAT-26",
+        "kind": "text",
+        "sid": "MAT 1:3",
+        "span": {
+          "end": 158,
+          "start": 115
+        },
+        "text": "and made his home in a town named Nazareth."
+      }
+    ],
+    "semanticSid": "MAT 1:3",
+    "status": "modified",
+    "undoSide": "current"
+  },
+  {
+    "blockId": "MAT 1:99::MAT-29",
+    "current": {
+      "blockId": "MAT 1:99::MAT-29",
+      "endExclusive": 33,
+      "prevBlockId": "MAT 1:3::MAT-16",
+      "semanticSid": "MAT 1:99",
+      "start": 29,
+      "textFull": "\\v 99 trailing addition\n"
+    },
+    "currentAlignment": [
+      {
+        "change": "added"
+      },
+      {
+        "change": "added"
+      },
+      {
+        "change": "added"
+      },
+      {
+        "change": "added"
+      }
+    ],
+    "currentText": "\\v 99 trailing addition\n",
+    "currentTextOnly": "99 trailing addition",
+    "currentTokens": [
+      {
+        "id": "MAT-29",
+        "kind": "marker",
+        "marker": "v",
+        "markerMetadata": {
+          "canonical": "v",
+          "kind": "verse"
+        },
+        "nested": false,
+        "sid": "MAT 1:99",
+        "span": {
+          "end": 163,
+          "start": 161
+        },
+        "structural": {
+          "scopeKind": "verse"
+        },
+        "text": "\\v"
+      },
+      {
+        "id": "MAT-30",
+        "kind": "number",
+        "numberInfo": {
+          "kind": "single",
+          "start": 99
+        },
+        "sid": "MAT 1:99",
+        "span": {
+          "end": 166,
+          "start": 163
+        },
+        "text": " 99"
+      },
+      {
+        "id": "MAT-31",
+        "kind": "text",
+        "sid": "MAT 1:99",
+        "span": {
+          "end": 184,
+          "start": 166
+        },
+        "text": " trailing addition"
+      },
+      {
+        "id": "MAT-32",
+        "kind": "newline",
+        "sid": "MAT 1:99",
+        "span": {
+          "end": 185,
+          "start": 184
+        },
+        "text": "\n"
+      }
+    ],
+    "isUsfmStructureChange": false,
+    "isWhitespaceChange": false,
+    "originalAlignment": [],
+    "originalText": "",
+    "originalTextOnly": "",
+    "originalTokens": [],
+    "semanticSid": "MAT 1:99",
+    "status": "added",
+    "undoSide": "current"
+  }
+]

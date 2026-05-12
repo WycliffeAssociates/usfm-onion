@@ -1,0 +1,84 @@
+{
+  "issues": [
+    {
+      "category": "context",
+      "code": "verse-outside-explicit-paragraph",
+      "issueType": "usfm",
+      "marker": "v",
+      "message": "Verses must appear inside a paragraph, list, or table.",
+      "messageParams": {},
+      "severity": "error",
+      "sid": "GEN 2:1",
+      "span": {
+        "end": 115,
+        "start": 113
+      },
+      "tokenId": "GEN-22"
+    },
+    {
+      "category": "structure",
+      "code": "missing-tag-end-delimiter-after-marker",
+      "fix": {
+        "code": "insert-tag-end-delimiter-after-marker",
+        "label": "InsertTagEndDelimiterAfterMarker",
+        "label_params": {},
+        "replacements": [
+          {
+            "kind": "marker",
+            "marker": "v",
+            "sid": "GEN 1:1",
+            "text": " \\v"
+          }
+        ],
+        "target_token_id": "GEN-7",
+        "type": "replaceToken"
+      },
+      "issueType": "usfm",
+      "marker": "p",
+      "message": "\\p needs a space before the text that follows.",
+      "messageParams": {},
+      "severity": "error",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 15,
+        "start": 13
+      },
+      "tokenId": "GEN-6"
+    },
+    {
+      "category": "structure",
+      "code": "excess-whitespace-in-content",
+      "fix": {
+        "code": "collapse-content-whitespace",
+        "label": "CollapseContentWhitespace",
+        "label_params": {},
+        "replacements": [
+          {
+            "kind": "text",
+            "sid": "GEN 1:2",
+            "text": " verse with excess whitespace"
+          }
+        ],
+        "target_token_id": "GEN-13",
+        "type": "replaceToken"
+      },
+      "issueType": "usfm",
+      "message": "Multiple spaces or a stray newline inside this text — collapse to a single space.",
+      "messageParams": {},
+      "severity": "warning",
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 90,
+        "start": 56
+      },
+      "tokenId": "GEN-13"
+    }
+  ],
+  "summary": {
+    "byCategory": {},
+    "byIssueType": {},
+    "bySeverity": {},
+    "suppressedCount": 0,
+    "totalCount": 3
+  }
+}

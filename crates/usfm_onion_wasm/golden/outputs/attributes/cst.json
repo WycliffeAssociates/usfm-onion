@@ -1,0 +1,349 @@
+{
+  "roots": [
+    {
+      "children": [
+        {
+          "children": [],
+          "tokenIndex": 1
+        },
+        {
+          "children": [],
+          "tokenIndex": 2
+        }
+      ],
+      "tokenIndex": 0
+    },
+    {
+      "children": [],
+      "tokenIndex": 3
+    },
+    {
+      "children": [],
+      "tokenIndex": 4
+    },
+    {
+      "children": [],
+      "tokenIndex": 5
+    },
+    {
+      "children": [
+        {
+          "children": [],
+          "tokenIndex": 7
+        },
+        {
+          "children": [],
+          "tokenIndex": 8
+        },
+        {
+          "children": [],
+          "tokenIndex": 9
+        },
+        {
+          "children": [],
+          "tokenIndex": 10
+        },
+        {
+          "children": [],
+          "tokenIndex": 11
+        },
+        {
+          "children": [],
+          "tokenIndex": 12
+        },
+        {
+          "children": [],
+          "tokenIndex": 13
+        },
+        {
+          "children": [],
+          "tokenIndex": 14
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "tokenIndex": 16
+            }
+          ],
+          "tokenIndex": 15
+        },
+        {
+          "children": [],
+          "tokenIndex": 17
+        }
+      ],
+      "tokenIndex": 6
+    }
+  ],
+  "tokens": [
+    {
+      "id": "GEN-0",
+      "kind": "marker",
+      "marker": "id",
+      "markerMetadata": {
+        "canonical": "id",
+        "kind": "header"
+      },
+      "nested": false,
+      "span": {
+        "end": 3,
+        "start": 0
+      },
+      "structural": {
+        "scopeKind": "header"
+      },
+      "text": "\\id"
+    },
+    {
+      "bookCode": "GEN",
+      "bookCodeValid": true,
+      "id": "GEN-1",
+      "kind": "bookCode",
+      "sid": "GEN 0:0",
+      "span": {
+        "end": 7,
+        "start": 3
+      },
+      "text": " GEN"
+    },
+    {
+      "id": "GEN-2",
+      "kind": "newline",
+      "sid": "GEN 0:0",
+      "span": {
+        "end": 8,
+        "start": 7
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-3",
+      "kind": "marker",
+      "marker": "c",
+      "markerMetadata": {
+        "canonical": "c",
+        "kind": "chapter"
+      },
+      "nested": false,
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 10,
+        "start": 8
+      },
+      "structural": {
+        "scopeKind": "chapter"
+      },
+      "text": "\\c"
+    },
+    {
+      "id": "GEN-4",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 12,
+        "start": 10
+      },
+      "text": " 1"
+    },
+    {
+      "id": "GEN-5",
+      "kind": "newline",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 13,
+        "start": 12
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-6",
+      "kind": "marker",
+      "marker": "p",
+      "markerMetadata": {
+        "canonical": "p",
+        "kind": "paragraph"
+      },
+      "nested": false,
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 15,
+        "start": 13
+      },
+      "structural": {
+        "inlineContext": "para",
+        "scopeKind": "block"
+      },
+      "text": "\\p"
+    },
+    {
+      "id": "GEN-7",
+      "kind": "newline",
+      "sid": "GEN 1:0",
+      "span": {
+        "end": 16,
+        "start": 15
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-8",
+      "kind": "marker",
+      "marker": "v",
+      "markerMetadata": {
+        "canonical": "v",
+        "kind": "verse"
+      },
+      "nested": false,
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 18,
+        "start": 16
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "GEN-9",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 1
+      },
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 20,
+        "start": 18
+      },
+      "text": " 1"
+    },
+    {
+      "id": "GEN-10",
+      "kind": "text",
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 36,
+        "start": 20
+      },
+      "text": " the first verse"
+    },
+    {
+      "id": "GEN-11",
+      "kind": "newline",
+      "sid": "GEN 1:1",
+      "span": {
+        "end": 37,
+        "start": 36
+      },
+      "text": "\n"
+    },
+    {
+      "id": "GEN-12",
+      "kind": "marker",
+      "marker": "v",
+      "markerMetadata": {
+        "canonical": "v",
+        "kind": "verse"
+      },
+      "nested": false,
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 39,
+        "start": 37
+      },
+      "structural": {
+        "scopeKind": "verse"
+      },
+      "text": "\\v"
+    },
+    {
+      "id": "GEN-13",
+      "kind": "number",
+      "numberInfo": {
+        "kind": "single",
+        "start": 2
+      },
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 41,
+        "start": 39
+      },
+      "text": " 2"
+    },
+    {
+      "id": "GEN-14",
+      "kind": "text",
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 59,
+        "start": 41
+      },
+      "text": " the second verse "
+    },
+    {
+      "attributes": [
+        {
+          "key": "lemma",
+          "span": {
+            "end": 84,
+            "start": 71
+          },
+          "text": "lemma=\"grace\"",
+          "value": "grace"
+        }
+      ],
+      "id": "GEN-15",
+      "kind": "marker",
+      "marker": "w",
+      "markerMetadata": {
+        "canonical": "w",
+        "kind": "character"
+      },
+      "nested": false,
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 61,
+        "start": 59
+      },
+      "structural": {
+        "scopeKind": "character"
+      },
+      "text": "\\w"
+    },
+    {
+      "id": "GEN-16",
+      "kind": "text",
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 70,
+        "start": 61
+      },
+      "text": " gracious"
+    },
+    {
+      "id": "GEN-17",
+      "kind": "endMarker",
+      "marker": "w",
+      "markerMetadata": {
+        "canonical": "w",
+        "kind": "character"
+      },
+      "nested": false,
+      "sid": "GEN 1:2",
+      "span": {
+        "end": 88,
+        "start": 85
+      },
+      "structural": {
+        "scopeKind": "character"
+      },
+      "text": "\\w*"
+    }
+  ]
+}

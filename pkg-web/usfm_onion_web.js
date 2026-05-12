@@ -118,11 +118,11 @@ export class ParsedUsfm {
      * @param {any | null} [options]
      * @returns {string}
      */
-    to_html(options) {
+    toHtml(options) {
         let deferred2_0;
         let deferred2_1;
         try {
-            const ret = wasm.parsedusfm_to_html(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+            const ret = wasm.parsedusfm_toHtml(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
             var ptr1 = ret[0];
             var len1 = ret[1];
             if (ret[3]) {
@@ -139,11 +139,11 @@ export class ParsedUsfm {
     /**
      * @returns {string}
      */
-    to_usfm() {
+    toUsfm() {
         let deferred1_0;
         let deferred1_1;
         try {
-            const ret = wasm.parsedusfm_to_usfm(this.__wbg_ptr);
+            const ret = wasm.parsedusfm_toUsfm(this.__wbg_ptr);
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
             return getStringFromWasm0(ret[0], ret[1]);
@@ -154,8 +154,8 @@ export class ParsedUsfm {
     /**
      * @returns {any}
      */
-    to_usj() {
-        const ret = wasm.parsedusfm_to_usj(this.__wbg_ptr);
+    toUsj() {
+        const ret = wasm.parsedusfm_toUsj(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -164,11 +164,11 @@ export class ParsedUsfm {
     /**
      * @returns {string}
      */
-    to_usx() {
+    toUsx() {
         let deferred2_0;
         let deferred2_1;
         try {
-            const ret = wasm.parsedusfm_to_usx(this.__wbg_ptr);
+            const ret = wasm.parsedusfm_toUsx(this.__wbg_ptr);
             var ptr1 = ret[0];
             var len1 = ret[1];
             if (ret[3]) {
@@ -185,8 +185,8 @@ export class ParsedUsfm {
     /**
      * @returns {any}
      */
-    to_vref() {
-        const ret = wasm.parsedusfm_to_vref(this.__wbg_ptr);
+    toVref() {
+        const ret = wasm.parsedusfm_toVref(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -204,117 +204,6 @@ export class ParsedUsfm {
     }
 }
 if (Symbol.dispose) ParsedUsfm.prototype[Symbol.dispose] = ParsedUsfm.prototype.free;
-
-export class ParsedUsfmBatch {
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(ParsedUsfmBatch.prototype);
-        obj.__wbg_ptr = ptr;
-        ParsedUsfmBatchFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        ParsedUsfmBatchFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_parsedusfmbatch_free(ptr, 0);
-    }
-    /**
-     * @param {any | null} [options]
-     * @returns {any}
-     */
-    format(options) {
-        const ret = wasm.parsedusfmbatch_format(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {Array<any>}
-     */
-    items() {
-        const ret = wasm.parsedusfmbatch_items(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * @param {any | null} [options]
-     * @returns {any}
-     */
-    lint(options) {
-        const ret = wasm.parsedusfmbatch_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {any | null} [options]
-     * @returns {any}
-     */
-    to_html(options) {
-        const ret = wasm.parsedusfmbatch_to_html(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {any}
-     */
-    to_usfm() {
-        const ret = wasm.parsedusfmbatch_to_usfm(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {any}
-     */
-    to_usj() {
-        const ret = wasm.parsedusfmbatch_to_usj(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {any}
-     */
-    to_usx() {
-        const ret = wasm.parsedusfmbatch_to_usx(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {any}
-     */
-    to_vref() {
-        const ret = wasm.parsedusfmbatch_to_vref(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {any}
-     */
-    tokens() {
-        const ret = wasm.parsedusfmbatch_tokens(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-}
-if (Symbol.dispose) ParsedUsfmBatch.prototype[Symbol.dispose] = ParsedUsfmBatch.prototype.free;
 
 export class UsfmMarkerCatalog {
     static __wrap(ptr) {
@@ -456,19 +345,6 @@ export function formatRules() {
 }
 
 /**
- * @param {any} token_batches
- * @param {any | null} [options]
- * @returns {any}
- */
-export function formatTokenBatch(token_batches, options) {
-    const ret = wasm.formatTokenBatch(token_batches, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
  * @param {any} tokens
  * @param {any | null} [options]
  * @returns {any}
@@ -554,19 +430,6 @@ export function lintCodes() {
 }
 
 /**
- * @param {any} token_batches
- * @param {any | null} [options]
- * @returns {any}
- */
-export function lintTokenBatch(token_batches, options) {
-    const ret = wasm.lintTokenBatch(token_batches, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
  * @param {any} tokens
  * @param {any | null} [options]
  * @returns {any}
@@ -625,18 +488,6 @@ export function parse(source) {
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.parse(ptr0, len0);
     return ParsedUsfm.__wrap(ret);
-}
-
-/**
- * @param {any} sources
- * @returns {ParsedUsfmBatch}
- */
-export function parseBatch(sources) {
-    const ret = wasm.parseBatch(sources);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return ParsedUsfmBatch.__wrap(ret[0]);
 }
 
 /**
@@ -902,10 +753,6 @@ function __wbg_get_imports() {
             const ret = new Object();
             return ret;
         },
-        __wbg_new_typed_bccac67128ed885a: function() {
-            const ret = new Array();
-            return ret;
-        },
         __wbg_next_11b99ee6237339e3: function() { return handleError(function (arg0) {
             const ret = arg0.next();
             return ret;
@@ -914,16 +761,8 @@ function __wbg_get_imports() {
             const ret = arg0.next;
             return ret;
         },
-        __wbg_parsedusfm_new: function(arg0) {
-            const ret = ParsedUsfm.__wrap(arg0);
-            return ret;
-        },
         __wbg_prototypesetcall_d62e5099504357e6: function(arg0, arg1, arg2) {
             Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
-        },
-        __wbg_push_e87b0e732085a946: function(arg0, arg1) {
-            const ret = arg0.push(arg1);
-            return ret;
         },
         __wbg_set_282384002438957f: function(arg0, arg1, arg2) {
             arg0[arg1 >>> 0] = arg2;
@@ -978,9 +817,6 @@ function __wbg_get_imports() {
 const ParsedUsfmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfm_free(ptr >>> 0, 1));
-const ParsedUsfmBatchFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfmbatch_free(ptr >>> 0, 1));
 const UsfmMarkerCatalogFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_usfmmarkercatalog_free(ptr >>> 0, 1));

@@ -15,92 +15,173 @@ if (target === "web") {
   await pkg.default({ module_or_path: wasmBytes });
 }
 
-const source = "\\\\id GEN\\n\\\\c 1\\n\\\\p\\n\\\\v 1 In the beginning\\n";
-const parsed = pkg.parseContent({
-  source,
-  format: "usfm",
-});
+const source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\n";
+const edited = `${source}God created the heavens.\n`;
 
-assert.equal(parsed.bookCode, "GEN");
+// --- parse + ParsedUsfm methods ----------------------------------------
 
-const html = pkg.intoHtml(parsed, {
-  noteMode: "extracted",
-});
-assert.match(html, /<article|<main|<section|<p/);
+const parsed = pkg.parse(source);
 
-const usj = pkg.intoUsj(parsed);
-assert.equal(usj.type, "USJ");
-
-const ast = pkg.intoAst(parsed);
-assert.ok(Array.isArray(ast.content));
-
-const directAst = pkg.usfmToAst(source);
-assert.ok(Array.isArray(directAst.content));
-
-const usx = pkg.intoUsx({ document: parsed });
-assert.match(usx, /<usx/);
-
-const tokenList = pkg.usfmToTokens(source);
-assert.ok(Array.isArray(tokenList));
-assert.equal(pkg.tokensToUsfm(tokenList), source);
-
-const variants = pkg.classifyTokens(tokenList);
-assert.ok(Array.isArray(variants));
-assert.ok(variants.some((variant) => variant.type === "marker"));
-
-const tokenAst = pkg.tokensToAst(tokenList);
-assert.ok(Array.isArray(tokenAst.content));
-
-const flattenedAstTokens = pkg.astToTokens(tokenAst);
-assert.ok(Array.isArray(flattenedAstTokens));
-
-const issues = pkg.lintContent({
-  source,
-  format: "usfm",
-});
-assert.ok(Array.isArray(issues));
-
-const tokenIssues = pkg.lintFlatTokens({
-  tokens: tokenList,
-});
-assert.ok(Array.isArray(tokenIssues));
-
-const fixableIssues = pkg.lintContent({
-  source: "\\\\id GEN\\n\\\\c 1\\n\\\\ptext\\n",
-  format: "usfm",
-});
+const tokens = parsed.tokens();
+assert.ok(Array.isArray(tokens), "tokens() returns an array");
+assert.ok(tokens.length > 0, "tokens() non-empty");
 assert.ok(
-  fixableIssues.some((issue) => issue.fix && issue.fix.type === "replaceToken"),
+  tokens.some((t) => t.kind === "marker" && t.marker === "id"),
+  "tokens include \\id marker",
 );
 
-const formatted = pkg.formatContent({
-  source,
-  format: "usfm",
-});
-assert.ok(formatted.tokens.length > 0);
+const cst = parsed.cst();
+assert.ok(Array.isArray(cst.tokens), "cst.tokens is an array");
+assert.ok(Array.isArray(cst.roots), "cst.roots is an array");
 
-const formattedTokens = pkg.formatFlatTokens({
-  tokens: tokenList,
-});
-assert.ok(formattedTokens.tokens.length > 0);
+const lintResult = parsed.lint();
+assert.ok(Array.isArray(lintResult.issues), "lint().issues is an array");
+assert.ok(typeof lintResult.summary === "object", "lint().summary is an object");
+assert.equal(typeof lintResult.summary.totalCount, "number");
 
-const diffs = pkg.diffUsfm({
-  baselineUsfm: source,
-  currentUsfm: `${source}God created\\n`,
-});
-assert.ok(Array.isArray(diffs));
+const usfmRoundtrip = parsed.toUsfm();
+assert.equal(usfmRoundtrip, source, "toUsfm() round-trips byte-exact");
 
-const tokenDiffs = pkg.diffTokens({
-  baselineTokens: tokenList,
-  currentTokens: pkg.usfmToTokens(`${source}God created\\n`),
-});
-assert.ok(Array.isArray(tokenDiffs));
+const usj = parsed.toUsj();
+assert.equal(usj.type, "USJ", "toUsj() has type=USJ");
+assert.ok(Array.isArray(usj.content), "toUsj().content is an array");
 
-const reverted = pkg.revertDiffBlock({
-  blockId: diffs[0]?.blockId ?? "GEN 1:1",
-  baselineTokens: tokenList,
-  currentTokens: pkg.usfmToTokens(`${source}God created\\n`),
-});
-assert.ok(Array.isArray(reverted));
+const usx = parsed.toUsx();
+assert.match(usx, /<usx/, "toUsx() emits <usx>");
+
+const html = parsed.toHtml({ noteMode: "extracted" });
+assert.match(html, /<(article|main|section|p)/, "toHtml() emits a block element");
+
+const vref = parsed.toVref();
+assert.equal(typeof vref, "object", "toVref() returns an object");
+
+// --- format ------------------------------------------------------------
+
+const formatted = parsed.format();
+assert.equal(typeof formatted, "string");
+
+// --- diff (instance method + standalone) -------------------------------
+
+const editedParsed = pkg.parse(edited);
+
+const diffs = parsed.diff(editedParsed);
+assert.ok(Array.isArray(diffs), "diff() returns an array");
+
+const diffsByChapter = parsed.diffByChapter(editedParsed);
+assert.equal(typeof diffsByChapter, "object", "diffByChapter() returns object");
+
+// --- standalone source-in functions ------------------------------------
+
+const lintFromSource = pkg.lintUsfm(source);
+assert.deepEqual(
+  lintFromSource.issues.map((i) => i.code).sort(),
+  lintResult.issues.map((i) => i.code).sort(),
+  "lintUsfm() and parsed.lint() agree",
+);
+
+const formattedFromSource = pkg.formatUsfm(source);
+assert.equal(formattedFromSource, formatted, "formatUsfm() matches parsed.format()");
+
+const diffsFromSource = pkg.diffUsfm(source, edited);
+assert.equal(
+  diffsFromSource.length,
+  diffs.length,
+  "diffUsfm() and parsed.diff() agree on block count",
+);
+
+// --- token-in functions ------------------------------------------------
+
+const usfmFromTokens = pkg.tokensToUsfm(tokens);
+assert.equal(usfmFromTokens, source, "tokensToUsfm() round-trips");
+
+const htmlFromTokens = pkg.tokensToHtml(tokens);
+assert.match(htmlFromTokens, /<(article|main|section|p)/);
+
+const lintFromTokens = pkg.lintTokens(tokens);
+assert.ok(Array.isArray(lintFromTokens.issues), "lintTokens() returns issues");
+
+const formattedTokens = pkg.formatTokens(tokens);
+assert.ok(Array.isArray(formattedTokens.tokens), "formatTokens().tokens is array");
+assert.equal(typeof formattedTokens.usfm, "string");
+
+const formattedTokensMut = pkg.formatTokensMut(tokens);
+assert.ok(Array.isArray(formattedTokensMut), "formatTokensMut() returns array");
+
+const editedTokens = editedParsed.tokens();
+const tokenDiffs = pkg.diffTokens(tokens, editedTokens);
+assert.ok(Array.isArray(tokenDiffs), "diffTokens() returns an array");
+
+// --- token fix flow ----------------------------------------------------
+
+const fixableSource = "\\id GEN\n\\c 1\n\\p\\v 1 Word\n";
+const fixableLint = pkg.lintUsfm(fixableSource);
+const fixableIssue = fixableLint.issues.find((i) => i.fix);
+assert.ok(fixableIssue, "fixture produces at least one issue with a fix");
+const fixedTokens = pkg.parse(fixableSource).applyTokenFix(fixableIssue.fix);
+assert.ok(Array.isArray(fixedTokens), "applyTokenFix() returns tokens");
+
+const standaloneFixed = pkg.applyTokenFix(
+  pkg.parse(fixableSource).tokens(),
+  fixableIssue.fix,
+);
+assert.ok(Array.isArray(standaloneFixed), "standalone applyTokenFix() returns tokens");
+
+// --- revert diff block -------------------------------------------------
+
+if (diffs.length > 0) {
+  const reverted = parsed.revertDiffBlock(editedParsed, diffs[0].blockId);
+  assert.ok(Array.isArray(reverted), "revertDiffBlock() returns tokens");
+
+  const standaloneReverted = pkg.revertDiffBlock(
+    tokens,
+    editedTokens,
+    diffs[0].blockId,
+  );
+  assert.ok(Array.isArray(standaloneReverted));
+
+  const standaloneRevertedMany = pkg.revertDiffBlocks(
+    tokens,
+    editedTokens,
+    [diffs[0].blockId],
+  );
+  assert.ok(Array.isArray(standaloneRevertedMany));
+}
+
+// --- marker catalog ----------------------------------------------------
+
+const catalog = pkg.markerCatalog();
+const all = catalog.all();
+assert.ok(Array.isArray(all), "markerCatalog().all() returns an array");
+assert.ok(all.length > 50, "catalog has many entries");
+assert.equal(catalog.contains("p"), true, "catalog contains \\p");
+assert.equal(catalog.contains("__nonexistent__"), false);
+const pInfo = catalog.get("p");
+assert.equal(pInfo.marker, "p");
+
+const directInfo = pkg.markerInfo("p");
+assert.equal(directInfo.marker, "p");
+assert.equal(pkg.isKnownMarker("p"), true);
+assert.equal(pkg.isKnownMarker("__nope__"), false);
+
+// --- lint / format introspection --------------------------------------
+
+const lintCodes = pkg.lintCodes();
+assert.ok(Array.isArray(lintCodes));
+assert.ok(lintCodes.length > 30, "many lint codes registered");
+assert.ok(lintCodes.includes("verse-is-empty"), "new lint codes present");
+
+const lintMeta = pkg.lintCodeMeta();
+assert.ok(Array.isArray(lintMeta));
+assert.equal(lintMeta.length, lintCodes.length);
+assert.ok(lintMeta.every((m) => m.category && m.severity && m.issueType));
+
+const formatRules = pkg.formatRules();
+assert.ok(Array.isArray(formatRules));
+assert.ok(formatRules.length > 5);
+
+const formatMeta = pkg.formatRuleMeta();
+assert.ok(Array.isArray(formatMeta));
+assert.equal(formatMeta.length, formatRules.length);
+assert.ok(formatMeta.every((m) => m.code && m.labelKey));
 
 console.log(`${target} package smoke test passed`);

@@ -1,0 +1,6 @@
+\id GEN
+\c 1
+\p
+\v 1 word with no space after marker \v 2 verse with excess whitespace \v 3 verse three
+\c 2
+\v 1 chapter two starts here
