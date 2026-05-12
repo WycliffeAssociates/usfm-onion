@@ -13,6 +13,7 @@
         "end": 64,
         "start": 61
       },
+      "template": "Verses should count up by one: expected verse {expected, number}, found verse {found, number}.",
       "tokenId": "GEN-17"
     }
   ],

@@ -481,3 +481,52 @@ export function lintCodes(): LintCode[];
 export function lintCodeMeta(): LintCodeMeta[];
 export function formatRules(): FormatRule[];
 export function formatRuleMeta(): FormatRuleMeta[];
+
+
+export type DiffStatus = "added" | "deleted" | "modified" | "unchanged";
+
+export type DiffTokenChange = "unchanged" | "added" | "deleted" | "modified";
+
+export type DiffUndoSide = "original" | "current";
+
+export type FfiBlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "sidebarStart" | "sidebarEnd";
+
+export type FfiClosingBehavior = "none" | "requiredExplicit" | "optionalExplicitUntilNoteEnd" | "selfClosingMilestone";
+
+export type FfiInlineContext = "para" | "section" | "list" | "table";
+
+export type FfiMarkerCategory = "document" | "paragraph" | "character" | "noteContainer" | "noteSubmarker" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "figure" | "sidebarStart" | "sidebarEnd" | "periph" | "meta" | "tableRow" | "tableCell" | "header" | "unknown";
+
+export type FfiMarkerDefKind = "paragraph" | "character" | "note" | "chapter" | "verse" | "milestone" | "figure" | "sidebar" | "periph" | "meta" | "tableRow" | "tableCell" | "header";
+
+export type FfiMarkerFamily = "footnote" | "crossReference" | "sectionParagraph" | "listParagraph" | "tableCell" | "milestone" | "sidebar";
+
+export type FfiMarkerFamilyRole = "canonical" | "numberedVariant" | "nestedVariant" | "milestoneStart" | "milestoneEnd" | "alias";
+
+export type FfiMarkerKind = "paragraph" | "note" | "character" | "header" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "sidebarStart" | "sidebarEnd" | "figure" | "meta" | "periph" | "tableRow" | "tableCell" | "unknown";
+
+export type FfiNoteFamily = "footnote" | "crossReference";
+
+export type FfiNoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
+
+export type FfiSpecContext = "scripture" | "bookIdentification" | "bookHeaders" | "bookTitles" | "bookIntroduction" | "bookIntroductionEndTitles" | "bookChapterLabel" | "chapterContent" | "peripheral" | "peripheralContent" | "peripheralDivision" | "chapter" | "verse" | "section" | "para" | "list" | "table" | "sidebar" | "footnote" | "crossReference";
+
+export type FfiStructuralScopeKind = "unknown" | "header" | "block" | "note" | "character" | "milestone" | "chapter" | "verse" | "tableRow" | "tableCell" | "sidebar" | "periph" | "meta";
+
+export type HtmlCallerScope = "documentSequential" | "verseSequential";
+
+export type HtmlCallerStyle = "numeric" | "alphaLower" | "alphaUpper" | "romanLower" | "romanUpper" | "source";
+
+export type HtmlNoteMode = "extracted" | "inline";
+
+export type LintCategory = "document" | "structure" | "context" | "numbering";
+
+export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "chapter-expected-increase-by-one" | "inconsistent-chapter-label" | "duplicate-verse-number" | "verse-expected-increase-by-one" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "excess-whitespace-around-marker" | "excess-whitespace-in-content" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph";
+
+export type LintIssueType = "usfm" | "content";
+
+export type LintSeverity = "error" | "warning";
+
+export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
+
+export type TokenKind = "newline" | "optBreak" | "marker" | "endMarker" | "milestone" | "milestoneEnd" | "bookCode" | "number" | "text";

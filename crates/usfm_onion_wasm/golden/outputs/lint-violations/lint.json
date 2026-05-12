@@ -13,6 +13,7 @@
         "end": 115,
         "start": 113
       },
+      "template": "Verses must appear inside a paragraph, list, or table.",
       "tokenId": "GEN-22"
     },
     {
@@ -43,6 +44,7 @@
         "end": 15,
         "start": 13
       },
+      "template": "\\{marker} needs a space before the text that follows.",
       "tokenId": "GEN-6"
     },
     {
@@ -71,6 +73,7 @@
         "end": 90,
         "start": 56
       },
+      "template": "Multiple spaces or a stray newline inside this text — collapse to a single space.",
       "tokenId": "GEN-13"
     }
   ],
