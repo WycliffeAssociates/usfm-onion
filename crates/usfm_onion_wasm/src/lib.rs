@@ -1374,7 +1374,8 @@ impl From<NoteSubkind> for FfiNoteSubkind {
 // byte-identical at this step.
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct SpanValue {
     start: u32,
@@ -1392,7 +1393,8 @@ struct MarkerMetadataValue {
     family: Option<FfiMarkerFamily>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct AttributeItemValue {
     span: SpanValue,
@@ -1401,7 +1403,8 @@ struct AttributeItemValue {
     value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct StructuralMarkerInfoValue {
     scope_kind: FfiStructuralScopeKind,
@@ -1411,7 +1414,8 @@ struct StructuralMarkerInfoValue {
     note_context: Option<FfiSpecContext>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct NumberInfoValue {
     start: u32,
@@ -1420,7 +1424,8 @@ struct NumberInfoValue {
     kind: NumberRangeKind,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct TokenValue {
     id: String,
@@ -1448,21 +1453,24 @@ struct TokenValue {
     attributes: Vec<AttributeItemValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct CstNodeValue {
     token_index: usize,
     children: Vec<CstNodeValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct CstDocumentValue {
     tokens: Vec<TokenValue>,
     roots: Vec<CstNodeValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct LintSuppressionValue {
     code: LintCode,
@@ -1482,7 +1490,8 @@ struct LintOptionsValue {
     allow_implicit_chapter_content_verse: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct LintIssueValue {
     code: LintCode,
@@ -1508,7 +1517,8 @@ struct LintIssueValue {
     fix: Option<TokenFixValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct LintSummaryValue {
     by_category: std::collections::BTreeMap<LintCategory, usize>,
@@ -1518,15 +1528,17 @@ struct LintSummaryValue {
     suppressed_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct LintResultValue {
     issues: Vec<LintIssueValue>,
     summary: LintSummaryValue,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 enum TokenFixValue {
     ReplaceToken {
         code: String,
@@ -1550,7 +1562,8 @@ enum TokenFixValue {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct TokenTemplateValue {
     kind: TokenKind,
@@ -1596,7 +1609,8 @@ struct FormatOptionsValue {
     normalize_marker_whitespace_at_line_start: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct FormatResultValue {
     tokens: Vec<TokenValue>,
@@ -1625,7 +1639,8 @@ struct BuildSidBlocksOptionsValue {
     allow_empty_sid: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct SidBlockValue {
     block_id: String,
@@ -1637,7 +1652,8 @@ struct SidBlockValue {
     text_full: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct TokenAlignmentValue {
     change: DiffTokenChange,
@@ -1645,7 +1661,8 @@ struct TokenAlignmentValue {
     counterpart_index: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct ChapterTokenDiffValue {
     block_id: String,
@@ -1668,7 +1685,8 @@ struct ChapterTokenDiffValue {
     undo_side: DiffUndoSide,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct LintCodeMetaValue {
     code: LintCode,
@@ -1677,14 +1695,16 @@ struct LintCodeMetaValue {
     issue_type: LintIssueType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct FormatRuleMetaValue {
     code: String,
     label_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 struct MarkerInfoValue {
     marker: String,

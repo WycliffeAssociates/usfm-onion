@@ -483,6 +483,167 @@ export function formatRules(): FormatRule[];
 export function formatRuleMeta(): FormatRuleMeta[];
 
 
+export interface AttributeItemValue {
+    span: SpanValue;
+    text: string;
+    key: string;
+    value: string;
+}
+
+export interface ChapterTokenDiffValue {
+    blockId: string;
+    semanticSid: string;
+    status: DiffStatus;
+    original?: SidBlockValue;
+    current?: SidBlockValue;
+    originalText: string;
+    currentText: string;
+    originalTextOnly: string;
+    currentTextOnly: string;
+    isWhitespaceChange: boolean;
+    isUsfmStructureChange: boolean;
+    originalTokens: TokenValue[];
+    currentTokens: TokenValue[];
+    originalAlignment: TokenAlignmentValue[];
+    currentAlignment: TokenAlignmentValue[];
+    undoSide: DiffUndoSide;
+}
+
+export interface CstDocumentValue {
+    tokens: TokenValue[];
+    roots: CstNodeValue[];
+}
+
+export interface CstNodeValue {
+    tokenIndex: number;
+    children: CstNodeValue[];
+}
+
+export interface FormatResultValue {
+    tokens: TokenValue[];
+    usfm: string;
+}
+
+export interface FormatRuleMetaValue {
+    code: string;
+    labelKey: string;
+}
+
+export interface LintCodeMetaValue {
+    code: LintCode;
+    category: LintCategory;
+    severity: LintSeverity;
+    issueType: LintIssueType;
+}
+
+export interface LintIssueValue {
+    code: LintCode;
+    category: LintCategory;
+    severity: LintSeverity;
+    issueType: LintIssueType;
+    template: string;
+    message: string;
+    messageParams: Record<string, string>;
+    span?: SpanValue;
+    relatedSpan?: SpanValue;
+    tokenId?: string;
+    relatedTokenId?: string;
+    sid?: string;
+    marker?: string;
+    fix?: TokenFixValue;
+}
+
+export interface LintResultValue {
+    issues: LintIssueValue[];
+    summary: LintSummaryValue;
+}
+
+export interface LintSummaryValue {
+    byCategory: Record<LintCategory, number>;
+    bySeverity: Record<LintSeverity, number>;
+    byIssueType: Record<LintIssueType, number>;
+    totalCount: number;
+    suppressedCount: number;
+}
+
+export interface LintSuppressionValue {
+    code: LintCode;
+    sid: string;
+}
+
+export interface MarkerInfoValue {
+    marker: string;
+    canonical?: string;
+    known: boolean;
+    deprecated: boolean;
+    category: FfiMarkerCategory;
+    kind: FfiMarkerKind;
+    family?: FfiMarkerFamily;
+    familyRole?: FfiMarkerFamilyRole;
+    noteFamily?: FfiNoteFamily;
+    noteSubkind?: FfiNoteSubkind;
+    inlineContext?: FfiInlineContext;
+    defaultAttribute?: string;
+    contexts: FfiSpecContext[];
+    blockBehavior?: FfiBlockBehavior;
+    closingBehavior?: FfiClosingBehavior;
+    source?: string;
+}
+
+export interface NumberInfoValue {
+    start: number;
+    end?: number;
+    kind: NumberRangeKind;
+}
+
+export interface SidBlockValue {
+    blockId: string;
+    semanticSid: string;
+    start: number;
+    endExclusive: number;
+    prevBlockId?: string;
+    textFull: string;
+}
+
+export interface SpanValue {
+    start: number;
+    end: number;
+}
+
+export interface StructuralMarkerInfoValue {
+    scopeKind: FfiStructuralScopeKind;
+    inlineContext?: FfiInlineContext;
+    noteContext?: FfiSpecContext;
+}
+
+export interface TokenAlignmentValue {
+    change: DiffTokenChange;
+    counterpartIndex?: number;
+}
+
+export interface TokenTemplateValue {
+    kind: TokenKind;
+    text: string;
+    marker?: string;
+    sid?: string;
+}
+
+export interface TokenValue {
+    id: string;
+    kind: TokenKind;
+    text: string;
+    span?: SpanValue;
+    sid?: string;
+    marker?: string;
+    nested?: boolean;
+    markerMetadata?: MarkerMetadataValue;
+    structural?: StructuralMarkerInfoValue;
+    numberInfo?: NumberInfoValue;
+    bookCode?: string;
+    bookCodeValid?: boolean;
+    attributes?: AttributeItemValue[];
+}
+
 export type DiffStatus = "added" | "deleted" | "modified" | "unchanged";
 
 export type DiffTokenChange = "unchanged" | "added" | "deleted" | "modified";
@@ -528,5 +689,7 @@ export type LintIssueType = "usfm" | "content";
 export type LintSeverity = "error" | "warning";
 
 export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
+
+export type TokenFixValue = { type: "replaceToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; replacements: TokenTemplateValue[] } | { type: "deleteToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string } | { type: "insertAfter"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; insert: TokenTemplateValue[] };
 
 export type TokenKind = "newline" | "optBreak" | "marker" | "endMarker" | "milestone" | "milestoneEnd" | "bookCode" | "number" | "text";
