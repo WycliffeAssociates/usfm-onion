@@ -30,9 +30,24 @@
 
 use crate::marker_defs::{
     InlineContext, ParagraphCategory, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
-    marker_allows_effective_context,
+    lookup_marker_def, marker_allows_effective_context, structural_marker_info,
 };
 use crate::token::{Token, TokenData, TokenKind};
+
+/// Recompute the `StructuralMarkerInfo` a parser would attach to this
+/// marker. Used as a fallback in the walker when a `WalkableToken`
+/// returns `None` from `structural()` — e.g. token streams handed in
+/// from a JS host that produced minimal tokens without re-running
+/// structural classification.
+///
+/// Returns the same value `parse()` would have stored: an `Unknown`-
+/// scope info for catalog-unknown markers, or the catalog-derived
+/// kind for known markers. Handles the `+`-prefixed nested character-
+/// marker form because `lookup_marker_def` already strips the prefix.
+fn derive_structural_from_marker(marker: &str) -> StructuralMarkerInfo {
+    let kind = lookup_marker_def(marker).map(|def| def.kind);
+    structural_marker_info(marker, kind)
+}
 
 /// Internal trait the walker is generic over.
 ///
@@ -424,16 +439,17 @@ impl<'tokens> WalkerState<'tokens> {
         T: WalkableToken,
         V: Visitor<'tokens, T>,
     {
-        let Some(info) = token.structural() else {
-            let ctx = self.make_ctx();
-            visitor.on_other(&ctx, token, index);
-            return;
-        };
         let Some(marker) = token.marker() else {
             let ctx = self.make_ctx();
             visitor.on_other(&ctx, token, index);
             return;
         };
+        // Tokens minted outside of `parse()` (e.g. from a JS host) may
+        // arrive without a `structural()` payload. Recompute from the
+        // marker name in that case — same derivation parse uses.
+        let info = token
+            .structural()
+            .unwrap_or_else(|| derive_structural_from_marker(marker));
 
         // `\c` / `\v` without a following number are not scope openers
         // — they're leaf markers.
@@ -509,16 +525,14 @@ impl<'tokens> WalkerState<'tokens> {
         T: WalkableToken,
         V: Visitor<'tokens, T>,
     {
-        let Some(info) = token.structural() else {
-            let ctx = self.make_ctx();
-            visitor.on_other(&ctx, token, index);
-            return;
-        };
         let Some(marker) = token.marker() else {
             let ctx = self.make_ctx();
             visitor.on_other(&ctx, token, index);
             return;
         };
+        let info = token
+            .structural()
+            .unwrap_or_else(|| derive_structural_from_marker(marker));
 
         // Match against Note / Character frames by marker name.
         if matches!(
@@ -603,16 +617,14 @@ impl<'tokens> WalkerState<'tokens> {
         // handled separately. All milestones are modelled as
         // enter/leave-bracketed scopes: open via on_enter_scope, close
         // via MilestoneEnd handling firing on_leave_scope.
-        let Some(info) = token.structural() else {
-            let ctx = self.make_ctx();
-            visitor.on_milestone(&ctx, token, index);
-            return;
-        };
         let Some(marker) = token.marker() else {
             let ctx = self.make_ctx();
             visitor.on_milestone(&ctx, token, index);
             return;
         };
+        let info = token
+            .structural()
+            .unwrap_or_else(|| derive_structural_from_marker(marker));
 
         // A `TokenData::Milestone` is syntactically a milestone
         // regardless of whether the spec data has a row for the
