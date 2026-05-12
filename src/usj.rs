@@ -1417,12 +1417,12 @@ fn extract_note_caller(text: &str) -> (String, Option<String>) {
     (caller, remainder)
 }
 
-fn format_chapter_sid(sid: Option<&crate::token::Sid<'_>>) -> Option<String> {
-    sid.map(|sid| format!("{} {}", sid.book_code, sid.chapter))
+fn format_chapter_sid(sid: Option<&crate::token::Sid>) -> Option<String> {
+    sid.map(|sid| format!("{} {}", sid.book, sid.chapter))
 }
 
-fn format_verse_sid(sid: Option<&crate::token::Sid<'_>>) -> Option<String> {
-    sid.map(|sid| format!("{} {}:{}", sid.book_code, sid.chapter, sid.verse))
+fn format_verse_sid(sid: Option<&crate::token::Sid>) -> Option<String> {
+    sid.map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse))
 }
 
 fn number_source_to_usj(

@@ -1479,7 +1479,7 @@ fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
     let mut owned = NativeFormatToken::from(token);
     owned.sid = token
         .sid
-        .map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse));
+        .map(|sid| format_sid(sid.book.as_str(), sid.chapter, sid.verse));
     owned.id = Some(format!("{}-{}", token.id.book_code, token.id.index));
     owned
 }
@@ -1582,7 +1582,7 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
         span: Some(map_span(token.span)),
         sid: token
             .sid
-            .map(|sid| format_sid(sid.book_code, sid.chapter, sid.verse)),
+            .map(|sid| format_sid(sid.book.as_str(), sid.chapter, sid.verse)),
         marker: token.marker_name().map(ToOwned::to_owned),
         nested: None,
         marker_metadata: None,
@@ -2490,7 +2490,7 @@ fn closing_behavior_str(behavior: ClosingBehavior) -> &'static str {
     }
 }
 
-fn format_sid(book: &str, chapter: u32, verse: u32) -> String {
+fn format_sid(book: &str, chapter: u16, verse: u16) -> String {
     format!("{book} {chapter}:{verse}")
 }
 

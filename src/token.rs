@@ -311,7 +311,7 @@ pub enum TokenData<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Token<'a> {
     pub id: TokenId<'a>,
-    pub sid: Option<Sid<'a>>,
+    pub sid: Option<Sid>,
     pub span: Span,
     pub source: &'a str,
     #[serde(flatten)]
@@ -408,20 +408,93 @@ pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
     output
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct Sid<'a> {
-    pub book_code: &'a str,
-    pub chapter: u32,
-    pub verse: u32,
+/// Three-byte USFM book code (`GEN`, `EXO`, …) stored as raw ASCII bytes.
+///
+/// `Copy`-friendly and equality is a 24-bit compare. The lexer already
+/// enforces 3-byte ASCII alphanumeric at the lex boundary, so any
+/// `BookId` constructed via `BookId::from_str` for a parsed file is
+/// guaranteed valid. Validation of *canonical* 66-book membership is
+/// deliberately pushed to consumers — the type itself stays cheap.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct BookId([u8; 3]);
+
+impl BookId {
+    /// Sentinel for "book code unknown" — used when materializing a
+    /// `Sid` for tokens that have no surrounding `\id`.
+    pub const UNKNOWN: BookId = BookId([b'?', b'?', b'?']);
+
+    /// Build a `BookId` from a 3-byte ASCII slice. Returns `None` for
+    /// any other length or non-ASCII-alphanumeric content. This mirrors
+    /// the lex boundary's validation rule.
+    pub fn from_str(s: &str) -> Option<Self> {
+        let bytes = s.as_bytes();
+        if bytes.len() != 3 {
+            return None;
+        }
+        if !bytes.iter().all(|b| b.is_ascii_alphanumeric()) {
+            return None;
+        }
+        Some(BookId([bytes[0], bytes[1], bytes[2]]))
+    }
+
+    pub fn as_str(&self) -> &str {
+        // SAFETY: BookId is always 3 ASCII alphanumeric bytes by construction.
+        std::str::from_utf8(&self.0).expect("BookId is valid ASCII by construction")
+    }
 }
 
-impl<'a> Sid<'a> {
-    pub const fn new(book_code: &'a str, chapter: u32, verse: u32) -> Self {
+impl std::fmt::Display for BookId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::fmt::Debug for BookId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BookId({})", self.as_str())
+    }
+}
+
+impl Serialize for BookId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// Canonical scripture reference: book + chapter + verse. 8 bytes, `Copy`,
+/// no lifetime. `verse == 0` means "no verse yet" (chapter-scope sid). Bridge
+/// verses (`\v 1-2`) are not encoded in `Sid`; the bridge lexeme is preserved
+/// in the verse-token's source span.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize)]
+pub struct Sid {
+    pub book: BookId,
+    pub chapter: u16,
+    pub verse: u16,
+}
+
+impl Sid {
+    pub const fn new(book: BookId, chapter: u16, verse: u16) -> Self {
         Self {
-            book_code,
+            book,
             chapter,
             verse,
         }
+    }
+}
+
+impl std::fmt::Display for Sid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.verse == 0 {
+            write!(f, "{} {}", self.book, self.chapter)
+        } else {
+            write!(f, "{} {}:{}", self.book, self.chapter, self.verse)
+        }
+    }
+}
+
+impl std::fmt::Debug for Sid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Sid({self})")
     }
 }
 
@@ -446,4 +519,24 @@ pub struct ParseAnalysis<'a> {
 pub struct ParseResult<'a> {
     pub tokens: Vec<Token<'a>>,
     pub analysis: ParseAnalysis<'a>,
+}
+
+#[cfg(test)]
+mod sid_size_guard {
+    use super::{BookId, Sid};
+    use std::mem::size_of;
+
+    #[test]
+    fn sid_stays_pointer_sized() {
+        // Sid is the hot path for every chapter/verse the walker tracks.
+        // Growing it past 8 bytes (e.g. by adding a heap field) would
+        // turn it into a pointer-equivalent and reintroduce the cost
+        // the sous-chef pattern was chosen to avoid.
+        assert!(
+            size_of::<Sid>() <= 8,
+            "Sid grew to {} bytes — keep it Copy-cheap",
+            size_of::<Sid>()
+        );
+        assert_eq!(size_of::<BookId>(), 3);
+    }
 }

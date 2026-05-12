@@ -153,14 +153,14 @@ struct NoteState {
     caller_consumed: bool,
 }
 
-struct HtmlVisitor<'src> {
+struct HtmlVisitor<'tokens> {
     options: HtmlOptions,
     /// Top-level output (whatever isn't inside any open element).
     output: String,
     /// Open-element stack. Mirrors the walker's scope stack 1:1,
     /// with the addition that markers like `\esbe` that don't emit
     /// HTML still occupy a stack slot (with `Emission::Phantom`).
-    stack: Vec<OpenElement<'src>>,
+    stack: Vec<OpenElement<'tokens>>,
     /// Note collections appended at finalize time.
     footnotes: Vec<String>,
     crossrefs: Vec<String>,
@@ -173,7 +173,7 @@ struct HtmlVisitor<'src> {
     crossref_id: usize,
 }
 
-impl<'src> HtmlVisitor<'src> {
+impl<'tokens> HtmlVisitor<'tokens> {
     fn new(options: HtmlOptions) -> Self {
         Self {
             options,
@@ -263,12 +263,12 @@ impl<'src> HtmlVisitor<'src> {
 // Visitor impl: each walker event maps to one HTML responsibility.
 // =============================================================================
 
-impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
+impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'tokens> {
     fn on_enter_scope(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        frame: &ScopeFrame<'src>,
-        token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         let marker = frame.marker;
@@ -397,8 +397,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_leave_scope(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _frame: &ScopeFrame<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _frame: &ScopeFrame<'tokens>,
         _reason: LeaveReason,
     ) {
         let Some(item) = self.stack.pop() else { return; };
@@ -427,8 +427,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_end_marker(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         // The corresponding `on_leave_scope(Explicit)` already closed
@@ -437,8 +437,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_milestone(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         // Milestone open is handled via on_enter_scope; this fallback
@@ -448,8 +448,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_milestone_end(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         // Same as on_end_marker — the matching close already fired.
@@ -457,8 +457,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_text(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         // If we're directly inside a note whose caller hasn't been
@@ -490,8 +490,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_chapter(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         if self.in_note_body() {
@@ -513,7 +513,7 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
         let sid = token
             .sid
             .as_ref()
-            .map(|s| format!("{} {}", s.book_code, s.chapter));
+            .map(|s| format!("{} {}", s.book, s.chapter));
         let token_id = token_id_str(&token.id);
         // Per the prior implementation, `\c` resets verse-scoped note
         // numbering. `on_enter_scope(Chapter)` already did that; the
@@ -525,8 +525,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_verse(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         if self.in_note_body() {
@@ -545,7 +545,7 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
         let sid = token
             .sid
             .as_ref()
-            .map(|s| format!("{} {}:{}", s.book_code, s.chapter, s.verse));
+            .map(|s| format!("{} {}:{}", s.book, s.chapter, s.verse));
         let token_id = token_id_str(&token.id);
         self.current_verse = (!number.is_empty()).then_some(number.clone());
         self.note_count_in_verse = 0;
@@ -556,8 +556,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_book_code(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         let TokenData::BookCode { code, .. } = &token.data else {
@@ -588,8 +588,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_opt_break(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         self.push_html("<wbr>");
@@ -597,8 +597,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_newline(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         // Newlines have no HTML representation.
@@ -606,8 +606,8 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 
     fn on_other(
         &mut self,
-        _ctx: &WalkContext<'src, '_>,
-        _token: &Token<'src>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
         // Numbers outside chapter/verse, unmatched end markers, etc.
@@ -620,14 +620,14 @@ impl<'src> Visitor<'src, Token<'src>> for HtmlVisitor<'src> {
 // Note opening (extracted vs inline)
 // =============================================================================
 
-impl<'src> HtmlVisitor<'src> {
+impl<'tokens> HtmlVisitor<'tokens> {
     /// Push a note frame onto the stack. We do **not** emit the caller
     /// HTML yet — the source caller is the first text token inside the
     /// note (see `parse_note_tokens` in the pre-walker code) and we
     /// don't know it until `on_text` fires. `consume_note_caller`
     /// finishes the open-time work (label, id assignment, caller HTML
     /// emission for extracted mode) when that first text arrives.
-    fn open_note(&mut self, token: &Token<'src>, marker: &'src str) {
+    fn open_note<'src>(&mut self, token: &'tokens Token<'src>, marker: &'tokens str) {
         let token_id = token_id_str(&token.id);
         let note_kind_enum = note_kind(marker);
         let inline = matches!(self.options.note_mode, HtmlNoteMode::Inline) || self.in_note_body();

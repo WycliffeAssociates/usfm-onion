@@ -46,10 +46,10 @@ fn main() {
     // Uncomment what you want to run. Single ops below; diff is special (two inputs).
     // run_parse(&sources, 1);
     // run_cst(&sources, 1);
-    // run_lint(&sources, 1);
+    run_lint(&sources, 800);
     // run_usj(&sources, 1);
     // run_usx(&sources, 1);
-    run_html(&sources, 200);
+    // run_html(&sources, 200);
     // run_format(&sources, 1);
     // run_vref(&sources, 1);
 

@@ -2,17 +2,10 @@ use std::collections::BTreeMap;
 
 use crate::marker_defs::{StructuralScopeKind, marker_paragraph_supports_verse};
 use crate::parse::parse;
-use crate::token::{Sid, Token, TokenData};
+use crate::token::{Sid, Token};
+use crate::walker::{ScopeFrame, Visitor, WalkContext, walk_tokens};
 
 pub type VrefMap = BTreeMap<String, String>;
-
-#[derive(Debug, Default)]
-struct VrefState {
-    current_ref: Option<String>,
-    current_text: String,
-    current_block_supports_verse: Option<bool>,
-    open_note_markers: Vec<String>,
-}
 
 pub fn usfm_to_vref_map(source: &str) -> VrefMap {
     let parsed = parse(source);
@@ -20,94 +13,95 @@ pub fn usfm_to_vref_map(source: &str) -> VrefMap {
 }
 
 pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
-    let mut map = VrefMap::new();
-    let mut state = VrefState::default();
-    let mut pending_marker_name: Option<&str> = None;
-
-    for token in tokens {
-        match &token.data {
-            TokenData::Marker {
-                name,
-                structural,
-                nested: _,
-                ..
-            } => {
-                // Recovery: any block-scope marker (chapter, verse, paragraph,
-                // sidebar, table row) implicitly closes an unclosed note.
-                // Without this, a single unclosed `\f` swallows every
-                // subsequent verse — see WA-Catalog/en_ulb 23-ISA.usfm where
-                // an unclosed footnote at 33:9 silently drops 33 chapters of
-                // output. Lint still reports UnclosedNote, so the underlying
-                // source bug stays visible.
-                if !state.open_note_markers.is_empty()
-                    && structural.scope_kind.closes_unclosed_note()
-                {
-                    state.open_note_markers.clear();
-                }
-
-                pending_marker_name = Some(name);
-
-                if structural.scope_kind == StructuralScopeKind::Note {
-                    state.open_note_markers.push((*name).to_string());
-                }
-
-                if structural.scope_kind == StructuralScopeKind::Block {
-                    state.current_block_supports_verse =
-                        Some(marker_paragraph_supports_verse(name));
-                }
-            }
-            TokenData::EndMarker {
-                name, structural, ..
-            } => {
-                pending_marker_name = None;
-
-                if structural.scope_kind == StructuralScopeKind::Note {
-                    pop_matching_note(&mut state.open_note_markers, name);
-                }
-            }
-            TokenData::Number { .. } => {
-                match pending_marker_name {
-                    Some("c") => {
-                        clear_current_verse(&mut state, &mut map);
-                    }
-                    Some("v") => {
-                        clear_current_verse(&mut state, &mut map);
-                        if let Some(reference) = verse_ref(token.sid, token.source) {
-                            state.current_ref = Some(reference);
-                        }
-                    }
-                    _ => {}
-                }
-                pending_marker_name = None;
-            }
-            TokenData::Text => {
-                pending_marker_name = None;
-                if can_collect_text(&state) {
-                    push_text(&mut state.current_text, token.source);
-                }
-            }
-            TokenData::Newline
-            | TokenData::OptBreak
-            | TokenData::BookCode { .. }
-            | TokenData::Milestone { .. }
-            | TokenData::MilestoneEnd => {
-                pending_marker_name = None;
-            }
-        }
-    }
-
-    clear_current_verse(&mut state, &mut map);
-    map
+    let mut visitor = VrefVisitor::default();
+    walk_tokens(tokens, &mut visitor);
+    visitor.finish()
 }
 
 pub fn vref_map_to_json_string(map: &VrefMap) -> String {
     serde_json::to_string_pretty(map).expect("vref map should serialize")
 }
 
-fn can_collect_text(state: &VrefState) -> bool {
-    state.current_ref.is_some()
-        && state.open_note_markers.is_empty()
-        && state.current_block_supports_verse.unwrap_or(true)
+#[derive(Debug, Default)]
+struct VrefVisitor {
+    map: VrefMap,
+    current_ref: Option<String>,
+    current_text: String,
+    // Persists across paragraph boundaries: once any Block has been
+    // seen, this reflects the latest Block's supports-verse status, even
+    // after that Block closes. Matches the pre-walker behaviour.
+    current_block_supports_verse: Option<bool>,
+}
+
+impl VrefVisitor {
+    fn finish(mut self) -> VrefMap {
+        self.flush_current_verse();
+        self.map
+    }
+
+    fn flush_current_verse(&mut self) {
+        let Some(reference) = self.current_ref.take() else {
+            self.current_text.clear();
+            return;
+        };
+        let trimmed = self.current_text.trim();
+        if !trimmed.is_empty() {
+            self.map.insert(reference, trimmed.to_string());
+        }
+        self.current_text.clear();
+    }
+
+    fn can_collect_text(&self, ctx: &WalkContext<'_, '_>) -> bool {
+        self.current_ref.is_some()
+            && !ctx.in_note()
+            && self.current_block_supports_verse.unwrap_or(true)
+    }
+}
+
+impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
+    fn on_enter_scope(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        _token: &'tokens Token<'src>,
+        _token_index: usize,
+    ) {
+        if frame.scope_kind == StructuralScopeKind::Block {
+            self.current_block_supports_verse = Some(marker_paragraph_supports_verse(frame.marker));
+        }
+    }
+
+    fn on_chapter(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
+        _token_index: usize,
+    ) {
+        self.flush_current_verse();
+    }
+
+    fn on_verse(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
+        _token_index: usize,
+    ) {
+        self.flush_current_verse();
+        if let Some(reference) = verse_ref(token.sid, token.source) {
+            self.current_ref = Some(reference);
+        }
+    }
+
+    fn on_text(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
+        _token_index: usize,
+    ) {
+        if self.can_collect_text(ctx) {
+            push_text(&mut self.current_text, token.source);
+        }
+    }
 }
 
 /// Build the `BOOK CHAPTER:VERSE` sid for a verse number token.
@@ -118,12 +112,8 @@ fn can_collect_text(state: &VrefState) -> bool {
 /// (`"GEN 1:1-2"`) and the convention used by usfm-grammar, usfmtc, and
 /// usfm3. Consumers that need per-verse lookup against a bridged source
 /// should split the lexeme themselves.
-fn verse_ref(sid: Option<Sid<'_>>, lexeme: &str) -> Option<String> {
+fn verse_ref(sid: Option<Sid>, lexeme: &str) -> Option<String> {
     let sid = sid?;
-    if sid.book_code.is_empty() {
-        return None;
-    }
-
     let chapter = sid.chapter;
     if chapter == 0 {
         return None;
@@ -134,20 +124,7 @@ fn verse_ref(sid: Option<Sid<'_>>, lexeme: &str) -> Option<String> {
         return None;
     }
 
-    Some(format!("{} {}:{}", sid.book_code, chapter, verse_part))
-}
-
-fn clear_current_verse(state: &mut VrefState, map: &mut VrefMap) {
-    let Some(reference) = state.current_ref.take() else {
-        state.current_text.clear();
-        return;
-    };
-
-    let trimmed = state.current_text.trim();
-    if !trimmed.is_empty() {
-        map.insert(reference, trimmed.to_string());
-    }
-    state.current_text.clear();
+    Some(format!("{} {}:{}", sid.book, chapter, verse_part))
 }
 
 fn push_text(current: &mut String, fragment: &str) {
@@ -164,13 +141,6 @@ fn push_text(current: &mut String, fragment: &str) {
     } else {
         current.push_str(fragment);
     }
-}
-
-fn pop_matching_note(stack: &mut Vec<String>, name: &str) {
-    let Some(index) = stack.iter().rposition(|open| open == name) else {
-        return;
-    };
-    stack.truncate(index);
 }
 
 #[cfg(test)]

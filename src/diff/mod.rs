@@ -32,9 +32,9 @@ impl<'a> DiffableToken for Token<'a> {
     fn sid_string(&self) -> Option<String> {
         self.sid.map(|sid| {
             if sid.verse == 0 {
-                format!("{} {}:0", sid.book_code, sid.chapter)
+                format!("{} {}:0", sid.book, sid.chapter)
             } else {
-                format!("{} {}:{}", sid.book_code, sid.chapter, sid.verse)
+                format!("{} {}:{}", sid.book, sid.chapter, sid.verse)
             }
         })
     }

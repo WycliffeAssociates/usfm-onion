@@ -65,6 +65,24 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## Rule 5 — Surface conflicts, don't average them
+If two existing patterns in the codebase contradict, don't blend them.
+Pick one (the more recent / more tested), explain why, and flag the other for cleanup.
+"Average" code that satisfies both rules is the worst code.
+
+
+## Rule 6 — Tests verify intent, not just behavior
+Every test must encode WHY the behavior matters, not just WHAT it does.
+A test like `expect(getUserName()).toBe('John')` is worthless if the function takes a hardcoded ID.
+If you can't write a test that would fail when business logic changes, the function is wrong.
+
+## Rule 7 — Fail loud
+If you can't be sure something worked, say so explicitly.
+"Migration completed" is wrong if 30 records were skipped silently.
+"Tests pass" is wrong if you skipped any.
+"Feature works" is wrong if you didn't verify the edge case I asked about.
+Default to surfacing uncertainty, not hiding it.
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 # Project at a glance

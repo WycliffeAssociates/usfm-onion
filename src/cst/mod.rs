@@ -102,12 +102,12 @@ impl CstBuilder {
     }
 }
 
-impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
+impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for CstBuilder {
     fn on_enter_scope(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        frame: &ScopeFrame<'a>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         let node_index = self.append_leaf(token_index);
@@ -118,8 +118,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_leave_scope(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        frame: &ScopeFrame<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
         _reason: LeaveReason,
     ) {
         if Self::is_pushed_kind(frame.scope_kind) {
@@ -129,8 +129,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_end_marker(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -138,8 +138,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_milestone(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -147,8 +147,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_milestone_end(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -156,8 +156,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_text(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -165,8 +165,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_chapter(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -174,8 +174,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_verse(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -183,8 +183,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_book_code(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -192,8 +192,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_opt_break(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -201,8 +201,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_newline(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);
@@ -210,8 +210,8 @@ impl<'a> Visitor<'a, Token<'a>> for CstBuilder {
 
     fn on_other(
         &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
         token_index: usize,
     ) {
         self.append_leaf(token_index);

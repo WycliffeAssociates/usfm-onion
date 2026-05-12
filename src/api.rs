@@ -509,11 +509,11 @@ fn format_token_with_identity(token: &Token<'_>) -> FormatToken {
     owned
 }
 
-fn format_sid(sid: Sid<'_>) -> String {
+fn format_sid(sid: Sid) -> String {
     if sid.verse == 0 {
-        format!("{} {}:0", sid.book_code, sid.chapter)
+        format!("{} {}:0", sid.book, sid.chapter)
     } else {
-        format!("{} {}:{}", sid.book_code, sid.chapter, sid.verse)
+        format!("{} {}:{}", sid.book, sid.chapter, sid.verse)
     }
 }
 

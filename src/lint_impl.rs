@@ -12,21 +12,28 @@ use crate::marker_defs::{
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind};
+use crate::walker::{
+    LeaveReason, ScopeFrame, Visitor, WalkContext, WalkableToken, walk,
+};
 
-pub trait LintableToken {
-    fn kind(&self) -> TokenKind;
+/// Public token-shape contract for `lint_tokens` and friends.
+///
+/// `LintableToken` is a supertrait of [`WalkableToken`] — every
+/// `LintableToken` impl can be fed directly to the walker, which means
+/// downstream consumers (`Token<'_>`, `FormatToken`, the editor's own
+/// `EditorToken`) all flow through the same single scope state machine
+/// for the structural rules. The methods on `WalkableToken` (`kind`,
+/// `marker`, `text`, `structural`) are inherited; this trait adds the
+/// lint-specific fields the walker doesn't need (`span`, `sid`, `id`,
+/// `number_info`).
+pub trait LintableToken: WalkableToken {
     fn span(&self) -> Option<Span> {
         None
     }
-    fn text(&self) -> &str;
-    fn marker(&self) -> Option<&str>;
     fn sid(&self) -> Option<String> {
         None
     }
     fn id(&self) -> Option<String> {
-        None
-    }
-    fn structural(&self) -> Option<StructuralMarkerInfo> {
         None
     }
     fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
@@ -35,20 +42,8 @@ pub trait LintableToken {
 }
 
 impl<'a> LintableToken for Token<'a> {
-    fn kind(&self) -> TokenKind {
-        self.kind()
-    }
-
     fn span(&self) -> Option<Span> {
         Some(self.span)
-    }
-
-    fn text(&self) -> &str {
-        self.source
-    }
-
-    fn marker(&self) -> Option<&str> {
-        self.marker_name()
     }
 
     fn sid(&self) -> Option<String> {
@@ -59,15 +54,6 @@ impl<'a> LintableToken for Token<'a> {
         Some(format_token_id(self.id))
     }
 
-    fn structural(&self) -> Option<StructuralMarkerInfo> {
-        match self.data {
-            TokenData::Marker { structural, .. }
-            | TokenData::EndMarker { structural, .. }
-            | TokenData::Milestone { structural, .. } => Some(structural),
-            _ => None,
-        }
-    }
-
     fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
         match self.data {
             TokenData::Number { start, end, kind } => Some((start, end, kind)),
@@ -76,21 +62,27 @@ impl<'a> LintableToken for Token<'a> {
     }
 }
 
-impl LintableToken for FormatToken {
+impl WalkableToken for FormatToken {
     fn kind(&self) -> TokenKind {
         self.kind
     }
 
-    fn span(&self) -> Option<Span> {
-        self.span
+    fn marker(&self) -> Option<&str> {
+        self.marker.as_deref()
     }
 
     fn text(&self) -> &str {
         &self.text
     }
 
-    fn marker(&self) -> Option<&str> {
-        self.marker.as_deref()
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        self.structural
+    }
+}
+
+impl LintableToken for FormatToken {
+    fn span(&self) -> Option<Span> {
+        self.span
     }
 
     fn sid(&self) -> Option<String> {
@@ -99,10 +91,6 @@ impl LintableToken for FormatToken {
 
     fn id(&self) -> Option<String> {
         self.id.clone()
-    }
-
-    fn structural(&self) -> Option<StructuralMarkerInfo> {
-        self.structural
     }
 
     fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
@@ -137,100 +125,214 @@ pub enum LintIssueType {
 #[serde(rename_all = "kebab-case")]
 pub enum LintCode {
     MissingIdMarker,
-    MissingSeparatorAfterMarker,
-    EmptyParagraph,
-    NumberRangeAfterChapterMarker,
-    VerseRangeExpectedAfterVerseMarker,
-    VerseContentNotEmpty,
-    UnknownToken,
-    CharNotClosed,
-    UnclosedNote,
-    ParagraphBeforeFirstChapter,
-    VerseBeforeFirstChapter,
-    NoteSubmarkerOutsideNote,
     DuplicateIdMarker,
     IdMarkerNotAtFileStart,
-    ChapterMetadataOutsideChapter,
-    VerseMetadataOutsideVerse,
+    MissingSeparatorAfterMarker,
+    EmptyParagraph,
     MissingChapterNumber,
     MissingVerseNumber,
+    /// Replaces the prior `VerseContentNotEmpty` and `VerseTextFollowsVerseRange`
+    /// codes: both fired when a verse had no body content (whitespace-only
+    /// text or no significant text at all). Merged because the user-facing
+    /// problem is identical.
+    VerseIsEmpty,
+    UnknownToken,
+    UnknownMarker,
+    UnknownCloseMarker,
+    /// Replaces the prior `ParagraphBeforeFirstChapter` and
+    /// `VerseBeforeFirstChapter` codes. The `kind` param (`paragraph` /
+    /// `verse`) distinguishes which content arrived early.
+    ContentBeforeFirstChapter,
+    VerseOutsideExplicitParagraph,
+    NoteSubmarkerOutsideNote,
+    /// Replaces the prior `ChapterMetadataOutsideChapter` and
+    /// `VerseMetadataOutsideVerse` codes. The `target` param
+    /// (`chapter` / `verse`) distinguishes the missing target.
+    MetadataOutsideTarget,
+    MarkerNotValidInContext,
     MissingMilestoneSelfClose,
-    ImplicitlyClosedMarker,
     StrayCloseMarker,
     MisnestedCloseMarker,
+    ImplicitlyClosedMarker,
+    /// Replaces the prior `UnclosedNote`, `CharNotClosed`, and
+    /// `UnclosedMarker` codes. The `kind` param (`note` / `character` /
+    /// `other`) and `location` param (`at-eof` / `at-boundary`) carry
+    /// the previously-distinct semantics.
     UnclosedMarker,
     DuplicateChapterNumber,
     ChapterExpectedIncreaseByOne,
+    InconsistentChapterLabel,
     DuplicateVerseNumber,
     VerseExpectedIncreaseByOne,
     InvalidNumberRange,
     NumberRangeNotPrecededByMarkerExpectingNumber,
-    VerseTextFollowsVerseRange,
-    UnknownMarker,
-    UnknownCloseMarker,
-    InconsistentChapterLabel,
-    MarkerNotValidInContext,
-    VerseOutsideExplicitParagraph,
+    /// Spec-driven: the `MARKER_WHITESPACE` row for a marker says
+    /// whitespace or a newline is required *before* the marker, but
+    /// none is present.
+    MissingWhitespaceBeforeMarker,
+    /// Spec-driven: the actual whitespace run around the marker
+    /// exceeds what the requirement allows (e.g. five spaces where the
+    /// spec wants exactly one).
+    ExcessWhitespaceAroundMarker,
+    /// Content-style: a run of multiple horizontal whitespace
+    /// characters or an embedded newline appears inside a `Text` token,
+    /// not adjacent to sentence-ending punctuation.
+    ExcessWhitespaceInContent,
+    /// Content-style flag-only rule: a closing character marker
+    /// (`\nd*`, `\bk*`, …) is directly followed by alphabetic text
+    /// with no space between. No autofix — the shape can be
+    /// language-correct (`\nd Lord\nd*'s`) and the linter cannot
+    /// distinguish.
+    MissingContentSpaceAfterCloseMarker,
+    /// USFM 3.2: `\v` is not allowed inside paragraphs of category
+    /// `Section` or `Other`. Driven by the walker's
+    /// `current_paragraph_category` — fires on `on_enter_scope(Verse)`
+    /// when the nearest open paragraph carries one of those categories.
+    VerseInSectionOrOtherParagraph,
 }
 
 impl LintCode {
     pub const fn code(self) -> &'static str {
         match self {
             Self::MissingIdMarker => "missing-id-marker",
-            Self::MissingSeparatorAfterMarker => "missing-separator-after-marker",
-            Self::EmptyParagraph => "empty-paragraph",
-            Self::NumberRangeAfterChapterMarker => "number-range-after-chapter-marker",
-            Self::VerseRangeExpectedAfterVerseMarker => "verse-range-expected-after-verse-marker",
-            Self::VerseContentNotEmpty => "verse-content-not-empty",
-            Self::UnknownToken => "unknown-token",
-            Self::CharNotClosed => "char-not-closed",
-            Self::UnclosedNote => "unclosed-note",
-            Self::ParagraphBeforeFirstChapter => "paragraph-before-first-chapter",
-            Self::VerseBeforeFirstChapter => "verse-before-first-chapter",
-            Self::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
             Self::DuplicateIdMarker => "duplicate-id-marker",
             Self::IdMarkerNotAtFileStart => "id-marker-not-at-file-start",
-            Self::ChapterMetadataOutsideChapter => "chapter-metadata-outside-chapter",
-            Self::VerseMetadataOutsideVerse => "verse-metadata-outside-verse",
+            Self::MissingSeparatorAfterMarker => "missing-separator-after-marker",
+            Self::EmptyParagraph => "empty-paragraph",
             Self::MissingChapterNumber => "missing-chapter-number",
             Self::MissingVerseNumber => "missing-verse-number",
+            Self::VerseIsEmpty => "verse-is-empty",
+            Self::UnknownToken => "unknown-token",
+            Self::UnknownMarker => "unknown-marker",
+            Self::UnknownCloseMarker => "unknown-close-marker",
+            Self::ContentBeforeFirstChapter => "content-before-first-chapter",
+            Self::VerseOutsideExplicitParagraph => "verse-outside-explicit-paragraph",
+            Self::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
+            Self::MetadataOutsideTarget => "metadata-outside-target",
+            Self::MarkerNotValidInContext => "marker-not-valid-in-context",
             Self::MissingMilestoneSelfClose => "missing-milestone-self-close",
-            Self::ImplicitlyClosedMarker => "implicitly-closed-marker",
             Self::StrayCloseMarker => "stray-close-marker",
             Self::MisnestedCloseMarker => "misnested-close-marker",
+            Self::ImplicitlyClosedMarker => "implicitly-closed-marker",
             Self::UnclosedMarker => "unclosed-marker",
             Self::DuplicateChapterNumber => "duplicate-chapter-number",
             Self::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
+            Self::InconsistentChapterLabel => "inconsistent-chapter-label",
             Self::DuplicateVerseNumber => "duplicate-verse-number",
             Self::VerseExpectedIncreaseByOne => "verse-expected-increase-by-one",
             Self::InvalidNumberRange => "invalid-number-range",
             Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
                 "number-range-not-preceded-by-marker-expecting-number"
             }
-            Self::VerseTextFollowsVerseRange => "verse-text-follows-verse-range",
-            Self::UnknownMarker => "unknown-marker",
-            Self::UnknownCloseMarker => "unknown-close-marker",
-            Self::InconsistentChapterLabel => "inconsistent-chapter-label",
-            Self::MarkerNotValidInContext => "marker-not-valid-in-context",
-            Self::VerseOutsideExplicitParagraph => "verse-outside-explicit-paragraph",
+            Self::MissingWhitespaceBeforeMarker => "missing-whitespace-before-marker",
+            Self::ExcessWhitespaceAroundMarker => "excess-whitespace-around-marker",
+            Self::ExcessWhitespaceInContent => "excess-whitespace-in-content",
+            Self::MissingContentSpaceAfterCloseMarker => {
+                "missing-content-space-after-close-marker"
+            }
+            Self::VerseInSectionOrOtherParagraph => "verse-in-section-or-other-paragraph",
+        }
+    }
+
+    /// Stable ICU MessageFormat template. Placeholders use the
+    /// `{name}` / `{name, number}` / `{name, select, …}` syntax;
+    /// resolve at runtime against the issue's `message_params`.
+    pub const fn template(self) -> &'static str {
+        match self {
+            Self::MissingIdMarker => "File is missing its \\id (book identifier).",
+            Self::DuplicateIdMarker => {
+                "This file has more than one \\id; only one is allowed."
+            }
+            Self::IdMarkerNotAtFileStart => "\\id must come before any other content.",
+            Self::MissingSeparatorAfterMarker => {
+                "\\{marker} needs a space before the text that follows."
+            }
+            Self::EmptyParagraph => {
+                "\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between."
+            }
+            Self::MissingChapterNumber => "\\c needs a chapter number after it.",
+            Self::MissingVerseNumber => "\\v needs a verse number after it.",
+            Self::VerseIsEmpty => "This verse has no content.",
+            Self::UnknownToken => "Couldn't recognize \"{text}\".",
+            Self::UnknownMarker => "\\{marker} is not a known USFM marker.",
+            Self::UnknownCloseMarker => "\\{marker}* is not a known closing marker.",
+            Self::ContentBeforeFirstChapter => {
+                "{kind, select, paragraph {Paragraph marker \\{marker}} verse {Verse marker \\v} other {\\{marker}}} appears before the first \\c."
+            }
+            Self::VerseOutsideExplicitParagraph => {
+                "Verses must appear inside a paragraph, list, or table."
+            }
+            Self::NoteSubmarkerOutsideNote => {
+                "\\{marker} is part of a footnote or cross-reference and must appear inside one."
+            }
+            Self::MetadataOutsideTarget => {
+                "\\{marker} must follow a {target, select, chapter {\\c chapter marker} verse {\\v verse marker} other {target marker}}."
+            }
+            Self::MarkerNotValidInContext => {
+                "\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}."
+            }
+            Self::MissingMilestoneSelfClose => {
+                "\\{marker} is a milestone and needs to end with \\*."
+            }
+            Self::StrayCloseMarker => {
+                "{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}"
+            }
+            Self::MisnestedCloseMarker => {
+                "{has_expected, select, true {Expected \\{expected}* here, but found \\{marker}*.} other {\\{marker}* does not match the marker that is currently open.}}"
+            }
+            Self::ImplicitlyClosedMarker => {
+                "\\{marker} was never closed; \\{closer}* closed it indirectly. Add an explicit \\{marker}* before \\{closer}*."
+            }
+            Self::UnclosedMarker => {
+                "{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}"
+            }
+            Self::DuplicateChapterNumber => {
+                "Chapter {chapter, number} appears more than once."
+            }
+            Self::ChapterExpectedIncreaseByOne => {
+                "Chapters should count up by one: expected chapter {expected, number}, found chapter {found, number}."
+            }
+            Self::InconsistentChapterLabel => {
+                "Chapter label '{found}' does not match the label '{expected}' used elsewhere in this file."
+            }
+            Self::DuplicateVerseNumber => {
+                "Verse {verse} appears more than once in chapter {chapter, number}."
+            }
+            Self::VerseExpectedIncreaseByOne => {
+                "Verses should count up by one: expected verse {expected, number}, found verse {found, number}."
+            }
+            Self::InvalidNumberRange => "'{verse}' is not a valid verse range.",
+            Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                "This number range is not preceded by a marker that expects a number (like \\c or \\v)."
+            }
+            Self::MissingWhitespaceBeforeMarker => {
+                "\\{marker} needs a space or newline before it."
+            }
+            Self::ExcessWhitespaceAroundMarker => {
+                "Too much whitespace {position, select, before {before} after {after} other {around}} \\{marker}."
+            }
+            Self::ExcessWhitespaceInContent => {
+                "Multiple spaces or a stray newline inside this text — collapse to a single space."
+            }
+            Self::MissingContentSpaceAfterCloseMarker => {
+                "\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this."
+            }
+            Self::VerseInSectionOrOtherParagraph => {
+                "\\v is not allowed inside a {category, select, section {section heading} other {non-content paragraph}}; verses must appear inside body paragraphs, lists, or tables."
+            }
         }
     }
 
     pub fn category(self) -> LintCategory {
         match self {
             Self::MissingIdMarker
-            | Self::ParagraphBeforeFirstChapter
-            | Self::VerseBeforeFirstChapter
+            | Self::ContentBeforeFirstChapter
             | Self::DuplicateIdMarker
             | Self::IdMarkerNotAtFileStart => LintCategory::Document,
             Self::MissingSeparatorAfterMarker
             | Self::EmptyParagraph
-            | Self::NumberRangeAfterChapterMarker
-            | Self::VerseRangeExpectedAfterVerseMarker
-            | Self::VerseContentNotEmpty
+            | Self::VerseIsEmpty
             | Self::UnknownToken
-            | Self::CharNotClosed
-            | Self::UnclosedNote
             | Self::MissingChapterNumber
             | Self::MissingVerseNumber
             | Self::MissingMilestoneSelfClose
@@ -239,35 +341,39 @@ impl LintCode {
             | Self::MisnestedCloseMarker
             | Self::UnclosedMarker
             | Self::UnknownMarker
-            | Self::UnknownCloseMarker => LintCategory::Structure,
+            | Self::UnknownCloseMarker
+            | Self::MissingWhitespaceBeforeMarker
+            | Self::ExcessWhitespaceAroundMarker
+            | Self::ExcessWhitespaceInContent
+            | Self::MissingContentSpaceAfterCloseMarker => LintCategory::Structure,
             Self::NoteSubmarkerOutsideNote
-            | Self::ChapterMetadataOutsideChapter
-            | Self::VerseMetadataOutsideVerse
+            | Self::MetadataOutsideTarget
             | Self::MarkerNotValidInContext
-            | Self::VerseOutsideExplicitParagraph => LintCategory::Context,
+            | Self::VerseOutsideExplicitParagraph
+            | Self::VerseInSectionOrOtherParagraph => LintCategory::Context,
             Self::DuplicateChapterNumber
             | Self::ChapterExpectedIncreaseByOne
             | Self::DuplicateVerseNumber
             | Self::VerseExpectedIncreaseByOne
             | Self::InvalidNumberRange
             | Self::NumberRangeNotPrecededByMarkerExpectingNumber
-            | Self::VerseTextFollowsVerseRange
             | Self::InconsistentChapterLabel => LintCategory::Numbering,
         }
     }
 
     pub fn severity(self) -> LintSeverity {
         match self {
-            Self::EmptyParagraph => LintSeverity::Warning,
+            Self::EmptyParagraph
+            | Self::ExcessWhitespaceAroundMarker
+            | Self::ExcessWhitespaceInContent
+            | Self::MissingContentSpaceAfterCloseMarker => LintSeverity::Warning,
             _ => LintSeverity::Error,
         }
     }
 
     pub fn issue_type(self) -> LintIssueType {
         match self {
-            Self::NumberRangeAfterChapterMarker
-            | Self::VerseRangeExpectedAfterVerseMarker
-            | Self::VerseContentNotEmpty
+            Self::VerseIsEmpty
             | Self::MissingChapterNumber
             | Self::MissingVerseNumber
             | Self::DuplicateChapterNumber
@@ -276,21 +382,16 @@ impl LintCode {
             | Self::VerseExpectedIncreaseByOne
             | Self::InvalidNumberRange
             | Self::NumberRangeNotPrecededByMarkerExpectingNumber
-            | Self::VerseTextFollowsVerseRange
             | Self::InconsistentChapterLabel => LintIssueType::Content,
             Self::MissingIdMarker
             | Self::MissingSeparatorAfterMarker
             | Self::EmptyParagraph
             | Self::UnknownToken
-            | Self::CharNotClosed
-            | Self::UnclosedNote
-            | Self::ParagraphBeforeFirstChapter
-            | Self::VerseBeforeFirstChapter
+            | Self::ContentBeforeFirstChapter
             | Self::NoteSubmarkerOutsideNote
             | Self::DuplicateIdMarker
             | Self::IdMarkerNotAtFileStart
-            | Self::ChapterMetadataOutsideChapter
-            | Self::VerseMetadataOutsideVerse
+            | Self::MetadataOutsideTarget
             | Self::MissingMilestoneSelfClose
             | Self::ImplicitlyClosedMarker
             | Self::StrayCloseMarker
@@ -299,7 +400,12 @@ impl LintCode {
             | Self::UnknownMarker
             | Self::UnknownCloseMarker
             | Self::MarkerNotValidInContext
-            | Self::VerseOutsideExplicitParagraph => LintIssueType::Usfm,
+            | Self::VerseOutsideExplicitParagraph
+            | Self::MissingWhitespaceBeforeMarker
+            | Self::ExcessWhitespaceAroundMarker
+            | Self::ExcessWhitespaceInContent
+            | Self::MissingContentSpaceAfterCloseMarker
+            | Self::VerseInSectionOrOtherParagraph => LintIssueType::Usfm,
         }
     }
 }
@@ -310,6 +416,16 @@ pub struct LintIssue {
     pub category: LintCategory,
     pub severity: LintSeverity,
     pub issue_type: LintIssueType,
+    /// Stable ICU MessageFormat template. Identical to
+    /// `LintCode::template(code)`; carried on the issue so consumers
+    /// localising messages don't have to look it up from the code
+    /// separately.
+    pub template: &'static str,
+    /// Rendered English message — `template` populated with
+    /// `message_params`. Always the same as
+    /// `render_template(template, &message_params)`; downstream
+    /// localisers can ignore this and re-render from `template` +
+    /// `message_params`.
     pub message: String,
     pub message_params: MessageParams,
     pub span: Option<Span>,
@@ -343,6 +459,152 @@ fn message_params<const N: usize>(pairs: [(&str, String); N]) -> MessageParams {
         .into_iter()
         .map(|(key, value)| (key.to_string(), value))
         .collect()
+}
+
+/// Render an ICU MessageFormat template against `params`. Supports:
+/// - `{name}` and `{name, number}` — substitutes `params[name]`.
+/// - `{name, select, key1 {…} key2 {…} other {…}}` — branches on
+///   `params[name]`, falling through to `other {…}` when no key matches.
+/// Literal `{` / `}` are not currently escapable; templates avoid them.
+///
+/// Localisers can replace this implementation with a full
+/// ICU-MessageFormat-compatible renderer without touching emit sites —
+/// each `LintIssue` carries both the canonical `template` and the
+/// already-populated `message_params`.
+pub fn render_template(template: &str, params: &MessageParams) -> String {
+    let mut out = String::with_capacity(template.len());
+    let bytes = template.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            let (rendered, advance) = render_placeholder(&template[i..], params);
+            out.push_str(&rendered);
+            i += advance;
+        } else {
+            // Walk to the next `{` or end. Push the literal span as-is.
+            let start = i;
+            while i < bytes.len() && bytes[i] != b'{' {
+                i += 1;
+            }
+            out.push_str(&template[start..i]);
+        }
+    }
+    out
+}
+
+/// Parse a single `{...}` placeholder starting at offset 0 of `s`.
+/// Returns the rendered text and the number of bytes consumed
+/// (including the surrounding braces).
+fn render_placeholder(s: &str, params: &MessageParams) -> (String, usize) {
+    debug_assert!(s.starts_with('{'));
+    let close = match find_matching_brace(s, 0) {
+        Some(idx) => idx,
+        None => return (s.to_string(), s.len()),
+    };
+    let inner = &s[1..close];
+    let consumed = close + 1;
+
+    // Split off the name (everything up to first comma at depth 0).
+    let comma = find_top_level_comma(inner);
+    let name = match comma {
+        Some(c) => inner[..c].trim(),
+        None => inner.trim(),
+    };
+    let rest = comma.map(|c| inner[c + 1..].trim()).unwrap_or("");
+
+    if rest.is_empty() || rest.starts_with("number") {
+        // Plain or number substitution: look up params[name].
+        let value = params.get(name).cloned().unwrap_or_default();
+        return (value, consumed);
+    }
+
+    if let Some(after_select) = rest.strip_prefix("select") {
+        let after_select = after_select.trim_start_matches(|c: char| c == ',' || c.is_whitespace());
+        let value = params.get(name).map(String::as_str).unwrap_or("");
+        let arm = pick_select_arm(after_select, value);
+        return (render_template(&arm, params), consumed);
+    }
+
+    // Unknown format — leave the placeholder as-is so missing renderer
+    // features are visible in output rather than silently dropped.
+    (s[..consumed].to_string(), consumed)
+}
+
+fn find_matching_brace(s: &str, open_idx: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    debug_assert_eq!(bytes[open_idx], b'{');
+    let mut depth = 0i32;
+    let mut i = open_idx;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn find_top_level_comma(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut depth = 0i32;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            b',' if depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Given the body of a `select` (`key1 {arm1} key2 {arm2} other {default}`),
+/// return the arm matching `value`, falling back to `other` and then
+/// to an empty string.
+fn pick_select_arm(body: &str, value: &str) -> String {
+    let mut i = 0usize;
+    let mut other: Option<String> = None;
+    let bytes = body.as_bytes();
+    while i < bytes.len() {
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() {
+            break;
+        }
+        // Read key up to whitespace or `{`.
+        let key_start = i;
+        while i < bytes.len() && !bytes[i].is_ascii_whitespace() && bytes[i] != b'{' {
+            i += 1;
+        }
+        let key = &body[key_start..i];
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'{' {
+            break;
+        }
+        let close = match find_matching_brace(&body[i..], 0) {
+            Some(c) => i + c,
+            None => break,
+        };
+        let arm = body[i + 1..close].to_string();
+        i = close + 1;
+        if key == value {
+            return arm;
+        }
+        if key == "other" {
+            other = Some(arm);
+        }
+    }
+    other.unwrap_or_default()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -410,21 +672,6 @@ struct DocumentLintState {
 }
 
 #[derive(Debug, Clone)]
-struct OpenMarkerFrame {
-    marker: String,
-    token_index: usize,
-    kind: MarkerKind,
-    valid_in_note: bool,
-}
-
-#[derive(Debug, Clone)]
-struct OpenLintFrame {
-    marker: String,
-    kind: StructuralScopeKind,
-    token_index: usize,
-}
-
-#[derive(Debug, Clone)]
 struct EnabledCodes {
     allowed: Option<BTreeSet<LintCode>>,
     disabled: BTreeSet<LintCode>,
@@ -474,13 +721,17 @@ impl DocumentLintState {
     }
 
     fn current_validation_context_for<T: LintableToken>(&self, token: &T) -> SpecContext {
+        self.current_validation_context_for_kind(token_marker_kind(token))
+    }
+
+    fn current_validation_context_for_kind(&self, kind: MarkerKind) -> SpecContext {
         let root_context = self.current_root_context();
         let effective = self
             .current_note_context()
             .or(self.block_context)
             .unwrap_or(root_context);
 
-        match token_marker_kind(token) {
+        match kind {
             MarkerKind::Character | MarkerKind::TableCell => effective,
             MarkerKind::Verse => root_context,
             MarkerKind::Meta => effective,
@@ -623,9 +874,7 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     }
     if enabled.has_any(&[
         LintCode::UnknownToken,
-        LintCode::NumberRangeAfterChapterMarker,
-        LintCode::VerseRangeExpectedAfterVerseMarker,
-        LintCode::VerseContentNotEmpty,
+        LintCode::VerseIsEmpty,
         LintCode::MissingChapterNumber,
         LintCode::MissingVerseNumber,
     ]) {
@@ -633,13 +882,11 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     }
     if enabled.has_any(&[
         LintCode::MissingIdMarker,
-        LintCode::ParagraphBeforeFirstChapter,
-        LintCode::VerseBeforeFirstChapter,
+        LintCode::ContentBeforeFirstChapter,
         LintCode::NoteSubmarkerOutsideNote,
         LintCode::DuplicateIdMarker,
         LintCode::IdMarkerNotAtFileStart,
-        LintCode::ChapterMetadataOutsideChapter,
-        LintCode::VerseMetadataOutsideVerse,
+        LintCode::MetadataOutsideTarget,
         LintCode::MarkerNotValidInContext,
         LintCode::VerseOutsideExplicitParagraph,
     ]) {
@@ -663,19 +910,27 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
         LintCode::InvalidNumberRange,
         LintCode::DuplicateVerseNumber,
         LintCode::VerseExpectedIncreaseByOne,
-        LintCode::VerseTextFollowsVerseRange,
+        LintCode::VerseIsEmpty,
     ]) {
         lint_number_and_verse_rules(tokens, &enabled, &mut issues);
     }
     if enabled.has_any(&[
-        LintCode::CharNotClosed,
         LintCode::StrayCloseMarker,
         LintCode::MisnestedCloseMarker,
         LintCode::MissingMilestoneSelfClose,
-        LintCode::UnclosedNote,
         LintCode::UnclosedMarker,
+        LintCode::ImplicitlyClosedMarker,
+        LintCode::VerseInSectionOrOtherParagraph,
     ]) {
         lint_marker_balance_rules(tokens, &enabled, &mut issues);
+    }
+    if enabled.has_any(&[
+        LintCode::MissingWhitespaceBeforeMarker,
+        LintCode::ExcessWhitespaceAroundMarker,
+        LintCode::ExcessWhitespaceInContent,
+        LintCode::MissingContentSpaceAfterCloseMarker,
+    ]) {
+        lint_whitespace_rules(tokens, &enabled, &mut issues);
     }
 
     let unique = dedupe_issues(issues);
@@ -798,13 +1053,15 @@ fn lint_missing_separator_after_marker<T: LintableToken>(
         if starts_with_horizontal_whitespace(next.text()) {
             continue;
         }
-        issues.push(issue(
-            LintCode::MissingSeparatorAfterMarker,
-            format!("marker \\{marker} is immediately missing a space after it before the neighboring text"),
-            current,
-            Some(next),
-        )
-        .with_fix(missing_separator_fix(next)));
+        issues.push(
+            issue(
+                LintCode::MissingSeparatorAfterMarker,
+                marker_params(marker),
+                current,
+                Some(next),
+            )
+            .with_fix(missing_separator_fix(next)),
+        );
     }
 }
 
@@ -825,9 +1082,7 @@ fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIs
         };
         issues.push(issue(
             LintCode::EmptyParagraph,
-            format!(
-                "paragraph marker \\{marker} creates an empty block before the next block marker"
-            ),
+            marker_params(marker),
             token,
             Some(&tokens[boundary_index]),
         ));
@@ -857,45 +1112,31 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
         match marker {
             "c" => {
                 let missing = next_number_token_index(tokens, index + 1).is_none();
-                if enabled.has(LintCode::NumberRangeAfterChapterMarker) && missing {
-                    issues.push(simple_issue(
-                        LintCode::NumberRangeAfterChapterMarker,
-                        "number range expected after \\c".to_string(),
-                        token,
-                    ));
-                }
                 if enabled.has(LintCode::MissingChapterNumber) && missing {
                     issues.push(simple_issue(
                         LintCode::MissingChapterNumber,
-                        "chapter number expected after \\c".to_string(),
+                        MessageParams::default(),
                         token,
                     ));
                 }
             }
             "v" => {
                 let missing = next_number_token_index(tokens, index + 1).is_none();
-                if enabled.has(LintCode::VerseRangeExpectedAfterVerseMarker) && missing {
-                    issues.push(simple_issue(
-                        LintCode::VerseRangeExpectedAfterVerseMarker,
-                        "verse number expected after \\v".to_string(),
-                        token,
-                    ));
-                }
                 if enabled.has(LintCode::MissingVerseNumber) && missing {
                     issues.push(simple_issue(
                         LintCode::MissingVerseNumber,
-                        "verse number expected after \\v".to_string(),
+                        MessageParams::default(),
                         token,
                     ));
                 }
-                if enabled.has(LintCode::VerseContentNotEmpty)
+                if enabled.has(LintCode::VerseIsEmpty)
                     && let Some(next_index) = next_significant_token_index(tokens, index + 1)
                     && tokens[next_index].kind() == TokenKind::Text
                     && tokens[next_index].text().trim().is_empty()
                 {
                     issues.push(issue(
-                        LintCode::VerseContentNotEmpty,
-                        "verse content expected after \\v".to_string(),
+                        LintCode::VerseIsEmpty,
+                        MessageParams::default(),
                         &tokens[next_index],
                         Some(token),
                     ));
@@ -918,17 +1159,19 @@ fn lint_structure_rules<T: LintableToken>(
     let mut document_state = DocumentLintState::default();
 
     for (index, token) in tokens.iter().enumerate() {
-        if token.kind() == TokenKind::Newline {
+        let token_kind = token.kind();
+        if token_kind == TokenKind::Newline {
             continue;
         }
 
-        if token.kind() == TokenKind::Marker {
+        if token_kind == TokenKind::Marker {
             let marker = token.marker().unwrap_or_default();
+            let marker_kind = token_marker_kind(token);
 
             if enabled.has(LintCode::IdMarkerNotAtFileStart) && marker == "id" && saw_content {
                 issues.push(simple_issue(
                     LintCode::IdMarkerNotAtFileStart,
-                    "\\id marker appears after book content has already started".to_string(),
+                    MessageParams::default(),
                     token,
                 ));
             }
@@ -936,52 +1179,58 @@ fn lint_structure_rules<T: LintableToken>(
                 if id_seen {
                     issues.push(simple_issue(
                         LintCode::DuplicateIdMarker,
-                        "duplicate \\id marker".to_string(),
+                        MessageParams::default(),
                         token,
                     ));
                 }
                 id_seen = true;
             }
 
-            let prospective_state = if token_marker_kind(token) == MarkerKind::Note {
-                document_state.current_validation_context_for(token)
-            } else if token_marker_kind(token) == MarkerKind::Paragraph
+            let prospective_state = if marker_kind == MarkerKind::Note {
+                document_state.current_validation_context_for_kind(marker_kind)
+            } else if marker_kind == MarkerKind::Paragraph
                 && document_state.current_note_context().is_none()
             {
                 top_level_root_context(
                     document_state.kind,
                     document_state.select_top_level_slot(marker),
                 )
-            } else if token_marker_kind(token) == MarkerKind::Periph {
+            } else if marker_kind == MarkerKind::Periph {
                 SpecContext::Peripheral
-            } else if token_marker_kind(token) == MarkerKind::Chapter {
+            } else if marker_kind == MarkerKind::Chapter {
                 top_level_root_context(document_state.kind, TopLevelSlot::Content)
             } else {
                 document_state.current_root_context()
             };
 
-            if enabled.has(LintCode::ParagraphBeforeFirstChapter)
+            if enabled.has(LintCode::ContentBeforeFirstChapter)
                 && !document_state.saw_chapter
                 && document_state.kind == DocumentKind::Scripture
-                && token_marker_kind(token) == MarkerKind::Paragraph
+                && marker_kind == MarkerKind::Paragraph
                 && is_body_paragraph_marker(marker)
                 && prospective_state == SpecContext::ChapterContent
             {
                 issues.push(simple_issue(
-                    LintCode::ParagraphBeforeFirstChapter,
-                    format!("body paragraph marker \\{marker} appears before the first chapter"),
+                    LintCode::ContentBeforeFirstChapter,
+                    message_params([
+                        ("kind", "paragraph".to_string()),
+                        ("marker", marker.to_string()),
+                    ]),
                     token,
                 ));
             }
 
-            if enabled.has(LintCode::VerseBeforeFirstChapter)
+            if enabled.has(LintCode::ContentBeforeFirstChapter)
                 && !document_state.saw_chapter
                 && document_state.kind == DocumentKind::Scripture
                 && marker == "v"
             {
                 issues.push(simple_issue(
-                    LintCode::VerseBeforeFirstChapter,
-                    "verse marker appears before the first chapter".to_string(),
+                    LintCode::ContentBeforeFirstChapter,
+                    message_params([
+                        ("kind", "verse".to_string()),
+                        ("marker", "v".to_string()),
+                    ]),
                     token,
                 ));
             }
@@ -998,8 +1247,7 @@ fn lint_structure_rules<T: LintableToken>(
             {
                 issues.push(simple_issue(
                     LintCode::VerseOutsideExplicitParagraph,
-                    "verse marker appears outside an explicit paragraph, list, or table block"
-                        .to_string(),
+                    MessageParams::default(),
                     token,
                 ));
             }
@@ -1010,40 +1258,46 @@ fn lint_structure_rules<T: LintableToken>(
             {
                 issues.push(simple_issue(
                     LintCode::NoteSubmarkerOutsideNote,
-                    format!("note submarker \\{marker} appears outside an open note"),
+                    marker_params(marker),
                     token,
                 ));
             }
 
-            if enabled.has(LintCode::ChapterMetadataOutsideChapter)
+            if enabled.has(LintCode::MetadataOutsideTarget)
                 && matches!(marker, "ca" | "cp")
                 && !matches_previous_marker_and_number(tokens, index, "c")
             {
                 issues.push(simple_issue(
-                    LintCode::ChapterMetadataOutsideChapter,
-                    format!("chapter metadata \\{marker} is not attached to a chapter marker"),
+                    LintCode::MetadataOutsideTarget,
+                    message_params([
+                        ("marker", marker.to_string()),
+                        ("target", "chapter".to_string()),
+                    ]),
                     token,
                 ));
             }
 
-            if enabled.has(LintCode::VerseMetadataOutsideVerse)
+            if enabled.has(LintCode::MetadataOutsideTarget)
                 && matches!(marker, "va" | "vp")
                 && !matches_previous_marker_and_number(tokens, index, "v")
             {
                 issues.push(simple_issue(
-                    LintCode::VerseMetadataOutsideVerse,
-                    format!("verse metadata \\{marker} is not attached to a verse marker"),
+                    LintCode::MetadataOutsideTarget,
+                    message_params([
+                        ("marker", marker.to_string()),
+                        ("target", "verse".to_string()),
+                    ]),
                     token,
                 ));
             }
 
             let validation_context = if marker == "periph" {
                 SpecContext::Peripheral
-            } else if token_marker_kind(token) == MarkerKind::Chapter {
+            } else if marker_kind == MarkerKind::Chapter {
                 top_level_root_context(document_state.kind, TopLevelSlot::Content)
             } else if document_state.current_note_context().is_none()
                 && matches!(
-                    token_marker_kind(token),
+                    marker_kind,
                     MarkerKind::Paragraph
                         | MarkerKind::Header
                         | MarkerKind::SidebarStart
@@ -1053,31 +1307,30 @@ fn lint_structure_rules<T: LintableToken>(
                 let next_slot = document_state.select_top_level_slot(marker);
                 top_level_root_context(document_state.kind, next_slot)
             } else {
-                document_state.current_validation_context_for(token)
+                document_state.current_validation_context_for_kind(marker_kind)
             };
 
             if enabled.has(LintCode::MarkerNotValidInContext)
-                && token_marker_kind(token) != MarkerKind::Unknown
+                && marker_kind != MarkerKind::Unknown
                 && !marker_allows_effective_context(marker, validation_context)
             {
                 issues.push(simple_issue(
                     LintCode::MarkerNotValidInContext,
-                    format!(
-                        "marker \\{} is not valid in {}",
-                        marker,
-                        spec_context_name(validation_context)
-                    ),
+                    message_params([
+                        ("marker", marker.to_string()),
+                        ("context", spec_context_name(validation_context).to_string()),
+                    ]),
                     token,
                 ));
             }
 
-            if token_marker_kind(token) == MarkerKind::Note {
+            if marker_kind == MarkerKind::Note {
                 note_stack.push(marker.to_string());
             }
 
             document_state.apply_marker(tokens, index, token);
             saw_content = true;
-        } else if token.kind() == TokenKind::EndMarker {
+        } else if token_kind == TokenKind::EndMarker {
             let marker = token.marker().unwrap_or_default();
             if is_note_close_marker(marker) {
                 while let Some(open) = note_stack.pop() {
@@ -1087,23 +1340,27 @@ fn lint_structure_rules<T: LintableToken>(
                 }
             }
             saw_content = true;
-        } else if token.kind() == TokenKind::Text {
+        } else if token_kind == TokenKind::Text {
             if !token.text().trim().is_empty() {
                 saw_content = true;
             }
-        } else if !matches!(token.kind(), TokenKind::Newline | TokenKind::OptBreak) {
+        } else if !matches!(token_kind, TokenKind::Newline | TokenKind::OptBreak) {
             saw_content = true;
         }
     }
 
     if enabled.has(LintCode::MissingIdMarker) && !id_seen {
+        let code = LintCode::MissingIdMarker;
+        let template = code.template();
+        let params = MessageParams::default();
         issues.push(LintIssue {
-            code: LintCode::MissingIdMarker,
-            category: LintCode::MissingIdMarker.category(),
-            severity: LintCode::MissingIdMarker.severity(),
-            issue_type: LintCode::MissingIdMarker.issue_type(),
-            message: "document is missing required \\id marker".to_string(),
-            message_params: MessageParams::default(),
+            code,
+            category: code.category(),
+            severity: code.severity(),
+            issue_type: code.issue_type(),
+            template,
+            message: render_template(template, &params),
+            message_params: params,
             span: None,
             related_span: None,
             token_id: None,
@@ -1128,7 +1385,7 @@ fn lint_unknown_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIss
         }
         issues.push(simple_issue(
             LintCode::UnknownMarker,
-            format!("unknown marker \\{marker}"),
+            marker_params(marker),
             token,
         ));
     }
@@ -1147,7 +1404,7 @@ fn lint_unknown_close_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<L
         }
         issues.push(simple_issue(
             LintCode::UnknownCloseMarker,
-            format!("unknown closing marker \\{marker}*"),
+            marker_params(marker),
             token,
         ));
     }
@@ -1174,7 +1431,10 @@ fn lint_chapter_rules<T: LintableToken>(
             if enabled.has(LintCode::DuplicateChapterNumber) && seen_chapters.contains(&chapter) {
                 issues.push(simple_issue_with_marker(
                     LintCode::DuplicateChapterNumber,
-                    format!("duplicate chapter number {chapter}"),
+                    message_params([
+                        ("chapter", chapter.to_string()),
+                        ("marker", "c".to_string()),
+                    ]),
                     "c",
                     &tokens[number_index],
                 ));
@@ -1182,21 +1442,18 @@ fn lint_chapter_rules<T: LintableToken>(
             if enabled.has(LintCode::ChapterExpectedIncreaseByOne) {
                 let expected = last_chapter.map_or(1, |last| last + 1);
                 if chapter != expected {
-                    issues.push(
-                        simple_issue_with_marker(
-                            LintCode::ChapterExpectedIncreaseByOne,
-                            format!("expected chapter number {expected}, found {chapter}"),
-                            "c",
-                            &tokens[number_index],
-                        )
-                        .with_message_params(message_params([
+                    issues.push(simple_issue_with_marker(
+                        LintCode::ChapterExpectedIncreaseByOne,
+                        message_params([
                             ("expected", expected.to_string()),
                             ("found", chapter.to_string()),
                             ("chapter", chapter.to_string()),
                             ("marker", "c".to_string()),
                             ("context", "chapter-number".to_string()),
-                        ])),
-                    );
+                        ]),
+                        "c",
+                        &tokens[number_index],
+                    ));
                 }
             }
             seen_chapters.insert(chapter);
@@ -1234,20 +1491,22 @@ fn lint_chapter_rules<T: LintableToken>(
                     continue;
                 }
                 for (span, token_id, sid) in entries {
+                    let code = LintCode::InconsistentChapterLabel;
+                    let template = code.template();
+                    let params = message_params([
+                        ("expected", canonical.clone()),
+                        ("found", label.clone()),
+                        ("marker", "cl".to_string()),
+                        ("context", "chapter-label".to_string()),
+                    ]);
                     issues.push(LintIssue {
-                        code: LintCode::InconsistentChapterLabel,
-                        category: LintCode::InconsistentChapterLabel.category(),
-                        severity: LintCode::InconsistentChapterLabel.severity(),
-                        issue_type: LintCode::InconsistentChapterLabel.issue_type(),
-                        message: format!(
-                            "inconsistent chapter label '{label}', expected the canonical label '{canonical}'"
-                        ),
-                        message_params: message_params([
-                            ("expected", canonical.clone()),
-                            ("found", label.clone()),
-                            ("marker", "cl".to_string()),
-                            ("context", "chapter-label".to_string()),
-                        ]),
+                        code,
+                        category: code.category(),
+                        severity: code.severity(),
+                        issue_type: code.issue_type(),
+                        template,
+                        message: render_template(template, &params),
+                        message_params: params,
                         span,
                         related_span: None,
                         token_id,
@@ -1299,20 +1558,17 @@ fn lint_number_and_verse_rules<T: LintableToken>(
         let parsed_range = token_number_range(number_token).or_else(|| parse_number_range(value));
 
         if enabled.has(LintCode::InvalidNumberRange) && parsed_range.is_none() {
-            issues.push(
-                simple_issue_with_marker(
-                    LintCode::InvalidNumberRange,
-                    format!("invalid verse range {value}"),
-                    "v",
-                    number_token,
-                )
-                .with_message_params(message_params([
+            issues.push(simple_issue_with_marker(
+                LintCode::InvalidNumberRange,
+                message_params([
                     ("found", value.to_string()),
                     ("verse", value.to_string()),
                     ("marker", "v".to_string()),
                     ("context", "verse-range".to_string()),
-                ])),
-            );
+                ]),
+                "v",
+                number_token,
+            ));
             continue;
         }
 
@@ -1331,46 +1587,39 @@ fn lint_number_and_verse_rules<T: LintableToken>(
         if enabled.has(LintCode::DuplicateVerseNumber) && duplicate {
             issues.push(simple_issue_with_marker(
                 LintCode::DuplicateVerseNumber,
-                format!("duplicate verse number {value}"),
+                message_params([
+                    ("verse", value.to_string()),
+                    ("chapter", chapter.to_string()),
+                    ("marker", "v".to_string()),
+                ]),
                 "v",
                 number_token,
             ));
         } else if enabled.has(LintCode::VerseExpectedIncreaseByOne) {
             let expected = chapter_state.last + 1;
             if start != expected {
-                let message = if chapter_state.last > 0 {
-                    format!(
-                        "previous verse number was {}, so expected {} here, found {}",
-                        chapter_state.last, expected, start
-                    )
-                } else {
-                    format!("expected verse {expected} here, found {start}")
-                };
-                issues.push(
-                    simple_issue_with_marker(
-                        LintCode::VerseExpectedIncreaseByOne,
-                        message,
-                        "v",
-                        number_token,
-                    )
-                    .with_message_params(message_params([
+                issues.push(simple_issue_with_marker(
+                    LintCode::VerseExpectedIncreaseByOne,
+                    message_params([
                         ("expected", expected.to_string()),
                         ("found", start.to_string()),
                         ("chapter", chapter.to_string()),
                         ("verse", value.to_string()),
                         ("marker", "v".to_string()),
                         ("context", "verse-number".to_string()),
-                    ])),
-                );
+                    ]),
+                    "v",
+                    number_token,
+                ));
             }
         }
 
-        if enabled.has(LintCode::VerseTextFollowsVerseRange)
+        if enabled.has(LintCode::VerseIsEmpty)
             && !verse_has_text_or_note(tokens, number_index + 1)
         {
             issues.push(simple_issue_with_marker(
-                LintCode::VerseTextFollowsVerseRange,
-                "expected verse content after \\v".to_string(),
+                LintCode::VerseIsEmpty,
+                MessageParams::default(),
                 "v",
                 number_token,
             ));
@@ -1383,149 +1632,646 @@ fn lint_number_and_verse_rules<T: LintableToken>(
     }
 }
 
+/// Walker-driven marker-balance rules. Subscribes to the walker's
+/// scope events so all the open/close tracking is delegated to the
+/// unified state machine — no separate inline / structural stacks live
+/// inside lint anymore.
+///
+/// Wires the following rules to walker events:
+///
+/// - `StrayCloseMarker` — falls out as `on_other(EndMarker)` (walker
+///   couldn't pair the close to any open scope) and from
+///   `on_milestone_end` when no Milestone was open.
+/// - `MisnestedCloseMarker` + `ImplicitlyClosedMarker` — when the
+///   walker pops scopes as `ImplicitByOpen` immediately before firing
+///   `Explicit` for the matching scope, those popped frames are
+///   misnest victims. Note submarkers (`\ft`, `\fqa`, …) that pop
+///   silently during a `\f*` close are skipped, matching the prior
+///   behaviour.
+/// - `UnclosedMarker` — emitted for Note frames popped as
+///   `RecoveryClosure` (block-boundary recovery), for Character
+///   frames popped as `ImplicitByOpen` at a block boundary (drained
+///   when the next non-leave event arrives), and for any Note/Character
+///   still on the stack at EOF.
+/// - `MissingMilestoneSelfClose` — fired immediately on
+///   `on_enter_scope(Milestone)` when the *next* token isn't a
+///   MilestoneEnd. (Pairwise check; not really walker-shaped, but
+///   bundled here so the visitor owns the milestone logic too.)
 fn lint_marker_balance_rules<T: LintableToken>(
     tokens: &[T],
     enabled: &EnabledCodes,
     issues: &mut Vec<LintIssue>,
 ) {
-    let mut stack: Vec<OpenMarkerFrame> = Vec::new();
-    let mut structural_stack: Vec<OpenLintFrame> = Vec::new();
+    let mut visitor = MarkerBalanceVisitor::new(tokens, enabled);
+    walk(tokens, &mut visitor);
+    visitor.finish(issues);
+}
 
-    for (index, token) in tokens.iter().enumerate() {
-        let kind = token.kind();
-        let marker = match kind {
-            TokenKind::Marker | TokenKind::EndMarker => token.marker(),
-            _ => None,
-        };
+/// Pending state during a close cycle. Each entry is a frame popped
+/// as `ImplicitByOpen`; its fate (misnest victim vs boundary recovery)
+/// is decided by the next event.
+#[derive(Debug, Clone)]
+struct PendingImplicitPop {
+    marker: String,
+    scope_kind: StructuralScopeKind,
+    token_index: usize,
+}
 
-        if kind == TokenKind::Marker && closes_inline_stack_at_boundary(token_marker_kind(token)) {
-            close_open_frames_for_boundary(tokens, token, &mut stack, enabled, issues);
+struct MarkerBalanceVisitor<'a, T: LintableToken> {
+    tokens: &'a [T],
+    enabled: &'a EnabledCodes,
+    pending_implicits: Vec<PendingImplicitPop>,
+    /// Buffered issues. Held internally so we can deduplicate or amend
+    /// them within the visitor's lifetime; flushed in `finish`.
+    issues: Vec<LintIssue>,
+    /// True when the most recent on_leave_scope was Explicit. Used by
+    /// on_milestone_end to detect "stray \*" (no preceding Explicit).
+    just_closed_via_explicit: bool,
+}
+
+impl<'a, T: LintableToken> MarkerBalanceVisitor<'a, T> {
+    fn new(tokens: &'a [T], enabled: &'a EnabledCodes) -> Self {
+        Self {
+            tokens,
+            enabled,
+            pending_implicits: Vec::new(),
+            issues: Vec::new(),
+            just_closed_via_explicit: false,
         }
+    }
 
-        if kind == TokenKind::Milestone
-            && enabled.has(LintCode::MissingMilestoneSelfClose)
-            && tokens
-                .get(index + 1)
+    fn finish(self, sink: &mut Vec<LintIssue>) {
+        sink.extend(self.issues);
+    }
+
+    /// Drain any `pending_implicits` as boundary-recovery
+    /// `UnclosedMarker` emissions. Called when the walker fires an
+    /// event that's neither another leave nor an Explicit close —
+    /// i.e. the precedence pops were caused by an unrelated boundary,
+    /// not a closing marker.
+    fn drain_pending_as_boundary_unclosed(&mut self) {
+        if self.pending_implicits.is_empty() {
+            return;
+        }
+        if !self.enabled.has(LintCode::UnclosedMarker) {
+            self.pending_implicits.clear();
+            return;
+        }
+        for pending in std::mem::take(&mut self.pending_implicits) {
+            // Note submarkers (Character frames with `valid_in_note`)
+            // never trigger UnclosedMarker — they pop silently as
+            // siblings of the note close. We only see them here when
+            // they were popped by a block boundary, not a note close.
+            if pending.scope_kind == StructuralScopeKind::Character
+                && marker_note_subkind(&pending.marker).is_some()
+            {
+                continue;
+            }
+            self.push_unclosed_marker(&pending, "at-boundary");
+        }
+    }
+
+    fn push_unclosed_marker(&mut self, pending: &PendingImplicitPop, location: &str) {
+        let kind = match pending.scope_kind {
+            StructuralScopeKind::Note => "note",
+            StructuralScopeKind::Character => "character",
+            _ => "other",
+        };
+        let code = LintCode::UnclosedMarker;
+        let template = code.template();
+        let params = message_params([
+            ("marker", pending.marker.clone()),
+            ("kind", kind.to_string()),
+            ("location", location.to_string()),
+        ]);
+        let token = &self.tokens[pending.token_index];
+        let anchor = self.tokens.last();
+        self.issues.push(LintIssue {
+            code,
+            category: code.category(),
+            severity: code.severity(),
+            issue_type: code.issue_type(),
+            template,
+            message: render_template(template, &params),
+            message_params: params,
+            span: token.span(),
+            related_span: anchor.and_then(|a| a.span()),
+            token_id: token.id(),
+            related_token_id: anchor.and_then(|a| a.id()),
+            sid: token.sid().or_else(|| anchor.and_then(|a| a.sid())),
+            marker: Some(pending.marker.clone()),
+            fix: None,
+        });
+    }
+}
+
+impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor<'a, T> {
+    fn on_enter_scope(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+        // Any pending implicit pops at this point were boundary
+        // recoveries, not misnest victims (the next event is an open,
+        // not an Explicit close).
+        self.drain_pending_as_boundary_unclosed();
+        self.just_closed_via_explicit = false;
+
+        if frame.scope_kind == StructuralScopeKind::Milestone
+            && self.enabled.has(LintCode::MissingMilestoneSelfClose)
+            && self
+                .tokens
+                .get(token_index + 1)
                 .is_none_or(|next| next.kind() != TokenKind::MilestoneEnd)
         {
-            issues.push(simple_issue(
+            self.issues.push(simple_issue(
                 LintCode::MissingMilestoneSelfClose,
-                format!(
-                    "milestone \\{} is missing a closing \\*",
-                    marker.unwrap_or("")
-                ),
+                marker_params(frame.marker),
                 token,
             ));
         }
 
-        match kind {
-            TokenKind::Marker => {
-                let marker_kind = token_marker_kind(token);
-                if matches!(
-                    marker_kind,
-                    MarkerKind::Character | MarkerKind::Note | MarkerKind::Meta
-                ) {
-                    stack.push(OpenMarkerFrame {
-                        marker: marker.unwrap_or_default().to_string(),
-                        token_index: index,
-                        kind: marker_kind,
-                        valid_in_note: marker_note_subkind(marker.unwrap_or_default()).is_some(),
-                    });
-                }
-                if let Some(structural) = token_structural_info(token)
-                    && matches!(
-                        structural.scope_kind,
-                        StructuralScopeKind::Note
-                            | StructuralScopeKind::Character
-                            | StructuralScopeKind::Milestone
-                    )
-                {
-                    structural_stack.push(OpenLintFrame {
-                        marker: marker.unwrap_or_default().to_string(),
-                        kind: structural.scope_kind,
-                        token_index: index,
-                    });
-                }
-            }
-            TokenKind::EndMarker => {
-                handle_close_marker(
-                    token,
-                    marker.unwrap_or_default(),
-                    &mut stack,
-                    enabled,
-                    issues,
-                );
-                handle_structural_close(
-                    token,
-                    marker.unwrap_or_default(),
-                    &mut structural_stack,
-                    enabled,
-                    issues,
-                );
-            }
-            TokenKind::MilestoneEnd => {
-                handle_milestone_end(token, &mut structural_stack, enabled, issues);
-            }
-            _ => {}
-        }
-
-        if matches!(kind, TokenKind::Marker | TokenKind::Milestone)
-            && matches!(
-                token_marker_kind(token),
-                MarkerKind::Paragraph
-                    | MarkerKind::Header
-                    | MarkerKind::Meta
-                    | MarkerKind::Chapter
-                    | MarkerKind::Periph
-                    | MarkerKind::Unknown
-            )
+        // USFM 3.2: a verse opening inside a Section / Other
+        // paragraph is not allowed. The walker's
+        // `current_paragraph_category` is the canonical signal — fires
+        // exactly when the enclosing paragraph has a forbidden
+        // category. `current_paragraph_category` walks the scope stack
+        // inside-out, so the value it returns *now* is the paragraph
+        // that contains this incoming Verse.
+        if frame.scope_kind == StructuralScopeKind::Verse
+            && self.enabled.has(LintCode::VerseInSectionOrOtherParagraph)
         {
-            close_structural_frames_for_boundary(
-                tokens,
-                token,
-                &mut structural_stack,
-                enabled,
-                issues,
-            );
-        }
-    }
-
-    if let Some(anchor) = tokens.last() {
-        while let Some(frame) = stack.pop() {
-            issues.push(unclosed_marker_issue(tokens, &frame, anchor, true));
-        }
-        for frame in structural_stack {
-            let code = if frame.kind == StructuralScopeKind::Note {
-                LintCode::UnclosedNote
-            } else {
-                LintCode::UnclosedMarker
+            use crate::marker_defs::ParagraphCategory;
+            let category = ctx.current_paragraph_category();
+            let category_key = match category {
+                Some(ParagraphCategory::Section) => Some("section"),
+                Some(ParagraphCategory::Other) => Some("other"),
+                _ => None,
             };
-            if enabled.has(code) {
-                issues.push(LintIssue {
-                    code,
-                    category: code.category(),
-                    severity: code.severity(),
-                    issue_type: code.issue_type(),
-                    message: if code == LintCode::UnclosedNote {
-                        format!(
-                            "note \\{} was not closed before paragraph or chapter boundary",
-                            frame.marker
-                        )
-                    } else {
-                        format!("\\{} was still open at end of file", frame.marker)
-                    },
-                    message_params: MessageParams::default(),
-                    span: tokens[frame.token_index].span(),
-                    related_span: anchor.span(),
-                    token_id: tokens[frame.token_index].id(),
-                    related_token_id: anchor.id(),
-                    sid: tokens[frame.token_index].sid().or_else(|| anchor.sid()),
-                    marker: Some(frame.marker),
-                    fix: None,
-                });
+            if let Some(category_key) = category_key {
+                self.issues.push(simple_issue(
+                    LintCode::VerseInSectionOrOtherParagraph,
+                    message_params([("category", category_key.to_string())]),
+                    token,
+                ));
             }
         }
     }
+
+    fn on_leave_scope(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        reason: LeaveReason,
+    ) {
+        match reason {
+            LeaveReason::Explicit => {
+                // The matching `\X*` close. If we accumulated pending
+                // implicit pops since the last anchor event, they were
+                // misnest victims (popped to reach this match).
+                //
+                // Special case: when `\f*` (or `\x*`, …) closes a note,
+                // any note-submarker Character frames above it
+                // (`\ft`, `\fqa`, …) pop silently — they are
+                // submarkers of the closing note and don't represent
+                // misnesting. Mirrors the original lint code's
+                // `is_note_close_marker` special-case.
+                let closer_is_note_close = is_note_close_marker(frame.marker);
+                if !self.pending_implicits.is_empty() {
+                    let raw_victims = std::mem::take(&mut self.pending_implicits);
+                    let victims: Vec<PendingImplicitPop> = raw_victims
+                        .into_iter()
+                        .filter(|v| {
+                            !(closer_is_note_close
+                                && v.scope_kind == StructuralScopeKind::Character
+                                && marker_note_subkind(&v.marker).is_some())
+                        })
+                        .collect();
+                    if !victims.is_empty()
+                        && self.enabled.has(LintCode::MisnestedCloseMarker)
+                        && let Some(expected) = victims.last()
+                    {
+                        let close_token = &self.tokens[frame.source_token_index];
+                        let template = LintCode::MisnestedCloseMarker.template();
+                        let params = message_params([
+                            ("marker", frame.marker.to_string()),
+                            ("expected", expected.marker.clone()),
+                            ("has_expected", "true".to_string()),
+                        ]);
+                        let code = LintCode::MisnestedCloseMarker;
+                        self.issues.push(LintIssue {
+                            code,
+                            category: code.category(),
+                            severity: code.severity(),
+                            issue_type: code.issue_type(),
+                            template,
+                            message: render_template(template, &params),
+                            message_params: params,
+                            span: close_token.span(),
+                            related_span: None,
+                            token_id: close_token.id(),
+                            related_token_id: None,
+                            sid: close_token.sid(),
+                            marker: Some(frame.marker.to_string()),
+                            fix: None,
+                        });
+                    }
+                    if !victims.is_empty()
+                        && self.enabled.has(LintCode::ImplicitlyClosedMarker)
+                    {
+                        for victim in victims {
+                            let open_token = &self.tokens[victim.token_index];
+                            self.issues.push(simple_issue_with_marker(
+                                LintCode::ImplicitlyClosedMarker,
+                                message_params([
+                                    ("marker", victim.marker.clone()),
+                                    ("closer", frame.marker.to_string()),
+                                ]),
+                                &victim.marker,
+                                open_token,
+                            ));
+                        }
+                    }
+                }
+                self.just_closed_via_explicit = true;
+            }
+            LeaveReason::ImplicitByOpen => {
+                if matches!(
+                    frame.scope_kind,
+                    StructuralScopeKind::Note | StructuralScopeKind::Character
+                ) {
+                    self.pending_implicits.push(PendingImplicitPop {
+                        marker: frame.marker.to_string(),
+                        scope_kind: frame.scope_kind,
+                        token_index: frame.source_token_index,
+                    });
+                }
+                self.just_closed_via_explicit = false;
+            }
+            LeaveReason::RecoveryClosure => {
+                // Notes auto-closed by a block-scope marker arriving.
+                // Always Note kind (RecoveryClosure only fires for note
+                // recovery in the walker).
+                let pending = PendingImplicitPop {
+                    marker: frame.marker.to_string(),
+                    scope_kind: frame.scope_kind,
+                    token_index: frame.source_token_index,
+                };
+                if self.enabled.has(LintCode::UnclosedMarker) {
+                    self.push_unclosed_marker(&pending, "at-boundary");
+                }
+                self.just_closed_via_explicit = false;
+            }
+            LeaveReason::EndOfInput => {
+                if matches!(
+                    frame.scope_kind,
+                    StructuralScopeKind::Note | StructuralScopeKind::Character
+                ) && self.enabled.has(LintCode::UnclosedMarker)
+                {
+                    let pending = PendingImplicitPop {
+                        marker: frame.marker.to_string(),
+                        scope_kind: frame.scope_kind,
+                        token_index: frame.source_token_index,
+                    };
+                    self.push_unclosed_marker(&pending, "at-eof");
+                }
+                self.just_closed_via_explicit = false;
+            }
+        }
+    }
+
+    fn on_end_marker(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens T,
+        _token_index: usize,
+    ) {
+        // Always preceded by on_leave_scope(Explicit) when the close
+        // matched a real scope; nothing more to do here.
+    }
+
+    fn on_milestone_end(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        _token_index: usize,
+    ) {
+        if !self.just_closed_via_explicit && self.enabled.has(LintCode::StrayCloseMarker) {
+            self.issues.push(simple_issue(
+                LintCode::StrayCloseMarker,
+                message_params([("form", "milestone-end".to_string())]),
+                token,
+            ));
+        }
+        self.just_closed_via_explicit = false;
+    }
+
+    fn on_text(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens T,
+        _token_index: usize,
+    ) {
+        self.drain_pending_as_boundary_unclosed();
+        self.just_closed_via_explicit = false;
+    }
+
+    fn on_chapter(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens T,
+        _token_index: usize,
+    ) {
+        self.drain_pending_as_boundary_unclosed();
+        self.just_closed_via_explicit = false;
+    }
+
+    fn on_verse(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens T,
+        _token_index: usize,
+    ) {
+        self.drain_pending_as_boundary_unclosed();
+        self.just_closed_via_explicit = false;
+    }
+
+    fn on_other(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        _token_index: usize,
+    ) {
+        // Walker routed an EndMarker here when no scope matched —
+        // that's a stray close.
+        if token.kind() == TokenKind::EndMarker
+            && self.enabled.has(LintCode::StrayCloseMarker)
+            && let Some(marker) = token.marker()
+        {
+            self.issues.push(simple_issue(
+                LintCode::StrayCloseMarker,
+                message_params([
+                    ("marker", marker.to_string()),
+                    ("form", "named".to_string()),
+                ]),
+                token,
+            ));
+        }
+        self.drain_pending_as_boundary_unclosed();
+        self.just_closed_via_explicit = false;
+    }
+}
+
+/// Whitespace rules driven by the `MARKER_WHITESPACE` spec table.
+/// Covers the four rules from `docs/plan-whitespace-lint-rules.md` that
+/// the existing `MissingSeparatorAfterMarker` doesn't already handle:
+///
+/// - **MissingWhitespaceBeforeMarker** (rule 1): the marker's row says
+///   whitespace/newline is required *before*, but the prior token's
+///   trailing text does not satisfy.
+/// - **ExcessWhitespaceAroundMarker** (rule 4): the actual run of
+///   whitespace before/after the marker is longer than the requirement
+///   allows.
+/// - **ExcessWhitespaceInContent** (rule 5): a `Text` token contains
+///   multi-space runs or embedded newlines, not adjacent to
+///   sentence-ending punctuation.
+/// - **MissingContentSpaceAfterCloseMarker** (rule 6): a closing
+///   character marker (`\nd*`, …) is immediately followed by alphabetic
+///   text with no separating whitespace.
+fn lint_whitespace_rules<T: LintableToken>(
+    tokens: &[T],
+    enabled: &EnabledCodes,
+    issues: &mut Vec<LintIssue>,
+) {
+    use crate::marker_defs::lookup_marker_whitespace;
+    use crate::whitespace::{
+        StructuralWhitespaceRequirement as Req, is_any_whitespace_char,
+        is_horizontal_whitespace_char, is_newline_char, is_sentence_ending_punctuation_char,
+    };
+
+    // Spec-driven rules (1, 4) gated together — skip the
+    // `lookup_marker_whitespace` per-token cost when neither is enabled.
+    let spec_rules_enabled = enabled.has(LintCode::MissingWhitespaceBeforeMarker)
+        || enabled.has(LintCode::ExcessWhitespaceAroundMarker);
+    let content_rule_enabled = enabled.has(LintCode::ExcessWhitespaceInContent);
+
+    for index in 0..tokens.len() {
+        let token = &tokens[index];
+        let token_kind = token.kind();
+
+        // Rule 5: excess whitespace inside content text.
+        if content_rule_enabled
+            && token_kind == TokenKind::Text
+            && let Some(marker) = scan_excess_content_whitespace(token.text())
+            && marker
+        {
+            issues.push(simple_issue(
+                LintCode::ExcessWhitespaceInContent,
+                MessageParams::default(),
+                token,
+            ));
+        }
+
+        if !spec_rules_enabled {
+            continue;
+        }
+        if !matches!(token_kind, TokenKind::Marker | TokenKind::Milestone) {
+            continue;
+        }
+        let Some(marker) = token.marker() else {
+            continue;
+        };
+        let Some(spec) = lookup_marker_whitespace(marker) else {
+            continue;
+        };
+
+        // Rule 1: missing whitespace before marker. Read the prior
+        // token's trailing source; "start of input" satisfies a
+        // newline-before requirement (conceptually preceded by SOF).
+        if enabled.has(LintCode::MissingWhitespaceBeforeMarker)
+            && requirement_demands_leading_ws(spec.required_before_open)
+            && index > 0
+        {
+            let prev = &tokens[index - 1];
+            let prev_text = prev.text();
+            let satisfied = match spec.required_before_open {
+                Req::SingleNewline | Req::AtLeastOneNewline => prev_text
+                    .chars()
+                    .next_back()
+                    .is_some_and(is_newline_char),
+                Req::NewlineOrAnyWhitespaceBeforeMarker | Req::AtLeastOneWhitespace => prev_text
+                    .chars()
+                    .next_back()
+                    .is_some_and(is_any_whitespace_char),
+                Req::AtLeastOneHorizontalWhitespace => prev_text
+                    .chars()
+                    .next_back()
+                    .is_some_and(is_horizontal_whitespace_char),
+                _ => true,
+            };
+            if !satisfied {
+                issues.push(simple_issue(
+                    LintCode::MissingWhitespaceBeforeMarker,
+                    marker_params(marker),
+                    token,
+                ));
+            }
+        }
+
+        // Rule 4: excess whitespace immediately after the marker name.
+        // The "after" run lives at the start of the next token's text.
+        if enabled.has(LintCode::ExcessWhitespaceAroundMarker)
+            && index + 1 < tokens.len()
+            && excess_leading_horizontal_whitespace(tokens[index + 1].text())
+        {
+            issues.push(simple_issue(
+                LintCode::ExcessWhitespaceAroundMarker,
+                message_params([
+                    ("marker", marker.to_string()),
+                    ("position", "after".to_string()),
+                ]),
+                token,
+            ));
+        }
+
+        // Rule 4 (mirror): excess whitespace immediately before the
+        // marker. Looks at the prior token's trailing whitespace run.
+        if enabled.has(LintCode::ExcessWhitespaceAroundMarker)
+            && index > 0
+            && excess_trailing_horizontal_whitespace(tokens[index - 1].text())
+        {
+            issues.push(simple_issue(
+                LintCode::ExcessWhitespaceAroundMarker,
+                message_params([
+                    ("marker", marker.to_string()),
+                    ("position", "before".to_string()),
+                ]),
+                token,
+            ));
+        }
+    }
+
+    // Rule 6: closing character marker immediately followed by
+    // alphabetic text. Pure pairwise check; doesn't consult the spec
+    // table (the pattern is content-style, not structural).
+    if enabled.has(LintCode::MissingContentSpaceAfterCloseMarker) {
+        for index in 0..tokens.len().saturating_sub(1) {
+            let token = &tokens[index];
+            if token.kind() != TokenKind::EndMarker {
+                continue;
+            }
+            let Some(marker) = token.marker() else {
+                continue;
+            };
+            let next = &tokens[index + 1];
+            if next.kind() != TokenKind::Text {
+                continue;
+            }
+            let next_text = next.text();
+            if next_text
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic())
+            {
+                issues.push(simple_issue(
+                    LintCode::MissingContentSpaceAfterCloseMarker,
+                    marker_params(marker),
+                    token,
+                ));
+            }
+        }
+    }
+
+    // Suppress unused-import warning when only some rules run.
+    let _ = is_sentence_ending_punctuation_char as fn(char) -> bool;
+}
+
+fn requirement_demands_leading_ws(req: crate::whitespace::StructuralWhitespaceRequirement) -> bool {
+    use crate::whitespace::StructuralWhitespaceRequirement as Req;
+    matches!(
+        req,
+        Req::SingleNewline
+            | Req::AtLeastOneNewline
+            | Req::NewlineOrAnyWhitespaceBeforeMarker
+            | Req::AtLeastOneWhitespace
+            | Req::AtLeastOneHorizontalWhitespace
+    )
+}
+
+fn excess_leading_horizontal_whitespace(text: &str) -> bool {
+    let mut chars = text.chars();
+    let mut horizontal = 0usize;
+    for c in chars.by_ref() {
+        if c == ' ' || c == '\t' {
+            horizontal += 1;
+            if horizontal > 1 {
+                return true;
+            }
+        } else {
+            break;
+        }
+    }
+    false
+}
+
+fn excess_trailing_horizontal_whitespace(text: &str) -> bool {
+    let mut horizontal = 0usize;
+    for c in text.chars().rev() {
+        if c == ' ' || c == '\t' {
+            horizontal += 1;
+            if horizontal > 1 {
+                return true;
+            }
+        } else {
+            break;
+        }
+    }
+    false
+}
+
+/// Returns `Some(true)` when `text` contains a run of 2+ horizontal
+/// whitespace characters not preceded by sentence-ending punctuation,
+/// or an embedded newline run, indicating the content rule applies.
+fn scan_excess_content_whitespace(text: &str) -> Option<bool> {
+    // ASCII-byte scan. All predicates (horizontal WS, newline, sentence-
+    // ending punctuation, generic WS) are ASCII; non-ASCII bytes are
+    // text content. Operating on bytes avoids the per-token allocation
+    // of a `Vec<char>`.
+    let bytes = text.as_bytes();
+    let is_hs = |b: u8| b == b' ' || b == b'\t';
+    let is_sentence_end = |b: u8| matches!(b, b'.' | b'!' | b'?' | b':' | b';');
+    let is_ws = |b: u8| b == b' ' || b == b'\t' || b == b'\n' || b == b'\r';
+    let mut i = 0usize;
+    let mut saw_text = false;
+    let mut last_nonws: Option<u8> = None;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if is_hs(b) {
+            let run_start = i;
+            while i < bytes.len() && is_hs(bytes[i]) {
+                i += 1;
+            }
+            let run_len = i - run_start;
+            if run_len >= 2 && saw_text {
+                let protected = last_nonws.is_some_and(is_sentence_end);
+                if !protected {
+                    return Some(true);
+                }
+            }
+        } else if b == b'\n' || b == b'\r' {
+            if saw_text && bytes[i + 1..].iter().any(|&ch| !is_ws(ch)) {
+                return Some(true);
+            }
+            i += 1;
+        } else {
+            saw_text = true;
+            last_nonws = Some(b);
+            i += 1;
+        }
+    }
+    Some(false)
 }
 
 fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
@@ -1550,7 +2296,7 @@ fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
     }
     Some(simple_issue_with_marker(
         LintCode::UnknownToken,
-        format!("unknown token {}", token.text()),
+        message_params([("text", token.text().to_string())]),
         marker,
         token,
     ))
@@ -1581,7 +2327,7 @@ fn lint_number_predecessor<T: LintableToken>(
     let Some(prev_index) = previous_significant_token_index(tokens, index) else {
         issues.push(simple_issue(
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
-            "number range is not preceded by a marker that expects a number".to_string(),
+            MessageParams::default(),
             token,
         ));
         return;
@@ -1593,7 +2339,7 @@ fn lint_number_predecessor<T: LintableToken>(
     if !valid {
         issues.push(simple_issue(
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
-            "number range is not preceded by a marker that expects a number".to_string(),
+            MessageParams::default(),
             token,
         ));
     }
@@ -1617,242 +2363,12 @@ fn matches_previous_marker_and_number<T: LintableToken>(
         && tokens[before_number_index].marker() == Some(expected_marker)
 }
 
-fn close_open_frames_for_boundary<T: LintableToken>(
-    tokens: &[T],
-    boundary: &T,
-    stack: &mut Vec<OpenMarkerFrame>,
-    enabled: &EnabledCodes,
-    issues: &mut Vec<LintIssue>,
-) {
-    while let Some(frame) = stack.pop() {
-        if frame.kind == MarkerKind::Character && frame.valid_in_note {
-            continue;
-        }
-        let code = match frame.kind {
-            MarkerKind::Note => LintCode::UnclosedNote,
-            MarkerKind::Character => LintCode::CharNotClosed,
-            _ => continue,
-        };
-        if enabled.has(code) {
-            issues.push(unclosed_marker_issue(tokens, &frame, boundary, false));
-        }
-    }
-}
-
-fn handle_close_marker<T: LintableToken>(
-    token: &T,
-    marker: &str,
-    stack: &mut Vec<OpenMarkerFrame>,
-    enabled: &EnabledCodes,
-    issues: &mut Vec<LintIssue>,
-) {
-    if stack.is_empty() {
-        if enabled.has(LintCode::StrayCloseMarker) {
-            issues.push(simple_issue(
-                LintCode::StrayCloseMarker,
-                format!("closing marker \\{marker}* has no matching opener"),
-                token,
-            ));
-        }
-        return;
-    }
-
-    if is_note_close_marker(marker) {
-        while let Some((frame_kind, _frame_marker)) =
-            stack.last().map(|frame| (frame.kind, frame.marker.clone()))
-        {
-            if frame_kind == MarkerKind::Character
-                && stack.last().is_some_and(|frame| frame.valid_in_note)
-            {
-                stack.pop();
-                continue;
-            }
-            break;
-        }
-    }
-
-    if stack.last().is_some_and(|frame| frame.marker == marker) {
-        stack.pop();
-        return;
-    }
-
-    if stack.iter().any(|frame| frame.marker == marker) {
-        if enabled.has(LintCode::MisnestedCloseMarker) {
-            issues.push(simple_issue(
-                LintCode::MisnestedCloseMarker,
-                format!("closing marker \\{marker}* mismatches the current open stack"),
-                token,
-            ));
-        }
-        while let Some(frame) = stack.pop() {
-            if frame.marker == marker {
-                break;
-            }
-            if enabled.has(LintCode::ImplicitlyClosedMarker) {
-                issues.push(simple_issue_with_marker(
-                    LintCode::ImplicitlyClosedMarker,
-                    format!(
-                        "marker \\{} was implicitly closed before \\{}*",
-                        frame.marker, marker
-                    ),
-                    &frame.marker,
-                    token,
-                ));
-            }
-        }
-    } else if enabled.has(LintCode::StrayCloseMarker) {
-        issues.push(simple_issue(
-            LintCode::StrayCloseMarker,
-            format!("closing marker \\{marker}* has no matching opener"),
-            token,
-        ));
-    }
-}
-
-fn handle_structural_close<T: LintableToken>(
-    token: &T,
-    marker: &str,
-    stack: &mut Vec<OpenLintFrame>,
-    enabled: &EnabledCodes,
-    issues: &mut Vec<LintIssue>,
-) {
-    if is_note_close_marker(marker) {
-        while let Some((frame_kind, frame_marker)) =
-            stack.last().map(|frame| (frame.kind, frame.marker.clone()))
-        {
-            if frame_kind == StructuralScopeKind::Character
-                && marker_note_subkind(frame_marker.as_str()).is_some()
-            {
-                stack.pop();
-                continue;
-            }
-            break;
-        }
-    }
-
-    if let Some(match_pos) = stack.iter().rposition(|frame| {
-        matches!(
-            frame.kind,
-            StructuralScopeKind::Note | StructuralScopeKind::Character
-        ) && frame.marker == marker
-    }) {
-        if match_pos + 1 != stack.len() && enabled.has(LintCode::MisnestedCloseMarker) {
-            if let Some(open) = stack.last() {
-                issues.push(issue(
-                    LintCode::MisnestedCloseMarker,
-                    format!("expected \\{}* but found \\{}*", open.marker, marker),
-                    token,
-                    None::<&T>,
-                ));
-            }
-        }
-        stack.truncate(match_pos);
-    } else if enabled.has(LintCode::StrayCloseMarker) {
-        issues.push(simple_issue(
-            LintCode::StrayCloseMarker,
-            format!("closing marker \\{marker}* has no matching opener"),
-            token,
-        ));
-    }
-}
-
-fn handle_milestone_end<T: LintableToken>(
-    token: &T,
-    stack: &mut Vec<OpenLintFrame>,
-    enabled: &EnabledCodes,
-    issues: &mut Vec<LintIssue>,
-) {
-    if let Some(match_pos) = stack
-        .iter()
-        .rposition(|frame| frame.kind == StructuralScopeKind::Milestone)
-    {
-        stack.truncate(match_pos);
-    } else if enabled.has(LintCode::StrayCloseMarker) {
-        issues.push(simple_issue(
-            LintCode::StrayCloseMarker,
-            "closing marker \\* has no matching opener".to_string(),
-            token,
-        ));
-    }
-}
-
-fn close_structural_frames_for_boundary<T: LintableToken>(
-    tokens: &[T],
-    boundary: &T,
-    stack: &mut Vec<OpenLintFrame>,
-    enabled: &EnabledCodes,
-    issues: &mut Vec<LintIssue>,
-) {
-    while let Some(frame) = stack.pop() {
-        let code = match frame.kind {
-            StructuralScopeKind::Note => LintCode::UnclosedNote,
-            StructuralScopeKind::Character => LintCode::UnclosedMarker,
-            _ => continue,
-        };
-        if enabled.has(code) {
-            let open = &tokens[frame.token_index];
-            issues.push(LintIssue {
-                code,
-                category: code.category(),
-                severity: code.severity(),
-                issue_type: code.issue_type(),
-                message: if code == LintCode::UnclosedNote {
-                    format!(
-                        "note \\{} was not closed before paragraph or chapter boundary",
-                        frame.marker
-                    )
-                } else {
-                    format!(
-                        "marker \\{} was not closed before the next block boundary",
-                        frame.marker
-                    )
-                },
-                message_params: MessageParams::default(),
-                span: open.span(),
-                related_span: boundary.span(),
-                token_id: open.id(),
-                related_token_id: boundary.id(),
-                sid: open.sid().or_else(|| boundary.sid()),
-                marker: Some(frame.marker),
-                fix: None,
-            });
-        }
-    }
-}
-
-fn unclosed_marker_issue<T: LintableToken>(
-    tokens: &[T],
-    frame: &OpenMarkerFrame,
-    anchor: &T,
-    at_eof: bool,
-) -> LintIssue {
-    let code = match frame.kind {
-        MarkerKind::Note => LintCode::UnclosedNote,
-        MarkerKind::Character => LintCode::CharNotClosed,
-        _ => LintCode::UnclosedMarker,
-    };
-    let location = if at_eof {
-        "before end of file"
-    } else {
-        "before the next block boundary"
-    };
-    let open = &tokens[frame.token_index];
-    LintIssue {
-        code,
-        category: code.category(),
-        severity: code.severity(),
-        issue_type: code.issue_type(),
-        message: format!("marker \\{} was not closed {}", frame.marker, location),
-        message_params: MessageParams::default(),
-        span: open.span(),
-        related_span: anchor.span(),
-        token_id: open.id(),
-        related_token_id: anchor.id(),
-        sid: open.sid().or_else(|| anchor.sid()),
-        marker: Some(frame.marker.clone()),
-        fix: None,
-    }
-}
+// Note: the helpers that used to live here (close_open_frames_for_boundary,
+// handle_close_marker, handle_structural_close, handle_milestone_end,
+// close_structural_frames_for_boundary, unclosed_marker_issue) were
+// retired when `lint_marker_balance_rules` migrated to a walker
+// visitor. The walker's events now drive all unclosed/misnested/stray
+// detection; see `MarkerBalanceVisitor`.
 
 fn verse_has_text_or_note<T: LintableToken>(tokens: &[T], start: usize) -> bool {
     for token in tokens.iter().skip(start) {
@@ -2185,60 +2701,56 @@ fn empty_paragraph_boundary_token<T: LintableToken>(token: &T) -> bool {
     )
 }
 
-fn closes_inline_stack_at_boundary(kind: MarkerKind) -> bool {
-    matches!(
-        kind,
-        MarkerKind::Paragraph
-            | MarkerKind::Header
-            | MarkerKind::Meta
-            | MarkerKind::Chapter
-            | MarkerKind::Periph
-            | MarkerKind::Unknown
-    )
-}
 
 fn is_note_close_marker(marker: &str) -> bool {
     matches!(marker, "f" | "fe" | "ef" | "x" | "ex")
 }
 
+/// Lowercase kebab-case identifier for a `SpecContext`. Stable wire
+/// value used by the `marker-not-valid-in-context` ICU template's
+/// `{context, select, …}` branches and by tooling that filters by
+/// context. Keep aligned with the template's branch keys.
 fn spec_context_name(context: SpecContext) -> &'static str {
     match context {
-        SpecContext::Scripture => "Scripture",
-        SpecContext::BookIdentification => "BookIdentification",
-        SpecContext::BookHeaders => "BookHeaders",
-        SpecContext::BookTitles => "BookTitles",
-        SpecContext::BookIntroduction => "BookIntroduction",
-        SpecContext::BookIntroductionEndTitles => "BookIntroductionEndTitles",
-        SpecContext::BookChapterLabel => "BookChapterLabel",
-        SpecContext::ChapterContent => "ChapterContent",
-        SpecContext::Peripheral => "Peripheral",
-        SpecContext::PeripheralContent => "PeripheralContent",
-        SpecContext::PeripheralDivision => "PeripheralDivision",
-        SpecContext::Chapter => "Chapter",
-        SpecContext::Verse => "Verse",
-        SpecContext::Section => "Section",
-        SpecContext::Para => "Para",
-        SpecContext::List => "List",
-        SpecContext::Table => "Table",
-        SpecContext::Sidebar => "Sidebar",
-        SpecContext::Footnote => "Footnote",
-        SpecContext::CrossReference => "CrossReference",
+        SpecContext::Scripture => "scripture",
+        SpecContext::BookIdentification => "book-identification",
+        SpecContext::BookHeaders => "book-headers",
+        SpecContext::BookTitles => "book-titles",
+        SpecContext::BookIntroduction => "book-introduction",
+        SpecContext::BookIntroductionEndTitles => "book-introduction-end-titles",
+        SpecContext::BookChapterLabel => "book-chapter-label",
+        SpecContext::ChapterContent => "chapter-content",
+        SpecContext::Peripheral => "peripheral",
+        SpecContext::PeripheralContent => "peripheral-content",
+        SpecContext::PeripheralDivision => "peripheral-division",
+        SpecContext::Chapter => "chapter",
+        SpecContext::Verse => "verse",
+        SpecContext::Section => "section",
+        SpecContext::Para => "para",
+        SpecContext::List => "list",
+        SpecContext::Table => "table",
+        SpecContext::Sidebar => "sidebar",
+        SpecContext::Footnote => "footnote",
+        SpecContext::CrossReference => "cross-reference",
     }
 }
 
 fn issue<T: LintableToken, U: LintableToken>(
     code: LintCode,
-    message: String,
+    params: MessageParams,
     token: &T,
     related: Option<&U>,
 ) -> LintIssue {
+    let template = code.template();
+    let message = render_template(template, &params);
     LintIssue {
         code,
         category: code.category(),
         severity: code.severity(),
         issue_type: code.issue_type(),
+        template,
         message,
-        message_params: MessageParams::default(),
+        message_params: params,
         span: token.span(),
         related_span: related.and_then(LintableToken::span),
         token_id: token.id(),
@@ -2250,11 +2762,6 @@ fn issue<T: LintableToken, U: LintableToken>(
 }
 
 impl LintIssue {
-    fn with_message_params(mut self, message_params: MessageParams) -> Self {
-        self.message_params = message_params;
-        self
-    }
-
     fn with_fix(mut self, fix: TokenFix) -> Self {
         self.fix = Some(fix);
         self
@@ -2276,19 +2783,25 @@ fn missing_separator_fix<T: LintableToken>(token: &T) -> TokenFix {
     }
 }
 
-fn simple_issue<T: LintableToken>(code: LintCode, message: String, token: &T) -> LintIssue {
-    issue(code, message, token, None::<&T>)
+fn simple_issue<T: LintableToken>(code: LintCode, params: MessageParams, token: &T) -> LintIssue {
+    issue(code, params, token, None::<&T>)
 }
 
 fn simple_issue_with_marker<T: LintableToken>(
     code: LintCode,
-    message: String,
+    params: MessageParams,
     marker: &str,
     token: &T,
 ) -> LintIssue {
-    let mut issue = simple_issue(code, message, token);
+    let mut issue = simple_issue(code, params, token);
     issue.marker = Some(marker.to_string());
     issue
+}
+
+/// Build a single-`marker`-param map, used by every rule that surfaces
+/// the offending marker name.
+fn marker_params(marker: &str) -> MessageParams {
+    message_params([("marker", marker.to_string())])
 }
 
 fn dedupe_issues(issues: Vec<LintIssue>) -> Vec<LintIssue> {
@@ -2352,12 +2865,8 @@ fn summarize(issues: &[LintIssue], suppressed_count: usize) -> LintSummary {
     }
 }
 
-fn format_sid(sid: Sid<'_>) -> String {
-    if sid.verse == 0 {
-        format!("{} {}", sid.book_code, sid.chapter)
-    } else {
-        format!("{} {}:{}", sid.book_code, sid.chapter, sid.verse)
-    }
+fn format_sid(sid: Sid) -> String {
+    sid.to_string()
 }
 
 fn format_token_id(id: TokenId<'_>) -> String {
@@ -2367,6 +2876,203 @@ fn format_token_id(id: TokenId<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn template_renders_plain_placeholders() {
+        let params = message_params([("marker", "p".to_string())]);
+        let rendered = render_template("\\{marker} needs a space.", &params);
+        assert_eq!(rendered, "\\p needs a space.");
+    }
+
+    #[test]
+    fn template_renders_number_placeholders() {
+        let params = message_params([("chapter", "3".to_string())]);
+        let rendered = render_template("Chapter {chapter, number} appears more than once.", &params);
+        assert_eq!(rendered, "Chapter 3 appears more than once.");
+    }
+
+    #[test]
+    fn template_renders_select_arms() {
+        let template = "{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened.";
+        let note_params = message_params([
+            ("kind", "note".to_string()),
+            ("marker", "f".to_string()),
+        ]);
+        assert_eq!(
+            render_template(template, &note_params),
+            "Note \\f was opened."
+        );
+
+        let char_params = message_params([
+            ("kind", "character".to_string()),
+            ("marker", "nd".to_string()),
+        ]);
+        assert_eq!(
+            render_template(template, &char_params),
+            "Character marker \\nd was opened."
+        );
+
+        let other_params = message_params([
+            ("kind", "milestone".to_string()),
+            ("marker", "zaln-s".to_string()),
+        ]);
+        assert_eq!(
+            render_template(template, &other_params),
+            "Marker \\zaln-s was opened."
+        );
+    }
+
+    #[test]
+    fn template_select_falls_through_when_param_missing() {
+        let template = "{form, select, milestone-end {EM} other {NAMED}}";
+        let rendered = render_template(template, &MessageParams::default());
+        assert_eq!(rendered, "NAMED");
+    }
+
+    #[test]
+    fn missing_whitespace_before_marker_is_flagged() {
+        // `\p` arrives directly after the previous text token with no
+        // separating whitespace — `\p`'s row demands
+        // NewlineOrAnyWhitespaceBeforeMarker.
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p first\\p second\n",
+            LintOptions::default(),
+        );
+        let flagged = result
+            .issues
+            .iter()
+            .any(|i| i.code == LintCode::MissingWhitespaceBeforeMarker);
+        assert!(
+            flagged,
+            "expected missing-whitespace-before-marker, got: {:?}",
+            result.issues.iter().map(|i| i.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn excess_whitespace_around_marker_is_flagged() {
+        // Five spaces immediately after `\p` and before the paragraph
+        // text. Paragraph markers don't take a number, so the WS run
+        // sits at the start of the next Text token where the rule
+        // looks.
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p     paragraph text\n",
+            LintOptions::default(),
+        );
+        let flagged = result
+            .issues
+            .iter()
+            .any(|i| i.code == LintCode::ExcessWhitespaceAroundMarker);
+        assert!(
+            flagged,
+            "expected excess-whitespace-around-marker, got: {:?}",
+            result.issues.iter().map(|i| i.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn excess_whitespace_in_content_is_flagged_for_non_punctuation_runs() {
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 word  another word.\n",
+            LintOptions::default(),
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
+            "expected excess-whitespace-in-content"
+        );
+    }
+
+    #[test]
+    fn excess_whitespace_after_sentence_punctuation_is_allowed() {
+        // The carve-out from `is_sentence_ending_punctuation_char`:
+        // multi-space after `.` (or ! ? : ;) is intentional typography.
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 End.  Next sentence.\n",
+            LintOptions::default(),
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
+            "double-space after period must not trigger the rule"
+        );
+    }
+
+    #[test]
+    fn verse_in_section_heading_is_flagged() {
+        // `\s1` is a Section-category paragraph. Putting `\v` inside
+        // one violates USFM 3.2 §verse-placement.
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\s1 Section\n\\v 1 Text\n",
+            LintOptions::default(),
+        );
+        let flagged = result
+            .issues
+            .iter()
+            .any(|i| i.code == LintCode::VerseInSectionOrOtherParagraph);
+        assert!(
+            flagged,
+            "expected verse-in-section issue; got: {:?}",
+            result.issues.iter().map(|i| i.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn verse_in_body_paragraph_is_not_flagged_as_section_violation() {
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n",
+            LintOptions::default(),
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::VerseInSectionOrOtherParagraph),
+            "body paragraph must not trigger section-or-other rule"
+        );
+    }
+
+    #[test]
+    fn missing_content_space_after_close_marker_is_flagged() {
+        // Closing \nd* immediately followed by alphabetic text. The
+        // intentional contraction case is still flagged — autofix is
+        // None so the linter is reporting a hint, not changing content.
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 \\nd Lord\\nd*walks.\n",
+            LintOptions::default(),
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::MissingContentSpaceAfterCloseMarker),
+            "expected missing-content-space-after-close-marker"
+        );
+    }
+
+    #[test]
+    fn unclosed_marker_emits_collapsed_code_with_kind_param() {
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text",
+            LintOptions::default(),
+        );
+        let issue = result
+            .issues
+            .iter()
+            .find(|i| i.code == LintCode::UnclosedMarker)
+            .expect("collapsed UnclosedMarker issue");
+        assert_eq!(issue.template, LintCode::UnclosedMarker.template());
+        assert_eq!(issue.message_params.get("kind"), Some(&"note".to_string()));
+        assert!(
+            issue.message.contains("Note"),
+            "rendered message should select note arm: {}",
+            issue.message
+        );
+    }
 
     #[derive(Debug)]
     struct EditorToken {
@@ -2379,21 +3085,27 @@ mod tests {
         lane: u8,
     }
 
-    impl LintableToken for EditorToken {
+    impl WalkableToken for EditorToken {
         fn kind(&self) -> TokenKind {
             self.token_kind
         }
 
-        fn span(&self) -> Option<Span> {
-            Some(self.token_span)
+        fn marker(&self) -> Option<&str> {
+            self.token_marker.as_deref()
         }
 
         fn text(&self) -> &str {
             &self.token_text
         }
 
-        fn marker(&self) -> Option<&str> {
-            self.token_marker.as_deref()
+        fn structural(&self) -> Option<StructuralMarkerInfo> {
+            None
+        }
+    }
+
+    impl LintableToken for EditorToken {
+        fn span(&self) -> Option<Span> {
+            Some(self.token_span)
         }
 
         fn sid(&self) -> Option<String> {
@@ -2577,17 +3289,31 @@ mod tests {
     #[test]
     fn chapter_and_verse_metadata_attachment_is_checked() {
         let result = lint_usfm("\\id GEN\n\\c 1\n\\vp 2\n\\ca 3", LintOptions::default());
-        assert!(
-            result
-                .issues
-                .iter()
-                .any(|issue| issue.code == LintCode::VerseMetadataOutsideVerse)
+        let verse_issue = result
+            .issues
+            .iter()
+            .find(|issue| {
+                issue.code == LintCode::MetadataOutsideTarget
+                    && issue.message_params.get("target").map(String::as_str)
+                        == Some("verse")
+            })
+            .expect("verse-metadata issue");
+        assert_eq!(
+            verse_issue.message_params.get("marker"),
+            Some(&"vp".to_string())
         );
-        assert!(
-            result
-                .issues
-                .iter()
-                .any(|issue| issue.code == LintCode::ChapterMetadataOutsideChapter)
+        let chapter_issue = result
+            .issues
+            .iter()
+            .find(|issue| {
+                issue.code == LintCode::MetadataOutsideTarget
+                    && issue.message_params.get("target").map(String::as_str)
+                        == Some("chapter")
+            })
+            .expect("chapter-metadata issue");
+        assert_eq!(
+            chapter_issue.message_params.get("marker"),
+            Some(&"ca".to_string())
         );
     }
 
@@ -2750,9 +3476,12 @@ mod tests {
             "\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text",
             LintOptions::default(),
         );
-        assert!(result.issues.iter().any(|issue| {
-            matches!(issue.code, LintCode::UnclosedNote | LintCode::CharNotClosed)
-        }));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::UnclosedMarker)
+        );
     }
 
     #[test]

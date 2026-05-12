@@ -35,30 +35,31 @@ use crate::marker_defs::{
     InlineContext, ParagraphCategory, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
     marker_allows_effective_context,
 };
-use crate::token::{Sid, Token, TokenData, TokenKind};
+use crate::token::{Token, TokenData, TokenKind};
 
 /// Internal trait the walker is generic over.
 ///
-/// Parameterised on the source lifetime so scope frames can hold
-/// `&'a str` marker names borrowed directly from the source. The
-/// relationship to the public `LintableToken` trait is **deliberately
-/// undefined** at this stage — step 6 (lint migration) will resolve
-/// it. Until then they are independent traits both implemented for
-/// `Token<'a>`.
-pub trait WalkableToken<'a> {
+/// Methods use self-elided lifetimes (`&self -> &str`). When the walker
+/// holds `&'tokens T`, those methods return `&'tokens str` references,
+/// which is what `ScopeFrame<'tokens>` borrows from. This is what lets
+/// the walker drive owned-string token types (`FormatToken`,
+/// `EditorToken`) as well as source-borrowed `Token<'_>` — neither
+/// needs a single shared "source lifetime."
+///
+/// `LintableToken` (public surface) is a supertrait of this one.
+pub trait WalkableToken {
     fn kind(&self) -> TokenKind;
-    fn marker_name(&self) -> Option<&'a str>;
+    fn marker(&self) -> Option<&str>;
     fn structural(&self) -> Option<StructuralMarkerInfo>;
-    fn sid(&self) -> Option<Sid<'a>>;
     /// Returns the token's source slice. For `Text` tokens this is the
     /// content; for marker/milestone tokens it is the literal source
-    /// span. Visitors typically only read `source()` inside `on_text`.
-    fn source(&self) -> &'a str;
+    /// span. Visitors typically only read `text()` inside `on_text`.
+    fn text(&self) -> &str;
     /// True when the *next* token in the original stream is a
     /// `Number` token. Only consulted for `\c` / `\v` markers — they
     /// open a scope iff a number follows. Defaults to `false`; callers
     /// using `walk_tokens` with `&[Token<'_>]` get the correct answer
-    /// from `Token`'s own implementation. Custom impls (editor tokens
+    /// from the slice-aware entry point. Custom impls (editor tokens
     /// without parse context) can leave the default and accept that
     /// chapter/verse opens fall back to leaf behaviour.
     fn next_is_number(&self) -> bool {
@@ -66,12 +67,12 @@ pub trait WalkableToken<'a> {
     }
 }
 
-impl<'a> WalkableToken<'a> for Token<'a> {
+impl<'a> WalkableToken for Token<'a> {
     fn kind(&self) -> TokenKind {
         Token::kind(self)
     }
 
-    fn marker_name(&self) -> Option<&'a str> {
+    fn marker(&self) -> Option<&str> {
         self.marker_name()
     }
 
@@ -84,11 +85,7 @@ impl<'a> WalkableToken<'a> for Token<'a> {
         }
     }
 
-    fn sid(&self) -> Option<Sid<'a>> {
-        self.sid
-    }
-
-    fn source(&self) -> &'a str {
+    fn text(&self) -> &str {
         self.source
     }
 
@@ -101,10 +98,15 @@ impl<'a> WalkableToken<'a> for Token<'a> {
 /// Holds every open scope, including character markers and milestone-
 /// starts. Visitors filter by `scope_kind` when they only care about a
 /// subset (e.g. paragraph queries skip `Character` frames).
+///
+/// `'tokens` is the **slice** lifetime — the lifetime of the input
+/// `&[T]` the walker is iterating. `frame.marker` borrows from a token
+/// in that slice, not from any "source string" — that's what lets the
+/// walker drive both source-borrowed and owned-string token types.
 #[derive(Debug, Clone, Copy)]
-pub struct ScopeFrame<'a> {
+pub struct ScopeFrame<'tokens> {
     pub scope_kind: StructuralScopeKind,
-    pub marker: &'a str,
+    pub marker: &'tokens str,
     /// Index into the input token slice of the token that opened this
     /// scope. Visitors that need attributes, span, or other token data
     /// look it up via this index.
@@ -142,29 +144,20 @@ pub enum LeaveReason {
 /// Read-only view of the walker's state, handed to every visitor
 /// callback.
 ///
-/// `'a` is the source lifetime (borrows from tokens). `'ctx` is the
-/// event-callback lifetime: any reference obtained from a
-/// `WalkContext` is only valid for the duration of the visitor method
-/// that received it. Visitors that need cross-event state own that
-/// state themselves — the borrow checker enforces this via `'ctx`.
+/// `'tokens` is the input-slice lifetime (borrows from tokens in the
+/// slice). `'ctx` is the event-callback lifetime: any reference
+/// obtained from a `WalkContext` is only valid for the duration of the
+/// visitor method that received it. Visitors that need cross-event
+/// state own that state themselves — the borrow checker enforces this
+/// via `'ctx`.
 #[derive(Debug, Clone, Copy)]
-pub struct WalkContext<'a, 'ctx> {
-    scope_stack: &'ctx [ScopeFrame<'a>],
-    current_chapter: Option<Sid<'a>>,
-    current_verse: Option<Sid<'a>>,
+pub struct WalkContext<'tokens, 'ctx> {
+    scope_stack: &'ctx [ScopeFrame<'tokens>],
 }
 
-impl<'a, 'ctx> WalkContext<'a, 'ctx> {
-    pub fn scope_stack(&self) -> &'ctx [ScopeFrame<'a>] {
+impl<'tokens, 'ctx> WalkContext<'tokens, 'ctx> {
+    pub fn scope_stack(&self) -> &'ctx [ScopeFrame<'tokens>] {
         self.scope_stack
-    }
-
-    pub fn current_chapter(&self) -> Option<Sid<'a>> {
-        self.current_chapter
-    }
-
-    pub fn current_verse(&self) -> Option<Sid<'a>> {
-        self.current_verse
     }
 
     /// Returns the depth of the innermost open note scope. Zero when
@@ -206,14 +199,14 @@ impl<'a, 'ctx> WalkContext<'a, 'ctx> {
 /// index-based structures (CST's arena, USJ's tree) use this directly;
 /// visitors that don't care (lint, vref) ignore it.
 #[allow(unused_variables)]
-pub trait Visitor<'a, T: WalkableToken<'a>> {
+pub trait Visitor<'tokens, T: WalkableToken> {
     /// Fires when a scope opens. `frame.source_token_index ==
     /// token_index`.
     fn on_enter_scope(
         &mut self,
-        ctx: &WalkContext<'a, '_>,
-        frame: &ScopeFrame<'a>,
-        token: &T,
+        ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        token: &'tokens T,
         token_index: usize,
     ) {
     }
@@ -225,8 +218,8 @@ pub trait Visitor<'a, T: WalkableToken<'a>> {
     /// `ImplicitByOpen`, `EndOfInput`) have no associated closing token.
     fn on_leave_scope(
         &mut self,
-        ctx: &WalkContext<'a, '_>,
-        frame: &ScopeFrame<'a>,
+        ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
         reason: LeaveReason,
     ) {
     }
@@ -235,44 +228,105 @@ pub trait Visitor<'a, T: WalkableToken<'a>> {
     /// `EndMarker` token (`\f*`, `\nd*`, …). Visitors that want the
     /// closer to appear as a leaf in their output (CST, USJ) append
     /// it here.
-    fn on_end_marker(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_end_marker(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
     /// Fires for self-closing milestone tokens and for milestone-end
     /// tokens (the `\*` after `\zaln-e`). Paired-milestone *opens*
     /// (`\zaln-s`) fire `on_enter_scope` instead.
-    fn on_milestone(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_milestone(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
     /// Fires for the bare `\*` token that closes a paired milestone.
     /// Currently distinct from `on_milestone` so visitors can treat
     /// the closer as a separate leaf if they want; most consumers
     /// will route both into the same handler.
-    fn on_milestone_end(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_milestone_end(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
-    fn on_text(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_text(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
-    fn on_chapter(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_chapter(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
-    fn on_verse(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_verse(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
-    fn on_book_code(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_book_code(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
-    fn on_opt_break(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_opt_break(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
-    fn on_newline(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_newline(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 
     /// Catch-all for any token the walker couldn't classify
     /// structurally (unknown markers, numbers outside chapter/verse,
     /// etc.). Visitors that want full token coverage append here.
-    fn on_other(&mut self, ctx: &WalkContext<'a, '_>, token: &T, token_index: usize) {}
+    fn on_other(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        token_index: usize,
+    ) {
+    }
 }
 
 /// Convenience entry point for walking a slice of native `Token<'a>`s.
 /// Resolves `next_is_number` against the slice so chapter/verse opens
 /// are classified correctly without requiring custom impls of
 /// `WalkableToken::next_is_number`.
-pub fn walk_tokens<'a, V>(tokens: &[Token<'a>], visitor: &mut V)
+pub fn walk_tokens<'tokens, 'src, V>(tokens: &'tokens [Token<'src>], visitor: &mut V)
 where
-    V: Visitor<'a, Token<'a>>,
+    'src: 'tokens,
+    V: Visitor<'tokens, Token<'src>>,
 {
     let mut state = WalkerState::new();
     for index in 0..tokens.len() {
@@ -285,50 +339,51 @@ where
     state.drain_to_eof(visitor);
 }
 
-/// Generic entry point. Defers to `WalkableToken::next_is_number` for
-/// the chapter/verse-open classification; custom token impls that
-/// don't know about the next token will get leaf-style classification
-/// for `\c` / `\v`.
-pub fn walk<'a, T, V>(tokens: &[T], visitor: &mut V)
+/// Generic entry point. Resolves `next_is_number` against the slice
+/// itself (via `WalkableToken::kind` on the following token) so chapter
+/// and verse opens classify correctly without requiring custom impls.
+/// Falls back to `WalkableToken::next_is_number` when the slice has no
+/// next token.
+pub fn walk<'tokens, T, V>(tokens: &'tokens [T], visitor: &mut V)
 where
-    T: WalkableToken<'a>,
-    V: Visitor<'a, T>,
+    T: WalkableToken,
+    V: Visitor<'tokens, T>,
 {
     let mut state = WalkerState::new();
     for (index, token) in tokens.iter().enumerate() {
-        let next_is_number = token.next_is_number();
+        let next_is_number = match tokens.get(index + 1) {
+            Some(next) => next.kind() == TokenKind::Number,
+            None => token.next_is_number(),
+        };
         state.step(index, token, next_is_number, visitor);
     }
     state.drain_to_eof(visitor);
 }
 
-struct WalkerState<'a> {
-    stack: Vec<ScopeFrame<'a>>,
-    current_chapter: Option<Sid<'a>>,
-    current_verse: Option<Sid<'a>>,
+struct WalkerState<'tokens> {
+    stack: Vec<ScopeFrame<'tokens>>,
 }
 
-impl<'a> WalkerState<'a> {
+impl<'tokens> WalkerState<'tokens> {
     fn new() -> Self {
-        Self {
-            stack: Vec::new(),
-            current_chapter: None,
-            current_verse: None,
-        }
+        Self { stack: Vec::new() }
     }
 
-    fn make_ctx<'ctx>(&'ctx self) -> WalkContext<'a, 'ctx> {
+    fn make_ctx<'ctx>(&'ctx self) -> WalkContext<'tokens, 'ctx> {
         WalkContext {
             scope_stack: &self.stack,
-            current_chapter: self.current_chapter,
-            current_verse: self.current_verse,
         }
     }
 
-    fn step<T, V>(&mut self, index: usize, token: &T, next_is_number: bool, visitor: &mut V)
-    where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+    fn step<T, V>(
+        &mut self,
+        index: usize,
+        token: &'tokens T,
+        next_is_number: bool,
+        visitor: &mut V,
+    ) where
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         match token.kind() {
             TokenKind::Marker => self.handle_marker(index, token, next_is_number, visitor),
@@ -340,13 +395,6 @@ impl<'a> WalkerState<'a> {
                 visitor.on_book_code(&ctx, token, index);
             }
             TokenKind::Number => {
-                if let Some(sid) = token.sid() {
-                    match self.stack.last().map(|f| f.scope_kind) {
-                        Some(StructuralScopeKind::Chapter) => self.current_chapter = Some(sid),
-                        Some(StructuralScopeKind::Verse) => self.current_verse = Some(sid),
-                        _ => {}
-                    }
-                }
                 let ctx = self.make_ctx();
                 match self.stack.last().map(|f| f.scope_kind) {
                     Some(StructuralScopeKind::Chapter) => visitor.on_chapter(&ctx, token, index),
@@ -369,17 +417,22 @@ impl<'a> WalkerState<'a> {
         }
     }
 
-    fn handle_marker<T, V>(&mut self, index: usize, token: &T, next_is_number: bool, visitor: &mut V)
-    where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+    fn handle_marker<T, V>(
+        &mut self,
+        index: usize,
+        token: &'tokens T,
+        next_is_number: bool,
+        visitor: &mut V,
+    ) where
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         let Some(info) = token.structural() else {
             let ctx = self.make_ctx();
             visitor.on_other(&ctx, token, index);
             return;
         };
-        let Some(marker) = token.marker_name() else {
+        let Some(marker) = token.marker() else {
             let ctx = self.make_ctx();
             visitor.on_other(&ctx, token, index);
             return;
@@ -431,12 +484,12 @@ impl<'a> WalkerState<'a> {
     fn handle_unknown_marker<T, V>(
         &mut self,
         index: usize,
-        token: &T,
+        token: &'tokens T,
         marker: &str,
         visitor: &mut V,
     ) where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         // Mirror `cst::recover_stack`'s UnknownMarker arm: pop down to
         // a structural parent (Chapter, Periph, Sidebar) before
@@ -456,17 +509,17 @@ impl<'a> WalkerState<'a> {
         visitor.on_other(&ctx, token, index);
     }
 
-    fn handle_end_marker<T, V>(&mut self, index: usize, token: &T, visitor: &mut V)
+    fn handle_end_marker<T, V>(&mut self, index: usize, token: &'tokens T, visitor: &mut V)
     where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         let Some(info) = token.structural() else {
             let ctx = self.make_ctx();
             visitor.on_other(&ctx, token, index);
             return;
         };
-        let Some(marker) = token.marker_name() else {
+        let Some(marker) = token.marker() else {
             let ctx = self.make_ctx();
             visitor.on_other(&ctx, token, index);
             return;
@@ -509,10 +562,10 @@ impl<'a> WalkerState<'a> {
         visitor.on_other(&ctx, token, index);
     }
 
-    fn handle_milestone_end<T, V>(&mut self, index: usize, token: &T, visitor: &mut V)
+    fn handle_milestone_end<T, V>(&mut self, index: usize, token: &'tokens T, visitor: &mut V)
     where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         // `\*` closes the topmost open Milestone. Anything popped above
         // it (rare; only matters if other scopes were pushed inside the
@@ -545,10 +598,10 @@ impl<'a> WalkerState<'a> {
         }
     }
 
-    fn handle_milestone<T, V>(&mut self, index: usize, token: &T, visitor: &mut V)
+    fn handle_milestone<T, V>(&mut self, index: usize, token: &'tokens T, visitor: &mut V)
     where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         // Milestones in the token stream are always Open events from
         // a structural standpoint (paired or self-closing). The end
@@ -561,7 +614,7 @@ impl<'a> WalkerState<'a> {
             visitor.on_milestone(&ctx, token, index);
             return;
         };
-        let Some(marker) = token.marker_name() else {
+        let Some(marker) = token.marker() else {
             let ctx = self.make_ctx();
             visitor.on_milestone(&ctx, token, index);
             return;
@@ -610,8 +663,8 @@ impl<'a> WalkerState<'a> {
         incoming_marker: &str,
         visitor: &mut V,
     ) where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         // Note / Character / Milestone opens only trigger note-recovery
         // when the incoming marker is not valid in the current note
@@ -754,8 +807,8 @@ impl<'a> WalkerState<'a> {
     /// with `RecoveryClosure`; everything else with `ImplicitByOpen`.
     fn pop_while<T, V, F>(&mut self, visitor: &mut V, predicate: F)
     where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
         F: Fn(StructuralScopeKind) -> bool,
     {
         while self
@@ -816,23 +869,16 @@ impl<'a> WalkerState<'a> {
         None
     }
 
-    fn bookkeep_on_pop(&mut self, frame: &ScopeFrame<'a>) {
-        match frame.scope_kind {
-            StructuralScopeKind::Chapter => {
-                self.current_chapter = None;
-                self.current_verse = None;
-            }
-            StructuralScopeKind::Verse => {
-                self.current_verse = None;
-            }
-            _ => {}
-        }
+    fn bookkeep_on_pop(&mut self, _frame: &ScopeFrame<'tokens>) {
+        // Reserved for future per-pop bookkeeping. Currently a no-op
+        // since the walker no longer tracks chapter/verse sids — those
+        // were unused by every visitor.
     }
 
     fn drain_to_eof<T, V>(&mut self, visitor: &mut V)
     where
-        T: WalkableToken<'a>,
-        V: Visitor<'a, T>,
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
     {
         while let Some(frame) = self.stack.pop() {
             self.bookkeep_on_pop(&frame);
@@ -859,12 +905,12 @@ mod tests {
         events: Vec<String>,
     }
 
-    impl<'a, T: WalkableToken<'a>> Visitor<'a, T> for EventLog {
+    impl<'tokens, T: WalkableToken> Visitor<'tokens, T> for EventLog {
         fn on_enter_scope(
             &mut self,
-            _ctx: &WalkContext<'a, '_>,
-            frame: &ScopeFrame<'a>,
-            _token: &T,
+            _ctx: &WalkContext<'tokens, '_>,
+            frame: &ScopeFrame<'tokens>,
+            _token: &'tokens T,
             _token_index: usize,
         ) {
             self.events
@@ -873,8 +919,8 @@ mod tests {
 
         fn on_leave_scope(
             &mut self,
-            _ctx: &WalkContext<'a, '_>,
-            frame: &ScopeFrame<'a>,
+            _ctx: &WalkContext<'tokens, '_>,
+            frame: &ScopeFrame<'tokens>,
             reason: LeaveReason,
         ) {
             self.events.push(format!(
@@ -885,28 +931,41 @@ mod tests {
 
         fn on_end_marker(
             &mut self,
-            _ctx: &WalkContext<'a, '_>,
-            token: &T,
+            _ctx: &WalkContext<'tokens, '_>,
+            token: &'tokens T,
             _token_index: usize,
         ) {
-            self.events.push(format!(
-                "end-marker[{}]",
-                token.marker_name().unwrap_or("?")
-            ));
-        }
-
-        fn on_chapter(&mut self, _ctx: &WalkContext<'a, '_>, token: &T, _token_index: usize) {
             self.events
-                .push(format!("chapter[{}]", token.source().trim()));
+                .push(format!("end-marker[{}]", token.marker().unwrap_or("?")));
         }
 
-        fn on_verse(&mut self, _ctx: &WalkContext<'a, '_>, token: &T, _token_index: usize) {
+        fn on_chapter(
+            &mut self,
+            _ctx: &WalkContext<'tokens, '_>,
+            token: &'tokens T,
+            _token_index: usize,
+        ) {
             self.events
-                .push(format!("verse[{}]", token.source().trim()));
+                .push(format!("chapter[{}]", token.text().trim()));
         }
 
-        fn on_text(&mut self, _ctx: &WalkContext<'a, '_>, token: &T, _token_index: usize) {
-            let s = token.source();
+        fn on_verse(
+            &mut self,
+            _ctx: &WalkContext<'tokens, '_>,
+            token: &'tokens T,
+            _token_index: usize,
+        ) {
+            self.events
+                .push(format!("verse[{}]", token.text().trim()));
+        }
+
+        fn on_text(
+            &mut self,
+            _ctx: &WalkContext<'tokens, '_>,
+            token: &'tokens T,
+            _token_index: usize,
+        ) {
+            let s = token.text();
             if !s.trim().is_empty() {
                 self.events.push(format!("text[{:?}]", s));
             }
