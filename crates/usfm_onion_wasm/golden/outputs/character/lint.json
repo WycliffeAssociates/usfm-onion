@@ -6,7 +6,14 @@
       "issueType": "content",
       "marker": "v",
       "message": "Verses should count up by one: expected verse 3, found verse 15.",
-      "messageParams": {},
+      "messageParams": {
+        "chapter": "1",
+        "context": "verse-number",
+        "expected": "3",
+        "found": "15",
+        "marker": "v",
+        "verse": "15"
+      },
       "severity": "error",
       "sid": "GEN 1:15",
       "span": {
@@ -18,9 +25,15 @@
     }
   ],
   "summary": {
-    "byCategory": {},
-    "byIssueType": {},
-    "bySeverity": {},
+    "byCategory": {
+      "numbering": 1
+    },
+    "byIssueType": {
+      "content": 1
+    },
+    "bySeverity": {
+      "error": 1
+    },
     "suppressedCount": 0,
     "totalCount": 1
   }

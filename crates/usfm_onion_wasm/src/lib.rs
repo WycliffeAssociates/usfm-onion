@@ -29,8 +29,12 @@ use usfm_onion::lint::{
     TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
 };
 use usfm_onion::marker_defs::{
-    BlockBehavior, ClosingBehavior, InlineContext, MarkerFamily, MarkerFamilyRole, NoteFamily,
-    NoteSubkind, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
+    BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
+    InlineContext as NativeInlineContext, MarkerFamily as NativeMarkerFamily,
+    MarkerFamilyRole as NativeMarkerFamilyRole, NoteFamily as NativeNoteFamily,
+    NoteSubkind as NativeNoteSubkind, SpecContext as NativeSpecContext,
+    StructuralMarkerInfo as NativeStructuralMarkerInfo,
+    StructuralScopeKind as NativeStructuralScopeKind,
 };
 use usfm_onion::walker::WalkableToken;
 use usfm_onion::markers::{
@@ -931,7 +935,7 @@ impl From<HtmlCallerScope> for NativeHtmlCallerScope {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiStructuralScopeKind {
+pub enum StructuralScopeKind {
     Unknown,
     Header,
     Block,
@@ -947,42 +951,42 @@ pub enum FfiStructuralScopeKind {
     Meta,
 }
 
-impl From<StructuralScopeKind> for FfiStructuralScopeKind {
-    fn from(value: StructuralScopeKind) -> Self {
+impl From<NativeStructuralScopeKind> for StructuralScopeKind {
+    fn from(value: NativeStructuralScopeKind) -> Self {
         match value {
-            StructuralScopeKind::Unknown => Self::Unknown,
-            StructuralScopeKind::Header => Self::Header,
-            StructuralScopeKind::Block => Self::Block,
-            StructuralScopeKind::Note => Self::Note,
-            StructuralScopeKind::Character => Self::Character,
-            StructuralScopeKind::Milestone => Self::Milestone,
-            StructuralScopeKind::Chapter => Self::Chapter,
-            StructuralScopeKind::Verse => Self::Verse,
-            StructuralScopeKind::TableRow => Self::TableRow,
-            StructuralScopeKind::TableCell => Self::TableCell,
-            StructuralScopeKind::Sidebar => Self::Sidebar,
-            StructuralScopeKind::Periph => Self::Periph,
-            StructuralScopeKind::Meta => Self::Meta,
+            NativeStructuralScopeKind::Unknown => Self::Unknown,
+            NativeStructuralScopeKind::Header => Self::Header,
+            NativeStructuralScopeKind::Block => Self::Block,
+            NativeStructuralScopeKind::Note => Self::Note,
+            NativeStructuralScopeKind::Character => Self::Character,
+            NativeStructuralScopeKind::Milestone => Self::Milestone,
+            NativeStructuralScopeKind::Chapter => Self::Chapter,
+            NativeStructuralScopeKind::Verse => Self::Verse,
+            NativeStructuralScopeKind::TableRow => Self::TableRow,
+            NativeStructuralScopeKind::TableCell => Self::TableCell,
+            NativeStructuralScopeKind::Sidebar => Self::Sidebar,
+            NativeStructuralScopeKind::Periph => Self::Periph,
+            NativeStructuralScopeKind::Meta => Self::Meta,
         }
     }
 }
 
-impl From<FfiStructuralScopeKind> for StructuralScopeKind {
-    fn from(value: FfiStructuralScopeKind) -> Self {
+impl From<StructuralScopeKind> for NativeStructuralScopeKind {
+    fn from(value: StructuralScopeKind) -> Self {
         match value {
-            FfiStructuralScopeKind::Unknown => Self::Unknown,
-            FfiStructuralScopeKind::Header => Self::Header,
-            FfiStructuralScopeKind::Block => Self::Block,
-            FfiStructuralScopeKind::Note => Self::Note,
-            FfiStructuralScopeKind::Character => Self::Character,
-            FfiStructuralScopeKind::Milestone => Self::Milestone,
-            FfiStructuralScopeKind::Chapter => Self::Chapter,
-            FfiStructuralScopeKind::Verse => Self::Verse,
-            FfiStructuralScopeKind::TableRow => Self::TableRow,
-            FfiStructuralScopeKind::TableCell => Self::TableCell,
-            FfiStructuralScopeKind::Sidebar => Self::Sidebar,
-            FfiStructuralScopeKind::Periph => Self::Periph,
-            FfiStructuralScopeKind::Meta => Self::Meta,
+            StructuralScopeKind::Unknown => NativeStructuralScopeKind::Unknown,
+            StructuralScopeKind::Header => NativeStructuralScopeKind::Header,
+            StructuralScopeKind::Block => NativeStructuralScopeKind::Block,
+            StructuralScopeKind::Note => NativeStructuralScopeKind::Note,
+            StructuralScopeKind::Character => NativeStructuralScopeKind::Character,
+            StructuralScopeKind::Milestone => NativeStructuralScopeKind::Milestone,
+            StructuralScopeKind::Chapter => NativeStructuralScopeKind::Chapter,
+            StructuralScopeKind::Verse => NativeStructuralScopeKind::Verse,
+            StructuralScopeKind::TableRow => NativeStructuralScopeKind::TableRow,
+            StructuralScopeKind::TableCell => NativeStructuralScopeKind::TableCell,
+            StructuralScopeKind::Sidebar => NativeStructuralScopeKind::Sidebar,
+            StructuralScopeKind::Periph => NativeStructuralScopeKind::Periph,
+            StructuralScopeKind::Meta => NativeStructuralScopeKind::Meta,
         }
     }
 }
@@ -990,7 +994,7 @@ impl From<FfiStructuralScopeKind> for StructuralScopeKind {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiSpecContext {
+pub enum SpecContext {
     Scripture,
     BookIdentification,
     BookHeaders,
@@ -1013,56 +1017,56 @@ pub enum FfiSpecContext {
     CrossReference,
 }
 
-impl From<SpecContext> for FfiSpecContext {
-    fn from(value: SpecContext) -> Self {
+impl From<NativeSpecContext> for SpecContext {
+    fn from(value: NativeSpecContext) -> Self {
         match value {
-            SpecContext::Scripture => Self::Scripture,
-            SpecContext::BookIdentification => Self::BookIdentification,
-            SpecContext::BookHeaders => Self::BookHeaders,
-            SpecContext::BookTitles => Self::BookTitles,
-            SpecContext::BookIntroduction => Self::BookIntroduction,
-            SpecContext::BookIntroductionEndTitles => Self::BookIntroductionEndTitles,
-            SpecContext::BookChapterLabel => Self::BookChapterLabel,
-            SpecContext::ChapterContent => Self::ChapterContent,
-            SpecContext::Peripheral => Self::Peripheral,
-            SpecContext::PeripheralContent => Self::PeripheralContent,
-            SpecContext::PeripheralDivision => Self::PeripheralDivision,
-            SpecContext::Chapter => Self::Chapter,
-            SpecContext::Verse => Self::Verse,
-            SpecContext::Section => Self::Section,
-            SpecContext::Para => Self::Para,
-            SpecContext::List => Self::List,
-            SpecContext::Table => Self::Table,
-            SpecContext::Sidebar => Self::Sidebar,
-            SpecContext::Footnote => Self::Footnote,
-            SpecContext::CrossReference => Self::CrossReference,
+            NativeSpecContext::Scripture => Self::Scripture,
+            NativeSpecContext::BookIdentification => Self::BookIdentification,
+            NativeSpecContext::BookHeaders => Self::BookHeaders,
+            NativeSpecContext::BookTitles => Self::BookTitles,
+            NativeSpecContext::BookIntroduction => Self::BookIntroduction,
+            NativeSpecContext::BookIntroductionEndTitles => Self::BookIntroductionEndTitles,
+            NativeSpecContext::BookChapterLabel => Self::BookChapterLabel,
+            NativeSpecContext::ChapterContent => Self::ChapterContent,
+            NativeSpecContext::Peripheral => Self::Peripheral,
+            NativeSpecContext::PeripheralContent => Self::PeripheralContent,
+            NativeSpecContext::PeripheralDivision => Self::PeripheralDivision,
+            NativeSpecContext::Chapter => Self::Chapter,
+            NativeSpecContext::Verse => Self::Verse,
+            NativeSpecContext::Section => Self::Section,
+            NativeSpecContext::Para => Self::Para,
+            NativeSpecContext::List => Self::List,
+            NativeSpecContext::Table => Self::Table,
+            NativeSpecContext::Sidebar => Self::Sidebar,
+            NativeSpecContext::Footnote => Self::Footnote,
+            NativeSpecContext::CrossReference => Self::CrossReference,
         }
     }
 }
 
-impl From<FfiSpecContext> for SpecContext {
-    fn from(value: FfiSpecContext) -> Self {
+impl From<SpecContext> for NativeSpecContext {
+    fn from(value: SpecContext) -> Self {
         match value {
-            FfiSpecContext::Scripture => Self::Scripture,
-            FfiSpecContext::BookIdentification => Self::BookIdentification,
-            FfiSpecContext::BookHeaders => Self::BookHeaders,
-            FfiSpecContext::BookTitles => Self::BookTitles,
-            FfiSpecContext::BookIntroduction => Self::BookIntroduction,
-            FfiSpecContext::BookIntroductionEndTitles => Self::BookIntroductionEndTitles,
-            FfiSpecContext::BookChapterLabel => Self::BookChapterLabel,
-            FfiSpecContext::ChapterContent => Self::ChapterContent,
-            FfiSpecContext::Peripheral => Self::Peripheral,
-            FfiSpecContext::PeripheralContent => Self::PeripheralContent,
-            FfiSpecContext::PeripheralDivision => Self::PeripheralDivision,
-            FfiSpecContext::Chapter => Self::Chapter,
-            FfiSpecContext::Verse => Self::Verse,
-            FfiSpecContext::Section => Self::Section,
-            FfiSpecContext::Para => Self::Para,
-            FfiSpecContext::List => Self::List,
-            FfiSpecContext::Table => Self::Table,
-            FfiSpecContext::Sidebar => Self::Sidebar,
-            FfiSpecContext::Footnote => Self::Footnote,
-            FfiSpecContext::CrossReference => Self::CrossReference,
+            SpecContext::Scripture => NativeSpecContext::Scripture,
+            SpecContext::BookIdentification => NativeSpecContext::BookIdentification,
+            SpecContext::BookHeaders => NativeSpecContext::BookHeaders,
+            SpecContext::BookTitles => NativeSpecContext::BookTitles,
+            SpecContext::BookIntroduction => NativeSpecContext::BookIntroduction,
+            SpecContext::BookIntroductionEndTitles => NativeSpecContext::BookIntroductionEndTitles,
+            SpecContext::BookChapterLabel => NativeSpecContext::BookChapterLabel,
+            SpecContext::ChapterContent => NativeSpecContext::ChapterContent,
+            SpecContext::Peripheral => NativeSpecContext::Peripheral,
+            SpecContext::PeripheralContent => NativeSpecContext::PeripheralContent,
+            SpecContext::PeripheralDivision => NativeSpecContext::PeripheralDivision,
+            SpecContext::Chapter => NativeSpecContext::Chapter,
+            SpecContext::Verse => NativeSpecContext::Verse,
+            SpecContext::Section => NativeSpecContext::Section,
+            SpecContext::Para => NativeSpecContext::Para,
+            SpecContext::List => NativeSpecContext::List,
+            SpecContext::Table => NativeSpecContext::Table,
+            SpecContext::Sidebar => NativeSpecContext::Sidebar,
+            SpecContext::Footnote => NativeSpecContext::Footnote,
+            SpecContext::CrossReference => NativeSpecContext::CrossReference,
         }
     }
 }
@@ -1070,31 +1074,31 @@ impl From<FfiSpecContext> for SpecContext {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "lowercase")]
-pub enum FfiInlineContext {
+pub enum InlineContext {
     Para,
     Section,
     List,
     Table,
 }
 
-impl From<InlineContext> for FfiInlineContext {
-    fn from(value: InlineContext) -> Self {
+impl From<NativeInlineContext> for InlineContext {
+    fn from(value: NativeInlineContext) -> Self {
         match value {
-            InlineContext::Para => Self::Para,
-            InlineContext::Section => Self::Section,
-            InlineContext::List => Self::List,
-            InlineContext::Table => Self::Table,
+            NativeInlineContext::Para => Self::Para,
+            NativeInlineContext::Section => Self::Section,
+            NativeInlineContext::List => Self::List,
+            NativeInlineContext::Table => Self::Table,
         }
     }
 }
 
-impl From<FfiInlineContext> for InlineContext {
-    fn from(value: FfiInlineContext) -> Self {
+impl From<InlineContext> for NativeInlineContext {
+    fn from(value: InlineContext) -> Self {
         match value {
-            FfiInlineContext::Para => Self::Para,
-            FfiInlineContext::Section => Self::Section,
-            FfiInlineContext::List => Self::List,
-            FfiInlineContext::Table => Self::Table,
+            InlineContext::Para => NativeInlineContext::Para,
+            InlineContext::Section => NativeInlineContext::Section,
+            InlineContext::List => NativeInlineContext::List,
+            InlineContext::Table => NativeInlineContext::Table,
         }
     }
 }
@@ -1102,7 +1106,7 @@ impl From<FfiInlineContext> for InlineContext {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiBlockBehavior {
+pub enum BlockBehavior {
     None,
     Paragraph,
     TableRow,
@@ -1111,15 +1115,15 @@ pub enum FfiBlockBehavior {
     SidebarEnd,
 }
 
-impl From<BlockBehavior> for FfiBlockBehavior {
-    fn from(value: BlockBehavior) -> Self {
+impl From<NativeBlockBehavior> for BlockBehavior {
+    fn from(value: NativeBlockBehavior) -> Self {
         match value {
-            BlockBehavior::None => Self::None,
-            BlockBehavior::Paragraph(_) => Self::Paragraph,
-            BlockBehavior::TableRow => Self::TableRow,
-            BlockBehavior::TableCell => Self::TableCell,
-            BlockBehavior::SidebarStart => Self::SidebarStart,
-            BlockBehavior::SidebarEnd => Self::SidebarEnd,
+            NativeBlockBehavior::None => Self::None,
+            NativeBlockBehavior::Paragraph(_) => Self::Paragraph,
+            NativeBlockBehavior::TableRow => Self::TableRow,
+            NativeBlockBehavior::TableCell => Self::TableCell,
+            NativeBlockBehavior::SidebarStart => Self::SidebarStart,
+            NativeBlockBehavior::SidebarEnd => Self::SidebarEnd,
         }
     }
 }
@@ -1127,20 +1131,20 @@ impl From<BlockBehavior> for FfiBlockBehavior {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiClosingBehavior {
+pub enum ClosingBehavior {
     None,
     RequiredExplicit,
     OptionalExplicitUntilNoteEnd,
     SelfClosingMilestone,
 }
 
-impl From<ClosingBehavior> for FfiClosingBehavior {
-    fn from(value: ClosingBehavior) -> Self {
+impl From<NativeClosingBehavior> for ClosingBehavior {
+    fn from(value: NativeClosingBehavior) -> Self {
         match value {
-            ClosingBehavior::None => Self::None,
-            ClosingBehavior::RequiredExplicit => Self::RequiredExplicit,
-            ClosingBehavior::OptionalExplicitUntilNoteEnd => Self::OptionalExplicitUntilNoteEnd,
-            ClosingBehavior::SelfClosingMilestone => Self::SelfClosingMilestone,
+            NativeClosingBehavior::None => Self::None,
+            NativeClosingBehavior::RequiredExplicit => Self::RequiredExplicit,
+            NativeClosingBehavior::OptionalExplicitUntilNoteEnd => Self::OptionalExplicitUntilNoteEnd,
+            NativeClosingBehavior::SelfClosingMilestone => Self::SelfClosingMilestone,
         }
     }
 }
@@ -1148,7 +1152,7 @@ impl From<ClosingBehavior> for FfiClosingBehavior {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiMarkerCategory {
+pub enum MarkerCategory {
     Document,
     Paragraph,
     Character,
@@ -1169,7 +1173,7 @@ pub enum FfiMarkerCategory {
     Unknown,
 }
 
-impl From<NativeMarkerCategory> for FfiMarkerCategory {
+impl From<NativeMarkerCategory> for MarkerCategory {
     fn from(value: NativeMarkerCategory) -> Self {
         match value {
             NativeMarkerCategory::Document => Self::Document,
@@ -1197,7 +1201,7 @@ impl From<NativeMarkerCategory> for FfiMarkerCategory {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiMarkerKind {
+pub enum MarkerKind {
     Paragraph,
     Note,
     Character,
@@ -1216,7 +1220,7 @@ pub enum FfiMarkerKind {
     Unknown,
 }
 
-impl From<NativeMarkerKind> for FfiMarkerKind {
+impl From<NativeMarkerKind> for MarkerKind {
     fn from(value: NativeMarkerKind) -> Self {
         match value {
             NativeMarkerKind::Paragraph => Self::Paragraph,
@@ -1245,7 +1249,7 @@ impl From<NativeMarkerKind> for FfiMarkerKind {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiMarkerDefKind {
+pub enum MarkerDefKind {
     Paragraph,
     Character,
     Note,
@@ -1261,7 +1265,7 @@ pub enum FfiMarkerDefKind {
     Header,
 }
 
-impl From<usfm_onion::marker_defs::MarkerDefKind> for FfiMarkerDefKind {
+impl From<usfm_onion::marker_defs::MarkerDefKind> for MarkerDefKind {
     fn from(value: usfm_onion::marker_defs::MarkerDefKind) -> Self {
         use usfm_onion::marker_defs::MarkerDefKind as K;
         match value {
@@ -1285,7 +1289,7 @@ impl From<usfm_onion::marker_defs::MarkerDefKind> for FfiMarkerDefKind {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiMarkerFamily {
+pub enum MarkerFamily {
     Footnote,
     CrossReference,
     SectionParagraph,
@@ -1295,16 +1299,16 @@ pub enum FfiMarkerFamily {
     Sidebar,
 }
 
-impl From<MarkerFamily> for FfiMarkerFamily {
-    fn from(value: MarkerFamily) -> Self {
+impl From<NativeMarkerFamily> for MarkerFamily {
+    fn from(value: NativeMarkerFamily) -> Self {
         match value {
-            MarkerFamily::Footnote => Self::Footnote,
-            MarkerFamily::CrossReference => Self::CrossReference,
-            MarkerFamily::SectionParagraph => Self::SectionParagraph,
-            MarkerFamily::ListParagraph => Self::ListParagraph,
-            MarkerFamily::TableCell => Self::TableCell,
-            MarkerFamily::Milestone => Self::Milestone,
-            MarkerFamily::Sidebar => Self::Sidebar,
+            NativeMarkerFamily::Footnote => Self::Footnote,
+            NativeMarkerFamily::CrossReference => Self::CrossReference,
+            NativeMarkerFamily::SectionParagraph => Self::SectionParagraph,
+            NativeMarkerFamily::ListParagraph => Self::ListParagraph,
+            NativeMarkerFamily::TableCell => Self::TableCell,
+            NativeMarkerFamily::Milestone => Self::Milestone,
+            NativeMarkerFamily::Sidebar => Self::Sidebar,
         }
     }
 }
@@ -1312,7 +1316,7 @@ impl From<MarkerFamily> for FfiMarkerFamily {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiMarkerFamilyRole {
+pub enum MarkerFamilyRole {
     Canonical,
     NumberedVariant,
     NestedVariant,
@@ -1321,15 +1325,15 @@ pub enum FfiMarkerFamilyRole {
     Alias,
 }
 
-impl From<MarkerFamilyRole> for FfiMarkerFamilyRole {
-    fn from(value: MarkerFamilyRole) -> Self {
+impl From<NativeMarkerFamilyRole> for MarkerFamilyRole {
+    fn from(value: NativeMarkerFamilyRole) -> Self {
         match value {
-            MarkerFamilyRole::Canonical => Self::Canonical,
-            MarkerFamilyRole::NumberedVariant => Self::NumberedVariant,
-            MarkerFamilyRole::NestedVariant => Self::NestedVariant,
-            MarkerFamilyRole::MilestoneStart => Self::MilestoneStart,
-            MarkerFamilyRole::MilestoneEnd => Self::MilestoneEnd,
-            MarkerFamilyRole::Alias => Self::Alias,
+            NativeMarkerFamilyRole::Canonical => Self::Canonical,
+            NativeMarkerFamilyRole::NumberedVariant => Self::NumberedVariant,
+            NativeMarkerFamilyRole::NestedVariant => Self::NestedVariant,
+            NativeMarkerFamilyRole::MilestoneStart => Self::MilestoneStart,
+            NativeMarkerFamilyRole::MilestoneEnd => Self::MilestoneEnd,
+            NativeMarkerFamilyRole::Alias => Self::Alias,
         }
     }
 }
@@ -1337,16 +1341,16 @@ impl From<MarkerFamilyRole> for FfiMarkerFamilyRole {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiNoteFamily {
+pub enum NoteFamily {
     Footnote,
     CrossReference,
 }
 
-impl From<NoteFamily> for FfiNoteFamily {
-    fn from(value: NoteFamily) -> Self {
+impl From<NativeNoteFamily> for NoteFamily {
+    fn from(value: NativeNoteFamily) -> Self {
         match value {
-            NoteFamily::Footnote => Self::Footnote,
-            NoteFamily::CrossReference => Self::CrossReference,
+            NativeNoteFamily::Footnote => Self::Footnote,
+            NativeNoteFamily::CrossReference => Self::CrossReference,
         }
     }
 }
@@ -1354,16 +1358,16 @@ impl From<NoteFamily> for FfiNoteFamily {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub enum FfiNoteSubkind {
+pub enum NoteSubkind {
     Structural,
     StructuralKeepsNestedCharsOpen,
 }
 
-impl From<NoteSubkind> for FfiNoteSubkind {
-    fn from(value: NoteSubkind) -> Self {
+impl From<NativeNoteSubkind> for NoteSubkind {
+    fn from(value: NativeNoteSubkind) -> Self {
         match value {
-            NoteSubkind::Structural => Self::Structural,
-            NoteSubkind::StructuralKeepsNestedCharsOpen => Self::StructuralKeepsNestedCharsOpen,
+            NativeNoteSubkind::Structural => Self::Structural,
+            NativeNoteSubkind::StructuralKeepsNestedCharsOpen => Self::StructuralKeepsNestedCharsOpen,
         }
     }
 }
@@ -1377,27 +1381,28 @@ impl From<NoteSubkind> for FfiNoteSubkind {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct SpanValue {
+struct Span {
     start: u32,
     end: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct MarkerMetadataValue {
+struct MarkerMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     canonical: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    kind: Option<FfiMarkerDefKind>,
+    kind: Option<MarkerDefKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    family: Option<FfiMarkerFamily>,
+    family: Option<MarkerFamily>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct AttributeItemValue {
-    span: SpanValue,
+struct AttributeItem {
+    span: Span,
     text: String,
     key: String,
     value: String,
@@ -1406,18 +1411,18 @@ struct AttributeItemValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct StructuralMarkerInfoValue {
-    scope_kind: FfiStructuralScopeKind,
+struct StructuralMarkerInfo {
+    scope_kind: StructuralScopeKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    inline_context: Option<FfiInlineContext>,
+    inline_context: Option<InlineContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    note_context: Option<FfiSpecContext>,
+    note_context: Option<SpecContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct NumberInfoValue {
+struct NumberInfo {
     start: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     end: Option<u32>,
@@ -1427,12 +1432,12 @@ struct NumberInfoValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct TokenValue {
+struct Token {
     id: String,
     kind: TokenKind,
     text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    span: Option<SpanValue>,
+    span: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sid: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1440,52 +1445,53 @@ struct TokenValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     nested: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    marker_metadata: Option<MarkerMetadataValue>,
+    marker_metadata: Option<MarkerMetadata>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    structural: Option<StructuralMarkerInfoValue>,
+    structural: Option<StructuralMarkerInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    number_info: Option<NumberInfoValue>,
+    number_info: Option<NumberInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     book_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     book_code_valid: Option<bool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    attributes: Vec<AttributeItemValue>,
+    attributes: Vec<AttributeItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct CstNodeValue {
+struct CstNode {
     token_index: usize,
-    children: Vec<CstNodeValue>,
+    children: Vec<CstNode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct CstDocumentValue {
-    tokens: Vec<TokenValue>,
-    roots: Vec<CstNodeValue>,
+struct CstDocument {
+    tokens: Vec<Token>,
+    roots: Vec<CstNode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintSuppressionValue {
+struct LintSuppression {
     code: LintCode,
     sid: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintOptionsValue {
+struct LintOptions {
     #[serde(default)]
     enabled_codes: Option<Vec<LintCode>>,
     #[serde(default)]
     disabled_codes: Vec<LintCode>,
     #[serde(default)]
-    suppressed: Vec<LintSuppressionValue>,
+    suppressed: Vec<LintSuppression>,
     #[serde(default)]
     allow_implicit_chapter_content_verse: bool,
 }
@@ -1493,7 +1499,7 @@ struct LintOptionsValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintIssueValue {
+struct LintIssue {
     code: LintCode,
     category: LintCategory,
     severity: LintSeverity,
@@ -1502,9 +1508,9 @@ struct LintIssueValue {
     message: String,
     message_params: std::collections::BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    span: Option<SpanValue>,
+    span: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    related_span: Option<SpanValue>,
+    related_span: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     token_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1514,13 +1520,13 @@ struct LintIssueValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     marker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    fix: Option<TokenFixValue>,
+    fix: Option<TokenFix>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintSummaryValue {
+struct LintSummary {
     by_category: std::collections::BTreeMap<LintCategory, usize>,
     by_severity: std::collections::BTreeMap<LintSeverity, usize>,
     by_issue_type: std::collections::BTreeMap<LintIssueType, usize>,
@@ -1531,21 +1537,21 @@ struct LintSummaryValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintResultValue {
-    issues: Vec<LintIssueValue>,
-    summary: LintSummaryValue,
+struct LintResult {
+    issues: Vec<LintIssue>,
+    summary: LintSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
-enum TokenFixValue {
+enum TokenFix {
     ReplaceToken {
         code: String,
         label: String,
         label_params: std::collections::BTreeMap<String, String>,
         target_token_id: String,
-        replacements: Vec<TokenTemplateValue>,
+        replacements: Vec<TokenTemplate>,
     },
     DeleteToken {
         code: String,
@@ -1558,14 +1564,14 @@ enum TokenFixValue {
         label: String,
         label_params: std::collections::BTreeMap<String, String>,
         target_token_id: String,
-        insert: Vec<TokenTemplateValue>,
+        insert: Vec<TokenTemplate>,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct TokenTemplateValue {
+struct TokenTemplate {
     kind: TokenKind,
     text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1574,9 +1580,10 @@ struct TokenTemplateValue {
     sid: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct FormatOptionsValue {
+struct FormatOptions {
     #[serde(default)]
     recover_malformed_markers: Option<bool>,
     #[serde(default)]
@@ -1612,14 +1619,15 @@ struct FormatOptionsValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct FormatResultValue {
-    tokens: Vec<TokenValue>,
+struct FormatResult {
+    tokens: Vec<Token>,
     usfm: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct HtmlOptionsValue {
+struct HtmlOptions {
     #[serde(default)]
     wrap_root: bool,
     #[serde(default)]
@@ -1632,9 +1640,10 @@ struct HtmlOptionsValue {
     caller_scope: Option<HtmlCallerScope>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct BuildSidBlocksOptionsValue {
+struct BuildSidBlocksOptions {
     #[serde(default)]
     allow_empty_sid: Option<bool>,
 }
@@ -1642,7 +1651,7 @@ struct BuildSidBlocksOptionsValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct SidBlockValue {
+struct SidBlock {
     block_id: String,
     semantic_sid: String,
     start: usize,
@@ -1655,7 +1664,7 @@ struct SidBlockValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct TokenAlignmentValue {
+struct TokenAlignment {
     change: DiffTokenChange,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     counterpart_index: Option<usize>,
@@ -1664,31 +1673,31 @@ struct TokenAlignmentValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct ChapterTokenDiffValue {
+struct ChapterTokenDiff {
     block_id: String,
     semantic_sid: String,
     status: DiffStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    original: Option<SidBlockValue>,
+    original: Option<SidBlock>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    current: Option<SidBlockValue>,
+    current: Option<SidBlock>,
     original_text: String,
     current_text: String,
     original_text_only: String,
     current_text_only: String,
     is_whitespace_change: bool,
     is_usfm_structure_change: bool,
-    original_tokens: Vec<TokenValue>,
-    current_tokens: Vec<TokenValue>,
-    original_alignment: Vec<TokenAlignmentValue>,
-    current_alignment: Vec<TokenAlignmentValue>,
+    original_tokens: Vec<Token>,
+    current_tokens: Vec<Token>,
+    original_alignment: Vec<TokenAlignment>,
+    current_alignment: Vec<TokenAlignment>,
     undo_side: DiffUndoSide,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintCodeMetaValue {
+struct LintCodeMeta {
     code: LintCode,
     category: LintCategory,
     severity: LintSeverity,
@@ -1698,7 +1707,7 @@ struct LintCodeMetaValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct FormatRuleMetaValue {
+struct FormatRuleMeta {
     code: String,
     label_key: String,
 }
@@ -1706,31 +1715,31 @@ struct FormatRuleMetaValue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct MarkerInfoValue {
+struct MarkerInfo {
     marker: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     canonical: Option<String>,
     known: bool,
     deprecated: bool,
-    category: FfiMarkerCategory,
-    kind: FfiMarkerKind,
+    category: MarkerCategory,
+    kind: MarkerKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    family: Option<FfiMarkerFamily>,
+    family: Option<MarkerFamily>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    family_role: Option<FfiMarkerFamilyRole>,
+    family_role: Option<MarkerFamilyRole>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    note_family: Option<FfiNoteFamily>,
+    note_family: Option<NoteFamily>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    note_subkind: Option<FfiNoteSubkind>,
+    note_subkind: Option<NoteSubkind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    inline_context: Option<FfiInlineContext>,
+    inline_context: Option<InlineContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default_attribute: Option<String>,
-    contexts: Vec<FfiSpecContext>,
+    contexts: Vec<SpecContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    block_behavior: Option<FfiBlockBehavior>,
+    block_behavior: Option<BlockBehavior>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    closing_behavior: Option<FfiClosingBehavior>,
+    closing_behavior: Option<ClosingBehavior>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source: Option<String>,
 }
@@ -1743,7 +1752,7 @@ struct AdapterToken {
     span: Option<NativeSpan>,
     sid: Option<String>,
     marker: Option<String>,
-    structural: Option<StructuralMarkerInfo>,
+    structural: Option<NativeStructuralMarkerInfo>,
     number_info: Option<(u32, Option<u32>, NativeNumberRangeKind)>,
 }
 
@@ -1756,7 +1765,7 @@ impl WalkableToken for AdapterToken {
         self.marker.as_deref()
     }
 
-    fn structural(&self) -> Option<StructuralMarkerInfo> {
+    fn structural(&self) -> Option<NativeStructuralMarkerInfo> {
         self.structural
     }
 
@@ -1819,32 +1828,30 @@ impl ParsedUsfm {
         Self { source }
     }
 
-    pub fn tokens(&self) -> Result<JsValue, JsError> {
+    pub fn tokens(&self) -> Vec<Token> {
         let parsed = native_parse(&self.source);
-        to_js_value(&map_tokens(&parsed.tokens))
+        map_tokens(&parsed.tokens)
     }
 
-    pub fn cst(&self) -> Result<JsValue, JsError> {
+    pub fn cst(&self) -> CstDocument {
         let cst = parse_cst(&self.source);
-        to_js_value(&map_cst_document(&cst))
+        map_cst_document(&cst)
     }
 
-    pub fn lint(&self, options: Option<JsValue>) -> Result<JsValue, JsError> {
-        let options = parse_lint_options(options)?;
-        to_js_value(&map_lint_result(lint_usfm(&self.source, options)))
+    pub fn lint(&self, options: Option<LintOptions>) -> LintResult {
+        map_lint_result(lint_usfm(&self.source, lint_options_into_native(options)))
     }
 
     #[wasm_bindgen(js_name = applyTokenFix)]
-    pub fn apply_token_fix(&self, fix: JsValue) -> Result<JsValue, JsError> {
+    pub fn apply_token_fix(&self, fix: TokenFix) -> Vec<Token> {
         let parsed = native_parse(&self.source);
         let native_tokens = parsed
             .tokens
             .iter()
             .map(format_token_with_identity)
             .collect::<Vec<_>>();
-        let fix = parse_token_fix(fix)?;
-        let result = apply_token_fix(&native_tokens, &fix);
-        to_js_value(&result.iter().map(map_format_token).collect::<Vec<_>>())
+        let result = apply_token_fix(&native_tokens, &token_fix_into_native(fix));
+        result.iter().map(map_format_token).collect()
     }
 
     #[wasm_bindgen(js_name = revertDiffBlock)]
@@ -1852,8 +1859,8 @@ impl ParsedUsfm {
         &self,
         current: &ParsedUsfm,
         block_id: &str,
-        options: Option<JsValue>,
-    ) -> Result<JsValue, JsError> {
+        options: Option<BuildSidBlocksOptions>,
+    ) -> Vec<Token> {
         let baseline = native_parse(&self.source);
         let current = native_parse(&current.source);
         let baseline = baseline
@@ -1870,14 +1877,13 @@ impl ParsedUsfm {
             block_id,
             &baseline,
             &current,
-            &parse_build_options(options)?,
+            &build_options_into_native(options),
         );
-        to_js_value(&reverted.iter().map(map_format_token).collect::<Vec<_>>())
+        reverted.iter().map(map_format_token).collect()
     }
 
-    pub fn format(&self, options: Option<JsValue>) -> Result<String, JsError> {
-        let options = parse_format_options(options)?;
-        Ok(format_usfm(&self.source, options))
+    pub fn format(&self, options: Option<FormatOptions>) -> String {
+        format_usfm(&self.source, format_options_into_native(options))
     }
 
     #[wasm_bindgen(js_name = toUsfm)]
@@ -1898,9 +1904,8 @@ impl ParsedUsfm {
     }
 
     #[wasm_bindgen(js_name = toHtml)]
-    pub fn to_html(&self, options: Option<JsValue>) -> Result<String, JsError> {
-        let options = parse_html_options(options)?;
-        Ok(usfm_to_html(&self.source, options))
+    pub fn to_html(&self, options: Option<HtmlOptions>) -> String {
+        usfm_to_html(&self.source, html_options_into_native(options))
     }
 
     #[wasm_bindgen(js_name = toVref)]
@@ -1908,19 +1913,23 @@ impl ParsedUsfm {
         to_js_value(&vref_to_object(usfm_to_vref_map(&self.source)))
     }
 
-    pub fn diff(&self, other: &ParsedUsfm, options: Option<JsValue>) -> Result<JsValue, JsError> {
-        let options = parse_build_options(options)?;
+    pub fn diff(
+        &self,
+        other: &ParsedUsfm,
+        options: Option<BuildSidBlocksOptions>,
+    ) -> Vec<ChapterTokenDiff> {
+        let options = build_options_into_native(options);
         let diffs = diff_usfm_sources(&self.source, &other.source, &options);
-        to_js_value(&map_chapter_diffs(&diffs))
+        map_chapter_diffs(&diffs)
     }
 
     #[wasm_bindgen(js_name = diffByChapter)]
     pub fn diff_by_chapter(
         &self,
         other: &ParsedUsfm,
-        options: Option<JsValue>,
+        options: Option<BuildSidBlocksOptions>,
     ) -> Result<JsValue, JsError> {
-        let options = parse_build_options(options)?;
+        let options = build_options_into_native(options);
         let diffs = diff_usfm_sources_by_chapter(&self.source, &other.source, &options);
         to_js_value(&map_diffs_by_chapter(&diffs))
     }
@@ -1932,19 +1941,17 @@ impl UsfmMarkerCatalog {
         Self
     }
 
-    pub fn all(&self) -> Result<JsValue, JsError> {
-        let entries = marker_catalog()
+    pub fn all(&self) -> Vec<MarkerInfo> {
+        marker_catalog()
             .all()
             .iter()
             .cloned()
             .map(map_marker_info)
-            .collect::<Vec<_>>();
-        to_js_value(&entries)
+            .collect()
     }
 
-    pub fn get(&self, marker: &str) -> Result<JsValue, JsError> {
-        let value = marker_catalog().get(marker).cloned().map(map_marker_info);
-        to_js_value(&value)
+    pub fn get(&self, marker: &str) -> Option<MarkerInfo> {
+        marker_catalog().get(marker).cloned().map(map_marker_info)
     }
 
     pub fn contains(&self, marker: &str) -> bool {
@@ -1957,129 +1964,122 @@ pub fn wasm_parse(source: &str) -> ParsedUsfm {
     ParsedUsfm::new(source.to_string())
 }
 
-#[wasm_bindgen(skip_typescript, js_name = lintUsfm)]
-pub fn wasm_lint_usfm(source: &str, options: Option<JsValue>) -> Result<JsValue, JsError> {
-    let options = parse_lint_options(options)?;
-    to_js_value(&map_lint_result(lint_usfm(source, options)))
+#[wasm_bindgen(js_name = lintUsfm)]
+pub fn wasm_lint_usfm(source: &str, options: Option<LintOptions>) -> LintResult {
+    map_lint_result(lint_usfm(source, lint_options_into_native(options)))
 }
 
-#[wasm_bindgen(skip_typescript, js_name = lintTokens)]
-pub fn wasm_lint_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<JsValue, JsError> {
-    let tokens = parse_adapter_tokens(tokens)?;
-    let options = parse_lint_options(options)?;
-    to_js_value(&map_lint_result(lint_tokens(&tokens, options)))
+#[wasm_bindgen(js_name = lintTokens)]
+pub fn wasm_lint_tokens(
+    tokens: Vec<Token>,
+    options: Option<LintOptions>,
+) -> LintResult {
+    let tokens = parse_adapter_tokens_from_values(tokens);
+    map_lint_result(lint_tokens(&tokens, lint_options_into_native(options)))
 }
 
-#[wasm_bindgen(skip_typescript, js_name = applyTokenFix)]
-pub fn wasm_apply_token_fix(tokens: JsValue, fix: JsValue) -> Result<JsValue, JsError> {
-    let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
-    let native_tokens = values
+#[wasm_bindgen(js_name = applyTokenFix)]
+pub fn wasm_apply_token_fix(tokens: Vec<Token>, fix: TokenFix) -> Vec<Token> {
+    let native_tokens = tokens
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    let fix = parse_token_fix(fix)?;
-    let result = apply_token_fix(&native_tokens, &fix);
-    to_js_value(&result.iter().map(map_format_token).collect::<Vec<_>>())
+    let result = apply_token_fix(&native_tokens, &token_fix_into_native(fix));
+    result.iter().map(map_format_token).collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = formatUsfm)]
-pub fn wasm_format_usfm(source: &str, options: Option<JsValue>) -> Result<String, JsError> {
-    Ok(format_usfm(source, parse_format_options(options)?))
+#[wasm_bindgen(js_name = formatUsfm)]
+pub fn wasm_format_usfm(source: &str, options: Option<FormatOptions>) -> String {
+    format_usfm(source, format_options_into_native(options))
 }
 
-#[wasm_bindgen(skip_typescript, js_name = formatTokens)]
-pub fn wasm_format_tokens(tokens: JsValue, options: Option<JsValue>) -> Result<JsValue, JsError> {
-    let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
-    let mut native_tokens = values
+#[wasm_bindgen(js_name = formatTokens)]
+pub fn wasm_format_tokens(
+    tokens: Vec<Token>,
+    options: Option<FormatOptions>,
+) -> FormatResult {
+    let mut native_tokens = tokens
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    native_format_tokens(&mut native_tokens, parse_format_options(options)?);
-    let formatted = FormatResultValue {
+    native_format_tokens(&mut native_tokens, format_options_into_native(options));
+    FormatResult {
         tokens: native_tokens.iter().map(map_format_token).collect(),
         usfm: format_tokens_to_usfm(&native_tokens),
-    };
-    to_js_value(&formatted)
+    }
 }
 
-#[wasm_bindgen(skip_typescript, js_name = formatTokensMut)]
+#[wasm_bindgen(js_name = formatTokensMut)]
 pub fn wasm_format_tokens_mut(
-    tokens: JsValue,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let values = from_js_or_default::<Vec<TokenValue>>(tokens)?;
-    let mut native_tokens = values
+    tokens: Vec<Token>,
+    options: Option<FormatOptions>,
+) -> Vec<Token> {
+    let mut native_tokens = tokens
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    native_format_tokens(&mut native_tokens, parse_format_options(options)?);
-    let formatted = native_tokens
-        .iter()
-        .map(map_format_token)
-        .collect::<Vec<_>>();
-    to_js_value(&formatted)
+    native_format_tokens(&mut native_tokens, format_options_into_native(options));
+    native_tokens.iter().map(map_format_token).collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = tokensToUsfm)]
-pub fn wasm_tokens_to_usfm(tokens: JsValue) -> Result<String, JsError> {
-    let tokens: Vec<TokenValue> = from_js_or_default(tokens)?;
-    Ok(token_values_to_usfm(&tokens))
+#[wasm_bindgen(js_name = tokensToUsfm)]
+pub fn wasm_tokens_to_usfm(tokens: Vec<Token>) -> String {
+    token_values_to_usfm(&tokens)
 }
 
-#[wasm_bindgen(skip_typescript, js_name = tokensToHtml)]
-pub fn wasm_tokens_to_html(tokens: JsValue, options: Option<JsValue>) -> Result<String, JsError> {
-    let tokens = from_js_or_default::<Vec<TokenValue>>(tokens)?;
+#[wasm_bindgen(js_name = tokensToHtml)]
+pub fn wasm_tokens_to_html(tokens: Vec<Token>, options: Option<HtmlOptions>) -> String {
     let usfm = token_values_to_usfm(&tokens);
-    Ok(usfm_to_html(&usfm, parse_html_options(options)?))
+    usfm_to_html(&usfm, html_options_into_native(options))
 }
 
-#[wasm_bindgen(skip_typescript, js_name = diffUsfm)]
+#[wasm_bindgen(js_name = diffUsfm)]
 pub fn wasm_diff_usfm(
     left: &str,
     right: &str,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let options = parse_build_options(options)?;
+    options: Option<BuildSidBlocksOptions>,
+) -> Vec<ChapterTokenDiff> {
+    let options = build_options_into_native(options);
     let diffs = diff_usfm_sources(left, right, &options);
-    to_js_value(&map_chapter_diffs(&diffs))
+    map_chapter_diffs(&diffs)
 }
 
 #[wasm_bindgen(skip_typescript, js_name = diffUsfmByChapter)]
 pub fn wasm_diff_usfm_by_chapter(
     left: &str,
     right: &str,
-    options: Option<JsValue>,
+    options: Option<BuildSidBlocksOptions>,
 ) -> Result<JsValue, JsError> {
-    let options = parse_build_options(options)?;
+    let options = build_options_into_native(options);
     let diffs = diff_usfm_sources_by_chapter(left, right, &options);
     to_js_value(&map_diffs_by_chapter(&diffs))
 }
 
-#[wasm_bindgen(skip_typescript, js_name = diffTokens)]
+#[wasm_bindgen(js_name = diffTokens)]
 pub fn wasm_diff_tokens(
-    left: JsValue,
-    right: JsValue,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let left = parse_adapter_tokens(left)?;
-    let right = parse_adapter_tokens(right)?;
-    let options = parse_build_options(options)?;
+    left: Vec<Token>,
+    right: Vec<Token>,
+    options: Option<BuildSidBlocksOptions>,
+) -> Vec<ChapterTokenDiff> {
+    let left = parse_adapter_tokens_from_values(left);
+    let right = parse_adapter_tokens_from_values(right);
+    let options = build_options_into_native(options);
     let diffs = diff_chapter_token_streams(&left, &right, &options);
-    to_js_value(&map_adapter_diffs(&diffs))
+    map_adapter_diffs(&diffs)
 }
 
-#[wasm_bindgen(skip_typescript, js_name = revertDiffBlock)]
+#[wasm_bindgen(js_name = revertDiffBlock)]
 pub fn wasm_revert_diff_block(
-    baseline: JsValue,
-    current: JsValue,
+    baseline: Vec<Token>,
+    current: Vec<Token>,
     block_id: &str,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let baseline = from_js_or_default::<Vec<TokenValue>>(baseline)?
+    options: Option<BuildSidBlocksOptions>,
+) -> Vec<Token> {
+    let baseline = baseline
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    let current = from_js_or_default::<Vec<TokenValue>>(current)?
+    let current = current
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
@@ -2087,44 +2087,43 @@ pub fn wasm_revert_diff_block(
         block_id,
         &baseline,
         &current,
-        &parse_build_options(options)?,
+        &build_options_into_native(options),
     );
-    to_js_value(&reverted.iter().map(map_format_token).collect::<Vec<_>>())
+    reverted.iter().map(map_format_token).collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = revertDiffBlocks)]
+#[wasm_bindgen(js_name = revertDiffBlocks)]
 pub fn wasm_revert_diff_blocks(
-    baseline: JsValue,
-    current: JsValue,
-    block_ids: JsValue,
-    options: Option<JsValue>,
-) -> Result<JsValue, JsError> {
-    let baseline = from_js_or_default::<Vec<TokenValue>>(baseline)?
+    baseline: Vec<Token>,
+    current: Vec<Token>,
+    block_ids: Vec<String>,
+    options: Option<BuildSidBlocksOptions>,
+) -> Vec<Token> {
+    let baseline = baseline
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    let current = from_js_or_default::<Vec<TokenValue>>(current)?
+    let current = current
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    let block_ids = from_js_or_default::<Vec<String>>(block_ids)?;
     let reverted = apply_reverts_by_block_id(
         &block_ids,
         &baseline,
         &current,
-        &parse_build_options(options)?,
+        &build_options_into_native(options),
     );
-    to_js_value(&reverted.iter().map(map_format_token).collect::<Vec<_>>())
+    reverted.iter().map(map_format_token).collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = markerCatalog)]
+#[wasm_bindgen(js_name = markerCatalog)]
 pub fn wasm_marker_catalog() -> UsfmMarkerCatalog {
     UsfmMarkerCatalog::new()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = markerInfo)]
-pub fn wasm_marker_info(marker: &str) -> Result<JsValue, JsError> {
-    to_js_value(&map_marker_info(marker_info(marker)))
+#[wasm_bindgen(js_name = markerInfo)]
+pub fn wasm_marker_info(marker: &str) -> MarkerInfo {
+    map_marker_info(marker_info(marker))
 }
 
 #[wasm_bindgen(skip_typescript, js_name = isKnownMarker)]
@@ -2132,54 +2131,46 @@ pub fn wasm_is_known_marker(marker: &str) -> bool {
     is_known_marker(marker)
 }
 
-#[wasm_bindgen(skip_typescript, js_name = lintCodes)]
-pub fn wasm_lint_codes() -> Result<JsValue, JsError> {
-    let codes = lint_code_variants()
-        .into_iter()
-        .map(LintCode::from)
-        .collect::<Vec<_>>();
-    to_js_value(&codes)
+#[wasm_bindgen(js_name = lintCodes)]
+pub fn wasm_lint_codes() -> Vec<LintCode> {
+    lint_code_variants().into_iter().map(LintCode::from).collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = lintCodeMeta)]
-pub fn wasm_lint_code_meta() -> Result<JsValue, JsError> {
-    let meta = lint_code_variants()
+#[wasm_bindgen(js_name = lintCodeMeta)]
+pub fn wasm_lint_code_meta() -> Vec<LintCodeMeta> {
+    lint_code_variants()
         .into_iter()
-        .map(|code| LintCodeMetaValue {
+        .map(|code| LintCodeMeta {
             code: code.into(),
             category: code.category().into(),
             severity: code.severity().into(),
             issue_type: code.issue_type().into(),
         })
-        .collect::<Vec<_>>();
-    to_js_value(&meta)
+        .collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = formatRules)]
-pub fn wasm_format_rules() -> Result<JsValue, JsError> {
-    let rules = NativeFormatRule::ALL
+#[wasm_bindgen(js_name = formatRules)]
+pub fn wasm_format_rules() -> Vec<String> {
+    NativeFormatRule::ALL
         .iter()
         .map(|rule| rule.code().to_string())
-        .collect::<Vec<_>>();
-    to_js_value(&rules)
+        .collect()
 }
 
-#[wasm_bindgen(skip_typescript, js_name = formatRuleMeta)]
-pub fn wasm_format_rule_meta() -> Result<JsValue, JsError> {
-    let meta = NativeFormatRule::ALL
+#[wasm_bindgen(js_name = formatRuleMeta)]
+pub fn wasm_format_rule_meta() -> Vec<FormatRuleMeta> {
+    NativeFormatRule::ALL
         .iter()
-        .map(|rule| FormatRuleMetaValue {
+        .map(|rule| FormatRuleMeta {
             code: rule.code().to_string(),
             label_key: rule.label_key().to_string(),
         })
-        .collect::<Vec<_>>();
-    to_js_value(&meta)
+        .collect()
 }
 
-fn parse_lint_options(value: Option<JsValue>) -> Result<NativeLintOptions, JsError> {
-    let value = value.unwrap_or(JsValue::UNDEFINED);
-    let value: LintOptionsValue = from_js_or_default(value)?;
-    Ok(NativeLintOptions {
+fn lint_options_into_native(value: Option<LintOptions>) -> NativeLintOptions {
+    let value = value.unwrap_or_default();
+    NativeLintOptions {
         enabled_codes: value
             .enabled_codes
             .map(|codes| codes.into_iter().map(NativeLintCode::from).collect()),
@@ -2197,12 +2188,11 @@ fn parse_lint_options(value: Option<JsValue>) -> Result<NativeLintOptions, JsErr
             })
             .collect(),
         allow_implicit_chapter_content_verse: value.allow_implicit_chapter_content_verse,
-    })
+    }
 }
 
-fn parse_format_options(value: Option<JsValue>) -> Result<NativeFormatOptions, JsError> {
-    let value = value.unwrap_or(JsValue::UNDEFINED);
-    let value: FormatOptionsValue = from_js_or_default(value)?;
+fn format_options_into_native(value: Option<FormatOptions>) -> NativeFormatOptions {
+    let value = value.unwrap_or_default();
     let mut options = NativeFormatOptions::default();
     apply_opt(
         &mut options.recover_malformed_markers,
@@ -2264,13 +2254,12 @@ fn parse_format_options(value: Option<JsValue>) -> Result<NativeFormatOptions, J
         &mut options.normalize_marker_whitespace_at_line_start,
         value.normalize_marker_whitespace_at_line_start,
     );
-    Ok(options)
+    options
 }
 
-fn parse_html_options(value: Option<JsValue>) -> Result<NativeHtmlOptions, JsError> {
-    let value = value.unwrap_or(JsValue::UNDEFINED);
-    let value: HtmlOptionsValue = from_js_or_default(value)?;
-    Ok(NativeHtmlOptions {
+fn html_options_into_native(value: Option<HtmlOptions>) -> NativeHtmlOptions {
+    let value = value.unwrap_or_default();
+    NativeHtmlOptions {
         wrap_root: value.wrap_root,
         prefer_native_elements: value.prefer_native_elements.unwrap_or(true),
         note_mode: value
@@ -2285,27 +2274,23 @@ fn parse_html_options(value: Option<JsValue>) -> Result<NativeHtmlOptions, JsErr
             .caller_scope
             .map(Into::into)
             .unwrap_or(NativeHtmlCallerScope::VerseSequential),
-    })
+    }
 }
 
-fn parse_build_options(value: Option<JsValue>) -> Result<NativeBuildSidBlocksOptions, JsError> {
-    let value = value.unwrap_or(JsValue::UNDEFINED);
-    let value: BuildSidBlocksOptionsValue = from_js_or_default(value)?;
-    Ok(NativeBuildSidBlocksOptions {
+fn build_options_into_native(
+    value: Option<BuildSidBlocksOptions>,
+) -> NativeBuildSidBlocksOptions {
+    let value = value.unwrap_or_default();
+    NativeBuildSidBlocksOptions {
         allow_empty_sid: value.allow_empty_sid.unwrap_or(true),
-    })
+    }
 }
 
-fn parse_adapter_tokens(value: JsValue) -> Result<Vec<AdapterToken>, JsError> {
-    let values = from_js_or_default::<Vec<TokenValue>>(value)?;
-    Ok(parse_adapter_tokens_from_values(values))
-}
-
-fn parse_adapter_tokens_from_values(values: Vec<TokenValue>) -> Vec<AdapterToken> {
+fn parse_adapter_tokens_from_values(values: Vec<Token>) -> Vec<AdapterToken> {
     values.into_iter().map(token_value_to_adapter).collect()
 }
 
-fn token_value_to_adapter(value: TokenValue) -> AdapterToken {
+fn token_value_to_adapter(value: Token) -> AdapterToken {
     AdapterToken {
         id: value.id,
         kind: value.kind.into(),
@@ -2318,7 +2303,7 @@ fn token_value_to_adapter(value: TokenValue) -> AdapterToken {
     }
 }
 
-fn token_value_to_format_token(value: TokenValue) -> NativeFormatToken {
+fn token_value_to_format_token(value: Token) -> NativeFormatToken {
     NativeFormatToken {
         kind: value.kind.into(),
         text: value.text,
@@ -2341,10 +2326,9 @@ fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
     owned
 }
 
-fn parse_token_fix(value: JsValue) -> Result<NativeTokenFix, JsError> {
-    let value: TokenFixValue = from_js_value(value).map_err(js_serde_error)?;
-    Ok(match value {
-        TokenFixValue::ReplaceToken {
+fn token_fix_into_native(value: TokenFix) -> NativeTokenFix {
+    match value {
+        TokenFix::ReplaceToken {
             code,
             label,
             label_params,
@@ -2357,7 +2341,7 @@ fn parse_token_fix(value: JsValue) -> Result<NativeTokenFix, JsError> {
             target_token_id,
             replacements: replacements.into_iter().map(parse_token_template).collect(),
         },
-        TokenFixValue::DeleteToken {
+        TokenFix::DeleteToken {
             code,
             label,
             label_params,
@@ -2368,7 +2352,7 @@ fn parse_token_fix(value: JsValue) -> Result<NativeTokenFix, JsError> {
             label_params,
             target_token_id,
         },
-        TokenFixValue::InsertAfter {
+        TokenFix::InsertAfter {
             code,
             label,
             label_params,
@@ -2381,10 +2365,10 @@ fn parse_token_fix(value: JsValue) -> Result<NativeTokenFix, JsError> {
             target_token_id,
             insert: insert.into_iter().map(parse_token_template).collect(),
         },
-    })
+    }
 }
 
-fn parse_token_template(value: TokenTemplateValue) -> usfm_onion::TokenTemplate {
+fn parse_token_template(value: TokenTemplate) -> usfm_onion::TokenTemplate {
     usfm_onion::TokenTemplate {
         kind: value.kind.into(),
         text: value.text,
@@ -2393,24 +2377,24 @@ fn parse_token_template(value: TokenTemplateValue) -> usfm_onion::TokenTemplate 
     }
 }
 
-fn parse_structural_info(value: StructuralMarkerInfoValue) -> StructuralMarkerInfo {
-    StructuralMarkerInfo {
+fn parse_structural_info(value: StructuralMarkerInfo) -> NativeStructuralMarkerInfo {
+    NativeStructuralMarkerInfo {
         scope_kind: value.scope_kind.into(),
         inline_context: value.inline_context.map(Into::into),
         note_context: value.note_context.map(Into::into),
     }
 }
 
-fn parse_number_info(value: NumberInfoValue) -> (u32, Option<u32>, NativeNumberRangeKind) {
+fn parse_number_info(value: NumberInfo) -> (u32, Option<u32>, NativeNumberRangeKind) {
     (value.start, value.end, value.kind.into())
 }
 
-fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<TokenValue> {
+fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<Token> {
     tokens.iter().map(map_token).collect()
 }
 
-fn map_token(token: &NativeToken<'_>) -> TokenValue {
-    let mut value = TokenValue {
+fn map_token(token: &NativeToken<'_>) -> Token {
+    let mut value = Token {
         id: format!("{}-{}", token.id.book_code, token.id.index),
         kind: token.kind().into(),
         text: token.source.to_string(),
@@ -2466,7 +2450,7 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
             value.book_code_valid = Some(*is_valid);
         }
         NativeTokenData::Number { start, end, kind } => {
-            value.number_info = Some(NumberInfoValue {
+            value.number_info = Some(NumberInfo {
                 start: *start,
                 end: *end,
                 kind: (*kind).into(),
@@ -2481,8 +2465,8 @@ fn map_token(token: &NativeToken<'_>) -> TokenValue {
     value
 }
 
-fn map_format_token(token: &NativeFormatToken) -> TokenValue {
-    TokenValue {
+fn map_format_token(token: &NativeFormatToken) -> Token {
+    Token {
         id: token.id.clone().unwrap_or_default(),
         kind: token.kind.into(),
         text: token.text.clone(),
@@ -2492,7 +2476,7 @@ fn map_format_token(token: &NativeFormatToken) -> TokenValue {
         nested: None,
         marker_metadata: None,
         structural: token.structural.map(map_structural_info),
-        number_info: token.number_info.map(|(start, end, kind)| NumberInfoValue {
+        number_info: token.number_info.map(|(start, end, kind)| NumberInfo {
             start,
             end,
             kind: kind.into(),
@@ -2503,8 +2487,8 @@ fn map_format_token(token: &NativeFormatToken) -> TokenValue {
     }
 }
 
-fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItemValue {
-    AttributeItemValue {
+fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItem {
+    AttributeItem {
         span: map_span(item.span),
         text: item.source.to_string(),
         key: item.key.to_string(),
@@ -2512,59 +2496,59 @@ fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItemValue {
     }
 }
 
-fn map_marker_metadata(metadata: NativeMarkerMetadata) -> MarkerMetadataValue {
-    MarkerMetadataValue {
+fn map_marker_metadata(metadata: NativeMarkerMetadata) -> MarkerMetadata {
+    MarkerMetadata {
         canonical: metadata.canonical.map(ToOwned::to_owned),
         kind: metadata.kind.map(Into::into),
         family: metadata.family.map(Into::into),
     }
 }
 
-fn map_structural_info(info: StructuralMarkerInfo) -> StructuralMarkerInfoValue {
-    StructuralMarkerInfoValue {
+fn map_structural_info(info: NativeStructuralMarkerInfo) -> StructuralMarkerInfo {
+    StructuralMarkerInfo {
         scope_kind: info.scope_kind.into(),
         inline_context: info.inline_context.map(Into::into),
         note_context: info.note_context.map(Into::into),
     }
 }
 
-fn map_span(span: NativeSpan) -> SpanValue {
-    SpanValue {
+fn map_span(span: NativeSpan) -> Span {
+    Span {
         start: span.start,
         end: span.end,
     }
 }
 
-fn native_span(span: SpanValue) -> NativeSpan {
+fn native_span(span: Span) -> NativeSpan {
     NativeSpan {
         start: span.start,
         end: span.end,
     }
 }
 
-fn map_cst_document(document: &NativeCstDocument<'_>) -> CstDocumentValue {
-    CstDocumentValue {
+fn map_cst_document(document: &NativeCstDocument<'_>) -> CstDocument {
+    CstDocument {
         tokens: map_tokens(&document.tokens),
         roots: document.roots.iter().map(map_cst_node).collect(),
     }
 }
 
-fn map_cst_node(node: &NativeCstNode) -> CstNodeValue {
-    CstNodeValue {
+fn map_cst_node(node: &NativeCstNode) -> CstNode {
+    CstNode {
         token_index: node.token_index,
         children: node.children.iter().map(map_cst_node).collect(),
     }
 }
 
-fn map_lint_result(result: NativeLintResult) -> LintResultValue {
-    LintResultValue {
+fn map_lint_result(result: NativeLintResult) -> LintResult {
+    LintResult {
         issues: result.issues.into_iter().map(map_lint_issue).collect(),
         summary: map_lint_summary(result.summary),
     }
 }
 
-fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummaryValue {
-    LintSummaryValue {
+fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummary {
+    LintSummary {
         by_category: summary
             .by_category
             .into_iter()
@@ -2585,7 +2569,7 @@ fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummaryValue {
     }
 }
 
-fn map_token_fix(fix: NativeTokenFix) -> TokenFixValue {
+fn map_token_fix(fix: NativeTokenFix) -> TokenFix {
     match fix {
         NativeTokenFix::ReplaceToken {
             code,
@@ -2593,7 +2577,7 @@ fn map_token_fix(fix: NativeTokenFix) -> TokenFixValue {
             label_params,
             target_token_id,
             replacements,
-        } => TokenFixValue::ReplaceToken {
+        } => TokenFix::ReplaceToken {
             code,
             label,
             label_params,
@@ -2605,7 +2589,7 @@ fn map_token_fix(fix: NativeTokenFix) -> TokenFixValue {
             label,
             label_params,
             target_token_id,
-        } => TokenFixValue::DeleteToken {
+        } => TokenFix::DeleteToken {
             code,
             label,
             label_params,
@@ -2617,7 +2601,7 @@ fn map_token_fix(fix: NativeTokenFix) -> TokenFixValue {
             label_params,
             target_token_id,
             insert,
-        } => TokenFixValue::InsertAfter {
+        } => TokenFix::InsertAfter {
             code,
             label,
             label_params,
@@ -2627,8 +2611,8 @@ fn map_token_fix(fix: NativeTokenFix) -> TokenFixValue {
     }
 }
 
-fn map_token_template(template: usfm_onion::TokenTemplate) -> TokenTemplateValue {
-    TokenTemplateValue {
+fn map_token_template(template: usfm_onion::TokenTemplate) -> TokenTemplate {
+    TokenTemplate {
         kind: template.kind.into(),
         text: template.text,
         marker: template.marker,
@@ -2636,8 +2620,8 @@ fn map_token_template(template: usfm_onion::TokenTemplate) -> TokenTemplateValue
     }
 }
 
-fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssueValue {
-    LintIssueValue {
+fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssue {
+    LintIssue {
         code: issue.code.into(),
         category: issue.category.into(),
         severity: issue.severity.into(),
@@ -2657,14 +2641,14 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssueValue {
 
 fn map_chapter_diffs(
     diffs: &[NativeChapterTokenDiff<NativeToken<'_>>],
-) -> Vec<ChapterTokenDiffValue> {
+) -> Vec<ChapterTokenDiff> {
     diffs.iter().map(map_native_chapter_diff).collect()
 }
 
 fn map_native_chapter_diff(
     diff: &NativeChapterTokenDiff<NativeToken<'_>>,
-) -> ChapterTokenDiffValue {
-    ChapterTokenDiffValue {
+) -> ChapterTokenDiff {
+    ChapterTokenDiff {
         block_id: diff.block_id.clone(),
         semantic_sid: diff.semantic_sid.clone(),
         status: diff.status.into(),
@@ -2694,12 +2678,12 @@ fn map_native_chapter_diff(
     }
 }
 
-fn map_adapter_diffs(diffs: &[NativeChapterTokenDiff<AdapterToken>]) -> Vec<ChapterTokenDiffValue> {
+fn map_adapter_diffs(diffs: &[NativeChapterTokenDiff<AdapterToken>]) -> Vec<ChapterTokenDiff> {
     diffs.iter().map(map_adapter_chapter_diff).collect()
 }
 
-fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> ChapterTokenDiffValue {
-    ChapterTokenDiffValue {
+fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> ChapterTokenDiff {
+    ChapterTokenDiff {
         block_id: diff.block_id.clone(),
         semantic_sid: diff.semantic_sid.clone(),
         status: diff.status.into(),
@@ -2729,8 +2713,8 @@ fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> Chap
     }
 }
 
-fn map_adapter_token(token: &AdapterToken) -> TokenValue {
-    TokenValue {
+fn map_adapter_token(token: &AdapterToken) -> Token {
+    Token {
         id: token.id.clone(),
         kind: token.kind.into(),
         text: token.text.clone(),
@@ -2740,7 +2724,7 @@ fn map_adapter_token(token: &AdapterToken) -> TokenValue {
         nested: None,
         marker_metadata: None,
         structural: token.structural.map(map_structural_info),
-        number_info: token.number_info.map(|(start, end, kind)| NumberInfoValue {
+        number_info: token.number_info.map(|(start, end, kind)| NumberInfo {
             start,
             end,
             kind: kind.into(),
@@ -2751,8 +2735,8 @@ fn map_adapter_token(token: &AdapterToken) -> TokenValue {
     }
 }
 
-fn map_sid_block(block: &NativeSidBlock) -> SidBlockValue {
-    SidBlockValue {
+fn map_sid_block(block: &NativeSidBlock) -> SidBlock {
+    SidBlock {
         block_id: block.block_id.clone(),
         semantic_sid: block.semantic_sid.clone(),
         start: block.start,
@@ -2762,8 +2746,8 @@ fn map_sid_block(block: &NativeSidBlock) -> SidBlockValue {
     }
 }
 
-fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignmentValue {
-    TokenAlignmentValue {
+fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignment {
+    TokenAlignment {
         change: alignment.change.into(),
         counterpart_index: alignment.counterpart_index,
     }
@@ -2771,7 +2755,7 @@ fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignmentValue {
 
 fn map_diffs_by_chapter(
     diffs: &NativeDiffsByChapterMap<NativeChapterTokenDiff<NativeToken<'_>>>,
-) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiffValue>>>
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiff>>>
 {
     diffs
         .iter()
@@ -2787,8 +2771,8 @@ fn map_diffs_by_chapter(
         .collect()
 }
 
-fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfoValue {
-    MarkerInfoValue {
+fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfo {
+    MarkerInfo {
         marker: info.marker,
         canonical: info.canonical,
         known: info.known,
@@ -2808,7 +2792,7 @@ fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfoValue {
     }
 }
 
-fn token_values_to_usfm(tokens: &[TokenValue]) -> String {
+fn token_values_to_usfm(tokens: &[Token]) -> String {
     tokens.iter().map(|token| token.text.as_str()).collect()
 }
 

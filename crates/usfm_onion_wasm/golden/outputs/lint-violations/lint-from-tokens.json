@@ -37,7 +37,9 @@
       "issueType": "usfm",
       "marker": "p",
       "message": "\\p needs a space before the text that follows.",
-      "messageParams": {},
+      "messageParams": {
+        "marker": "p"
+      },
       "severity": "error",
       "sid": "GEN 1:0",
       "span": {
@@ -78,9 +80,17 @@
     }
   ],
   "summary": {
-    "byCategory": {},
-    "byIssueType": {},
-    "bySeverity": {},
+    "byCategory": {
+      "context": 1,
+      "structure": 2
+    },
+    "byIssueType": {
+      "usfm": 3
+    },
+    "bySeverity": {
+      "error": 2,
+      "warning": 1
+    },
     "suppressedCount": 0,
     "totalCount": 3
   }

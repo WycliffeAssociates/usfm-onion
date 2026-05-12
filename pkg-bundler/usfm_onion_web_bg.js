@@ -1,9 +1,4 @@
-//#region exports
-
 export class ParsedUsfm {
-    constructor() {
-        throw new Error('cannot invoke `new` directly');
-    }
     static __wrap(ptr) {
         ptr = ptr >>> 0;
         const obj = Object.create(ParsedUsfm.prototype);
@@ -22,60 +17,41 @@ export class ParsedUsfm {
         wasm.__wbg_parsedusfm_free(ptr, 0);
     }
     /**
-     * @param {any} fix
-     * @returns {any}
+     * @param {TokenFix} fix
+     * @returns {Token[]}
      */
     applyTokenFix(fix) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_applyTokenFix(this.__wbg_ptr, fix);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
-     * @returns {any}
+     * @returns {CstDocument}
      */
     cst() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_cst(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        return ret;
     }
     /**
      * @param {ParsedUsfm} other
-     * @param {any | null} [options]
-     * @returns {any}
+     * @param {BuildSidBlocksOptions | null} [options]
+     * @returns {ChapterTokenDiff[]}
      */
     diff(other, options) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         _assertClass(other, ParsedUsfm);
-        if (other.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * @param {ParsedUsfm} other
-     * @param {any | null} [options]
+     * @param {BuildSidBlocksOptions | null} [options]
      * @returns {any}
      */
     diffByChapter(other, options) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         _assertClass(other, ParsedUsfm);
-        if (other.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
@@ -83,85 +59,58 @@ export class ParsedUsfm {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
-     * @param {any | null} [options]
+     * @param {FormatOptions | null} [options]
      * @returns {string}
      */
     format(options) {
-        let deferred2_0;
-        let deferred2_1;
+        let deferred1_0;
+        let deferred1_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_format(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-            var ptr1 = ret[0];
-            var len1 = ret[1];
-            if (ret[3]) {
-                ptr1 = 0; len1 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred2_0 = ptr1;
-            deferred2_1 = len1;
-            return getStringFromWasm0(ptr1, len1);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
-     * @param {any | null} [options]
-     * @returns {any}
+     * @param {LintOptions | null} [options]
+     * @returns {LintResult}
      */
     lint(options) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        return ret;
     }
     /**
      * @param {ParsedUsfm} current
      * @param {string} block_id
-     * @param {any | null} [options]
-     * @returns {any}
+     * @param {BuildSidBlocksOptions | null} [options]
+     * @returns {Token[]}
      */
     revertDiffBlock(current, block_id, options) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         _assertClass(current, ParsedUsfm);
-        if (current.__wbg_ptr === 0) {
-            throw new Error('Attempt to use a moved value');
-        }
         const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.parsedusfm_revertDiffBlock(this.__wbg_ptr, current.__wbg_ptr, ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v2;
     }
     /**
-     * @param {any | null} [options]
+     * @param {HtmlOptions | null} [options]
      * @returns {string}
      */
     toHtml(options) {
-        let deferred2_0;
-        let deferred2_1;
+        let deferred1_0;
+        let deferred1_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_toHtml(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-            var ptr1 = ret[0];
-            var len1 = ret[1];
-            if (ret[3]) {
-                ptr1 = 0; len1 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred2_0 = ptr1;
-            deferred2_1 = len1;
-            return getStringFromWasm0(ptr1, len1);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
@@ -171,8 +120,6 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_toUsfm(this.__wbg_ptr);
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
@@ -185,8 +132,6 @@ export class ParsedUsfm {
      * @returns {any}
      */
     toUsj() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_toUsj(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
@@ -200,8 +145,6 @@ export class ParsedUsfm {
         let deferred2_0;
         let deferred2_1;
         try {
-            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_toUsx(this.__wbg_ptr);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -220,8 +163,6 @@ export class ParsedUsfm {
      * @returns {any}
      */
     toVref() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_toVref(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
@@ -229,24 +170,18 @@ export class ParsedUsfm {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
-     * @returns {any}
+     * @returns {Token[]}
      */
     tokens() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_tokens(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
 }
 if (Symbol.dispose) ParsedUsfm.prototype[Symbol.dispose] = ParsedUsfm.prototype.free;
 
 export class UsfmMarkerCatalog {
-    constructor() {
-        throw new Error('cannot invoke `new` directly');
-    }
     static __wrap(ptr) {
         ptr = ptr >>> 0;
         const obj = Object.create(UsfmMarkerCatalog.prototype);
@@ -265,24 +200,19 @@ export class UsfmMarkerCatalog {
         wasm.__wbg_usfmmarkercatalog_free(ptr, 0);
     }
     /**
-     * @returns {any}
+     * @returns {MarkerInfo[]}
      */
     all() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.usfmmarkercatalog_all(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * @param {string} marker
      * @returns {boolean}
      */
     contains(marker) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.usfmmarkercatalog_contains(this.__wbg_ptr, ptr0, len0);
@@ -290,54 +220,53 @@ export class UsfmMarkerCatalog {
     }
     /**
      * @param {string} marker
-     * @returns {any}
+     * @returns {MarkerInfo | undefined}
      */
     get(marker) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.usfmmarkercatalog_get(this.__wbg_ptr, ptr0, len0);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        return ret;
     }
 }
 if (Symbol.dispose) UsfmMarkerCatalog.prototype[Symbol.dispose] = UsfmMarkerCatalog.prototype.free;
 
 /**
- * @param {any} tokens
- * @param {any} fix
- * @returns {any}
+ * @param {Token[]} tokens
+ * @param {TokenFix} fix
+ * @returns {Token[]}
  */
 export function applyTokenFix(tokens, fix) {
-    const ret = wasm.applyTokenFix(tokens, fix);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.applyTokenFix(ptr0, len0, fix);
+    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v2;
 }
 
 /**
- * @param {any} left
- * @param {any} right
- * @param {any | null} [options]
- * @returns {any}
+ * @param {Token[]} left
+ * @param {Token[]} right
+ * @param {BuildSidBlocksOptions | null} [options]
+ * @returns {ChapterTokenDiff[]}
  */
 export function diffTokens(left, right, options) {
-    const ret = wasm.diffTokens(left, right, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passArrayJsValueToWasm0(left, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(right, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.diffTokens(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    var v3 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v3;
 }
 
 /**
  * @param {string} left
  * @param {string} right
- * @param {any | null} [options]
- * @returns {any}
+ * @param {BuildSidBlocksOptions | null} [options]
+ * @returns {ChapterTokenDiff[]}
  */
 export function diffUsfm(left, right, options) {
     const ptr0 = passStringToWasm0(left, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -345,16 +274,15 @@ export function diffUsfm(left, right, options) {
     const ptr1 = passStringToWasm0(right, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    var v3 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v3;
 }
 
 /**
  * @param {string} left
  * @param {string} right
- * @param {any | null} [options]
+ * @param {BuildSidBlocksOptions | null} [options]
  * @returns {any}
  */
 export function diffUsfmByChapter(left, right, options) {
@@ -370,76 +298,68 @@ export function diffUsfmByChapter(left, right, options) {
 }
 
 /**
- * @returns {any}
+ * @returns {FormatRuleMeta[]}
  */
 export function formatRuleMeta() {
     const ret = wasm.formatRuleMeta();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
- * @returns {any}
+ * @returns {string[]}
  */
 export function formatRules() {
     const ret = wasm.formatRules();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
- * @param {any} tokens
- * @param {any | null} [options]
- * @returns {any}
+ * @param {Token[]} tokens
+ * @param {FormatOptions | null} [options]
+ * @returns {FormatResult}
  */
 export function formatTokens(tokens, options) {
-    const ret = wasm.formatTokens(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.formatTokens(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    return ret;
 }
 
 /**
- * @param {any} tokens
- * @param {any | null} [options]
- * @returns {any}
+ * @param {Token[]} tokens
+ * @param {FormatOptions | null} [options]
+ * @returns {Token[]}
  */
 export function formatTokensMut(tokens, options) {
-    const ret = wasm.formatTokensMut(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.formatTokensMut(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v2;
 }
 
 /**
  * @param {string} source
- * @param {any | null} [options]
+ * @param {FormatOptions | null} [options]
  * @returns {string}
  */
 export function formatUsfm(source, options) {
-    let deferred3_0;
-    let deferred3_1;
+    let deferred2_0;
+    let deferred2_1;
     try {
         const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.formatUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -455,53 +375,47 @@ export function isKnownMarker(marker) {
 }
 
 /**
- * @returns {any}
+ * @returns {LintCodeMeta[]}
  */
 export function lintCodeMeta() {
     const ret = wasm.lintCodeMeta();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
- * @returns {any}
+ * @returns {LintCode[]}
  */
 export function lintCodes() {
     const ret = wasm.lintCodes();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
- * @param {any} tokens
- * @param {any | null} [options]
- * @returns {any}
+ * @param {Token[]} tokens
+ * @param {LintOptions | null} [options]
+ * @returns {LintResult}
  */
 export function lintTokens(tokens, options) {
-    const ret = wasm.lintTokens(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.lintTokens(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    return ret;
 }
 
 /**
  * @param {string} source
- * @param {any | null} [options]
- * @returns {any}
+ * @param {LintOptions | null} [options]
+ * @returns {LintResult}
  */
 export function lintUsfm(source, options) {
     const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.lintUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    return ret;
 }
 
 /**
@@ -514,16 +428,13 @@ export function markerCatalog() {
 
 /**
  * @param {string} marker
- * @returns {any}
+ * @returns {MarkerInfo}
  */
 export function markerInfo(marker) {
     const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.markerInfo(ptr0, len0);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    return ret;
 }
 
 /**
@@ -538,180 +449,101 @@ export function parse(source) {
 }
 
 /**
- * @param {any} baseline
- * @param {any} current
+ * @param {Token[]} baseline
+ * @param {Token[]} current
  * @param {string} block_id
- * @param {any | null} [options]
- * @returns {any}
+ * @param {BuildSidBlocksOptions | null} [options]
+ * @returns {Token[]}
  */
 export function revertDiffBlock(baseline, current, block_id, options) {
-    const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.revertDiffBlock(baseline, current, ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.revertDiffBlock(ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    var v4 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v4;
 }
 
 /**
- * @param {any} baseline
- * @param {any} current
- * @param {any} block_ids
- * @param {any | null} [options]
- * @returns {any}
+ * @param {Token[]} baseline
+ * @param {Token[]} current
+ * @param {string[]} block_ids
+ * @param {BuildSidBlocksOptions | null} [options]
+ * @returns {Token[]}
  */
 export function revertDiffBlocks(baseline, current, block_ids, options) {
-    const ret = wasm.revertDiffBlocks(baseline, current, block_ids, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayJsValueToWasm0(block_ids, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.revertDiffBlocks(ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    var v4 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v4;
 }
 
 /**
- * @param {any} tokens
- * @param {any | null} [options]
+ * @param {Token[]} tokens
+ * @param {HtmlOptions | null} [options]
  * @returns {string}
  */
 export function tokensToHtml(tokens, options) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const ret = wasm.tokensToHtml(tokens, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
+        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.tokensToHtml(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
 /**
- * @param {any} tokens
+ * @param {Token[]} tokens
  * @returns {string}
  */
 export function tokensToUsfm(tokens) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const ret = wasm.tokensToUsfm(tokens);
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
+        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.tokensToUsfm(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
-
-//#endregion
-
-//#region wasm imports
-export function __wbg_Error_83742b46f01ce22d() { return logError(function (arg0, arg1) {
+export function __wbg_Error_83742b46f01ce22d(arg0, arg1) {
     const ret = Error(getStringFromWasm0(arg0, arg1));
     return ret;
-}, arguments); }
-export function __wbg_Number_a5a435bd7bbec835() { return logError(function (arg0) {
-    const ret = Number(arg0);
-    return ret;
-}, arguments); }
-export function __wbg_String_8564e559799eccda() { return logError(function (arg0, arg1) {
+}
+export function __wbg_String_8564e559799eccda(arg0, arg1) {
     const ret = String(arg1);
     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-}, arguments); }
-export function __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda(arg0, arg1) {
-    const v = arg1;
-    const ret = typeof(v) === 'bigint' ? v : undefined;
-    if (!isLikeNone(ret)) {
-        _assertBigInt(ret);
-    }
-    getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
-    getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
-}
-export function __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1(arg0) {
-    const v = arg0;
-    const ret = typeof(v) === 'boolean' ? v : undefined;
-    if (!isLikeNone(ret)) {
-        _assertBoolean(ret);
-    }
-    return isLikeNone(ret) ? 0xFFFFFF : ret ? 1 : 0;
-}
-export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
-    const ret = debugString(arg1);
-    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-    getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-}
-export function __wbg___wbindgen_in_41dbb8413020e076(arg0, arg1) {
-    const ret = arg0 in arg1;
-    _assertBoolean(ret);
-    return ret;
-}
-export function __wbg___wbindgen_is_bigint_e2141d4f045b7eda(arg0) {
-    const ret = typeof(arg0) === 'bigint';
-    _assertBoolean(ret);
-    return ret;
-}
-export function __wbg___wbindgen_is_function_3c846841762788c1(arg0) {
-    const ret = typeof(arg0) === 'function';
-    _assertBoolean(ret);
-    return ret;
-}
-export function __wbg___wbindgen_is_null_0b605fc6b167c56f(arg0) {
-    const ret = arg0 === null;
-    _assertBoolean(ret);
-    return ret;
-}
-export function __wbg___wbindgen_is_object_781bc9f159099513(arg0) {
-    const val = arg0;
-    const ret = typeof(val) === 'object' && val !== null;
-    _assertBoolean(ret);
-    return ret;
 }
 export function __wbg___wbindgen_is_string_7ef6b97b02428fae(arg0) {
     const ret = typeof(arg0) === 'string';
-    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_undefined_52709e72fb9f179c(arg0) {
     const ret = arg0 === undefined;
-    _assertBoolean(ret);
     return ret;
-}
-export function __wbg___wbindgen_jsval_eq_ee31bfad3e536463(arg0, arg1) {
-    const ret = arg0 === arg1;
-    _assertBoolean(ret);
-    return ret;
-}
-export function __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b(arg0, arg1) {
-    const ret = arg0 == arg1;
-    _assertBoolean(ret);
-    return ret;
-}
-export function __wbg___wbindgen_number_get_34bb9d9dcfa21373(arg0, arg1) {
-    const obj = arg1;
-    const ret = typeof(obj) === 'number' ? obj : undefined;
-    if (!isLikeNone(ret)) {
-        _assertNum(ret);
-    }
-    getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
-    getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
 }
 export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
     const obj = arg1;
@@ -724,153 +556,51 @@ export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
 export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
 }
-export function __wbg_call_e133b57c9155d22c() { return handleError(function (arg0, arg1) {
-    const ret = arg0.call(arg1);
-    return ret;
-}, arguments); }
-export function __wbg_done_08ce71ee07e3bd17() { return logError(function (arg0) {
-    const ret = arg0.done;
-    _assertBoolean(ret);
-    return ret;
-}, arguments); }
-export function __wbg_entries_e8a20ff8c9757101() { return logError(function (arg0) {
-    const ret = Object.entries(arg0);
-    return ret;
-}, arguments); }
-export function __wbg_get_326e41e095fb2575() { return handleError(function (arg0, arg1) {
-    const ret = Reflect.get(arg0, arg1);
-    return ret;
-}, arguments); }
-export function __wbg_get_a8ee5c45dabc1b3b() { return logError(function (arg0, arg1) {
-    const ret = arg0[arg1 >>> 0];
-    return ret;
-}, arguments); }
-export function __wbg_get_unchecked_329cfe50afab7352() { return logError(function (arg0, arg1) {
-    const ret = arg0[arg1 >>> 0];
-    return ret;
-}, arguments); }
-export function __wbg_get_with_ref_key_6412cf3094599694() { return logError(function (arg0, arg1) {
-    const ret = arg0[arg1];
-    return ret;
-}, arguments); }
-export function __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6() { return logError(function (arg0) {
-    let result;
-    try {
-        result = arg0 instanceof ArrayBuffer;
-    } catch (_) {
-        result = false;
-    }
-    const ret = result;
-    _assertBoolean(ret);
-    return ret;
-}, arguments); }
-export function __wbg_instanceof_Map_f194b366846aca0c() { return logError(function (arg0) {
-    let result;
-    try {
-        result = arg0 instanceof Map;
-    } catch (_) {
-        result = false;
-    }
-    const ret = result;
-    _assertBoolean(ret);
-    return ret;
-}, arguments); }
-export function __wbg_instanceof_Uint8Array_740438561a5b956d() { return logError(function (arg0) {
-    let result;
-    try {
-        result = arg0 instanceof Uint8Array;
-    } catch (_) {
-        result = false;
-    }
-    const ret = result;
-    _assertBoolean(ret);
-    return ret;
-}, arguments); }
-export function __wbg_isArray_33b91feb269ff46e() { return logError(function (arg0) {
-    const ret = Array.isArray(arg0);
-    _assertBoolean(ret);
-    return ret;
-}, arguments); }
-export function __wbg_isSafeInteger_ecd6a7f9c3e053cd() { return logError(function (arg0) {
-    const ret = Number.isSafeInteger(arg0);
-    _assertBoolean(ret);
-    return ret;
-}, arguments); }
-export function __wbg_iterator_d8f549ec8fb061b1() { return logError(function () {
-    const ret = Symbol.iterator;
-    return ret;
-}, arguments); }
-export function __wbg_length_b3416cf66a5452c8() { return logError(function (arg0) {
-    const ret = arg0.length;
-    _assertNum(ret);
-    return ret;
-}, arguments); }
-export function __wbg_length_ea16607d7b61445b() { return logError(function (arg0) {
-    const ret = arg0.length;
-    _assertNum(ret);
-    return ret;
-}, arguments); }
-export function __wbg_new_49d5571bd3f0c4d4() { return logError(function () {
+export function __wbg_new_49d5571bd3f0c4d4() {
     const ret = new Map();
     return ret;
-}, arguments); }
-export function __wbg_new_5f486cdf45a04d78() { return logError(function (arg0) {
-    const ret = new Uint8Array(arg0);
-    return ret;
-}, arguments); }
-export function __wbg_new_a70fbab9066b301f() { return logError(function () {
+}
+export function __wbg_new_a70fbab9066b301f() {
     const ret = new Array();
     return ret;
-}, arguments); }
-export function __wbg_new_ab79df5bd7c26067() { return logError(function () {
+}
+export function __wbg_new_ab79df5bd7c26067() {
     const ret = new Object();
     return ret;
-}, arguments); }
-export function __wbg_next_11b99ee6237339e3() { return handleError(function (arg0) {
-    const ret = arg0.next();
+}
+export function __wbg_parse_e9eddd2a82c706eb() { return handleError(function (arg0, arg1) {
+    const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
     return ret;
 }, arguments); }
-export function __wbg_next_e01a967809d1aa68() { return logError(function (arg0) {
-    const ret = arg0.next;
-    return ret;
-}, arguments); }
-export function __wbg_prototypesetcall_d62e5099504357e6() { return logError(function (arg0, arg1, arg2) {
-    Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
-}, arguments); }
-export function __wbg_set_282384002438957f() { return logError(function (arg0, arg1, arg2) {
+export function __wbg_set_282384002438957f(arg0, arg1, arg2) {
     arg0[arg1 >>> 0] = arg2;
-}, arguments); }
-export function __wbg_set_6be42768c690e380() { return logError(function (arg0, arg1, arg2) {
+}
+export function __wbg_set_6be42768c690e380(arg0, arg1, arg2) {
     arg0[arg1] = arg2;
-}, arguments); }
-export function __wbg_set_bf7251625df30a02() { return logError(function (arg0, arg1, arg2) {
+}
+export function __wbg_set_bf7251625df30a02(arg0, arg1, arg2) {
     const ret = arg0.set(arg1, arg2);
     return ret;
-}, arguments); }
-export function __wbg_value_21fc78aab0322612() { return logError(function (arg0) {
-    const ret = arg0.value;
+}
+export function __wbg_stringify_5ae93966a84901ac() { return handleError(function (arg0) {
+    const ret = JSON.stringify(arg0);
     return ret;
 }, arguments); }
-export function __wbindgen_cast_0000000000000001() { return logError(function (arg0) {
+export function __wbindgen_cast_0000000000000001(arg0) {
     // Cast intrinsic for `F64 -> Externref`.
     const ret = arg0;
     return ret;
-}, arguments); }
-export function __wbindgen_cast_0000000000000002() { return logError(function (arg0) {
-    // Cast intrinsic for `I64 -> Externref`.
-    const ret = arg0;
-    return ret;
-}, arguments); }
-export function __wbindgen_cast_0000000000000003() { return logError(function (arg0, arg1) {
+}
+export function __wbindgen_cast_0000000000000002(arg0, arg1) {
     // Cast intrinsic for `Ref(String) -> Externref`.
     const ret = getStringFromWasm0(arg0, arg1);
     return ret;
-}, arguments); }
-export function __wbindgen_cast_0000000000000004() { return logError(function (arg0) {
+}
+export function __wbindgen_cast_0000000000000003(arg0) {
     // Cast intrinsic for `U64 -> Externref`.
     const ret = BigInt.asUintN(64, arg0);
     return ret;
-}, arguments); }
+}
 export function __wbindgen_init_externref_table() {
     const table = wasm.__wbindgen_externrefs;
     const offset = table.grow(4);
@@ -880,8 +610,6 @@ export function __wbindgen_init_externref_table() {
     table.set(offset + 2, true);
     table.set(offset + 3, false);
 }
-
-//#endregion
 const ParsedUsfmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfm_free(ptr >>> 0, 1));
@@ -889,22 +617,10 @@ const UsfmMarkerCatalogFinalization = (typeof FinalizationRegistry === 'undefine
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_usfmmarkercatalog_free(ptr >>> 0, 1));
 
-
-//#region intrinsics
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
     return idx;
-}
-
-function _assertBigInt(n) {
-    if (typeof(n) !== 'bigint') throw new Error(`expected a bigint argument, found ${typeof(n)}`);
-}
-
-function _assertBoolean(n) {
-    if (typeof(n) !== 'boolean') {
-        throw new Error(`expected a boolean argument, found ${typeof(n)}`);
-    }
 }
 
 function _assertClass(instance, klass) {
@@ -913,78 +629,15 @@ function _assertClass(instance, klass) {
     }
 }
 
-function _assertNum(n) {
-    if (typeof(n) !== 'number') throw new Error(`expected a number argument, found ${typeof(n)}`);
-}
-
-function debugString(val) {
-    // primitive types
-    const type = typeof val;
-    if (type == 'number' || type == 'boolean' || val == null) {
-        return  `${val}`;
-    }
-    if (type == 'string') {
-        return `"${val}"`;
-    }
-    if (type == 'symbol') {
-        const description = val.description;
-        if (description == null) {
-            return 'Symbol';
-        } else {
-            return `Symbol(${description})`;
-        }
-    }
-    if (type == 'function') {
-        const name = val.name;
-        if (typeof name == 'string' && name.length > 0) {
-            return `Function(${name})`;
-        } else {
-            return 'Function';
-        }
-    }
-    // objects
-    if (Array.isArray(val)) {
-        const length = val.length;
-        let debug = '[';
-        if (length > 0) {
-            debug += debugString(val[0]);
-        }
-        for(let i = 1; i < length; i++) {
-            debug += ', ' + debugString(val[i]);
-        }
-        debug += ']';
-        return debug;
-    }
-    // Test for built-in
-    const builtInMatches = /\[object ([^\]]+)\]/.exec(toString.call(val));
-    let className;
-    if (builtInMatches && builtInMatches.length > 1) {
-        className = builtInMatches[1];
-    } else {
-        // Failed to match the standard '[object ClassName]'
-        return toString.call(val);
-    }
-    if (className == 'Object') {
-        // we're a user defined class or Object
-        // JSON.stringify avoids problems with cycles, and is generally much
-        // easier than looping through ownProperties of `val`.
-        try {
-            return 'Object(' + JSON.stringify(val) + ')';
-        } catch (_) {
-            return 'Object';
-        }
-    }
-    // errors
-    if (val instanceof Error) {
-        return `${val.name}: ${val.message}\n${val.stack}`;
-    }
-    // TODO we could test for more things here, like `Set`s and `Map`s.
-    return className;
-}
-
-function getArrayU8FromWasm0(ptr, len) {
+function getArrayJsValueFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
-    return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
+    const mem = getDataViewMemory0();
+    const result = [];
+    for (let i = ptr; i < ptr + 4 * len; i += 4) {
+        result.push(wasm.__wbindgen_externrefs.get(mem.getUint32(i, true)));
+    }
+    wasm.__externref_drop_slice(ptr, len);
+    return result;
 }
 
 let cachedDataViewMemory0 = null;
@@ -1021,24 +674,17 @@ function isLikeNone(x) {
     return x === undefined || x === null;
 }
 
-function logError(f, args) {
-    try {
-        return f.apply(this, args);
-    } catch (e) {
-        let error = (function () {
-            try {
-                return e instanceof Error ? `${e.message}\n\nStack:\n${e.stack}` : e.toString();
-            } catch(_) {
-                return "<failed to stringify thrown value>";
-            }
-        }());
-        console.error("wasm-bindgen: imported JS function that was not marked as `catch` threw an error:", error);
-        throw e;
+function passArrayJsValueToWasm0(array, malloc) {
+    const ptr = malloc(array.length * 4, 4) >>> 0;
+    for (let i = 0; i < array.length; i++) {
+        const add = addToExternrefTable0(array[i]);
+        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
     }
+    WASM_VECTOR_LEN = array.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
-    if (typeof(arg) !== 'string') throw new Error(`expected a string argument, found ${typeof(arg)}`);
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
         const ptr = malloc(buf.length, 1) >>> 0;
@@ -1066,7 +712,7 @@ function passStringToWasm0(arg, malloc, realloc) {
         ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
         const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
         const ret = cachedTextEncoder.encodeInto(arg, view);
-        if (ret.read !== arg.length) throw new Error('failed to pass whole string');
+
         offset += ret.written;
         ptr = realloc(ptr, len, offset, 1) >>> 0;
     }
@@ -1111,13 +757,7 @@ if (!('encodeInto' in cachedTextEncoder)) {
 let WASM_VECTOR_LEN = 0;
 
 
-//#endregion
-
-//#region wasm loading
-
 let wasm;
 export function __wbg_set_wasm(val) {
     wasm = val;
 }
-
-//#endregion

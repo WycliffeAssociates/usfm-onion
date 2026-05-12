@@ -483,60 +483,90 @@ export function formatRules(): FormatRule[];
 export function formatRuleMeta(): FormatRuleMeta[];
 
 
-export interface AttributeItemValue {
-    span: SpanValue;
+export interface AttributeItem {
+    span: Span;
     text: string;
     key: string;
     value: string;
 }
 
-export interface ChapterTokenDiffValue {
+export interface BuildSidBlocksOptions {
+    allowEmptySid?: boolean | null;
+}
+
+export interface ChapterTokenDiff {
     blockId: string;
     semanticSid: string;
     status: DiffStatus;
-    original?: SidBlockValue;
-    current?: SidBlockValue;
+    original?: SidBlock;
+    current?: SidBlock;
     originalText: string;
     currentText: string;
     originalTextOnly: string;
     currentTextOnly: string;
     isWhitespaceChange: boolean;
     isUsfmStructureChange: boolean;
-    originalTokens: TokenValue[];
-    currentTokens: TokenValue[];
-    originalAlignment: TokenAlignmentValue[];
-    currentAlignment: TokenAlignmentValue[];
+    originalTokens: Token[];
+    currentTokens: Token[];
+    originalAlignment: TokenAlignment[];
+    currentAlignment: TokenAlignment[];
     undoSide: DiffUndoSide;
 }
 
-export interface CstDocumentValue {
-    tokens: TokenValue[];
-    roots: CstNodeValue[];
+export interface CstDocument {
+    tokens: Token[];
+    roots: CstNode[];
 }
 
-export interface CstNodeValue {
+export interface CstNode {
     tokenIndex: number;
-    children: CstNodeValue[];
+    children: CstNode[];
 }
 
-export interface FormatResultValue {
-    tokens: TokenValue[];
+export interface FormatOptions {
+    recoverMalformedMarkers?: boolean | null;
+    collapseWhitespaceInText?: boolean | null;
+    ensureInlineSeparators?: boolean | null;
+    removeDuplicateVerseNumbers?: boolean | null;
+    normalizeSpacingAfterParagraphMarkers?: boolean | null;
+    removeUnwantedLinebreaks?: boolean | null;
+    bridgeConsecutiveVerseMarkers?: boolean | null;
+    removeOrphanEmptyVerseBeforeContentfulVerse?: boolean | null;
+    removeBridgeVerseEnumerators?: boolean | null;
+    moveChapterLabelAfterChapterMarker?: boolean | null;
+    insertDefaultParagraphAfterChapterIntro?: boolean | null;
+    removeEmptyParagraphs?: boolean | null;
+    insertStructuralLinebreaks?: boolean | null;
+    collapseConsecutiveLinebreaks?: boolean | null;
+    normalizeMarkerWhitespaceAtLineStart?: boolean | null;
+}
+
+export interface FormatResult {
+    tokens: Token[];
     usfm: string;
 }
 
-export interface FormatRuleMetaValue {
+export interface FormatRuleMeta {
     code: string;
     labelKey: string;
 }
 
-export interface LintCodeMetaValue {
+export interface HtmlOptions {
+    wrapRoot?: boolean;
+    preferNativeElements?: boolean | null;
+    noteMode?: HtmlNoteMode | null;
+    callerStyle?: HtmlCallerStyle | null;
+    callerScope?: HtmlCallerScope | null;
+}
+
+export interface LintCodeMeta {
     code: LintCode;
     category: LintCategory;
     severity: LintSeverity;
     issueType: LintIssueType;
 }
 
-export interface LintIssueValue {
+export interface LintIssue {
     code: LintCode;
     category: LintCategory;
     severity: LintSeverity;
@@ -544,21 +574,28 @@ export interface LintIssueValue {
     template: string;
     message: string;
     messageParams: Record<string, string>;
-    span?: SpanValue;
-    relatedSpan?: SpanValue;
+    span?: Span;
+    relatedSpan?: Span;
     tokenId?: string;
     relatedTokenId?: string;
     sid?: string;
     marker?: string;
-    fix?: TokenFixValue;
+    fix?: TokenFix;
 }
 
-export interface LintResultValue {
-    issues: LintIssueValue[];
-    summary: LintSummaryValue;
+export interface LintOptions {
+    enabledCodes?: LintCode[] | null;
+    disabledCodes?: LintCode[];
+    suppressed?: LintSuppression[];
+    allowImplicitChapterContentVerse?: boolean;
 }
 
-export interface LintSummaryValue {
+export interface LintResult {
+    issues: LintIssue[];
+    summary: LintSummary;
+}
+
+export interface LintSummary {
     byCategory: Record<LintCategory, number>;
     bySeverity: Record<LintSeverity, number>;
     byIssueType: Record<LintIssueType, number>;
@@ -566,37 +603,43 @@ export interface LintSummaryValue {
     suppressedCount: number;
 }
 
-export interface LintSuppressionValue {
+export interface LintSuppression {
     code: LintCode;
     sid: string;
 }
 
-export interface MarkerInfoValue {
+export interface MarkerInfo {
     marker: string;
     canonical?: string;
     known: boolean;
     deprecated: boolean;
-    category: FfiMarkerCategory;
-    kind: FfiMarkerKind;
-    family?: FfiMarkerFamily;
-    familyRole?: FfiMarkerFamilyRole;
-    noteFamily?: FfiNoteFamily;
-    noteSubkind?: FfiNoteSubkind;
-    inlineContext?: FfiInlineContext;
+    category: MarkerCategory;
+    kind: MarkerKind;
+    family?: MarkerFamily;
+    familyRole?: MarkerFamilyRole;
+    noteFamily?: NoteFamily;
+    noteSubkind?: NoteSubkind;
+    inlineContext?: InlineContext;
     defaultAttribute?: string;
-    contexts: FfiSpecContext[];
-    blockBehavior?: FfiBlockBehavior;
-    closingBehavior?: FfiClosingBehavior;
+    contexts: SpecContext[];
+    blockBehavior?: BlockBehavior;
+    closingBehavior?: ClosingBehavior;
     source?: string;
 }
 
-export interface NumberInfoValue {
+export interface MarkerMetadata {
+    canonical?: string;
+    kind?: MarkerDefKind;
+    family?: MarkerFamily;
+}
+
+export interface NumberInfo {
     start: number;
     end?: number;
     kind: NumberRangeKind;
 }
 
-export interface SidBlockValue {
+export interface SidBlock {
     blockId: string;
     semanticSid: string;
     start: number;
@@ -605,44 +648,48 @@ export interface SidBlockValue {
     textFull: string;
 }
 
-export interface SpanValue {
+export interface Span {
     start: number;
     end: number;
 }
 
-export interface StructuralMarkerInfoValue {
-    scopeKind: FfiStructuralScopeKind;
-    inlineContext?: FfiInlineContext;
-    noteContext?: FfiSpecContext;
+export interface StructuralMarkerInfo {
+    scopeKind: StructuralScopeKind;
+    inlineContext?: InlineContext;
+    noteContext?: SpecContext;
 }
 
-export interface TokenAlignmentValue {
+export interface Token {
+    id: string;
+    kind: TokenKind;
+    text: string;
+    span?: Span;
+    sid?: string;
+    marker?: string;
+    nested?: boolean;
+    markerMetadata?: MarkerMetadata;
+    structural?: StructuralMarkerInfo;
+    numberInfo?: NumberInfo;
+    bookCode?: string;
+    bookCodeValid?: boolean;
+    attributes?: AttributeItem[];
+}
+
+export interface TokenAlignment {
     change: DiffTokenChange;
     counterpartIndex?: number;
 }
 
-export interface TokenTemplateValue {
+export interface TokenTemplate {
     kind: TokenKind;
     text: string;
     marker?: string;
     sid?: string;
 }
 
-export interface TokenValue {
-    id: string;
-    kind: TokenKind;
-    text: string;
-    span?: SpanValue;
-    sid?: string;
-    marker?: string;
-    nested?: boolean;
-    markerMetadata?: MarkerMetadataValue;
-    structural?: StructuralMarkerInfoValue;
-    numberInfo?: NumberInfoValue;
-    bookCode?: string;
-    bookCodeValid?: boolean;
-    attributes?: AttributeItemValue[];
-}
+export type BlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "sidebarStart" | "sidebarEnd";
+
+export type ClosingBehavior = "none" | "requiredExplicit" | "optionalExplicitUntilNoteEnd" | "selfClosingMilestone";
 
 export type DiffStatus = "added" | "deleted" | "modified" | "unchanged";
 
@@ -650,35 +697,13 @@ export type DiffTokenChange = "unchanged" | "added" | "deleted" | "modified";
 
 export type DiffUndoSide = "original" | "current";
 
-export type FfiBlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "sidebarStart" | "sidebarEnd";
-
-export type FfiClosingBehavior = "none" | "requiredExplicit" | "optionalExplicitUntilNoteEnd" | "selfClosingMilestone";
-
-export type FfiInlineContext = "para" | "section" | "list" | "table";
-
-export type FfiMarkerCategory = "document" | "paragraph" | "character" | "noteContainer" | "noteSubmarker" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "figure" | "sidebarStart" | "sidebarEnd" | "periph" | "meta" | "tableRow" | "tableCell" | "header" | "unknown";
-
-export type FfiMarkerDefKind = "paragraph" | "character" | "note" | "chapter" | "verse" | "milestone" | "figure" | "sidebar" | "periph" | "meta" | "tableRow" | "tableCell" | "header";
-
-export type FfiMarkerFamily = "footnote" | "crossReference" | "sectionParagraph" | "listParagraph" | "tableCell" | "milestone" | "sidebar";
-
-export type FfiMarkerFamilyRole = "canonical" | "numberedVariant" | "nestedVariant" | "milestoneStart" | "milestoneEnd" | "alias";
-
-export type FfiMarkerKind = "paragraph" | "note" | "character" | "header" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "sidebarStart" | "sidebarEnd" | "figure" | "meta" | "periph" | "tableRow" | "tableCell" | "unknown";
-
-export type FfiNoteFamily = "footnote" | "crossReference";
-
-export type FfiNoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
-
-export type FfiSpecContext = "scripture" | "bookIdentification" | "bookHeaders" | "bookTitles" | "bookIntroduction" | "bookIntroductionEndTitles" | "bookChapterLabel" | "chapterContent" | "peripheral" | "peripheralContent" | "peripheralDivision" | "chapter" | "verse" | "section" | "para" | "list" | "table" | "sidebar" | "footnote" | "crossReference";
-
-export type FfiStructuralScopeKind = "unknown" | "header" | "block" | "note" | "character" | "milestone" | "chapter" | "verse" | "tableRow" | "tableCell" | "sidebar" | "periph" | "meta";
-
 export type HtmlCallerScope = "documentSequential" | "verseSequential";
 
 export type HtmlCallerStyle = "numeric" | "alphaLower" | "alphaUpper" | "romanLower" | "romanUpper" | "source";
 
 export type HtmlNoteMode = "extracted" | "inline";
+
+export type InlineContext = "para" | "section" | "list" | "table";
 
 export type LintCategory = "document" | "structure" | "context" | "numbering";
 
@@ -688,8 +713,63 @@ export type LintIssueType = "usfm" | "content";
 
 export type LintSeverity = "error" | "warning";
 
+export type MarkerCategory = "document" | "paragraph" | "character" | "noteContainer" | "noteSubmarker" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "figure" | "sidebarStart" | "sidebarEnd" | "periph" | "meta" | "tableRow" | "tableCell" | "header" | "unknown";
+
+export type MarkerDefKind = "paragraph" | "character" | "note" | "chapter" | "verse" | "milestone" | "figure" | "sidebar" | "periph" | "meta" | "tableRow" | "tableCell" | "header";
+
+export type MarkerFamily = "footnote" | "crossReference" | "sectionParagraph" | "listParagraph" | "tableCell" | "milestone" | "sidebar";
+
+export type MarkerFamilyRole = "canonical" | "numberedVariant" | "nestedVariant" | "milestoneStart" | "milestoneEnd" | "alias";
+
+export type MarkerKind = "paragraph" | "note" | "character" | "header" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "sidebarStart" | "sidebarEnd" | "figure" | "meta" | "periph" | "tableRow" | "tableCell" | "unknown";
+
+export type NoteFamily = "footnote" | "crossReference";
+
+export type NoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
+
 export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
 
-export type TokenFixValue = { type: "replaceToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; replacements: TokenTemplateValue[] } | { type: "deleteToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string } | { type: "insertAfter"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; insert: TokenTemplateValue[] };
+export type SpecContext = "scripture" | "bookIdentification" | "bookHeaders" | "bookTitles" | "bookIntroduction" | "bookIntroductionEndTitles" | "bookChapterLabel" | "chapterContent" | "peripheral" | "peripheralContent" | "peripheralDivision" | "chapter" | "verse" | "section" | "para" | "list" | "table" | "sidebar" | "footnote" | "crossReference";
+
+export type StructuralScopeKind = "unknown" | "header" | "block" | "note" | "character" | "milestone" | "chapter" | "verse" | "tableRow" | "tableCell" | "sidebar" | "periph" | "meta";
+
+export type TokenFix = { type: "replaceToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; replacements: TokenTemplate[] } | { type: "deleteToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string } | { type: "insertAfter"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; insert: TokenTemplate[] };
 
 export type TokenKind = "newline" | "optBreak" | "marker" | "endMarker" | "milestone" | "milestoneEnd" | "bookCode" | "number" | "text";
+
+
+export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
+
+export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
+
+export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
+
+export function formatRuleMeta(): FormatRuleMeta[];
+
+export function formatRules(): string[];
+
+export function formatTokens(tokens: Token[], options?: FormatOptions | null): FormatResult;
+
+export function formatTokensMut(tokens: Token[], options?: FormatOptions | null): Token[];
+
+export function formatUsfm(source: string, options?: FormatOptions | null): string;
+
+export function lintCodeMeta(): LintCodeMeta[];
+
+export function lintCodes(): LintCode[];
+
+export function lintTokens(tokens: Token[], options?: LintOptions | null): LintResult;
+
+export function lintUsfm(source: string, options?: LintOptions | null): LintResult;
+
+export function markerCatalog(): UsfmMarkerCatalog;
+
+export function markerInfo(marker: string): MarkerInfo;
+
+export function revertDiffBlock(baseline: Token[], current: Token[], block_id: string, options?: BuildSidBlocksOptions | null): Token[];
+
+export function revertDiffBlocks(baseline: Token[], current: Token[], block_ids: string[], options?: BuildSidBlocksOptions | null): Token[];
+
+export function tokensToHtml(tokens: Token[], options?: HtmlOptions | null): string;
+
+export function tokensToUsfm(tokens: Token[]): string;

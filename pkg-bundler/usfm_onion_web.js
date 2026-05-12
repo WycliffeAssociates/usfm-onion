@@ -7,4 +7,3 @@ wasm.__wbindgen_start();
 export {
     ParsedUsfm, UsfmMarkerCatalog, applyTokenFix, diffTokens, diffUsfm, diffUsfmByChapter, formatRuleMeta, formatRules, formatTokens, formatTokensMut, formatUsfm, isKnownMarker, lintCodeMeta, lintCodes, lintTokens, lintUsfm, markerCatalog, markerInfo, parse, revertDiffBlock, revertDiffBlocks, tokensToHtml, tokensToUsfm
 } from "./usfm_onion_web_bg.js";
-export { wasm as __wasm }
