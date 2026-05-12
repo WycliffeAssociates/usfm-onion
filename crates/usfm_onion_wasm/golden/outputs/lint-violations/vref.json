@@ -1,1 +1,6 @@
-{}
+{
+  "GEN 1:1": "word with no space after marker",
+  "GEN 1:2": "verse with    excess   whitespace",
+  "GEN 1:3": "verse three",
+  "GEN 2:1": "chapter two starts here"
+}

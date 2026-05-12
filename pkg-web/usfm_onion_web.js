@@ -50,15 +50,12 @@ export class ParsedUsfm {
     /**
      * @param {ParsedUsfm} other
      * @param {BuildSidBlocksOptions | null} [options]
-     * @returns {any}
+     * @returns {DiffsByChapterMap}
      */
     diffByChapter(other, options) {
         _assertClass(other, ParsedUsfm);
         const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        return ret;
     }
     /**
      * @param {FormatOptions | null} [options]
@@ -162,14 +159,11 @@ export class ParsedUsfm {
         }
     }
     /**
-     * @returns {any}
+     * @returns {VrefMap}
      */
     toVref() {
         const ret = wasm.parsedusfm_toVref(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
+        return ret;
     }
     /**
      * @returns {Token[]}
@@ -285,7 +279,7 @@ export function diffUsfm(left, right, options) {
  * @param {string} left
  * @param {string} right
  * @param {BuildSidBlocksOptions | null} [options]
- * @returns {any}
+ * @returns {DiffsByChapterMap}
  */
 export function diffUsfmByChapter(left, right, options) {
     const ptr0 = passStringToWasm0(left, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -293,10 +287,7 @@ export function diffUsfmByChapter(left, right, options) {
     const ptr1 = passStringToWasm0(right, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
+    return ret;
 }
 
 /**
@@ -592,19 +583,9 @@ function __wbg_get_imports() {
             const ret = JSON.stringify(arg0);
             return ret;
         }, arguments); },
-        __wbindgen_cast_0000000000000001: function(arg0) {
-            // Cast intrinsic for `F64 -> Externref`.
-            const ret = arg0;
-            return ret;
-        },
-        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
-            return ret;
-        },
-        __wbindgen_cast_0000000000000003: function(arg0) {
-            // Cast intrinsic for `U64 -> Externref`.
-            const ret = BigInt.asUintN(64, arg0);
             return ret;
         },
         __wbindgen_init_externref_table: function() {

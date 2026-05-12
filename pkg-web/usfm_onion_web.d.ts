@@ -1,371 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export type Span = { start: number; end: number };
-export type TokenKind =
-| "newline"
-| "optBreak"
-| "marker"
-| "endMarker"
-| "milestone"
-| "milestoneEnd"
-| "bookCode"
-| "number"
-| "text"
-| "attributeList";
-export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
-export type MarkerKind =
-| "paragraph"
-| "note"
-| "character"
-| "header"
-| "chapter"
-| "verse"
-| "milestoneStart"
-| "milestoneEnd"
-| "sidebarStart"
-| "sidebarEnd"
-| "figure"
-| "meta"
-| "periph"
-| "tableRow"
-| "tableCell"
-| "unknown";
-export type MarkerCategory =
-| "document"
-| "paragraph"
-| "character"
-| "noteContainer"
-| "noteSubmarker"
-| "chapter"
-| "verse"
-| "milestoneStart"
-| "milestoneEnd"
-| "figure"
-| "sidebarStart"
-| "sidebarEnd"
-| "periph"
-| "meta"
-| "tableRow"
-| "tableCell"
-| "header"
-| "unknown";
-export type MarkerNoteFamily = "footnote" | "crossReference";
-export type MarkerNoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
-export type MarkerInlineContext = "para" | "section" | "list" | "table";
-export type MarkerFamily =
-| "footnote"
-| "crossReference"
-| "sectionParagraph"
-| "listParagraph"
-| "tableCell"
-| "milestone"
-| "sidebar";
-export type MarkerFamilyRole =
-| "canonical"
-| "numberedVariant"
-| "nestedVariant"
-| "milestoneStart"
-| "milestoneEnd"
-| "alias";
-export type BlockBehavior =
-| "none"
-| "paragraph"
-| "tableRow"
-| "tableCell"
-| "sidebarStart"
-| "sidebarEnd";
-export type ClosingBehavior =
-| "none"
-| "requiredExplicit"
-| "optionalExplicitUntilNoteEnd"
-| "selfClosingMilestone";
-export type SpecContext =
-| "scripture"
-| "bookIdentification"
-| "bookHeaders"
-| "bookTitles"
-| "bookIntroduction"
-| "bookIntroductionEndTitles"
-| "bookChapterLabel"
-| "chapterContent"
-| "peripheral"
-| "peripheralContent"
-| "peripheralDivision"
-| "chapter"
-| "verse"
-| "section"
-| "para"
-| "list"
-| "table"
-| "sidebar"
-| "footnote"
-| "crossReference";
-export type StructuralScopeKind =
-| "unknown"
-| "header"
-| "block"
-| "note"
-| "character"
-| "milestone"
-| "chapter"
-| "verse"
-| "tableRow"
-| "tableCell"
-| "sidebar"
-| "periph"
-| "meta";
-export type LintCategory = "document" | "structure" | "context" | "numbering";
-export type LintSeverity = "error" | "warning";
-export type LintIssueType = "usfm" | "content";
-export type LintCode =
-| "missing-id-marker"
-| "duplicate-id-marker"
-| "id-marker-not-at-file-start"
-| "empty-paragraph"
-| "missing-chapter-number"
-| "missing-verse-number"
-| "verse-is-empty"
-| "unknown-token"
-| "unknown-marker"
-| "unknown-close-marker"
-| "content-before-first-chapter"
-| "verse-outside-explicit-paragraph"
-| "note-submarker-outside-note"
-| "metadata-outside-target"
-| "marker-not-valid-in-context"
-| "missing-milestone-self-close"
-| "stray-close-marker"
-| "misnested-close-marker"
-| "implicitly-closed-marker"
-| "unclosed-marker"
-| "duplicate-chapter-number"
-| "chapter-expected-increase-by-one"
-| "inconsistent-chapter-label"
-| "duplicate-verse-number"
-| "verse-expected-increase-by-one"
-| "invalid-number-range"
-| "number-range-not-preceded-by-marker-expecting-number"
-| "missing-whitespace-before-marker"
-| "missing-horizontal-whitespace-after-marker-name"
-| "missing-tag-end-delimiter-after-marker"
-| "excess-whitespace-around-marker"
-| "excess-whitespace-in-content"
-| "missing-content-space-after-close-marker"
-| "verse-in-section-or-other-paragraph";
-export type FormatRule =
-| "recover-malformed-markers"
-| "collapse-whitespace-in-text"
-| "ensure-inline-separators"
-| "remove-duplicate-verse-numbers"
-| "normalize-spacing-after-paragraph-markers"
-| "remove-unwanted-linebreaks"
-| "bridge-consecutive-verse-markers"
-| "remove-orphan-empty-verse-before-contentful-verse"
-| "remove-bridge-verse-enumerators"
-| "move-chapter-label-after-chapter-marker"
-| "insert-default-paragraph-after-chapter-intro"
-| "remove-empty-paragraphs"
-| "insert-structural-linebreaks"
-| "collapse-consecutive-linebreaks"
-| "normalize-marker-whitespace-at-line-start";
-export type HtmlNoteMode = "extracted" | "inline";
-export type HtmlCallerStyle = "numeric" | "alphaLower" | "alphaUpper" | "romanLower" | "romanUpper" | "source";
-export type HtmlCallerScope = "documentSequential" | "verseSequential";
-export type DiffStatus = "added" | "deleted" | "modified" | "unchanged";
-export type DiffTokenChange = "unchanged" | "added" | "deleted" | "modified";
-export type DiffUndoSide = "original" | "current";
-
-export interface AttributeItem {
-    span: Span;
-    text: string;
-    key: string;
-    value: string;
-}
-
-export interface MarkerMetadata {
-    canonical?: string;
-    kind?: string;
-    family?: MarkerFamily;
-}
-
-export interface StructuralMarkerInfo {
-    scopeKind: StructuralScopeKind;
-    inlineContext?: MarkerInlineContext;
-    noteContext?: SpecContext;
-}
-
-export interface NumberInfo {
-    start: number;
-    end?: number;
-    kind: NumberRangeKind;
-}
-
-export interface Token {
-    id: string;
-    kind: TokenKind;
-    text: string;
-    span?: Span;
-    sid?: string;
-    marker?: string;
-    nested?: boolean;
-    markerMetadata?: MarkerMetadata;
-    structural?: StructuralMarkerInfo;
-    numberInfo?: NumberInfo;
-    bookCode?: string;
-    bookCodeValid?: boolean;
-    attributes?: AttributeItem[];
-}
-
-export type FormatToken = Token;
-
-export interface CstNode {
-    tokenIndex: number;
-    children: CstNode[];
-}
-
-export interface CstDocument {
-    tokens: Token[];
-    roots: CstNode[];
-}
-
-export interface LintSuppression {
-    code: LintCode;
-    sid: string;
-}
-
-export interface LintOptions {
-    enabledCodes?: LintCode[];
-    disabledCodes?: LintCode[];
-    suppressed?: LintSuppression[];
-    allowImplicitChapterContentVerse?: boolean;
-}
-
-export interface LintIssue {
-    code: LintCode;
-    category: LintCategory;
-    severity: LintSeverity;
-    issueType: LintIssueType;
-    message: string;
-    messageParams: Record<string, string>;
-    span?: Span;
-    relatedSpan?: Span;
-    tokenId?: string;
-    relatedTokenId?: string;
-    sid?: string;
-    marker?: string;
-    fix?: TokenFix;
-}
-
-export interface LintSummary {
-    byCategory: Partial<Record<LintCategory, number>>;
-    bySeverity: Partial<Record<LintSeverity, number>>;
-    byIssueType: Partial<Record<LintIssueType, number>>;
-    totalCount: number;
-    suppressedCount: number;
-}
-
-export interface LintResult {
-    issues: LintIssue[];
-    summary: LintSummary;
-}
-
-export type TokenFix =
-| {
-    type: "replaceToken";
-    code: string;
-    label: string;
-    labelParams: Record<string, string>;
-    targetTokenId: string;
-    replacements: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
-}
-| {
-    type: "deleteToken";
-    code: string;
-    label: string;
-    labelParams: Record<string, string>;
-    targetTokenId: string;
-}
-| {
-    type: "insertAfter";
-    code: string;
-    label: string;
-    labelParams: Record<string, string>;
-    targetTokenId: string;
-    insert: { kind: TokenKind; text: string; marker?: string; sid?: string }[];
-};
-
-
-export interface FormatOptions {
-    recoverMalformedMarkers?: boolean;
-    collapseWhitespaceInText?: boolean;
-    ensureInlineSeparators?: boolean;
-    removeDuplicateVerseNumbers?: boolean;
-    normalizeSpacingAfterParagraphMarkers?: boolean;
-    removeUnwantedLinebreaks?: boolean;
-    bridgeConsecutiveVerseMarkers?: boolean;
-    removeOrphanEmptyVerseBeforeContentfulVerse?: boolean;
-    removeBridgeVerseEnumerators?: boolean;
-    moveChapterLabelAfterChapterMarker?: boolean;
-    insertDefaultParagraphAfterChapterIntro?: boolean;
-    removeEmptyParagraphs?: boolean;
-    insertStructuralLinebreaks?: boolean;
-    collapseConsecutiveLinebreaks?: boolean;
-    normalizeMarkerWhitespaceAtLineStart?: boolean;
-}
-
-export interface FormatResult {
-    tokens: FormatToken[];
-    usfm: string;
-}
-
-export interface HtmlOptions {
-    wrapRoot?: boolean;
-    preferNativeElements?: boolean;
-    noteMode?: HtmlNoteMode;
-    callerStyle?: HtmlCallerStyle;
-    callerScope?: HtmlCallerScope;
-}
-
-export interface BuildSidBlocksOptions {
-    allowEmptySid?: boolean;
-}
-
-export interface SidBlock {
-    blockId: string;
-    semanticSid: string;
-    start: number;
-    endExclusive: number;
-    prevBlockId?: string;
-    textFull: string;
-}
-
-export interface TokenAlignment {
-    change: DiffTokenChange;
-    counterpartIndex?: number;
-}
-
-export interface ChapterTokenDiff {
-    blockId: string;
-    semanticSid: string;
-    status: DiffStatus;
-    original?: SidBlock;
-    current?: SidBlock;
-    originalText: string;
-    currentText: string;
-    originalTextOnly: string;
-    currentTextOnly: string;
-    isWhitespaceChange: boolean;
-    isUsfmStructureChange: boolean;
-    originalTokens: Token[];
-    currentTokens: Token[];
-    originalAlignment: TokenAlignment[];
-    currentAlignment: TokenAlignment[];
-    undoSide: DiffUndoSide;
-}
-
-export type DiffsByChapterMap = Record<string, Record<number, ChapterTokenDiff[]>>;
-export type VrefMap = Record<string, string>;
+// JSON Value type and USJ document tree.
+//
+// Mirroring the native `UsjDocument` shape as a real Tsify type is
+// follow-up work; until that lands, USJ is the one return type that
+// is still emitted as a TS_TYPES hand-written declaration. Every
+// other public shape is tsify-derived.
 
 export type Value =
 | string
@@ -402,86 +43,16 @@ export type UsjElement =
 | ({ type: "unmatched"; marker: string; content?: UsjNode[] } & Record<string, Value>)
 | ({ type: "optbreak" } & Record<string, Value>);
 
-export interface LintCodeMeta {
-    code: LintCode;
-    category: LintCategory;
-    severity: LintSeverity;
-    issueType: LintIssueType;
-}
 
-export interface FormatRuleMeta {
-    code: FormatRule;
-    labelKey: string;
-}
+/**
+ * Diff result grouped by book and chapter: `{ \"GEN\": { 1: [...], 2: [...] } }`.
+ */
+export type DiffsByChapterMap = Record<string, Record<number, ChapterTokenDiff[]>>;
 
-export interface MarkerInfo {
-    marker: string;
-    canonical?: string;
-    known: boolean;
-    deprecated: boolean;
-    category: MarkerCategory;
-    kind: MarkerKind;
-    family?: MarkerFamily;
-    familyRole?: MarkerFamilyRole;
-    noteFamily?: MarkerNoteFamily;
-    noteSubkind?: MarkerNoteSubkind;
-    inlineContext?: MarkerInlineContext;
-    defaultAttribute?: string;
-    contexts: SpecContext[];
-    blockBehavior?: BlockBehavior;
-    closingBehavior?: ClosingBehavior;
-    source?: string;
-}
-
-export interface LintLocalizations extends Partial<Record<LintCode, string>> {}
-export interface FormatLocalizations extends Partial<Record<FormatRule, string>> {}
-
-export class ParsedUsfm {
-    private constructor();
-    tokens(): Token[];
-    cst(): CstDocument;
-    lint(options?: LintOptions): LintResult;
-    applyTokenFix(fix: TokenFix): Token[];
-    revertDiffBlock(current: ParsedUsfm, blockId: string, options?: BuildSidBlocksOptions): Token[];
-    format(options?: FormatOptions): string;
-    toUsfm(): string;
-    toUsj(): UsjDocument;
-    toUsx(): string;
-    toHtml(options?: HtmlOptions): string;
-    toVref(): VrefMap;
-    diff(other: ParsedUsfm, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
-    diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions): DiffsByChapterMap;
-}
-
-export class UsfmMarkerCatalog {
-    private constructor();
-    all(): MarkerInfo[];
-    get(marker: string): MarkerInfo | undefined;
-    contains(marker: string): boolean;
-}
-
-export function parse(source: string): ParsedUsfm;
-export function lintUsfm(source: string, options?: LintOptions): LintResult;
-export function lintTokens(tokens: Token[], options?: LintOptions): LintResult;
-export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
-export function formatUsfm(source: string, options?: FormatOptions): string;
-export function formatTokens(tokens: FormatToken[], options?: FormatOptions): FormatResult;
-export function formatTokensMut(tokens: FormatToken[], options?: FormatOptions): FormatToken[];
-export function tokensToUsfm(tokens: Token[]): string;
-export function tokensToHtml(tokens: Token[], options?: HtmlOptions): string;
-export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions): ChapterTokenDiff[];
-export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions): DiffsByChapterMap;
-export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions): ChapterTokenDiff[];
-export function revertDiffBlock(baseline: Token[], current: Token[], blockId: string, options?: BuildSidBlocksOptions): Token[];
-export function revertDiffBlocks(baseline: Token[], current: Token[], blockIds: string[], options?: BuildSidBlocksOptions): Token[];
-export function markerCatalog(): UsfmMarkerCatalog;
-export function markerInfo(marker: string): MarkerInfo;
-export function isKnownMarker(marker: string): boolean;
-export function lintCodes(): LintCode[];
-export function lintCodeMeta(): LintCodeMeta[];
-export function formatRules(): FormatRule[];
-export function formatRuleMeta(): FormatRuleMeta[];
-
+/**
+ * Verse-reference map: `{ \"GEN 1:1\": \"...\", \"GEN 1:2\": \"...\", ... }`.
+ */
+export type VrefMap = Record<string, string>;
 
 export interface AttributeItem {
     span: Span;
@@ -738,11 +309,41 @@ export type TokenFix = { type: "replaceToken"; code: string; label: string; labe
 export type TokenKind = "newline" | "optBreak" | "marker" | "endMarker" | "milestone" | "milestoneEnd" | "bookCode" | "number" | "text";
 
 
+export class ParsedUsfm {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    applyTokenFix(fix: TokenFix): Token[];
+    cst(): CstDocument;
+    diff(other: ParsedUsfm, options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
+    diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions | null): DiffsByChapterMap;
+    format(options?: FormatOptions | null): string;
+    lint(options?: LintOptions | null): LintResult;
+    revertDiffBlock(current: ParsedUsfm, block_id: string, options?: BuildSidBlocksOptions | null): Token[];
+    toHtml(options?: HtmlOptions | null): string;
+    toUsfm(): string;
+    toUsj(): any;
+    toUsx(): string;
+    toVref(): VrefMap;
+    tokens(): Token[];
+}
+
+export class UsfmMarkerCatalog {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    all(): MarkerInfo[];
+    contains(marker: string): boolean;
+    get(marker: string): MarkerInfo | undefined;
+}
+
 export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
 
 export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
 
 export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
+
+export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions | null): DiffsByChapterMap;
 
 export function formatRuleMeta(): FormatRuleMeta[];
 
@@ -753,6 +354,8 @@ export function formatTokens(tokens: Token[], options?: FormatOptions | null): F
 export function formatTokensMut(tokens: Token[], options?: FormatOptions | null): Token[];
 
 export function formatUsfm(source: string, options?: FormatOptions | null): string;
+
+export function isKnownMarker(marker: string): boolean;
 
 export function lintCodeMeta(): LintCodeMeta[];
 
@@ -765,6 +368,8 @@ export function lintUsfm(source: string, options?: LintOptions | null): LintResu
 export function markerCatalog(): UsfmMarkerCatalog;
 
 export function markerInfo(marker: string): MarkerInfo;
+
+export function parse(source: string): ParsedUsfm;
 
 export function revertDiffBlock(baseline: Token[], current: Token[], block_id: string, options?: BuildSidBlocksOptions | null): Token[];
 
@@ -783,7 +388,7 @@ export interface InitOutput {
     readonly applyTokenFix: (a: number, b: number, c: any) => [number, number];
     readonly diffTokens: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly diffUsfm: (a: number, b: number, c: number, d: number, e: number) => [number, number];
-    readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly formatRuleMeta: () => [number, number];
     readonly formatRules: () => [number, number];
     readonly formatTokens: (a: number, b: number, c: number) => any;
@@ -799,7 +404,7 @@ export interface InitOutput {
     readonly parsedusfm_applyTokenFix: (a: number, b: any) => [number, number];
     readonly parsedusfm_cst: (a: number) => any;
     readonly parsedusfm_diff: (a: number, b: number, c: number) => [number, number];
-    readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => [number, number, number];
+    readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => any;
     readonly parsedusfm_format: (a: number, b: number) => [number, number];
     readonly parsedusfm_lint: (a: number, b: number) => any;
     readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number) => [number, number];
@@ -807,7 +412,7 @@ export interface InitOutput {
     readonly parsedusfm_toUsfm: (a: number) => [number, number];
     readonly parsedusfm_toUsj: (a: number) => [number, number, number];
     readonly parsedusfm_toUsx: (a: number) => [number, number, number, number];
-    readonly parsedusfm_toVref: (a: number) => [number, number, number];
+    readonly parsedusfm_toVref: (a: number) => any;
     readonly parsedusfm_tokens: (a: number) => [number, number];
     readonly revertDiffBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly revertDiffBlocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
