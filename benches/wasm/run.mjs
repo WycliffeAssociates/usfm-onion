@@ -82,6 +82,22 @@ const ops = [
   ["diff/string", () => pkg.diffUsfm(source, editedSource)],
   ["diff/tokens", () => pkg.diffTokens(tokens, editedTokens)],
   ["vref/string", () => pkg.parse(source).toVref()],
+  // Editor's parsedToProjectedDocument pattern: one ParsedUsfm, lint then
+  // tokens. Before the cache this paid two parses per call; after, one.
+  ["editor/lint+tokens", () => {
+    const p = pkg.parse(source);
+    p.lint();
+    p.tokens();
+  }],
+  // Workspace-open pattern: same parsed, multiple downstream views.
+  ["editor/full-open", () => {
+    const p = pkg.parse(source);
+    p.tokens();
+    p.lint();
+    p.cst();
+    p.toHtml();
+    p.toVref();
+  }],
   // Marshalling-only micro-benches: isolate FFI hop cost.
   ["tokens/marshal-out", () => pkg.parse(source).tokens()],
   ["tokens/marshal-in", () => pkg.tokensToUsfm(tokens)],

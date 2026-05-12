@@ -12,18 +12,20 @@ for the native side; same fixture (en_ulb/43-LUK.usfm), same per-op shape.
 
 | Operation              |    Median |  Throughput |
 | ---------------------- | --------: | ----------: |
-| `parse/string        ` |  11.77 ms |   11.8 MiB/s |
-| `cst/string          ` |  11.38 ms |   12.2 MiB/s |
-| `usj/string          ` |   3.78 ms |   36.6 MiB/s |
-| `usx/string          ` |   2.35 ms |   58.8 MiB/s |
-| `html/string         ` |   2.86 ms |   48.4 MiB/s |
-| `html/tokens         ` |  13.40 ms |   10.3 MiB/s |
-| `lint/string         ` |   2.72 ms |   50.9 MiB/s |
-| `lint/tokens         ` |  12.81 ms |   10.8 MiB/s |
-| `format/string       ` |   2.92 ms |   47.3 MiB/s |
-| `format/tokens       ` |  20.10 ms |    6.9 MiB/s |
-| `diff/string         ` |  39.71 ms |    3.5 MiB/s |
-| `diff/tokens         ` |  55.27 ms |    2.5 MiB/s |
-| `vref/string         ` |   1.64 ms |   84.4 MiB/s |
-| `tokens/marshal-out  ` |  11.81 ms |   11.7 MiB/s |
-| `tokens/marshal-in   ` |  10.76 ms |   12.9 MiB/s |
+| `parse/string        ` |  12.20 ms |   11.3 MiB/s |
+| `cst/string          ` |  11.43 ms |   12.1 MiB/s |
+| `usj/string          ` |   3.77 ms |   36.7 MiB/s |
+| `usx/string          ` |   2.31 ms |   59.8 MiB/s |
+| `html/string         ` |   2.89 ms |   47.9 MiB/s |
+| `html/tokens         ` |  13.22 ms |   10.5 MiB/s |
+| `lint/string         ` |   2.71 ms |   51.0 MiB/s |
+| `lint/tokens         ` |  12.82 ms |   10.8 MiB/s |
+| `format/string       ` |   2.89 ms |   47.8 MiB/s |
+| `format/tokens       ` |  20.14 ms |    6.9 MiB/s |
+| `diff/string         ` |  40.86 ms |    3.4 MiB/s |
+| `diff/tokens         ` |  54.41 ms |    2.5 MiB/s |
+| `vref/string         ` |   1.63 ms |   85.1 MiB/s |
+| `editor/lint+tokens  ` |  14.22 ms |    9.7 MiB/s |
+| `editor/full-open    ` |  30.15 ms |    4.6 MiB/s |
+| `tokens/marshal-out  ` |  11.63 ms |   11.9 MiB/s |
+| `tokens/marshal-in   ` |  10.74 ms |   12.9 MiB/s |
