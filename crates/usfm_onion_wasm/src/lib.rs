@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_wasm_bindgen::{from_value as from_js_value, to_value as swb_to_js_value};
+use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::to_value as swb_to_js_value;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
@@ -956,7 +956,7 @@ pub struct VrefMap(pub std::collections::BTreeMap<String, String>);
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct Span {
+pub struct Span {
     start: u32,
     end: u32,
 }
@@ -964,7 +964,7 @@ struct Span {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct MarkerMetadata {
+pub struct MarkerMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     canonical: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -976,7 +976,7 @@ struct MarkerMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct AttributeItem {
+pub struct AttributeItem {
     span: Span,
     text: String,
     key: String,
@@ -986,7 +986,7 @@ struct AttributeItem {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct StructuralMarkerInfo {
+pub struct StructuralMarkerInfo {
     scope_kind: StructuralScopeKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     inline_context: Option<InlineContext>,
@@ -997,7 +997,7 @@ struct StructuralMarkerInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct NumberInfo {
+pub struct NumberInfo {
     start: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     end: Option<u32>,
@@ -1007,7 +1007,7 @@ struct NumberInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct Token {
+pub struct Token {
     id: String,
     kind: TokenKind,
     text: String,
@@ -1036,7 +1036,7 @@ struct Token {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct CstNode {
+pub struct CstNode {
     token_index: usize,
     children: Vec<CstNode>,
 }
@@ -1044,7 +1044,7 @@ struct CstNode {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct CstDocument {
+pub struct CstDocument {
     tokens: Vec<Token>,
     roots: Vec<CstNode>,
 }
@@ -1052,7 +1052,7 @@ struct CstDocument {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintSuppression {
+pub struct LintSuppression {
     code: LintCode,
     sid: String,
 }
@@ -1060,7 +1060,7 @@ struct LintSuppression {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintOptions {
+pub struct LintOptions {
     #[serde(default)]
     enabled_codes: Option<Vec<LintCode>>,
     #[serde(default)]
@@ -1074,7 +1074,7 @@ struct LintOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintIssue {
+pub struct LintIssue {
     code: LintCode,
     category: LintCategory,
     severity: LintSeverity,
@@ -1101,7 +1101,7 @@ struct LintIssue {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintSummary {
+pub struct LintSummary {
     by_category: std::collections::BTreeMap<LintCategory, usize>,
     by_severity: std::collections::BTreeMap<LintSeverity, usize>,
     by_issue_type: std::collections::BTreeMap<LintIssueType, usize>,
@@ -1112,7 +1112,7 @@ struct LintSummary {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintResult {
+pub struct LintResult {
     issues: Vec<LintIssue>,
     summary: LintSummary,
 }
@@ -1120,7 +1120,7 @@ struct LintResult {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
-enum TokenFix {
+pub enum TokenFix {
     ReplaceToken {
         code: String,
         label: String,
@@ -1146,7 +1146,7 @@ enum TokenFix {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct TokenTemplate {
+pub struct TokenTemplate {
     kind: TokenKind,
     text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1158,7 +1158,7 @@ struct TokenTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct FormatOptions {
+pub struct FormatOptions {
     #[serde(default)]
     recover_malformed_markers: Option<bool>,
     #[serde(default)]
@@ -1194,7 +1194,7 @@ struct FormatOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct FormatResult {
+pub struct FormatResult {
     tokens: Vec<Token>,
     usfm: String,
 }
@@ -1202,7 +1202,7 @@ struct FormatResult {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct HtmlOptions {
+pub struct HtmlOptions {
     #[serde(default)]
     wrap_root: bool,
     #[serde(default)]
@@ -1218,7 +1218,7 @@ struct HtmlOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct BuildSidBlocksOptions {
+pub struct BuildSidBlocksOptions {
     #[serde(default)]
     allow_empty_sid: Option<bool>,
 }
@@ -1226,7 +1226,7 @@ struct BuildSidBlocksOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct SidBlock {
+pub struct SidBlock {
     block_id: String,
     semantic_sid: String,
     start: usize,
@@ -1239,7 +1239,7 @@ struct SidBlock {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct TokenAlignment {
+pub struct TokenAlignment {
     change: DiffTokenChange,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     counterpart_index: Option<usize>,
@@ -1248,7 +1248,7 @@ struct TokenAlignment {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct ChapterTokenDiff {
+pub struct ChapterTokenDiff {
     block_id: String,
     semantic_sid: String,
     status: DiffStatus,
@@ -1272,7 +1272,7 @@ struct ChapterTokenDiff {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct LintCodeMeta {
+pub struct LintCodeMeta {
     code: LintCode,
     category: LintCategory,
     severity: LintSeverity,
@@ -1282,7 +1282,7 @@ struct LintCodeMeta {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct FormatRuleMeta {
+pub struct FormatRuleMeta {
     code: String,
     label_key: String,
 }
@@ -1290,7 +1290,7 @@ struct FormatRuleMeta {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-struct MarkerInfo {
+pub struct MarkerInfo {
     marker: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     canonical: Option<String>,
@@ -2373,17 +2373,6 @@ fn token_values_to_usfm(tokens: &[Token]) -> String {
 
 fn vref_to_object(map: NativeVrefMap) -> std::collections::BTreeMap<String, String> {
     map.into_iter().collect()
-}
-
-fn from_js_or_default<T>(value: JsValue) -> Result<T, JsError>
-where
-    T: DeserializeOwned + Default,
-{
-    if value.is_undefined() || value.is_null() {
-        Ok(T::default())
-    } else {
-        from_js_value(value).map_err(js_serde_error)
-    }
 }
 
 fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
