@@ -1654,7 +1654,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
     },
     MarkerSpec {
         marker: "qt-e",
-        kind: MarkerDefKind::Character,
+        kind: MarkerDefKind::Milestone,
         contexts: &[
             SpecContext::BookTitles,
             SpecContext::BookIntroduction,
@@ -1665,12 +1665,12 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
             SpecContext::Table,
         ],
         deprecated: false,
-        source: "repos_to_compare/tcdocs-main/markers/char/qt.adoc",
+        source: "repos_to_compare/tcdocs-main/markers/ms/qt.adoc",
         paragraph_category: None,
     },
     MarkerSpec {
         marker: "qt-s",
-        kind: MarkerDefKind::Character,
+        kind: MarkerDefKind::Milestone,
         contexts: &[
             SpecContext::BookTitles,
             SpecContext::BookIntroduction,
@@ -1681,7 +1681,7 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
             SpecContext::Table,
         ],
         deprecated: false,
-        source: "repos_to_compare/tcdocs-main/markers/char/qt.adoc",
+        source: "repos_to_compare/tcdocs-main/markers/ms/qt.adoc",
         paragraph_category: None,
     },
     MarkerSpec {

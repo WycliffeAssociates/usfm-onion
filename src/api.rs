@@ -640,8 +640,8 @@ mod tests {
             .lint(LintOptions::default())
             .issues
             .into_iter()
-            .find(|issue| issue.code == LintCode::MissingSeparatorAfterMarker)
-            .expect("expected missing-separator issue");
+            .find(|issue| issue.code == LintCode::MissingTagEndDelimiterAfterMarker)
+            .expect("expected missing-tag-end-delimiter issue");
         let fix = issue.fix.expect("expected concrete token fix");
         let fixed = TokenStream::from_tokens(malformed_tokens).apply_token_fix(&fix);
         assert_eq!(fixed.len(), 2);

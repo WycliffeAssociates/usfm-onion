@@ -70,4 +70,4 @@ The pipeline is a layered onion. Each layer is a pure function over the previous
 
 ## Deferred work / planning docs
 
-`docs/plan-*.md` capture roadmaps that have been agreed but not yet implemented. They're real (recently landed as roadmaps, not as code) — treat as design context, not as a description of current behavior. Current plans: marker-data curation, whitespace lint rules, walker architecture, CLI.
+`docs/plan-*.md` capture roadmaps that have been agreed but not yet implemented. They're real (recently landed as roadmaps, not as code) — treat as design context, not as a description of current behavior. Current plans: marker-data curation, whitespace lint rules, walker architecture, CLI, wasm bindings (tsify migration + parity benches).

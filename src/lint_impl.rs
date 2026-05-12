@@ -127,7 +127,6 @@ pub enum LintCode {
     MissingIdMarker,
     DuplicateIdMarker,
     IdMarkerNotAtFileStart,
-    MissingSeparatorAfterMarker,
     EmptyParagraph,
     MissingChapterNumber,
     MissingVerseNumber,
@@ -170,6 +169,18 @@ pub enum LintCode {
     /// whitespace or a newline is required *before* the marker, but
     /// none is present.
     MissingWhitespaceBeforeMarker,
+    /// Spec-driven: the marker's row demands horizontal whitespace
+    /// (or any whitespace) immediately after the marker name, but the
+    /// following token does not start with the required whitespace.
+    /// Covers cases like `\c1` (chapter number jammed against marker)
+    /// or `\v1Text` (verse marker against number, also against text).
+    MissingHorizontalWhitespaceAfterMarkerName,
+    /// Spec-driven: the marker's row demands a tag-end delimiter
+    /// (whitespace, end-of-input, or `|` attribute opener) immediately
+    /// after the marker name, but the following token is none of those.
+    /// Covers paragraph / header / sidebar / note markers jammed
+    /// against text — e.g. `\p word` is fine, `\pword` is not.
+    MissingTagEndDelimiterAfterMarker,
     /// Spec-driven: the actual whitespace run around the marker
     /// exceeds what the requirement allows (e.g. five spaces where the
     /// spec wants exactly one).
@@ -197,7 +208,6 @@ impl LintCode {
             Self::MissingIdMarker => "missing-id-marker",
             Self::DuplicateIdMarker => "duplicate-id-marker",
             Self::IdMarkerNotAtFileStart => "id-marker-not-at-file-start",
-            Self::MissingSeparatorAfterMarker => "missing-separator-after-marker",
             Self::EmptyParagraph => "empty-paragraph",
             Self::MissingChapterNumber => "missing-chapter-number",
             Self::MissingVerseNumber => "missing-verse-number",
@@ -225,6 +235,10 @@ impl LintCode {
                 "number-range-not-preceded-by-marker-expecting-number"
             }
             Self::MissingWhitespaceBeforeMarker => "missing-whitespace-before-marker",
+            Self::MissingHorizontalWhitespaceAfterMarkerName => {
+                "missing-horizontal-whitespace-after-marker-name"
+            }
+            Self::MissingTagEndDelimiterAfterMarker => "missing-tag-end-delimiter-after-marker",
             Self::ExcessWhitespaceAroundMarker => "excess-whitespace-around-marker",
             Self::ExcessWhitespaceInContent => "excess-whitespace-in-content",
             Self::MissingContentSpaceAfterCloseMarker => {
@@ -244,9 +258,6 @@ impl LintCode {
                 "This file has more than one \\id; only one is allowed."
             }
             Self::IdMarkerNotAtFileStart => "\\id must come before any other content.",
-            Self::MissingSeparatorAfterMarker => {
-                "\\{marker} needs a space before the text that follows."
-            }
             Self::EmptyParagraph => {
                 "\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between."
             }
@@ -308,6 +319,12 @@ impl LintCode {
             Self::MissingWhitespaceBeforeMarker => {
                 "\\{marker} needs a space or newline before it."
             }
+            Self::MissingHorizontalWhitespaceAfterMarkerName => {
+                "\\{marker} needs a space after the marker name."
+            }
+            Self::MissingTagEndDelimiterAfterMarker => {
+                "\\{marker} needs a space before the text that follows."
+            }
             Self::ExcessWhitespaceAroundMarker => {
                 "Too much whitespace {position, select, before {before} after {after} other {around}} \\{marker}."
             }
@@ -329,8 +346,7 @@ impl LintCode {
             | Self::ContentBeforeFirstChapter
             | Self::DuplicateIdMarker
             | Self::IdMarkerNotAtFileStart => LintCategory::Document,
-            Self::MissingSeparatorAfterMarker
-            | Self::EmptyParagraph
+            Self::EmptyParagraph
             | Self::VerseIsEmpty
             | Self::UnknownToken
             | Self::MissingChapterNumber
@@ -343,6 +359,8 @@ impl LintCode {
             | Self::UnknownMarker
             | Self::UnknownCloseMarker
             | Self::MissingWhitespaceBeforeMarker
+            | Self::MissingHorizontalWhitespaceAfterMarkerName
+            | Self::MissingTagEndDelimiterAfterMarker
             | Self::ExcessWhitespaceAroundMarker
             | Self::ExcessWhitespaceInContent
             | Self::MissingContentSpaceAfterCloseMarker => LintCategory::Structure,
@@ -384,7 +402,6 @@ impl LintCode {
             | Self::NumberRangeNotPrecededByMarkerExpectingNumber
             | Self::InconsistentChapterLabel => LintIssueType::Content,
             Self::MissingIdMarker
-            | Self::MissingSeparatorAfterMarker
             | Self::EmptyParagraph
             | Self::UnknownToken
             | Self::ContentBeforeFirstChapter
@@ -402,6 +419,8 @@ impl LintCode {
             | Self::MarkerNotValidInContext
             | Self::VerseOutsideExplicitParagraph
             | Self::MissingWhitespaceBeforeMarker
+            | Self::MissingHorizontalWhitespaceAfterMarkerName
+            | Self::MissingTagEndDelimiterAfterMarker
             | Self::ExcessWhitespaceAroundMarker
             | Self::ExcessWhitespaceInContent
             | Self::MissingContentSpaceAfterCloseMarker
@@ -720,10 +739,6 @@ impl DocumentLintState {
         self.note_stack.last().copied()
     }
 
-    fn current_validation_context_for<T: LintableToken>(&self, token: &T) -> SpecContext {
-        self.current_validation_context_for_kind(token_marker_kind(token))
-    }
-
     fn current_validation_context_for_kind(&self, kind: MarkerKind) -> SpecContext {
         let root_context = self.current_root_context();
         let effective = self
@@ -866,9 +881,6 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     let enabled = EnabledCodes::new(&options);
     let mut issues = Vec::new();
 
-    if enabled.has(LintCode::MissingSeparatorAfterMarker) {
-        lint_missing_separator_after_marker(tokens, &mut issues);
-    }
     if enabled.has(LintCode::EmptyParagraph) {
         lint_empty_paragraphs(tokens, &mut issues);
     }
@@ -1023,46 +1035,6 @@ fn build_replacement_tokens<T: FormattableToken>(
         built.push(token);
     }
     built
-}
-
-fn lint_missing_separator_after_marker<T: LintableToken>(
-    tokens: &[T],
-    issues: &mut Vec<LintIssue>,
-) {
-    for window in tokens.windows(2) {
-        let [current, next] = window else { continue };
-        if current.kind() != TokenKind::Marker || next.kind() != TokenKind::Text {
-            continue;
-        }
-        let Some(marker) = current.marker() else {
-            continue;
-        };
-        let marker_kind = token_marker_kind(current);
-        if matches!(
-            marker_kind,
-            MarkerKind::MilestoneStart | MarkerKind::MilestoneEnd
-        ) {
-            continue;
-        }
-        if matches!(marker_kind, MarkerKind::Unknown) && marker.starts_with('z') {
-            continue;
-        }
-        if ends_with_horizontal_whitespace(current.text()) {
-            continue;
-        }
-        if starts_with_horizontal_whitespace(next.text()) {
-            continue;
-        }
-        issues.push(
-            issue(
-                LintCode::MissingSeparatorAfterMarker,
-                marker_params(marker),
-                current,
-                Some(next),
-            )
-            .with_fix(missing_separator_fix(next)),
-        );
-    }
 }
 
 fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
@@ -2024,13 +1996,22 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
     }
 }
 
-/// Whitespace rules driven by the `MARKER_WHITESPACE` spec table.
-/// Covers the four rules from `docs/plan-whitespace-lint-rules.md` that
-/// the existing `MissingSeparatorAfterMarker` doesn't already handle:
+/// Whitespace rules driven by `MARKER_WHITESPACE` plus per-
+/// `MarkerDefKind` defaults — every known marker has a profile, so
+/// these rules cover the full marker catalog rather than just the
+/// markers in the explicit table.
+///
+/// Covers the rules from `docs/plan-whitespace-lint-rules.md`:
 ///
 /// - **MissingWhitespaceBeforeMarker** (rule 1): the marker's row says
 ///   whitespace/newline is required *before*, but the prior token's
 ///   trailing text does not satisfy.
+/// - **MissingHorizontalWhitespaceAfterMarkerName** (rule 2): the
+///   marker's row says HS (or any WS) is required after the marker
+///   name, but the following token doesn't start with it.
+/// - **MissingTagEndDelimiterAfterMarker** (rule 3): the marker's row
+///   says a tag-end delimiter (WS, EOI, or `|`) is required after the
+///   marker name, but the following token is none of those.
 /// - **ExcessWhitespaceAroundMarker** (rule 4): the actual run of
 ///   whitespace before/after the marker is longer than the requirement
 ///   allows.
@@ -2051,9 +2032,11 @@ fn lint_whitespace_rules<T: LintableToken>(
         is_horizontal_whitespace_char, is_newline_char, is_sentence_ending_punctuation_char,
     };
 
-    // Spec-driven rules (1, 4) gated together — skip the
-    // `lookup_marker_whitespace` per-token cost when neither is enabled.
+    // Spec-driven rules (1, 2, 3, 4) gated together — skip the
+    // `lookup_marker_whitespace` per-token cost when none are enabled.
     let spec_rules_enabled = enabled.has(LintCode::MissingWhitespaceBeforeMarker)
+        || enabled.has(LintCode::MissingHorizontalWhitespaceAfterMarkerName)
+        || enabled.has(LintCode::MissingTagEndDelimiterAfterMarker)
         || enabled.has(LintCode::ExcessWhitespaceAroundMarker);
     let content_rule_enabled = enabled.has(LintCode::ExcessWhitespaceInContent);
 
@@ -2067,11 +2050,15 @@ fn lint_whitespace_rules<T: LintableToken>(
             && let Some(marker) = scan_excess_content_whitespace(token.text())
             && marker
         {
-            issues.push(simple_issue(
+            let mut issue = simple_issue(
                 LintCode::ExcessWhitespaceInContent,
                 MessageParams::default(),
                 token,
-            ));
+            );
+            if let Some(fix) = excess_content_whitespace_fix(token) {
+                issue = issue.with_fix(fix);
+            }
+            issues.push(issue);
         }
 
         if !spec_rules_enabled {
@@ -2112,28 +2099,141 @@ fn lint_whitespace_rules<T: LintableToken>(
                 _ => true,
             };
             if !satisfied {
-                issues.push(simple_issue(
+                let prefix = preferred_ws(spec.format_preference_before_open);
+                let mut issue = simple_issue(
                     LintCode::MissingWhitespaceBeforeMarker,
                     marker_params(marker),
                     token,
-                ));
+                );
+                if !prefix.is_empty() && token.id().is_some() {
+                    issue = issue.with_fix(prepend_ws_fix(
+                        "insert-whitespace-before-marker",
+                        "InsertWhitespaceBeforeMarker",
+                        token,
+                        prefix,
+                    ));
+                }
+                issues.push(issue);
+            }
+        }
+
+        // Rules 2 & 3: required whitespace immediately after the marker
+        // name. Rule 2 fires when the spec demands HS / newline / any
+        // WS; rule 3 fires when the spec demands a tag-end delimiter
+        // (WS, EOI, or the `|` attribute opener).
+        let after_name_satisfied_by_marker_token = matches!(
+            spec.required_after_open_name,
+            Req::AtLeastOneHorizontalWhitespace
+                | Req::AtLeastOneWhitespace
+                | Req::SingleNewline
+                | Req::AtLeastOneNewline
+                | Req::OptionalHorizontalWhitespace
+                | Req::OptionalWhitespace
+                | Req::TagEndDelimiter
+        ) && token
+            .text()
+            .chars()
+            .next_back()
+            .is_some_and(is_any_whitespace_char);
+
+        let next_token = tokens.get(index + 1);
+        let next_text = next_token.map(|n| n.text()).unwrap_or("");
+        let next_first = next_text.chars().next();
+
+        if !after_name_satisfied_by_marker_token {
+            match spec.required_after_open_name {
+                Req::AtLeastOneHorizontalWhitespace
+                | Req::AtLeastOneWhitespace
+                | Req::SingleNewline
+                | Req::AtLeastOneNewline
+                    if enabled.has(LintCode::MissingHorizontalWhitespaceAfterMarkerName) =>
+                {
+                    let satisfied = match spec.required_after_open_name {
+                        Req::AtLeastOneHorizontalWhitespace => {
+                            next_first.is_some_and(is_horizontal_whitespace_char)
+                        }
+                        Req::AtLeastOneWhitespace => {
+                            next_first.is_some_and(is_any_whitespace_char)
+                        }
+                        Req::SingleNewline | Req::AtLeastOneNewline => {
+                            next_first.is_some_and(is_newline_char)
+                        }
+                        _ => true,
+                    };
+                    if !satisfied
+                        && let Some(next) = next_token
+                    {
+                        let prefix = preferred_ws(spec.format_preference_after_open_name);
+                        let mut issue = simple_issue(
+                            LintCode::MissingHorizontalWhitespaceAfterMarkerName,
+                            marker_params(marker),
+                            token,
+                        );
+                        if !prefix.is_empty() && next.id().is_some() {
+                            issue = issue.with_fix(prepend_ws_fix(
+                                "insert-whitespace-after-marker-name",
+                                "InsertWhitespaceAfterMarkerName",
+                                next,
+                                prefix,
+                            ));
+                        }
+                        issues.push(issue);
+                    }
+                }
+                Req::TagEndDelimiter
+                    if enabled.has(LintCode::MissingTagEndDelimiterAfterMarker) =>
+                {
+                    let satisfied = match next_token {
+                        None => true, // EOI satisfies tag-end
+                        Some(_) => {
+                            next_first.is_some_and(is_any_whitespace_char)
+                                || matches!(next_first, Some('|'))
+                        }
+                    };
+                    if !satisfied
+                        && let Some(next) = next_token
+                    {
+                        let prefix = preferred_ws(spec.format_preference_after_open_name);
+                        let mut issue = simple_issue(
+                            LintCode::MissingTagEndDelimiterAfterMarker,
+                            marker_params(marker),
+                            token,
+                        );
+                        if !prefix.is_empty() && next.id().is_some() {
+                            issue = issue.with_fix(prepend_ws_fix(
+                                "insert-tag-end-delimiter-after-marker",
+                                "InsertTagEndDelimiterAfterMarker",
+                                next,
+                                prefix,
+                            ));
+                        }
+                        issues.push(issue);
+                    }
+                }
+                _ => {}
             }
         }
 
         // Rule 4: excess whitespace immediately after the marker name.
         // The "after" run lives at the start of the next token's text.
         if enabled.has(LintCode::ExcessWhitespaceAroundMarker)
-            && index + 1 < tokens.len()
-            && excess_leading_horizontal_whitespace(tokens[index + 1].text())
+            && let Some(next) = next_token
+            && excess_leading_horizontal_whitespace(next.text())
         {
-            issues.push(simple_issue(
+            let mut issue = simple_issue(
                 LintCode::ExcessWhitespaceAroundMarker,
                 message_params([
                     ("marker", marker.to_string()),
                     ("position", "after".to_string()),
                 ]),
                 token,
-            ));
+            );
+            if let Some(fix) =
+                excess_leading_ws_fix(next, spec.format_preference_after_open_name)
+            {
+                issue = issue.with_fix(fix);
+            }
+            issues.push(issue);
         }
 
         // Rule 4 (mirror): excess whitespace immediately before the
@@ -2142,14 +2242,21 @@ fn lint_whitespace_rules<T: LintableToken>(
             && index > 0
             && excess_trailing_horizontal_whitespace(tokens[index - 1].text())
         {
-            issues.push(simple_issue(
+            let prev = &tokens[index - 1];
+            let mut issue = simple_issue(
                 LintCode::ExcessWhitespaceAroundMarker,
                 message_params([
                     ("marker", marker.to_string()),
                     ("position", "before".to_string()),
                 ]),
                 token,
-            ));
+            );
+            if let Some(fix) =
+                excess_trailing_ws_fix(prev, spec.format_preference_before_open)
+            {
+                issue = issue.with_fix(fix);
+            }
+            issues.push(issue);
         }
     }
 
@@ -2598,14 +2705,6 @@ fn previous_significant_token_index<T: LintableToken>(tokens: &[T], end: usize) 
     None
 }
 
-fn starts_with_horizontal_whitespace(text: &str) -> bool {
-    matches!(text.chars().next(), Some(' ' | '\t'))
-}
-
-fn ends_with_horizontal_whitespace(text: &str) -> bool {
-    matches!(text.chars().next_back(), Some(' ' | '\t'))
-}
-
 fn strip_digits(text: &str) -> &str {
     let first_digit = text
         .find(|ch: char| ch.is_ascii_digit())
@@ -2768,17 +2867,177 @@ impl LintIssue {
     }
 }
 
-fn missing_separator_fix<T: LintableToken>(token: &T) -> TokenFix {
-    TokenFix::ReplaceToken {
-        code: "insert-separator-after-marker".to_string(),
-        label: "InsertSeparatorAfterMarker".to_string(),
+/// Resolve a `FormatWhitespacePreference` to the literal whitespace
+/// string the formatter would insert. `None` falls back to a single
+/// space — matches the plan's "single space if the preference is unset"
+/// rule and the historical `missing_separator_fix` behaviour.
+fn preferred_ws(pref: Option<crate::whitespace::FormatWhitespacePreference>) -> &'static str {
+    use crate::whitespace::FormatWhitespacePreference as Pref;
+    match pref {
+        Some(Pref::PreferSingleNewline) => "\n",
+        Some(Pref::PreferRemoveAllWhitespace) => "",
+        Some(Pref::PreferSingleSpace) | None => " ",
+    }
+}
+
+/// Collapse a leading horizontal-whitespace run in `target`'s text down
+/// to a single occurrence of `pref` (or a single space if unset).
+/// Returns `None` if there's no excess to collapse or the target has
+/// no id (unfixable).
+fn excess_leading_ws_fix<T: LintableToken>(
+    target: &T,
+    pref: Option<crate::whitespace::FormatWhitespacePreference>,
+) -> Option<TokenFix> {
+    let id = target.id()?;
+    let text = target.text();
+    let leading_len: usize = text
+        .as_bytes()
+        .iter()
+        .take_while(|b| **b == b' ' || **b == b'\t')
+        .count();
+    if leading_len < 2 {
+        return None;
+    }
+    let replacement = preferred_ws(pref);
+    let new_text = format!("{}{}", replacement, &text[leading_len..]);
+    Some(TokenFix::ReplaceToken {
+        code: "collapse-whitespace-around-marker".to_string(),
+        label: "CollapseWhitespaceAroundMarker".to_string(),
         label_params: MessageParams::default(),
-        target_token_id: token.id().expect("fixable token should have id"),
+        target_token_id: id,
         replacements: vec![crate::format::TokenTemplate {
-            kind: token.kind(),
-            text: format!(" {}", token.text()),
-            marker: token.marker().map(ToOwned::to_owned),
-            sid: token.sid(),
+            kind: target.kind(),
+            text: new_text,
+            marker: target.marker().map(ToOwned::to_owned),
+            sid: target.sid(),
+        }],
+    })
+}
+
+/// Collapse a trailing horizontal-whitespace run in `target`'s text
+/// down to a single occurrence of `pref` (or a single space if unset).
+fn excess_trailing_ws_fix<T: LintableToken>(
+    target: &T,
+    pref: Option<crate::whitespace::FormatWhitespacePreference>,
+) -> Option<TokenFix> {
+    let id = target.id()?;
+    let text = target.text();
+    let bytes = text.as_bytes();
+    let trailing_len: usize = bytes
+        .iter()
+        .rev()
+        .take_while(|b| **b == b' ' || **b == b'\t')
+        .count();
+    if trailing_len < 2 {
+        return None;
+    }
+    let head_end = bytes.len() - trailing_len;
+    let replacement = preferred_ws(pref);
+    let new_text = format!("{}{}", &text[..head_end], replacement);
+    Some(TokenFix::ReplaceToken {
+        code: "collapse-whitespace-around-marker".to_string(),
+        label: "CollapseWhitespaceAroundMarker".to_string(),
+        label_params: MessageParams::default(),
+        target_token_id: id,
+        replacements: vec![crate::format::TokenTemplate {
+            kind: target.kind(),
+            text: new_text,
+            marker: target.marker().map(ToOwned::to_owned),
+            sid: target.sid(),
+        }],
+    })
+}
+
+/// Collapse multi-whitespace runs and embedded newlines inside a Text
+/// token to a single space. Preserves the sentence-ending-punctuation
+/// carve-out from `scan_excess_content_whitespace`: a multi-space run
+/// directly after `.!?:;` is kept as-is. Returns `None` when the token
+/// has no id or no excess was found.
+fn excess_content_whitespace_fix<T: LintableToken>(target: &T) -> Option<TokenFix> {
+    let id = target.id()?;
+    let text = target.text();
+    let bytes = text.as_bytes();
+    let is_hs = |b: u8| b == b' ' || b == b'\t';
+    let is_nl = |b: u8| b == b'\n' || b == b'\r';
+    let is_sentence_end = |b: u8| matches!(b, b'.' | b'!' | b'?' | b':' | b';');
+
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    let mut changed = false;
+    let mut last_nonws: Option<u8> = None;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if is_hs(b) {
+            let run_start = i;
+            while i < bytes.len() && is_hs(bytes[i]) {
+                i += 1;
+            }
+            let run_len = i - run_start;
+            if run_len >= 2 && last_nonws.is_some_and(is_sentence_end) {
+                // Carve-out: preserve as-is.
+                out.push_str(&text[run_start..i]);
+            } else if run_len >= 2 {
+                out.push(' ');
+                changed = true;
+            } else {
+                // Single space, leave alone.
+                out.push(b as char);
+            }
+        } else if is_nl(b) {
+            // Skip the newline; treat as collapse-target. Multi-byte
+            // CRLF and runs of mixed CR/LF/space collapse together.
+            let run_start = i;
+            while i < bytes.len() && (is_nl(bytes[i]) || is_hs(bytes[i])) {
+                i += 1;
+            }
+            // Only collapse if there's non-whitespace content on both
+            // sides of the run. A trailing/leading newline run is
+            // preserved (matches scan's "saw_text && next non-WS"
+            // pattern).
+            let has_following_content = bytes[i..].iter().any(|&ch| !is_hs(ch) && !is_nl(ch));
+            if last_nonws.is_some() && has_following_content {
+                out.push(' ');
+                changed = true;
+            } else {
+                out.push_str(&text[run_start..i]);
+            }
+        } else {
+            out.push(b as char);
+            last_nonws = Some(b);
+            i += 1;
+        }
+    }
+    if !changed {
+        return None;
+    }
+    Some(TokenFix::ReplaceToken {
+        code: "collapse-content-whitespace".to_string(),
+        label: "CollapseContentWhitespace".to_string(),
+        label_params: MessageParams::default(),
+        target_token_id: id,
+        replacements: vec![crate::format::TokenTemplate {
+            kind: target.kind(),
+            text: out,
+            marker: target.marker().map(ToOwned::to_owned),
+            sid: target.sid(),
+        }],
+    })
+}
+
+/// Replace `target` with a token whose text is `prefix` + the target's
+/// existing text. Used by rules 1, 2, 3 to insert the required
+/// whitespace immediately before the offending token.
+fn prepend_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, prefix: &str) -> TokenFix {
+    TokenFix::ReplaceToken {
+        code: code.to_string(),
+        label: label.to_string(),
+        label_params: MessageParams::default(),
+        target_token_id: target.id().expect("fixable token should have id"),
+        replacements: vec![crate::format::TokenTemplate {
+            kind: target.kind(),
+            text: format!("{}{}", prefix, target.text()),
+            marker: target.marker().map(ToOwned::to_owned),
+            sid: target.sid(),
         }],
     }
 }
@@ -2950,6 +3209,94 @@ mod tests {
     }
 
     #[test]
+    fn missing_whitespace_before_marker_autofix_prepends_preferred_ws() {
+        // `\p`'s row pairs `NewlineOrAnyWhitespaceBeforeMarker` with
+        // `PreferSingleNewline`. Autofix should prepend "\n" to the
+        // jammed marker token.
+        let tokens = vec![
+            crate::FormatToken {
+                kind: TokenKind::Text,
+                text: "tail".to_string(),
+                marker: None,
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-0".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+            crate::FormatToken {
+                kind: TokenKind::Marker,
+                text: "\\p".to_string(),
+                marker: Some("p".to_string()),
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-1".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+        ];
+
+        let result = lint_tokens(&tokens, LintOptions::default());
+        let issue = result
+            .issues
+            .into_iter()
+            .find(|i| i.code == LintCode::MissingWhitespaceBeforeMarker)
+            .expect("expected missing-whitespace-before-marker issue");
+        let fix = issue.fix.expect("expected autofix");
+        let fixed = apply_token_fix(&tokens, &fix);
+
+        assert_eq!(fixed.len(), 2);
+        assert_eq!(fixed[0].text, "tail");
+        assert_eq!(fixed[1].text, "\n\\p");
+    }
+
+    #[test]
+    fn missing_horizontal_whitespace_after_marker_name_is_flagged_with_autofix() {
+        // Hand-built: `\c` Marker followed by `1` Number with no
+        // whitespace between. `\c`'s row demands
+        // AtLeastOneHorizontalWhitespace after the marker name.
+        let tokens = vec![
+            crate::FormatToken {
+                kind: TokenKind::Marker,
+                text: "\\c".to_string(),
+                marker: Some("c".to_string()),
+                sid: Some("GEN 1:0".to_string()),
+                id: Some("GEN-0".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+            crate::FormatToken {
+                kind: TokenKind::Number,
+                text: "1".to_string(),
+                marker: None,
+                sid: Some("GEN 1:0".to_string()),
+                id: Some("GEN-1".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+        ];
+
+        let result = lint_tokens(&tokens, LintOptions::default());
+        let issue = result
+            .issues
+            .into_iter()
+            .find(|i| i.code == LintCode::MissingHorizontalWhitespaceAfterMarkerName)
+            .expect("expected missing-horizontal-whitespace-after-marker-name issue");
+        let fix = issue.fix.expect("expected autofix");
+        let fixed = apply_token_fix(&tokens, &fix);
+
+        assert_eq!(fixed.len(), 2);
+        assert_eq!(fixed[0].text, "\\c");
+        assert_eq!(fixed[1].text, " 1");
+    }
+
+    #[test]
     fn excess_whitespace_around_marker_is_flagged() {
         // Five spaces immediately after `\p` and before the paragraph
         // text. Paragraph markers don't take a number, so the WS run
@@ -2971,6 +3318,49 @@ mod tests {
     }
 
     #[test]
+    fn excess_whitespace_around_marker_autofix_collapses_leading_run() {
+        // `\p` Marker followed by Text "     paragraph text" — five
+        // leading spaces. Rule 4 fires, autofix collapses to one space.
+        let tokens = vec![
+            crate::FormatToken {
+                kind: TokenKind::Marker,
+                text: "\\p".to_string(),
+                marker: Some("p".to_string()),
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-0".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+            crate::FormatToken {
+                kind: TokenKind::Text,
+                text: "     paragraph text".to_string(),
+                marker: None,
+                sid: Some("GEN 1:1".to_string()),
+                id: Some("GEN-1".to_string()),
+                span: None,
+                structural: None,
+                number_info: None,
+                marker_profile: None,
+            },
+        ];
+
+        let result = lint_tokens(&tokens, LintOptions::default());
+        let issue = result
+            .issues
+            .into_iter()
+            .find(|i| i.code == LintCode::ExcessWhitespaceAroundMarker)
+            .expect("expected excess-whitespace-around-marker issue");
+        let fix = issue.fix.expect("expected autofix");
+        let fixed = apply_token_fix(&tokens, &fix);
+
+        assert_eq!(fixed.len(), 2);
+        assert_eq!(fixed[0].text, "\\p");
+        assert_eq!(fixed[1].text, " paragraph text");
+    }
+
+    #[test]
     fn excess_whitespace_in_content_is_flagged_for_non_punctuation_runs() {
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p\n\\v 1 word  another word.\n",
@@ -2982,6 +3372,66 @@ mod tests {
                 .iter()
                 .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
             "expected excess-whitespace-in-content"
+        );
+    }
+
+    #[test]
+    fn excess_whitespace_in_content_autofix_collapses_multispace() {
+        // Text token "word  another word." has a double-space run that
+        // isn't preceded by sentence-ending punctuation. Rule 5
+        // collapses it to a single space.
+        let tokens = vec![crate::FormatToken {
+            kind: TokenKind::Text,
+            text: "word  another word.".to_string(),
+            marker: None,
+            sid: Some("GEN 1:1".to_string()),
+            id: Some("GEN-0".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        }];
+
+        let result = lint_tokens(&tokens, LintOptions::default());
+        let issue = result
+            .issues
+            .into_iter()
+            .find(|i| i.code == LintCode::ExcessWhitespaceInContent)
+            .expect("expected excess-whitespace-in-content issue");
+        let fix = issue.fix.expect("expected autofix");
+        let fixed = apply_token_fix(&tokens, &fix);
+
+        assert_eq!(fixed.len(), 1);
+        assert_eq!(fixed[0].text, "word another word.");
+    }
+
+    #[test]
+    fn excess_whitespace_in_content_autofix_preserves_sentence_punctuation_runs() {
+        // "End.  Next" has a double-space after `.` — carve-out kicks
+        // in and Rule 5 does not flag (so no fix). Belt-and-braces:
+        // if a fix were generated despite the carve-out, applying it
+        // would change the text. So we assert no issue is emitted at
+        // all (this is also the contract of the carve-out test
+        // upstream).
+        let tokens = vec![crate::FormatToken {
+            kind: TokenKind::Text,
+            text: "End.  Next sentence.".to_string(),
+            marker: None,
+            sid: Some("GEN 1:1".to_string()),
+            id: Some("GEN-0".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        }];
+
+        let result = lint_tokens(&tokens, LintOptions::default());
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
+            "double-space after period must not trigger the rule"
         );
     }
 
@@ -3154,13 +3604,13 @@ mod tests {
             issues
                 .issues
                 .iter()
-                .any(|issue| issue.code == LintCode::MissingSeparatorAfterMarker)
+                .any(|issue| issue.code == LintCode::MissingTagEndDelimiterAfterMarker)
         );
         assert_eq!(tokens[0].lane, 1);
     }
 
     #[test]
-    fn missing_separator_issue_carries_concrete_fix_and_apply_token_fix_updates_tokens() {
+    fn missing_tag_end_delimiter_carries_concrete_fix_and_apply_token_fix_updates_tokens() {
         let tokens = vec![
             crate::FormatToken {
                 kind: TokenKind::Marker,
@@ -3190,8 +3640,8 @@ mod tests {
         let issue = result
             .issues
             .into_iter()
-            .find(|issue| issue.code == LintCode::MissingSeparatorAfterMarker)
-            .expect("expected missing-separator issue");
+            .find(|issue| issue.code == LintCode::MissingTagEndDelimiterAfterMarker)
+            .expect("expected missing-tag-end-delimiter issue");
         let fix = issue.fix.expect("expected concrete token fix");
         let fixed = apply_token_fix(&tokens, &fix);
 

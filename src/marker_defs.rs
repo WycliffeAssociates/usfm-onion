@@ -371,9 +371,177 @@ pub(crate) use marker_defs_data::{MARKER_SPECS, MARKER_WHITESPACE};
 /// leading `+`, resolves milestone `-s`/`-e` suffixes back to the base
 /// marker name, resolves numbered variants), so callers can pass a marker
 /// as it appears in source.
-pub fn lookup_marker_whitespace(marker: &str) -> Option<&'static MarkerWhitespace> {
-    let canonical = lookup_spec_marker(marker)?.marker;
-    whitespace_index().get(canonical).copied()
+///
+/// Returns the explicit `MARKER_WHITESPACE` row when one exists,
+/// otherwise synthesizes a sensible default from the marker's
+/// `MarkerDefKind` (paragraph/character/note/milestone/…). USFM 3.1
+/// defines whitespace shape per-category; this lookup mirrors that so
+/// every known marker gets a profile without needing an explicit row.
+pub fn lookup_marker_whitespace(marker: &str) -> Option<MarkerWhitespace> {
+    let spec = lookup_spec_marker(marker)?;
+    if let Some(explicit) = whitespace_index().get(spec.marker).copied() {
+        return Some(*explicit);
+    }
+    Some(default_marker_whitespace_for(spec))
+}
+
+/// Per-marker default whitespace row. Used as a fallback when
+/// `MARKER_WHITESPACE` doesn't carry an explicit row.
+///
+/// Drives off the USFM 3.1 marker categorization (`MarkerDefKind` plus
+/// `ParagraphCategory`), so each spec category gets the shape the spec
+/// actually specifies — not one generic paragraph fallback. The
+/// explicit `MARKER_WHITESPACE` rows override these per-marker for
+/// cases that deviate (e.g. `\v` permits inline whitespace before it;
+/// `\f` does not require a newline).
+///
+/// Reference for the categories below:
+/// <https://docs.usfm.bible/usfm/3.1/index.html>.
+fn default_marker_whitespace_for(spec: &MarkerSpec) -> MarkerWhitespace {
+    use crate::whitespace::FormatWhitespacePreference as Pref;
+    use crate::whitespace::StructuralWhitespaceRequirement as Req;
+    use crate::whitespace::WhitespaceFormatCategory as Cat;
+    match spec.kind {
+        // Paragraph-kind markers: the spec category decides the
+        // after-name shape. Identification, title, and section
+        // markers take a literal value after the marker name (HS
+        // separation). Body/poetry/list/introduction/peripheral
+        // markers carry paragraph content (tag-end delimiter).
+        MarkerDefKind::Paragraph => {
+            let (after_name, after_pref) = match spec.paragraph_category {
+                Some(
+                    ParagraphCategory::Identification
+                    | ParagraphCategory::Title
+                    | ParagraphCategory::Section,
+                ) => (
+                    Req::AtLeastOneHorizontalWhitespace,
+                    Some(Pref::PreferSingleSpace),
+                ),
+                _ => (Req::TagEndDelimiter, None),
+            };
+            MarkerWhitespace {
+                marker: spec.marker,
+                required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+                required_after_open_name: after_name,
+                required_before_close: Req::NotRequired,
+                required_after_close: Req::NotRequired,
+                format_preference_before_open: Some(Pref::PreferSingleNewline),
+                format_preference_after_open_name: after_pref,
+                category_for_profiles: Cat::Block,
+            }
+        }
+        // `\id` is the only Header-kind marker in the catalog; it
+        // takes the book code as its value (HS separation).
+        MarkerDefKind::Header => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+            required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::NotRequired,
+            format_preference_before_open: Some(Pref::PreferSingleNewline),
+            format_preference_after_open_name: Some(Pref::PreferSingleSpace),
+            category_for_profiles: Cat::Block,
+        },
+        // Sidebar open / table row openers carry no value of their
+        // own; the body content starts on the next non-WS token.
+        MarkerDefKind::Sidebar | MarkerDefKind::TableRow => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+            required_after_open_name: Req::TagEndDelimiter,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::NotRequired,
+            format_preference_before_open: Some(Pref::PreferSingleNewline),
+            format_preference_after_open_name: None,
+            category_for_profiles: Cat::Block,
+        },
+        // Peripheral and chapter take a following identifier / number
+        // and therefore require at-least-one HS after the marker name.
+        MarkerDefKind::Chapter | MarkerDefKind::Periph => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::NewlineOrAnyWhitespaceBeforeMarker,
+            required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::NotRequired,
+            format_preference_before_open: Some(Pref::PreferSingleNewline),
+            format_preference_after_open_name: Some(Pref::PreferSingleSpace),
+            category_for_profiles: Cat::Block,
+        },
+        // Verse markers sit inline within a paragraph; the explicit
+        // `v` row overrides this with `OptionalWhitespace` before, but
+        // for any other Verse-kind marker (rare/none today) require WS.
+        MarkerDefKind::Verse => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::AtLeastOneWhitespace,
+            required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::NotRequired,
+            format_preference_before_open: Some(Pref::PreferSingleNewline),
+            format_preference_after_open_name: Some(Pref::PreferSingleSpace),
+            category_for_profiles: Cat::Block,
+        },
+        // Character markers run inline; explicit closing `\X*` form
+        // means the open marker's after-name delimiter is tag-end
+        // (whitespace, EOI, or `|` for attributes).
+        MarkerDefKind::Character | MarkerDefKind::TableCell => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::OptionalWhitespace,
+            required_after_open_name: Req::TagEndDelimiter,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::NotRequired,
+            format_preference_before_open: None,
+            format_preference_after_open_name: None,
+            category_for_profiles: Cat::Inline,
+        },
+        // Note containers (footnote, cross-reference) match `\f` / `\x`.
+        MarkerDefKind::Note => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::OptionalWhitespace,
+            required_after_open_name: Req::TagEndDelimiter,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::OptionalWhitespace,
+            format_preference_before_open: None,
+            format_preference_after_open_name: None,
+            category_for_profiles: Cat::Inline,
+        },
+        // Milestones accept attributes via `|...` or self-close via
+        // `\*`. Tag-end delimiter is the right after-name shape.
+        MarkerDefKind::Milestone => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::OptionalWhitespace,
+            required_after_open_name: Req::TagEndDelimiter,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::OptionalWhitespace,
+            format_preference_before_open: None,
+            format_preference_after_open_name: None,
+            category_for_profiles: Cat::Inline,
+        },
+        // Figure markers take `|attribute=...|...` shape after the
+        // marker name; tag-end allows the `|` to follow directly.
+        MarkerDefKind::Figure => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::OptionalWhitespace,
+            required_after_open_name: Req::TagEndDelimiter,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::NotRequired,
+            format_preference_before_open: None,
+            format_preference_after_open_name: None,
+            category_for_profiles: Cat::Inline,
+        },
+        // Metadata markers (`cat`, `va`, `vp`, `ca`, `cp`) — the
+        // explicit table covers the common ones with `OptionalHs`
+        // after name; default to a tolerant inline shape for any
+        // future addition.
+        MarkerDefKind::Meta => MarkerWhitespace {
+            marker: spec.marker,
+            required_before_open: Req::OptionalWhitespace,
+            required_after_open_name: Req::OptionalHorizontalWhitespace,
+            required_before_close: Req::NotRequired,
+            required_after_close: Req::OptionalWhitespace,
+            format_preference_before_open: None,
+            format_preference_after_open_name: None,
+            category_for_profiles: Cat::Inline,
+        },
+    }
 }
 
 fn whitespace_index() -> &'static HashMap<&'static str, &'static MarkerWhitespace> {
@@ -1239,6 +1407,55 @@ mod tests {
             lookup_marker_whitespace("zzzzz").is_none(),
             "unknown marker should return None"
         );
+
+        // `\h` is Paragraph kind / Identification category — no
+        // explicit `MARKER_WHITESPACE` row, but the category-driven
+        // default gives it newline-before + at-least-one-HS after
+        // (since `\h` takes a string value: the running header text).
+        let header = lookup_marker_whitespace("h")
+            .expect("marker known to spec should resolve to a default WS row");
+        assert_eq!(
+            header.required_before_open,
+            StructuralWhitespaceRequirement::NewlineOrAnyWhitespaceBeforeMarker
+        );
+        assert_eq!(
+            header.required_after_open_name,
+            StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
+        );
+        assert_eq!(header.category_for_profiles, WhitespaceFormatCategory::Block);
+
+        // `\mt1` is Paragraph kind / Title category — takes a title
+        // string after the marker name (HS required).
+        let title = lookup_marker_whitespace("mt1").expect("mt1 should resolve via numbered variant");
+        assert_eq!(
+            title.required_after_open_name,
+            StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
+        );
+
+        // `\ip` is Paragraph kind / Introduction category — paragraph
+        // content follows, so tag-end-delimiter after name.
+        let intro = lookup_marker_whitespace("ip").expect("ip should resolve to intro default");
+        assert_eq!(
+            intro.required_after_open_name,
+            StructuralWhitespaceRequirement::TagEndDelimiter
+        );
+
+        // `\id` is Header kind — book code value follows (HS).
+        let id = lookup_marker_whitespace("id").expect("id should resolve to header default");
+        assert_eq!(
+            id.required_after_open_name,
+            StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
+        );
+
+        // `\nd` (character marker) takes the inline default — tag-end
+        // after name, optional WS before, no format preference.
+        let nd = lookup_marker_whitespace("nd")
+            .expect("character marker should resolve to inline default");
+        assert_eq!(
+            nd.required_after_open_name,
+            StructuralWhitespaceRequirement::TagEndDelimiter
+        );
+        assert_eq!(nd.category_for_profiles, WhitespaceFormatCategory::Inline);
     }
 
     #[test]
