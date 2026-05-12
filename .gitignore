@@ -26,3 +26,6 @@ src/bin/playground.rs
 playgroundOut.json
 .DS_Store
 whitespace.md
+profile.json.gz
+scheduled_tasks.lock
+scratchpad/

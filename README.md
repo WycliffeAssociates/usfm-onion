@@ -9,7 +9,7 @@ It currently provides:
 - token-first lint, format, and diff
 - semantic exports to USJ, USX, HTML, and VREF
 - a typed Rust facade
-- a typed `wasm-pack` wrapper in [`crates/usfm_onion_wasm`](/Users/willkelly/Documents/Work/Code/usfm_onion/crates/usfm_onion_wasm)
+- a typed `wasm-pack` wrapper in [`crates/usfm_onion_wasm`](./crates/usfm_onion_wasm)
 - a shared marker catalog for both Rust and wasm consumers
 
 The design goal is
@@ -17,6 +17,10 @@ The design goal is
 - parse once
 - operate on tokens explicitly
 - never silently normalize content on ingest
+
+## Documentation
+
+The engine overview, architecture notes, walker design, and performance snapshots live in **[`docs/usfm-onion.html`](./docs/usfm-onion.html)** — open it in any browser. That document is the canonical reference; this README is a quick orientation only.
 
 ## Rust Quick Start
 
@@ -160,46 +164,42 @@ Use this when downstream code needs to know:
 
 ## WASM
 
-The wasm wrapper is in [`crates/usfm_onion_wasm`](/Users/willkelly/Documents/Work/Code/usfm_onion/crates/usfm_onion_wasm).
+The wasm wrapper is in [`crates/usfm_onion_wasm`](./crates/usfm_onion_wasm). All public types are `tsify`-derived — TypeScript declarations come straight from Rust.
 
-It exposes:
+The exposed surface is string-in only at construction; token-in entry points exist for the repeated editor operations (lint, format, diff):
 
-- `parse(...)`
-- `parseBatch(...)`
-- typed `ParsedUsfm` and `ParsedUsfmBatch`
-- token-direct `lintTokens`, `formatTokens`, `formatTokensMut`, `diffTokens`
-- typed code exports such as `LintCode`, `FormatRule`, `MarkerInfo`, and `UsfmMarkerCatalog`
+- `parse(source)` → `ParsedUsfm`
+- `ParsedUsfm.tokens()`, `.lint()`, `.format()`, `.diff()`, `.toUsj()`, `.toUsx()`, `.toHtml()`, `.toVref()`
+- top-level `lintTokens`, `formatTokens`, `formatTokensMut`, `diffTokens` for the token-in fast path
+- typed exports: `LintCode`, `FormatRule`, `MarkerInfo`, `UsfmMarkerCatalog`
 
-Build it with:
+Build it with the root npm scripts:
 
 ```bash
-wasm-pack build crates/usfm_onion_wasm --target web
-wasm-pack build crates/usfm_onion_wasm --target bundler
+npm run build:wasm                       # bundler + web targets, release
+npm run build:wasm:bundler:dev           # dev build
+npm run check:wasm:web                   # cargo check against wasm32 target
+npm run test:wasm                        # scripts/test-web-package.mjs against both targets
 ```
 
 ## Benchmarks
 
-Focused benches live in [`benches/`](/Users/willkelly/Documents/Work/Code/usfm_onion/benches):
+Two criterion harnesses live in [`benches/`](./benches):
 
-- `lexer`
-- `parse`
-- `cst`
-- `cst_walk`
-- `usj`
-- `usx`
-- `lint`
-- `format`
-- `diff`
-- `html`
-- `omni`
-
-Useful commands:
+- `operations` — string-vs-tokens matrix on a single book (Luke by default)
+- `parallelism` — serial vs `rayon` over the full en_ulb corpus
 
 ```bash
-cargo bench --bench omni
-cargo bench --bench lint
-USFM_BENCH_CORPORA=examples.bsb cargo bench --bench format
-USFM_BENCH_CORPORA=all cargo bench --bench omni
+cargo bench --bench operations
+cargo bench --bench parallelism
+cargo run --release --example bench_report > BENCH_RESULTS.md
 ```
 
-Use `omni` for a broad convenience sweep. Use the focused benches when you want cleaner Criterion reports for one subsystem.
+Different corpora:
+
+```bash
+USFM_BENCH_CORPORA=examples.bsb cargo bench --bench operations
+USFM_BENCH_CORPORA=all cargo bench --bench parallelism
+```
+
+Snapshots live at [`BENCH_RESULTS.md`](./BENCH_RESULTS.md) (native) and [`BENCH_RESULTS_WASM.md`](./BENCH_RESULTS_WASM.md) (browser).

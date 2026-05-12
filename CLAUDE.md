@@ -93,4 +93,4 @@ The design contract:
 - **Parse once, operate on tokens.** A flat token stream is the canonical working representation. Everything else (CST, lint, format, diff, exports) is layered on top.
 - **Never silently normalize on ingest.** Whitespace and source bytes are preserved. The token stream and CST are lossless by design; `to_html`, `to_usj`, `to_usx`, `to_vref` are explicitly lossy and apply recovery for things like unclosed notes.
 
-For the rest of architecture, see ./docs/architecture.md if you need more details for making changes that touch multiple layers or than what user has described.
+For the rest of the architecture (pipeline, walker design, public surfaces, perf numbers, onboarding stubs), see `./docs/usfm-onion.html` — that's the canonical reference. It is HTML so it renders richly in a browser; read it directly when working through the file content. The `plans/` directory holds historical planning notes; treat those as ephemeral context, not as a description of current behavior.

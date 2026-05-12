@@ -81,9 +81,9 @@ small and discoverable.
   `usj → usfm`, `usx → usj`, etc. without renames.
 - **Supported pairs today:**
 
-  | from → to  | usj | usx | html |
-  |------------|-----|-----|------|
-  | **usfm**   | ✅  | ✅  | ✅   |
+  | from → to | usj | usx | html |
+  | --------- | --- | --- | ---- |
+  | **usfm**  | ✅   | ✅   | ✅    |
 
   All other pairs return: `conversion <a> → <b> not yet supported`.
   Cells flip as library functions land; no CLI changes needed.
@@ -117,15 +117,15 @@ small and discoverable.
 
 ## Exit codes (rustfmt / ruff convention)
 
-| Subcommand        | 0                  | 1                       | 2              |
-|-------------------|--------------------|-------------------------|----------------|
-| `lint`            | clean              | findings present        | internal error |
-| `format --check`  | no changes needed  | would reformat          | internal error |
-| `format --write`  | success            | —                       | internal error |
-| `format` (stdout) | success            | —                       | internal error |
-| `convert`         | success            | —                       | internal error |
-| `diff`            | success            | —                       | internal error |
-| `vref`            | success            | —                       | internal error |
+| Subcommand        | 0                 | 1                | 2              |
+| ----------------- | ----------------- | ---------------- | -------------- |
+| `lint`            | clean             | findings present | internal error |
+| `format --check`  | no changes needed | would reformat   | internal error |
+| `format --write`  | success           | —                | internal error |
+| `format` (stdout) | success           | —                | internal error |
+| `convert`         | success           | —                | internal error |
+| `diff`            | success           | —                | internal error |
+| `vref`            | success           | —                | internal error |
 
 CI scripts can distinguish "has findings" from "crashed" — the
 distinction `lint`/`format --check` need most.

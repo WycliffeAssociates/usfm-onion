@@ -2001,26 +2001,25 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
 /// these rules cover the full marker catalog rather than just the
 /// markers in the explicit table.
 ///
-/// Covers the rules from `docs/plan-whitespace-lint-rules.md`:
+/// Spec-driven whitespace rules consuming the `MARKER_WHITESPACE` table:
 ///
-/// - **MissingWhitespaceBeforeMarker** (rule 1): the marker's row says
+/// - **MissingWhitespaceBeforeMarker**: the marker's row says
 ///   whitespace/newline is required *before*, but the prior token's
 ///   trailing text does not satisfy.
-/// - **MissingHorizontalWhitespaceAfterMarkerName** (rule 2): the
-///   marker's row says HS (or any WS) is required after the marker
-///   name, but the following token doesn't start with it.
-/// - **MissingTagEndDelimiterAfterMarker** (rule 3): the marker's row
-///   says a tag-end delimiter (WS, EOI, or `|`) is required after the
-///   marker name, but the following token is none of those.
-/// - **ExcessWhitespaceAroundMarker** (rule 4): the actual run of
-///   whitespace before/after the marker is longer than the requirement
-///   allows.
-/// - **ExcessWhitespaceInContent** (rule 5): a `Text` token contains
-///   multi-space runs or embedded newlines, not adjacent to
-///   sentence-ending punctuation.
-/// - **MissingContentSpaceAfterCloseMarker** (rule 6): a closing
-///   character marker (`\nd*`, …) is immediately followed by alphabetic
-///   text with no separating whitespace.
+/// - **MissingHorizontalWhitespaceAfterMarkerName**: the marker's row
+///   says HS (or any WS) is required after the marker name, but the
+///   following token doesn't start with it.
+/// - **MissingTagEndDelimiterAfterMarker**: the marker's row says a
+///   tag-end delimiter (WS, EOI, or `|`) is required after the marker
+///   name, but the following token is none of those.
+/// - **ExcessWhitespaceAroundMarker**: the actual run of whitespace
+///   before/after the marker is longer than the requirement allows.
+/// - **ExcessWhitespaceInContent**: a `Text` token contains multi-space
+///   runs or embedded newlines, not adjacent to sentence-ending
+///   punctuation.
+/// - **MissingContentSpaceAfterCloseMarker**: a closing character
+///   marker (`\nd*`, …) is immediately followed by alphabetic text
+///   with no separating whitespace.
 fn lint_whitespace_rules<T: LintableToken>(
     tokens: &[T],
     enabled: &EnabledCodes,

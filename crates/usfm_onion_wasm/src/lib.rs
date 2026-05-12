@@ -51,7 +51,6 @@ use usfm_onion::usx::usfm_to_usx;
 use usfm_onion::vref::{VrefMap as NativeVrefMap, usfm_to_vref_map};
 use usfm_onion::walker::WalkableToken;
 
-// @ai? -> Can we do this please? What's What's needed? I'd rather not have to maintain any custom typescript section, generally speaking.
 #[wasm_bindgen(typescript_custom_section)]
 const TS_TYPES: &str = r#"
 // JSON Value type and USJ document tree.
@@ -105,7 +104,6 @@ export type UsjElement =
 // the previous stringify pairs produced. From impls in both directions keep
 // the boundary between native and FFI fully typed; no string parsing.
 // ---------------------------------------------------------------------------
-// @ai? I've generally not done a lot of Rust or WASM, but I like it because it forces LLMs to adhere to the compiler as well as it offers opportunities for speedy things.  Can you just generally sketch out what this entire file is doing? tsify, bindgen.  I was kind of under the impression you could get Wasm for free basically by dropping in that m T SFI macro and that was it, so like, what 2k lines of code here?
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -492,7 +490,7 @@ pub enum HtmlCallerScope {
     DocumentSequential,
     VerseSequential,
 }
-// @ai? -> Again, maybe this is a mistake, but I've not handwritten a whole lot of Rust, but I'm still trying to learn things, so what is the "From" with a generic for?
+
 impl From<HtmlCallerScope> for NativeHtmlCallerScope {
     fn from(value: HtmlCallerScope) -> Self {
         match value {
@@ -839,7 +837,6 @@ pub enum MarkerDefKind {
 
 impl From<usfm_onion::marker_defs::MarkerDefKind> for MarkerDefKind {
     fn from(value: usfm_onion::marker_defs::MarkerDefKind) -> Self {
-        // @ai? -> why the generic cast as K?
         use usfm_onion::marker_defs::MarkerDefKind as K;
         match value {
             K::Paragraph => Self::Paragraph,
@@ -1456,7 +1453,6 @@ impl ParsedUsfm {
         result.iter().map(map_format_token).collect()
     }
 
-    // @ai? -> This looks different than just mapping types. It looks like it's like a redoing of the entire function itself. Again, some of this is my understanding of how WASMBy and Gen TSFI works. Like I say, I thought you basically could put macros on these things and then you pretty much got 'em for free but this looks like reimplementing the logc? Or at least a lot of glue code to the native functions.
     #[wasm_bindgen(js_name = revertDiffBlock)]
     pub fn revert_diff_block(
         &self,
@@ -2572,7 +2568,3 @@ mod tests {
     }
 }
 
-// @ai? Open questions: Please explain a little more to me regarindg: recap: Cleaning up the wasm crate by migrating to tsify-derived types; all 9 phases of docs/plan-wasm-bindings.md are landed across 7 commits with golden parity and bench
-//   1. ParsedUsfm lazy-parse caching (biggest perf win the bench surfaced)
-//   2. Mirror UsjDocument as a real tsify type — only thing left in TS_TYPES
-//   3. Optional: fold WalkToken onto Token directly if a shape can be found that doesn't force per-method conversion on hot lint/diff paths

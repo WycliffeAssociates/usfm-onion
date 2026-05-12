@@ -1,35 +1,32 @@
 //! Unified walker over the flat token stream.
 //!
-//! See `docs/plan-walker-architecture.md` for the design contract.
+//! See `docs/usfm-onion.html` (the engine overview) for the full
+//! architectural context. This module is the single state machine that
+//! every structural consumer (CST, USJ, USX, HTML, vref, lint) drives
+//! through.
 //!
-//! ## Design notes (step 2a, deviates from plan)
+//! ## Three design calls worth knowing
 //!
-//! Three things shifted from the original plan during step-2 design:
+//! 1. **Precedence rules are always on.** Opening a block-scope marker
+//!    pops an unclosed note above it; opening a new `\p` pops the
+//!    previous `\p`. There is no "see source as written" mode — that
+//!    framing is incoherent because CST's tree shape itself depends on
+//!    these pops. Instead, [`LeaveReason`] annotates every close so
+//!    consumers that care about source intent (lint) can distinguish
+//!    `RecoveryClosure` from `Explicit`.
 //!
-//! 1. **No `apply_recovery` flag.** The walker always applies precedence
-//!    rules — opening a block-scope marker pops an unclosed note above
-//!    it, opening a new `\p` pops the previous `\p`, etc. The plan's
-//!    notion that lossless consumers (CST, lint) would see "source-as-
-//!    written" with the flag off was incoherent: CST's tree shape today
-//!    relies on those very precedence pops. Instead, `LeaveReason`
-//!    annotates each implicit close so lint (step 6) can subscribe to
-//!    `RecoveryClosure` events as its `UnclosedNote` signal.
+//! 2. **A single unified scope stack.** Character markers (`\nd`,
+//!    `\bk`, …) and milestone-starts (`\zaln-s` …) sit on the same
+//!    stack as paragraphs, notes, chapters. Helpers like
+//!    [`WalkContext::current_paragraph_category`] filter by frame kind,
+//!    so consumers that only care about block scopes are unaffected.
 //!
-//! 2. **Single unified scope stack.** Character markers (`\nd`,
-//!    `\bk`, …) and milestone-starts (`\zaln-s` …) live on the same
-//!    stack as paragraphs, notes, chapters, etc. The original plan's
-//!    "structural scopes only" subsection was wrong: current CST
-//!    pushes character markers as parent frames in its tree, and any
-//!    walker-based CST visitor needs to mirror that. Helpers like
-//!    `current_paragraph_category()` already filter by frame kind, so
-//!    consumers that only care about structural scopes are unaffected.
-//!
-//! 3. **`on_end_marker` and `on_milestone_end` events.** When an
-//!    explicit close fires (`\f*`, `\zaln-e\*`), the walker emits
-//!    `on_leave_scope(reason: Explicit)` *and* a follow-up event for
-//!    the closing token itself. CST appends the closer as a sibling
-//!    leaf of the opener; without the follow-up event, the close
-//!    token would be silently consumed.
+//! 3. **Explicit closers emit two events.** When `\f*` or `\zaln-e\*`
+//!    arrives, the walker emits `on_leave_scope(reason: Explicit)`
+//!    *and then* a follow-up `on_end_marker` / `on_milestone_end` event
+//!    for the closing token itself. Visitors that want the closer to
+//!    appear as a leaf in their output (CST, USJ) handle it on the
+//!    follow-up; visitors that don't care (vref, lint) ignore it.
 
 use crate::marker_defs::{
     InlineContext, ParagraphCategory, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
@@ -439,8 +436,7 @@ impl<'tokens> WalkerState<'tokens> {
         };
 
         // `\c` / `\v` without a following number are not scope openers
-        // — they're leaf markers. Match `structure::open_token`'s
-        // classification.
+        // — they're leaf markers.
         if matches!(
             info.scope_kind,
             StructuralScopeKind::Chapter | StructuralScopeKind::Verse
@@ -491,11 +487,10 @@ impl<'tokens> WalkerState<'tokens> {
         T: WalkableToken,
         V: Visitor<'tokens, T>,
     {
-        // Mirror `cst::recover_stack`'s UnknownMarker arm: pop down to
-        // a structural parent (Chapter, Periph, Sidebar) before
-        // appending. We model the pops as `ImplicitByOpen` since the
-        // unknown marker is functionally an opener — even though we
-        // don't push a frame for it.
+        // Unknown marker: pop down to a structural parent (Chapter,
+        // Periph, Sidebar) before appending. Model the pops as
+        // `ImplicitByOpen` since the unknown marker is functionally
+        // an opener, even though we don't push a frame for it.
         self.pop_while(visitor, |kind| {
             !matches!(
                 kind,
@@ -526,7 +521,6 @@ impl<'tokens> WalkerState<'tokens> {
         };
 
         // Match against Note / Character frames by marker name.
-        // Mirrors `cst::recover_stack`'s CloseMarker arm.
         if matches!(
             info.scope_kind,
             StructuralScopeKind::Note | StructuralScopeKind::Character
@@ -606,9 +600,9 @@ impl<'tokens> WalkerState<'tokens> {
         // Milestones in the token stream are always Open events from
         // a structural standpoint (paired or self-closing). The end
         // form ("\*") arrives as a TokenKind::MilestoneEnd token,
-        // which we handle separately. Step-2a treats all milestones
-        // as enter/leave-bracketed scopes: open via on_enter_scope,
-        // close via MilestoneEnd handling firing on_leave_scope.
+        // handled separately. All milestones are modelled as
+        // enter/leave-bracketed scopes: open via on_enter_scope, close
+        // via MilestoneEnd handling firing on_leave_scope.
         let Some(info) = token.structural() else {
             let ctx = self.make_ctx();
             visitor.on_milestone(&ctx, token, index);
@@ -629,10 +623,9 @@ impl<'tokens> WalkerState<'tokens> {
         // kind here so the pairing works.
         let scope_kind = StructuralScopeKind::Milestone;
 
-        // Apply precedence (e.g. an inline-scope close would pop
-        // higher inline scopes). `pop_for_open_scope`'s Milestone
-        // branch only handles note-recovery for invalid markers
-        // inside notes — same as Note/Character. We mirror that.
+        // Apply precedence. Milestones follow the Note / Character
+        // precedence path: only trigger note-recovery when the
+        // incoming marker is invalid in the current note context.
         self.apply_open_precedence(scope_kind, marker, visitor);
 
         let frame = ScopeFrame {
@@ -649,14 +642,13 @@ impl<'tokens> WalkerState<'tokens> {
         // Note: a self-closing milestone (`\ts\*`) produces both a
         // Milestone open token AND a MilestoneEnd token in the stream
         // — the MilestoneEnd handler will fire the matching
-        // on_leave_scope and on_milestone_end events. The step-2a
-        // skeleton does not yet emit on_milestone for self-closing
-        // milestones as a single "point" event; consumers that care
-        // (USX) will revisit at their migration step.
+        // on_leave_scope and on_milestone_end events. There is no
+        // single "point" event for self-closing milestones; consumers
+        // that need to distinguish them check for the immediate
+        // open/close pair against the same token index.
     }
 
     /// Apply precedence rules when opening a scope of `incoming_kind`.
-    /// Direct port of `cst::pop_for_open_scope`.
     fn apply_open_precedence<T, V>(
         &mut self,
         incoming_kind: StructuralScopeKind,
@@ -689,7 +681,8 @@ impl<'tokens> WalkerState<'tokens> {
             return;
         }
 
-        // The three-pass algorithm from `cst::pop_for_open_scope`.
+        // Three-pass algorithm: inline + verse, then block-level
+        // siblings, then everything below the nearest structural parent.
         match incoming_kind {
             StructuralScopeKind::Chapter => {
                 while let Some(frame) = self.stack.pop() {
@@ -838,7 +831,9 @@ impl<'tokens> WalkerState<'tokens> {
         ) && !marker_allows_effective_context(incoming_marker, context)
     }
 
-    /// Mirrors `structure::effective_context` over our scope stack.
+    /// Resolve the effective `SpecContext` from the scope stack —
+    /// "what kind of place are we currently in?" — for note-recovery
+    /// decisions about which inner markers are valid here.
     fn effective_context(&self) -> Option<SpecContext> {
         for scope in self.stack.iter().rev() {
             match scope.scope_kind {

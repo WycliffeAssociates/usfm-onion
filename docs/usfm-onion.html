@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>usfm_onion — engine overview</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1c2230;
+    --border: #262d3d;
+    --text: #d9dde6;
+    --text-dim: #9aa3b2;
+    --text-faint: #5c6678;
+    --accent: #7aa2f7;
+    --accent-2: #9ece6a;
+    --accent-3: #e0af68;
+    --accent-4: #f7768e;
+    --accent-5: #bb9af7;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    color: var(--text);
+    background: var(--bg);
+    margin: 0;
+    line-height: 1.55;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 24px 18px 32px 24px;
+    background: var(--panel);
+    font-size: 13.5px;
+  }
+  nav.toc h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    margin: 18px 0 8px 0;
+    font-weight: 600;
+  }
+  nav.toc h2:first-child { margin-top: 0; }
+  nav.toc a {
+    display: block;
+    color: var(--text-dim);
+    text-decoration: none;
+    padding: 4px 0;
+    border-radius: 3px;
+  }
+  nav.toc a:hover { color: var(--text); }
+  nav.toc .brand {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  nav.toc .version {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-family: var(--mono);
+    margin-bottom: 18px;
+  }
+  main {
+    padding: 48px 56px 96px 56px;
+    max-width: 960px;
+  }
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  h1 { font-size: 28px; margin: 0 0 6px 0; font-weight: 700; letter-spacing: -0.01em; }
+  h2 {
+    font-size: 20px;
+    margin: 0 0 16px 0;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  h3 { font-size: 15px; margin: 24px 0 8px 0; font-weight: 600; color: var(--text); }
+  h4 { font-size: 13.5px; margin: 16px 0 4px 0; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+  p { margin: 0 0 12px 0; color: var(--text); }
+  .lede { color: var(--text-dim); font-size: 16px; margin-bottom: 18px; }
+  code, pre {
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--accent-3);
+    font-size: 12.5px;
+  }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    color: var(--text);
+    line-height: 1.5;
+    margin: 12px 0;
+  }
+  pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-size: 13px;
+  }
+  .kw { color: var(--accent-5); }
+  .ty { color: var(--accent); }
+  .fn { color: var(--accent-2); }
+  .str { color: var(--accent-3); }
+  .cmt { color: var(--text-faint); font-style: italic; }
+  .num { color: var(--accent-3); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--panel-2);
+  }
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+  td code { font-size: 12px; }
+  ul, ol { margin: 8px 0 12px 0; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 14px 0;
+  }
+  .panel.tight { padding: 12px 16px; }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    margin-right: 4px;
+  }
+  .pill.ok { color: var(--accent-2); border-color: rgba(158,206,106,0.35); }
+  .pill.warn { color: var(--accent-3); border-color: rgba(224,175,104,0.35); }
+  .pill.note { color: var(--accent); border-color: rgba(122,162,247,0.35); }
+  .pill.no { color: var(--text-faint); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(122,162,247,0.06);
+    padding: 12px 16px;
+    margin: 14px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.why { border-left-color: var(--accent-3); background: rgba(224,175,104,0.06); }
+  .callout.gotcha { border-left-color: var(--accent-4); background: rgba(247,118,142,0.06); }
+  .callout .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .callout.why .label { color: var(--accent-3); }
+  .callout.gotcha .label { color: var(--accent-4); }
+  svg { display: block; max-width: 100%; height: auto; margin: 14px auto; }
+  .diagram { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin: 18px 0; }
+  .diagram-caption { font-size: 12.5px; color: var(--text-dim); text-align: center; margin-top: 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .anchor { color: var(--text-faint); margin-left: 8px; text-decoration: none; font-weight: 400; opacity: 0; transition: opacity 0.15s; }
+  h2:hover .anchor, h3:hover .anchor { opacity: 1; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  details { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin: 10px 0; }
+  details summary { cursor: pointer; color: var(--text-dim); font-size: 13.5px; user-select: none; }
+  details[open] summary { color: var(--text); margin-bottom: 8px; }
+  .meta { font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
+  .grid-3 .panel { margin: 0; }
+  .ex {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent-3);
+    white-space: nowrap;
+  }
+  .ex .bad { color: var(--accent-4); }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main { padding: 24px 18px 64px 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <div class="brand">usfm_onion</div>
+  <div class="version">engine overview · 2026-05-12</div>
+
+  <h2>Read first</h2>
+  <a href="#what">What it is</a>
+  <a href="#mental-model">Mental model</a>
+  <a href="#pipeline">Pipeline</a>
+
+  <h2>Architecture</h2>
+  <a href="#lossless">Lossless foundation</a>
+  <a href="#walker">The walker</a>
+  <a href="#consumers">Consumers</a>
+  <a href="#recovery">Recovery</a>
+  <a href="#marker-catalog">Marker catalog</a>
+  <a href="#whitespace">Whitespace contract</a>
+
+  <h2>Surfaces</h2>
+  <a href="#rust-facade">Rust facade</a>
+  <a href="#wasm-surface">WASM surface</a>
+  <a href="#token-shape">JS token shape</a>
+  <a href="#stability">Stability contracts</a>
+
+  <h2>Behavior</h2>
+  <a href="#lint-codes">Lint codes</a>
+  <a href="#export-shapes">Exports</a>
+
+  <h2>Performance</h2>
+  <a href="#perf-native">Native</a>
+  <a href="#perf-wasm">WASM</a>
+
+  <h2>Working in the repo</h2>
+  <a href="#test-data">Test data</a>
+  <a href="#run-it">Build, test, bench</a>
+  <a href="#consumer-tips">Tips for consumers</a>
+  <a href="#orient">Read order</a>
+</nav>
+
+<main>
+
+<section id="what">
+<h1>usfm_onion</h1>
+<p class="lede">A Rust engine for USFM — the markup format the global Bible-translation community uses to author scripture. One canonical working model (flat tokens). Everything else is a layer over it.</p>
+
+<p>The engine parses USFM, projects it into a source-faithful concrete syntax tree, lints and formats it, diffs versions of it, and exports it to USJ, USX, HTML, and verse-reference maps. It runs natively in Rust and in browsers via a <code>wasm-pack</code> wrapper. The same logic drives both.</p>
+
+<div class="callout why">
+  <div class="label">Design contract</div>
+  <strong>Parse once, operate on tokens.</strong> A flat <code>Vec&lt;Token&gt;</code> is the working representation; every operation reads or rewrites that stream. <strong>Never silently normalize on ingest.</strong> If the source has odd whitespace, duplicate <code>\id</code>, or unclosed markers, the parser preserves the bytes; lint surfaces the problems; format proposes fixes; exports apply spec-defined recovery and say so.
+</div>
+</section>
+
+<section id="mental-model">
+<h2>Mental model<a class="anchor" href="#mental-model">#</a></h2>
+
+<ol>
+  <li><strong>Tokens are the truth.</strong> <code>parse(source)</code> produces a <code>Vec&lt;Token&gt;</code> that round-trips back to the original bytes exactly via <code>tokens_to_usfm</code>. No normalization, no synthesised whitespace.</li>
+  <li><strong>Operations consume tokens.</strong> Lint, format, diff, and the CST projection all read tokens. The CST is a tree <em>view</em> over the same stream; it never invents content and always flattens back to canonical tokens.</li>
+  <li><strong>Exports are explicitly lossy.</strong> USJ, USX, HTML, and verse-reference maps are downstream projections. They apply spec-defined recovery (closing unclosed footnotes at block boundaries, for example) and cannot round-trip back to source.</li>
+</ol>
+</section>
+
+<section id="pipeline">
+<h2>Pipeline<a class="anchor" href="#pipeline">#</a></h2>
+
+<div class="diagram">
+<svg viewBox="0 0 880 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="usfm_onion pipeline">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5c6678"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7aa2f7"/>
+    </marker>
+  </defs>
+
+  <style>
+    .lay { fill: #1c2230; stroke: #262d3d; stroke-width: 1; rx: 6; }
+    .lay-accent { fill: #161922; stroke: #7aa2f7; stroke-width: 1.5; rx: 6; }
+    .lbl { font: 600 13px ui-monospace, monospace; fill: #d9dde6; }
+    .sub { font: 11px ui-monospace, monospace; fill: #9aa3b2; }
+    .arrow { stroke: #5c6678; stroke-width: 1.5; fill: none; }
+    .arrow-accent { stroke: #7aa2f7; stroke-width: 1.5; fill: none; }
+    .group-lbl { font: 600 11px -apple-system, sans-serif; fill: #5c6678; text-transform: uppercase; letter-spacing: 0.08em; }
+    .lossless { fill: #9ece6a; }
+    .lossy { fill: #e0af68; }
+  </style>
+
+  <text x="40" y="28" class="group-lbl">Lossless · byte-faithful</text>
+
+  <rect x="40" y="44" width="120" height="56" class="lay"/>
+  <text x="100" y="70" text-anchor="middle" class="lbl">source</text>
+  <text x="100" y="86" text-anchor="middle" class="sub">USFM bytes</text>
+
+  <rect x="200" y="44" width="120" height="56" class="lay"/>
+  <text x="260" y="70" text-anchor="middle" class="lbl">lex</text>
+  <text x="260" y="86" text-anchor="middle" class="sub">Vec&lt;Lexeme&gt;</text>
+
+  <rect x="360" y="44" width="120" height="56" class="lay"/>
+  <text x="420" y="70" text-anchor="middle" class="lbl">parse</text>
+  <text x="420" y="86" text-anchor="middle" class="sub">Vec&lt;Token&gt;</text>
+
+  <rect x="520" y="44" width="120" height="56" class="lay-accent"/>
+  <text x="580" y="70" text-anchor="middle" class="lbl">walker</text>
+  <text x="580" y="86" text-anchor="middle" class="sub">visitor events</text>
+
+  <path d="M160 72 L200 72" class="arrow" marker-end="url(#arrow)"/>
+  <path d="M320 72 L360 72" class="arrow" marker-end="url(#arrow)"/>
+  <path d="M480 72 L520 72" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+
+  <text x="40" y="150" class="group-lbl">Consumers · one driver, six outputs</text>
+
+  <rect x="40" y="170" width="118" height="42" class="lay"/>
+  <text x="99" y="195" text-anchor="middle" class="lbl">CST</text>
+  <text x="99" y="208" text-anchor="middle" class="sub lossless">lossless tree</text>
+
+  <rect x="178" y="170" width="118" height="42" class="lay"/>
+  <text x="237" y="195" text-anchor="middle" class="lbl">lint</text>
+  <text x="237" y="208" text-anchor="middle" class="sub lossless">findings + fixes</text>
+
+  <rect x="316" y="170" width="118" height="42" class="lay"/>
+  <text x="375" y="195" text-anchor="middle" class="lbl">vref</text>
+  <text x="375" y="208" text-anchor="middle" class="sub lossy">verse map</text>
+
+  <rect x="454" y="170" width="118" height="42" class="lay"/>
+  <text x="513" y="195" text-anchor="middle" class="lbl">USJ</text>
+  <text x="513" y="208" text-anchor="middle" class="sub lossy">scripture.json</text>
+
+  <rect x="592" y="170" width="118" height="42" class="lay"/>
+  <text x="651" y="195" text-anchor="middle" class="lbl">USX</text>
+  <text x="651" y="208" text-anchor="middle" class="sub lossy">XML</text>
+
+  <rect x="730" y="170" width="118" height="42" class="lay"/>
+  <text x="789" y="195" text-anchor="middle" class="lbl">HTML</text>
+  <text x="789" y="208" text-anchor="middle" class="sub lossy">rendered</text>
+
+  <path d="M580 100 L580 130 L99 130 L99 170" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M580 130 L237 130 L237 170" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M580 130 L375 130 L375 170" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M580 130 L513 130 L513 170" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M580 130 L651 130 L651 170" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <path d="M580 130 L789 130 L789 170" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+
+  <text x="40" y="252" class="group-lbl">Token rewriters · sit beside the walker</text>
+
+  <rect x="40" y="272" width="180" height="56" class="lay"/>
+  <text x="130" y="298" text-anchor="middle" class="lbl">format</text>
+  <text x="130" y="314" text-anchor="middle" class="sub">FormattableToken &amp;mut</text>
+
+  <rect x="240" y="272" width="180" height="56" class="lay"/>
+  <text x="330" y="298" text-anchor="middle" class="lbl">diff</text>
+  <text x="330" y="314" text-anchor="middle" class="sub">DiffableToken, SID-block</text>
+
+  <path d="M420 72 L420 240 L130 240 L130 272" class="arrow" marker-end="url(#arrow)"/>
+  <path d="M420 240 L330 240 L330 272" class="arrow" marker-end="url(#arrow)"/>
+
+  <text x="600" y="304" class="sub" fill="#9aa3b2">Format and diff operate</text>
+  <text x="600" y="320" class="sub" fill="#9aa3b2">on tokens directly —</text>
+  <text x="600" y="336" class="sub" fill="#9aa3b2">no walker needed.</text>
+</svg>
+  <div class="diagram-caption">
+    The walker is a single state machine that every structural consumer drives through, so each output format only concerns itself with output-specific concerns. Format and diff sit beside the walker as token-stream rewriters.
+    <div class="legend" style="justify-content:center">
+      <span><i style="background:#9ece6a"></i>Lossless</span>
+      <span><i style="background:#e0af68"></i>Lossy (applies recovery)</span>
+    </div>
+  </div>
+</div>
+</section>
+
+<section id="lossless">
+<h2>Lossless foundation<a class="anchor" href="#lossless">#</a></h2>
+
+<p>The first three layers are byte-faithful. They never invent, drop, or merge bytes.</p>
+
+<table>
+  <tr><th>Layer</th><th>Produces</th><th>Round-trips?</th></tr>
+  <tr><td><code>lexer</code></td><td><code>Vec&lt;Lexeme&gt;</code> with byte spans</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><code>parse</code></td><td><code>Vec&lt;Token&gt;</code>, plus <code>id</code>/<code>sid</code> assignment and attribute lifting</td><td><span class="pill ok">yes — <code>tokens_to_usfm</code></span></td></tr>
+  <tr><td><code>cst</code></td><td><code>CstDocument</code> — a source-faithful tree projected from tokens</td><td><span class="pill ok">yes — flattens back to canonical tokens</span></td></tr>
+</table>
+
+<h3>Tokens and the CST coexist</h3>
+
+<p>The flat stream is the source of truth. The CST is a <em>view</em> derived from it. Both are useful for different operations:</p>
+
+<ul>
+  <li>Tokens give exact spans and exact whitespace — the right shape for lint, format, and diff, which need to point at specific bytes and rewrite ranges.</li>
+  <li>The CST gives structural nesting — the right shape for any consumer that asks "what is the parent of this verse?" or wants to traverse the document as a tree.</li>
+</ul>
+
+<p>The CST is always derivable from the tokens; the tokens are never derived from the tree.</p>
+</section>
+
+<section id="walker">
+<h2>The walker<a class="anchor" href="#walker">#</a></h2>
+
+<p>The walker is a single visitor-based state machine over the flat token stream. It owns the scope stack, applies USFM's marker-precedence rules, and emits events. Every structural consumer (CST, USJ, USX, HTML, vref, lint) is a <em>visitor</em> — it overrides the events it cares about and ignores the rest. Each output format concerns itself only with its own output specifics.</p>
+
+<h3>The visitor surface</h3>
+
+<pre><code><span class="kw">pub trait</span> <span class="ty">Visitor</span>&lt;<span class="ty">'tokens</span>, T: <span class="ty">WalkableToken</span>&gt; {
+    <span class="kw">fn</span> <span class="fn">on_enter_scope</span>(&<span class="kw">mut</span> <span class="kw">self</span>, ctx: &<span class="ty">WalkContext</span>, frame: &<span class="ty">ScopeFrame</span>, token: &T, i: <span class="ty">usize</span>) {}
+    <span class="kw">fn</span> <span class="fn">on_leave_scope</span>(&<span class="kw">mut</span> <span class="kw">self</span>, ctx: &<span class="ty">WalkContext</span>, frame: &<span class="ty">ScopeFrame</span>, reason: <span class="ty">LeaveReason</span>) {}
+    <span class="kw">fn</span> <span class="fn">on_end_marker</span>(&<span class="kw">mut</span> <span class="kw">self</span>, ctx: &<span class="ty">WalkContext</span>, token: &T, i: <span class="ty">usize</span>) {}
+    <span class="kw">fn</span> <span class="fn">on_text</span>(&<span class="kw">mut</span> <span class="kw">self</span>, ctx: &<span class="ty">WalkContext</span>, token: &T, i: <span class="ty">usize</span>) {}
+    <span class="kw">fn</span> <span class="fn">on_chapter</span>(&<span class="kw">mut</span> <span class="kw">self</span>, ctx: &<span class="ty">WalkContext</span>, token: &T, i: <span class="ty">usize</span>) {}
+    <span class="kw">fn</span> <span class="fn">on_verse</span>(&<span class="kw">mut</span> <span class="kw">self</span>, ctx: &<span class="ty">WalkContext</span>, token: &T, i: <span class="ty">usize</span>) {}
+    <span class="cmt">// + on_book_code, on_milestone, on_milestone_end, on_opt_break, on_newline, on_other</span>
+}
+
+<span class="kw">pub fn</span> <span class="fn">walk_tokens</span>&lt;<span class="ty">'tokens</span>, <span class="ty">'src</span>, V&gt;(tokens: &[<span class="ty">Token</span>&lt;<span class="ty">'src</span>&gt;], visitor: &<span class="kw">mut</span> V)</code></pre>
+
+<p><code>WalkContext</code> is a live view of the scope stack handed to every callback. <code>ScopeFrame</code> describes one open scope: what marker opened it, where in the token slice the opener lives, what paragraph category / inline context / note context applies, and the kind of scope it is (Block, Note, Character, Milestone, Chapter, Verse, TableRow, TableCell, Sidebar, Periph, Header, Meta, Unknown).</p>
+
+<h3>Scope stack &amp; events</h3>
+
+<div class="diagram">
+<svg viewBox="0 0 860 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="walker scope stack example">
+  <style>
+    .src { font: 12px ui-monospace, monospace; fill: #d9dde6; }
+    .ev { font: 11px ui-monospace, monospace; fill: #9ece6a; }
+    .ev-r { font: 11px ui-monospace, monospace; fill: #e0af68; }
+    .ev-i { font: 11px ui-monospace, monospace; fill: #bb9af7; }
+    .stack-box { fill: #1c2230; stroke: #262d3d; rx: 4; }
+    .stack-lbl { font: 11px ui-monospace, monospace; fill: #d9dde6; }
+    .tick { stroke: #5c6678; stroke-width: 1; }
+    .col-hdr { font: 600 11px -apple-system, sans-serif; fill: #5c6678; text-transform: uppercase; letter-spacing: 0.08em; }
+  </style>
+
+  <text x="20" y="20" class="col-hdr">source token</text>
+  <text x="320" y="20" class="col-hdr">walker emits</text>
+  <text x="610" y="20" class="col-hdr">scope stack after</text>
+
+  <text x="20" y="48" class="src">\c 1</text>
+  <text x="320" y="48" class="ev">on_enter_scope(Chapter)</text>
+  <rect x="610" y="36" width="60" height="18" class="stack-box"/><text x="640" y="48" text-anchor="middle" class="stack-lbl">Chapter</text>
+
+  <text x="20" y="76" class="src">\p</text>
+  <text x="320" y="76" class="ev">on_enter_scope(Block "p")</text>
+  <rect x="610" y="64" width="60" height="18" class="stack-box"/><text x="640" y="76" text-anchor="middle" class="stack-lbl">Chapter</text>
+  <rect x="675" y="64" width="60" height="18" class="stack-box"/><text x="705" y="76" text-anchor="middle" class="stack-lbl">Block</text>
+
+  <text x="20" y="104" class="src">\v 1 hi</text>
+  <text x="320" y="104" class="ev">on_enter_scope(Verse), on_text("hi")</text>
+  <rect x="610" y="92" width="60" height="18" class="stack-box"/><text x="640" y="104" text-anchor="middle" class="stack-lbl">Chapter</text>
+  <rect x="675" y="92" width="60" height="18" class="stack-box"/><text x="705" y="104" text-anchor="middle" class="stack-lbl">Block</text>
+  <rect x="740" y="92" width="60" height="18" class="stack-box"/><text x="770" y="104" text-anchor="middle" class="stack-lbl">Verse</text>
+
+  <text x="20" y="132" class="src">\f + note</text>
+  <text x="320" y="132" class="ev">on_enter_scope(Note)</text>
+  <rect x="610" y="120" width="60" height="18" class="stack-box"/><text x="640" y="132" text-anchor="middle" class="stack-lbl">Chapter</text>
+  <rect x="675" y="120" width="60" height="18" class="stack-box"/><text x="705" y="132" text-anchor="middle" class="stack-lbl">Block</text>
+  <rect x="740" y="120" width="60" height="18" class="stack-box"/><text x="770" y="132" text-anchor="middle" class="stack-lbl">Verse</text>
+
+  <rect x="805" y="120" width="50" height="18" style="fill:#3a2d2d;stroke:#f7768e;stroke-width:1;rx:4"/>
+  <text x="830" y="132" text-anchor="middle" class="stack-lbl">Note</text>
+
+  <line x1="20" y1="150" x2="860" y2="150" class="tick"/>
+  <text x="20" y="170" class="src">\p next</text>
+  <text x="320" y="166" class="ev-r">on_leave_scope(Note, RecoveryClosure)</text>
+  <text x="320" y="180" class="ev-i">on_leave_scope(Verse, ImplicitByOpen)</text>
+  <text x="320" y="194" class="ev-i">on_leave_scope(Block, ImplicitByOpen)</text>
+  <text x="320" y="208" class="ev">on_enter_scope(Block "p")</text>
+
+  <rect x="610" y="170" width="60" height="18" class="stack-box"/><text x="640" y="182" text-anchor="middle" class="stack-lbl">Chapter</text>
+  <rect x="675" y="170" width="60" height="18" class="stack-box"/><text x="705" y="182" text-anchor="middle" class="stack-lbl">Block</text>
+
+  <text x="20" y="246" class="src">EOF</text>
+  <text x="320" y="240" class="ev">on_leave_scope(Block, EndOfInput)</text>
+  <text x="320" y="254" class="ev">on_leave_scope(Chapter, EndOfInput)</text>
+  <text x="610" y="246" class="stack-lbl" style="font-style:italic;fill:#5c6678">(empty)</text>
+</svg>
+  <div class="diagram-caption">
+    Opening <code>\p</code> after an unclosed <code>\f</code> closes the Note, the prior Verse, and the prior Block. The walker annotates each pop with a <code>LeaveReason</code>; consumers that just want a clean tree (USJ, HTML) ignore the reason, lint subscribes to <code>RecoveryClosure</code> as its "unclosed note" signal.
+  </div>
+</div>
+
+<h3>Event types</h3>
+
+<table>
+  <tr><th>Event</th><th>Fires on</th></tr>
+  <tr><td><code>on_enter_scope</code></td><td>A marker opens any scope (chapter, verse, paragraph, note, character marker, sidebar, milestone-start, table row/cell, header, meta, periph).</td></tr>
+  <tr><td><code>on_leave_scope</code></td><td>A scope closes. <code>LeaveReason</code> is one of <code>Explicit</code>, <code>RecoveryClosure</code>, <code>ImplicitByOpen</code>, <code>EndOfInput</code>.</td></tr>
+  <tr><td><code>on_end_marker</code></td><td>An <code>EndMarker</code> token (<code>\f*</code>, <code>\nd*</code>, …). Fires after <code>on_leave_scope(Explicit)</code> so visitors that need to append the closer as a leaf can do so.</td></tr>
+  <tr><td><code>on_milestone</code> / <code>on_milestone_end</code></td><td>Self-closing milestone tokens and the <code>\*</code> closing a paired milestone.</td></tr>
+  <tr><td><code>on_chapter</code> / <code>on_verse</code> / <code>on_book_code</code></td><td>The number/code token immediately following <code>\c</code> / <code>\v</code> / <code>\id</code>.</td></tr>
+  <tr><td><code>on_text</code></td><td>Any text token. Visitors can check <code>ctx.in_note()</code> to skip note bodies.</td></tr>
+  <tr><td><code>on_newline</code> / <code>on_opt_break</code></td><td>Whitespace-significant tokens. Most consumers ignore.</td></tr>
+  <tr><td><code>on_other</code></td><td>Catch-all for unknown markers, stray closers, numbers outside chapter/verse, anything the walker couldn't classify structurally.</td></tr>
+</table>
+
+<p>Every callback receives <code>token_index: usize</code> — the position of the triggering token in the input slice. Visitors that build index-based structures (CST's arena, USJ's tree) wire it into their output directly.</p>
+
+<h3>WalkContext helpers</h3>
+
+<pre><code><span class="cmt">// All read-only. References are event-local — visitors that need</span>
+<span class="cmt">// cross-event state own that state themselves.</span>
+ctx.<span class="fn">scope_stack</span>() -&gt; &amp;[<span class="ty">ScopeFrame</span>]
+ctx.<span class="fn">current_scope_kind</span>() -&gt; <span class="ty">Option</span>&lt;<span class="ty">StructuralScopeKind</span>&gt;
+ctx.<span class="fn">current_paragraph_category</span>() -&gt; <span class="ty">Option</span>&lt;<span class="ty">ParagraphCategory</span>&gt;
+ctx.<span class="fn">in_note</span>() -&gt; <span class="ty">bool</span>
+ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></code></pre>
+</section>
+
+<section id="consumers">
+<h2>Consumers<a class="anchor" href="#consumers">#</a></h2>
+
+<table>
+  <tr><th>Consumer</th><th>Source</th><th>Output</th><th>Entry point</th></tr>
+  <tr><td><strong>CST</strong></td><td><code>src/cst/mod.rs</code></td><td><code>CstDocument&lt;'_&gt;</code></td><td><code>cst::parse_cst(source)</code></td></tr>
+  <tr><td><strong>HTML</strong></td><td><code>src/html.rs</code></td><td><code>String</code></td><td><code>html::usfm_to_html(source, opts)</code></td></tr>
+  <tr><td><strong>USJ</strong></td><td><code>src/usj.rs</code></td><td><code>UsjDocument</code></td><td><code>usj::usfm_to_usj(source)</code></td></tr>
+  <tr><td><strong>USX</strong></td><td><code>src/usx.rs</code></td><td><code>String</code> (XML)</td><td><code>usx::usfm_to_usx(source)</code></td></tr>
+  <tr><td><strong>vref</strong></td><td><code>src/vref.rs</code></td><td><code>BTreeMap&lt;String, String&gt;</code></td><td><code>vref::usfm_to_vref_map(source)</code></td></tr>
+  <tr><td><strong>lint</strong></td><td><code>src/lint_impl.rs</code></td><td><code>LintResult</code> w/ issues + fixes</td><td><code>lint_tokens&lt;T: LintableToken&gt;</code></td></tr>
+  <tr><td><strong>format</strong></td><td><code>src/format/mod.rs</code></td><td><code>Vec&lt;FormatToken&gt;</code> or <code>String</code></td><td><code>format&lt;T: FormattableToken&gt;</code></td></tr>
+  <tr><td><strong>diff</strong></td><td><code>src/diff/mod.rs</code></td><td><code>Vec&lt;ChapterTokenDiff&gt;</code></td><td><code>diff_chapter_token_streams&lt;T: DiffableToken&gt;</code></td></tr>
+</table>
+
+<p>The first six are walker-driven. Format and diff sit beside the walker — they operate on token streams directly.</p>
+
+<h3>Why format and diff aren't visitors</h3>
+
+<p><strong>Format</strong> needs <code>&amp;mut [FormatToken]</code> to rewrite tokens in place. The walker is read-only by design; mutating walks would double the visitor API for one beneficiary.</p>
+
+<p><strong>Diff</strong> operates above tokens — it builds SID-keyed chapter blocks and runs a diff algorithm over them. It never needs structural events; it needs already-tokenized chapter slices.</p>
+</section>
+
+<section id="recovery">
+<h2>Recovery<a class="anchor" href="#recovery">#</a></h2>
+
+<p>USFM in the wild is messy. Files have unclosed footnotes, unknown markers, paragraph markers nested where they shouldn't be. The walker applies spec-defined precedence rules so the structural interpretation is consistent across consumers; each pop is annotated with a <code>LeaveReason</code> so visitors can distinguish source intent from synthesised recovery.</p>
+
+<h3>Precedence rules</h3>
+
+<p>Each kind of incoming marker closes specific kinds of open scope before pushing its own frame. The cases:</p>
+
+<table>
+  <tr><th>Incoming marker</th><th>What it pops</th></tr>
+  <tr><td><strong>Chapter</strong> (<code>\c</code>)</td><td>Everything. A new chapter resets the entire scope stack down to nothing.</td></tr>
+  <tr><td><strong>Verse</strong> (<code>\v</code>)</td><td>Inline scopes (Note, Character, Milestone), any prior Verse, then any Header / Meta above.</td></tr>
+  <tr><td><strong>Block / paragraph</strong> (<code>\p</code>, <code>\q</code>, <code>\li</code>, etc.)</td><td>Inline scopes + Verse, then prior Block / TableCell / TableRow / Header / Meta, then everything down to the nearest Chapter / Periph / Sidebar.</td></tr>
+  <tr><td><strong>Sidebar</strong> (<code>\esb</code>)</td><td>Everything down to the nearest Chapter.</td></tr>
+  <tr><td><strong>TableRow / TableCell</strong></td><td>Inline scopes + Verse + cell/row siblings, then down to TableRow / Chapter / Periph / Sidebar.</td></tr>
+  <tr><td><strong>Header / Meta / Periph</strong> (<code>\h</code>, <code>\toc1</code>, etc.)</td><td>Everything.</td></tr>
+  <tr><td><strong>Note / Character / Milestone</strong> (<code>\f</code>, <code>\nd</code>, <code>\zaln-s</code>, …)</td><td>Inside a note: pops the open Note if the incoming marker isn't valid inside it. Otherwise pushes without popping.</td></tr>
+  <tr><td><strong>Unknown marker</strong></td><td>Pops down to a structural parent (Chapter / Periph / Sidebar), then emits as <code>on_other</code> without pushing a frame.</td></tr>
+  <tr><td><strong>End-of-input</strong></td><td>Drains every remaining open frame.</td></tr>
+</table>
+
+<h3>LeaveReason on every pop</h3>
+
+<table>
+  <tr><th><code>LeaveReason</code></th><th>Means</th></tr>
+  <tr><td><code>Explicit</code></td><td>An explicit closer arrived (<code>\f*</code>, <code>\nd*</code>, <code>\zaln-e\*</code>, <code>\esbe</code>).</td></tr>
+  <tr><td><code>RecoveryClosure</code></td><td>A Note frame was synthesised closed because an opening marker satisfying the note-recovery predicate arrived. Lint subscribes to this as its "unclosed note" signal.</td></tr>
+  <tr><td><code>ImplicitByOpen</code></td><td>The pop was driven by precedence — a higher-level scope opened that the rules say must close this one.</td></tr>
+  <tr><td><code>EndOfInput</code></td><td>The token stream ended while the scope was still open.</td></tr>
+</table>
+
+<h3>Explicit closers fire two events</h3>
+
+<p>When <code>\f*</code> arrives, the walker fires <code>on_leave_scope(reason: Explicit)</code> and then <code>on_end_marker</code> with the closing token. Visitors that want the closer to appear as a leaf in their output (CST, USJ) handle it on <code>on_end_marker</code>; visitors that don't care (vref, lint) ignore it.</p>
+
+<h3>Compound bridge SIDs</h3>
+
+<p>A verse range like <code>\v 1-2</code> produces a single SID covering both numbers. The vref export emits the bridged form (<code>"GEN 1:1-2"</code>) rather than splitting; consumers that need per-verse text handle the split themselves.</p>
+
+<div class="callout">
+  <div class="label">Where recovery is applied</div>
+  USJ, USX, HTML, and vref are <strong>lossy</strong>: they emit a clean tree / map shaped by the walker's recovery decisions. CST and lint observe the same events but they don't change what they output based on them — lint records a finding; CST records the close in its tree shape. The flat token stream itself is never modified.
+</div>
+</section>
+
+<section id="marker-catalog">
+<h2>Marker catalog<a class="anchor" href="#marker-catalog">#</a></h2>
+
+<p>USFM 3.2 defines hundreds of markers. The catalog is the single source of truth for marker metadata. Lint rules, the structural classifier, and the walker all consult it; nothing in the engine hardcodes marker names.</p>
+
+<pre><code><span class="kw">use</span> usfm_onion::{marker_catalog, marker_info, is_known_marker};
+
+<span class="kw">let</span> p = marker_info(<span class="str">"p"</span>);
+<span class="cmt">// p.kind            -> MarkerKind::Paragraph</span>
+<span class="cmt">// p.category        -> MarkerCategory::Body</span>
+<span class="cmt">// p.note_family     -> None</span>
+<span class="cmt">// p.inline_context  -> Some(InlineContext::Para)</span>
+<span class="cmt">// p.contexts        -> &amp;[SpecContext::ChapterContent]</span></code></pre>
+
+<table>
+  <tr><th>File</th><th>Role</th></tr>
+  <tr><td><code>src/marker_defs.rs</code></td><td>Type definitions (<code>MarkerSpec</code>, <code>MarkerKind</code>, <code>StructuralScopeKind</code>, <code>ParagraphCategory</code>) + lookup helpers.</td></tr>
+  <tr><td><code>src/marker_defs_data.rs</code></td><td>The actual rows. Tracks USFM 3.0 through 3.2.</td></tr>
+  <tr><td><code>src/markers.rs</code></td><td>Structural-marker classifier used during parse.</td></tr>
+</table>
+
+<p>Every row cites its spec source URL, so the provenance of any given marker's metadata is auditable from the row itself.</p>
+</section>
+
+<section id="whitespace">
+<h2>Whitespace contract<a class="anchor" href="#whitespace">#</a></h2>
+
+<p><code>MARKER_WHITESPACE</code> in <code>marker_defs_data.rs</code> declares, per marker:</p>
+<ul>
+  <li>what whitespace the spec <em>requires</em> at each position (before the marker, after the marker name, around the closing form);</li>
+  <li>what whitespace the formatter <em>prefers</em> when normalizing.</li>
+</ul>
+
+<p>One table, two consumers: the formatter writes it, the linter flags violations against it. If a row says <code>\c</code> requires <code>AtLeastOneHorizontalWhitespace</code> after the marker name, then <code>\c1</code> is a lint finding and the autofix is exactly what the formatter would insert — a single space.</p>
+</section>
+
+<section id="rust-facade">
+<h2>Rust facade<a class="anchor" href="#rust-facade">#</a></h2>
+
+<p>Three types in <code>src/api.rs</code> cover the surface. The difference comes down to <em>when you parse</em>:</p>
+
+<table>
+  <tr><th>Type</th><th>Holds</th><th>Use when</th></tr>
+  <tr><td><code>Usfm</code></td><td>Source string only.</td><td>You have a source string and want one or two operations on it. Each method on <code>Usfm</code> parses internally on call.</td></tr>
+  <tr><td><code>ParsedUsfm</code></td><td>Source string + the parsed token vec (owned).</td><td>You'll run several operations on the same document and want to pay the parse cost once. <code>Usfm::parse_owned()</code> produces it.</td></tr>
+  <tr><td><code>TokenStream&lt;T&gt;</code></td><td>A <code>Vec&lt;T&gt;</code> for any token type implementing the relevant traits.</td><td>You already have tokens — borrowed <code>Token&lt;'a&gt;</code> straight from <code>parse</code>, or owned <code>FormatToken</code>, or any other type that implements the public token traits.</td></tr>
+</table>
+
+<pre><code><span class="kw">use</span> usfm_onion::{<span class="ty">FormatOptions</span>, <span class="ty">HtmlOptions</span>, <span class="ty">LintOptions</span>, <span class="ty">Usfm</span>};
+
+<span class="cmt">// One-off: each call re-parses internally.</span>
+<span class="kw">let</span> doc = <span class="ty">Usfm</span>::<span class="fn">from_str</span>(source);
+<span class="kw">let</span> issues = doc.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">default</span>());
+<span class="kw">let</span> html   = doc.<span class="fn">to_html</span>(<span class="ty">HtmlOptions</span>::<span class="fn">default</span>());
+
+<span class="cmt">// Several ops on the same document: parse once, reuse the tokens.</span>
+<span class="kw">let</span> owned = doc.<span class="fn">parse_owned</span>();
+<span class="kw">let</span> issues = owned.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">default</span>());
+<span class="kw">let</span> formatted = owned.<span class="fn">format</span>(<span class="ty">FormatOptions</span>::<span class="fn">default</span>());
+
+<span class="cmt">// You already have tokens (from your own data model, or a prior parse).</span>
+<span class="kw">use</span> usfm_onion::{<span class="ty">TokenStream</span>, parse::parse};
+<span class="kw">let</span> parsed = <span class="fn">parse</span>(source);
+<span class="kw">let</span> stream = <span class="ty">TokenStream</span>::<span class="fn">from_tokens</span>(parsed.tokens);
+<span class="kw">let</span> issues = stream.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">default</span>());</code></pre>
+
+<p>The library is string-in, data-out. It does no file I/O and does no parallelism — both belong to callers. For an example of parallelizing across a whole corpus, see the <code>parallelism</code> benchmark, which uses <code>rayon</code> at the file level.</p>
+</section>
+
+<section id="wasm-surface">
+<h2>WASM surface<a class="anchor" href="#wasm-surface">#</a></h2>
+
+<p><code>crates/usfm_onion_wasm</code> wraps the library for browser and Node consumers. Every public type is <code>tsify</code>-derived — TypeScript declarations come straight from the Rust definitions.</p>
+
+<table>
+  <tr><th>JS name</th><th>Shape</th><th>Notes</th></tr>
+  <tr><td><code>parse(source)</code></td><td>→ <code>ParsedUsfm</code></td><td>Returns a typed handle. Methods on it operate on the stored source.</td></tr>
+  <tr><td><code>ParsedUsfm.tokens()</code></td><td>→ <code>Token[]</code></td><td>Marshals the full token stream out as JS objects.</td></tr>
+  <tr><td><code>ParsedUsfm.lint(opts)</code></td><td>→ <code>LintResult</code></td><td>String-in (re-parses internally).</td></tr>
+  <tr><td><code>lintTokens(tokens, opts)</code></td><td>→ <code>LintResult</code></td><td>Token-in. Skips a second parse when you already have tokens.</td></tr>
+  <tr><td><code>formatTokens / formatTokensMut</code></td><td>→ <code>Token[]</code></td><td>Token-in format.</td></tr>
+  <tr><td><code>diffTokens</code></td><td>→ <code>ChapterTokenDiff[]</code></td><td>Token-in diff.</td></tr>
+  <tr><td><code>ParsedUsfm.toUsj / toUsx / toHtml / toVref</code></td><td>→ JSON / string / map</td><td>String-in only; lossy projections.</td></tr>
+  <tr><td><code>UsfmMarkerCatalog</code></td><td>typed</td><td>The marker catalog reachable from JS.</td></tr>
+</table>
+
+<div class="callout">
+  <div class="label">Why some ops are token-in and others aren't</div>
+  Lint, format, and diff are the operations a caller is most likely to run <em>repeatedly</em> on the same document (e.g. validating on every change to a buffer). Token-in entry points let those callers skip a re-parse on each call. USJ, USX, HTML, vref, and CST are typically one-shot per document — adding a parallel token-in surface would just double the API for no real-world payoff. The surface is intentionally minimal.
+</div>
+</section>
+
+<section id="token-shape">
+<h2>JS token shape<a class="anchor" href="#token-shape">#</a></h2>
+
+<p>The <code>Token</code> type a JS caller passes to <code>lintTokens</code> / <code>formatTokens</code> / <code>diffTokens</code> is the same shape <code>ParsedUsfm.tokens()</code> returns. Field names are <code>camelCase</code>; enums are JS string unions. Schematically:</p>
+
+<pre><code><span class="kw">type</span> <span class="ty">Token</span> = {
+  <span class="ty">id</span>: <span class="ty">string</span>;                  <span class="cmt">// stable token identity</span>
+  <span class="ty">kind</span>: <span class="str">"marker"</span> | <span class="str">"endMarker"</span> | <span class="str">"milestone"</span> | <span class="str">"milestoneEnd"</span>
+      | <span class="str">"bookCode"</span> | <span class="str">"number"</span> | <span class="str">"text"</span> | <span class="str">"newline"</span> | <span class="str">"optBreak"</span>;
+  <span class="ty">text</span>: <span class="ty">string</span>;                <span class="cmt">// the literal source slice</span>
+  <span class="ty">marker</span>?: <span class="ty">string</span>;             <span class="cmt">// e.g. "p", "v", "f", "nd"</span>
+  <span class="ty">span</span>?: { <span class="ty">start</span>: <span class="ty">number</span>; <span class="ty">end</span>: <span class="ty">number</span> };
+  <span class="ty">sid</span>?: <span class="ty">string</span>;                <span class="cmt">// e.g. "GEN 1:1" — set on chapter/verse openers</span>
+  <span class="ty">structural</span>?: {              <span class="cmt">// present on marker / endMarker / milestone tokens</span>
+    <span class="ty">scopeKind</span>: <span class="str">"block"</span> | <span class="str">"note"</span> | <span class="str">"character"</span> | <span class="str">"milestone"</span>
+              | <span class="str">"chapter"</span> | <span class="str">"verse"</span> | <span class="str">"tableRow"</span> | <span class="str">"tableCell"</span>
+              | <span class="str">"sidebar"</span> | <span class="str">"periph"</span> | <span class="str">"header"</span> | <span class="str">"meta"</span> | <span class="str">"unknown"</span>;
+    <span class="ty">inlineContext</span>?: <span class="ty">InlineContext</span>;
+    <span class="ty">noteContext</span>?: <span class="ty">SpecContext</span>;
+  };
+  <span class="ty">numberInfo</span>?: [<span class="ty">number</span>, <span class="ty">number</span> | <span class="kw">null</span>, <span class="ty">NumberRangeKind</span>];
+};</code></pre>
+
+<p>If you produce tokens from your own data model — converting a tree, normalizing a draft, replaying edits — fill in <code>id</code>, <code>kind</code>, <code>text</code>, and whichever optional fields apply to your token type. The walker only needs <code>kind</code>, <code>marker</code>, <code>text</code>, and <code>structural</code>; lint and diff additionally look at <code>span</code>, <code>sid</code>, <code>id</code>, and <code>numberInfo</code>.</p>
+
+<h3>Pattern: lint without re-parsing</h3>
+
+<pre><code><span class="kw">import</span> { parse, lintTokens } <span class="kw">from</span> <span class="str">"usfm-onion-web"</span>;
+
+<span class="kw">const</span> doc = <span class="fn">parse</span>(source);
+<span class="kw">const</span> tokens = doc.<span class="fn">tokens</span>();
+
+<span class="cmt">// Repeated lint calls on the same tokens — no second parse, no marshalling overhead.</span>
+<span class="kw">const</span> issues = <span class="fn">lintTokens</span>(tokens, {});
+
+<span class="cmt">// Mutate tokens in your editor, then lint again on what you actually have:</span>
+<span class="kw">const</span> nextIssues = <span class="fn">lintTokens</span>(currentTokens, {});</code></pre>
+</section>
+
+<section id="stability">
+<h2>Stability contracts<a class="anchor" href="#stability">#</a></h2>
+
+<p>Three Rust traits define the minimum token surface each operation needs. On the JS side they collapse into "the <code>Token</code> shape" above — JS callers don't see the traits directly, but the trait surface is what determines which fields a caller must provide.</p>
+
+<div class="grid-3">
+  <div class="panel tight">
+    <h4>WalkableToken</h4>
+    <p>Required by the walker. Implemented for every token type that flows through any structural consumer.</p>
+    <p>Needs: <code>kind</code>, <code>marker</code>, <code>text</code>, <code>structural</code>.</p>
+  </div>
+  <div class="panel tight">
+    <h4>LintableToken</h4>
+    <p>Supertrait of <code>WalkableToken</code>. Required by <code>lintTokens</code>.</p>
+    <p>Adds: <code>span</code>, <code>sid</code>, <code>id</code>, <code>numberInfo</code>.</p>
+  </div>
+  <div class="panel tight">
+    <h4>FormattableToken / DiffableToken</h4>
+    <p>Standalone. Format needs mutable accessors. Diff needs SID accessors.</p>
+    <p>Both accept the same <code>Token</code> shape from JS.</p>
+  </div>
+</div>
+
+<p>The stable JS-facing strings (<code>LintCode</code>, <code>FormatRule</code>) are derived from Rust enums via <code>tsify</code>, so a new lint code appearing on the Rust side surfaces automatically as a new member of the string union in the generated <code>.d.ts</code>.</p>
+</section>
+
+<section id="lint-codes">
+<h2>Lint codes<a class="anchor" href="#lint-codes">#</a></h2>
+
+<p>Codes are stable enums with stable string forms. Each finding carries an ICU MessageFormat template and a <code>message_params</code> map; any consumer (Rust, JS, CLI, web UI) can resolve the template against the params and localize the result independently of the engine.</p>
+
+<p>The "trigger" column is a minimal USFM snippet that produces the code. <code>fix</code> column: ✓ means an autofix is emitted as a <code>TokenFix</code> that <code>applyTokenFix</code> can apply; — means flag-only.</p>
+
+<table>
+  <tr><th>Code</th><th>Trigger example</th><th>Fix</th></tr>
+  <tr><td><code>missing-id-marker</code></td><td><span class="ex"><span class="bad">\c 1</span> \p \v 1 text</span></td><td>—</td></tr>
+  <tr><td><code>duplicate-id-marker</code></td><td><span class="ex">\id GEN <span class="bad">\id GEN</span></span></td><td>—</td></tr>
+  <tr><td><code>id-marker-not-at-file-start</code></td><td><span class="ex">\h Title <span class="bad">\id GEN</span></span></td><td>—</td></tr>
+  <tr><td><code>empty-paragraph</code></td><td><span class="ex"><span class="bad">\p</span> \p next</span></td><td>—</td></tr>
+  <tr><td><code>missing-chapter-number</code></td><td><span class="ex"><span class="bad">\c</span> \p</span></td><td>—</td></tr>
+  <tr><td><code>missing-verse-number</code></td><td><span class="ex">\p <span class="bad">\v</span> text</span></td><td>—</td></tr>
+  <tr><td><code>verse-is-empty</code></td><td><span class="ex"><span class="bad">\v 1</span> \v 2 text</span></td><td>—</td></tr>
+  <tr><td><code>unknown-marker</code></td><td><span class="ex">\p <span class="bad">\foozy</span> text</span></td><td>—</td></tr>
+  <tr><td><code>unknown-close-marker</code></td><td><span class="ex">\p text<span class="bad">\foozy*</span></span></td><td>—</td></tr>
+  <tr><td><code>content-before-first-chapter</code></td><td><span class="ex"><span class="bad">\p text</span> \c 1</span></td><td>—</td></tr>
+  <tr><td><code>verse-outside-explicit-paragraph</code></td><td><span class="ex">\c 1 <span class="bad">\v 1 text</span></span></td><td>—</td></tr>
+  <tr><td><code>note-submarker-outside-note</code></td><td><span class="ex">\p <span class="bad">\fr 1.1</span> text</span></td><td>—</td></tr>
+  <tr><td><code>metadata-outside-target</code></td><td><span class="ex">\p <span class="bad">\ca 1</span> outside any chapter</span></td><td>—</td></tr>
+  <tr><td><code>marker-not-valid-in-context</code></td><td><span class="ex">\f + body <span class="bad">\b</span> \f*</span></td><td>—</td></tr>
+  <tr><td><code>missing-milestone-self-close</code></td><td><span class="ex"><span class="bad">\ts</span> text</span> <span class="meta">(expected \ts\*)</span></td><td>—</td></tr>
+  <tr><td><code>stray-close-marker</code></td><td><span class="ex">\p text<span class="bad">\bd*</span></span></td><td>—</td></tr>
+  <tr><td><code>misnested-close-marker</code></td><td><span class="ex">\bd \it both<span class="bad">\bd*</span> \it*</span></td><td>—</td></tr>
+  <tr><td><code>implicitly-closed-marker</code></td><td><span class="ex">\p <span class="bad">\bd bold</span> \p next</span></td><td>—</td></tr>
+  <tr><td><code>unclosed-marker</code></td><td><span class="ex">\p <span class="bad">\f +</span> body \p next</span></td><td>—</td></tr>
+  <tr><td><code>duplicate-chapter-number</code></td><td><span class="ex">\c 1 ... <span class="bad">\c 1</span></span></td><td>—</td></tr>
+  <tr><td><code>chapter-expected-increase-by-one</code></td><td><span class="ex">\c 1 ... <span class="bad">\c 3</span></span></td><td>—</td></tr>
+  <tr><td><code>inconsistent-chapter-label</code></td><td><span class="ex">\cl Chapter \c 1 \v 1 ... <span class="bad">\cl Capítulo \c 2</span></span></td><td>—</td></tr>
+  <tr><td><code>duplicate-verse-number</code></td><td><span class="ex">\v 1 ... <span class="bad">\v 1</span></span></td><td>—</td></tr>
+  <tr><td><code>verse-expected-increase-by-one</code></td><td><span class="ex">\v 1 ... <span class="bad">\v 3</span></span></td><td>—</td></tr>
+  <tr><td><code>invalid-number-range</code></td><td><span class="ex"><span class="bad">\v 5-3</span> text</span></td><td>—</td></tr>
+  <tr><td><code>number-range-not-preceded-by-marker-expecting-number</code></td><td><span class="ex">\p <span class="bad">1-2</span> text</span></td><td>—</td></tr>
+  <tr><td><code>missing-whitespace-before-marker</code></td><td><span class="ex">text<span class="bad">\p</span> next</span></td><td><span class="pill ok">✓</span></td></tr>
+  <tr><td><code>missing-horizontal-whitespace-after-marker-name</code></td><td><span class="ex"><span class="bad">\c1</span></span></td><td><span class="pill ok">✓</span></td></tr>
+  <tr><td><code>missing-tag-end-delimiter-after-marker</code></td><td><span class="ex"><span class="bad">\pword</span></span></td><td><span class="pill ok">✓</span></td></tr>
+  <tr><td><code>excess-whitespace-around-marker</code></td><td><span class="ex">\v 1<span class="bad">     </span>text</span></td><td><span class="pill ok">✓</span></td></tr>
+  <tr><td><code>excess-whitespace-in-content</code></td><td><span class="ex">word<span class="bad">     </span>word</span></td><td><span class="pill ok">✓</span></td></tr>
+  <tr><td><code>missing-content-space-after-close-marker</code></td><td><span class="ex">\nd Lord\nd*<span class="bad">had</span></span></td><td>—</td></tr>
+  <tr><td><code>verse-in-section-or-other-paragraph</code></td><td><span class="ex">\s heading <span class="bad">\v 1 text</span></span></td><td>—</td></tr>
+</table>
+
+<div class="callout">
+  <div class="label">Parametric codes</div>
+  A handful of codes carry <code>kind</code> / <code>target</code> / <code>location</code> params that distinguish closely-related cases — e.g. <code>content-before-first-chapter</code> has <code>kind: paragraph | verse</code>; <code>unclosed-marker</code> has <code>kind: note | character | other</code> and <code>location: at-eof | at-boundary</code>. Resolve them via the ICU template against <code>message_params</code> to produce the localized human-readable string.
+</div>
+</section>
+
+<section id="export-shapes">
+<h2>Exports<a class="anchor" href="#export-shapes">#</a></h2>
+
+<table>
+  <tr><th>Export</th><th>Good for</th><th>Lossy because</th></tr>
+  <tr><td><strong>USJ</strong></td><td>JSON consumers, web editors, anything speaking the <code>.usj</code> format.</td><td>Insufficient trivia to round-trip exact USFM whitespace.</td></tr>
+  <tr><td><strong>USX</strong></td><td>Paratext-adjacent tooling, XML pipelines.</td><td>XML structure drops byte-level fidelity.</td></tr>
+  <tr><td><strong>HTML</strong></td><td>Browser display, preview panes, reading apps.</td><td>Summary output; not designed to round-trip.</td></tr>
+  <tr><td><strong>VREF</strong></td><td>Verse-keyed text extraction (search indexes, alignment tools).</td><td>Drops everything but the verse text.</td></tr>
+</table>
+
+<p>All four route through the walker for structural traversal — the shared recovery contract lives in one place so behavior is consistent across export formats.</p>
+</section>
+
+<section id="perf-native">
+<h2>Performance — native<a class="anchor" href="#perf-native">#</a></h2>
+<p class="meta">aarch64-macos · <code>[profile.bench]</code> opt-level 3, thin LTO · fixture: <code>43-LUK.usfm</code> (141.7 KiB)</p>
+
+<h3>Per operation</h3>
+<table>
+  <tr><th>Operation</th><th class="num">Median</th><th class="num">Throughput</th></tr>
+  <tr><td><code>lex/string</code></td><td class="num">158 µs</td><td class="num">873 MiB/s</td></tr>
+  <tr><td><code>parse/string</code></td><td class="num">263 µs</td><td class="num">527 MiB/s</td></tr>
+  <tr><td><code>cst/tokens</code></td><td class="num">193 µs</td><td class="num">717 MiB/s</td></tr>
+  <tr><td><code>lint/tokens</code></td><td class="num">545 µs</td><td class="num">254 MiB/s</td></tr>
+  <tr><td><code>lint/string</code></td><td class="num">1.41 ms</td><td class="num">98 MiB/s</td></tr>
+  <tr><td><code>format/tokens</code></td><td class="num">1.09 ms</td><td class="num">126 MiB/s</td></tr>
+  <tr><td><code>format/string</code></td><td class="num">1.64 ms</td><td class="num">84 MiB/s</td></tr>
+  <tr><td><code>usj/string</code></td><td class="num">1.38 ms</td><td class="num">100 MiB/s</td></tr>
+  <tr><td><code>usx/string</code></td><td class="num">2.01 ms</td><td class="num">69 MiB/s</td></tr>
+  <tr><td><code>html/string</code></td><td class="num">8.21 ms</td><td class="num">17 MiB/s</td></tr>
+  <tr><td><code>diff/string</code></td><td class="num">9.16 ms</td><td class="num">15 MiB/s</td></tr>
+</table>
+
+<h3>File-level parallelism (en_ulb — 66 books)</h3>
+<p>The library itself is single-threaded by design. The <code>parallelism</code> bench demonstrates what a caller gets by parallelizing at the file level with <code>rayon</code>.</p>
+<table>
+  <tr><th>Operation</th><th class="num">Serial</th><th class="num">Rayon (10 cores)</th><th class="num">Speedup</th></tr>
+  <tr><td><code>parse</code></td><td class="num">9.70 ms</td><td class="num">2.88 ms</td><td class="num">3.36×</td></tr>
+  <tr><td><code>lint</code></td><td class="num">27.83 ms</td><td class="num">6.78 ms</td><td class="num">4.10×</td></tr>
+  <tr><td><code>format</code></td><td class="num">56.99 ms</td><td class="num">13.35 ms</td><td class="num">4.27×</td></tr>
+  <tr><td><code>usj</code></td><td class="num">40.38 ms</td><td class="num">10.91 ms</td><td class="num">3.70×</td></tr>
+  <tr><td><code>usx</code></td><td class="num">64.78 ms</td><td class="num">15.88 ms</td><td class="num">4.08×</td></tr>
+  <tr><td><code>html</code></td><td class="num">289.45 ms</td><td class="num">149.12 ms</td><td class="num">1.94×</td></tr>
+</table>
+</section>
+
+<section id="perf-wasm">
+<h2>Performance — WASM<a class="anchor" href="#perf-wasm">#</a></h2>
+<p class="meta">Node 24, bundler target · same fixture (Luke, 141.7 KiB) · 50 iterations, median reported</p>
+
+<table>
+  <tr><th>Operation</th><th class="num">Median</th><th class="num">Throughput</th></tr>
+  <tr><td><code>parse/string</code></td><td class="num">12.20 ms</td><td class="num">11.3 MiB/s</td></tr>
+  <tr><td><code>cst/string</code></td><td class="num">11.43 ms</td><td class="num">12.1 MiB/s</td></tr>
+  <tr><td><code>vref/string</code></td><td class="num">1.63 ms</td><td class="num">85.1 MiB/s</td></tr>
+  <tr><td><code>usj/string</code></td><td class="num">3.77 ms</td><td class="num">36.7 MiB/s</td></tr>
+  <tr><td><code>usx/string</code></td><td class="num">2.31 ms</td><td class="num">59.8 MiB/s</td></tr>
+  <tr><td><code>html/string</code></td><td class="num">2.89 ms</td><td class="num">47.9 MiB/s</td></tr>
+  <tr><td><code>lint/string</code></td><td class="num">2.71 ms</td><td class="num">51.0 MiB/s</td></tr>
+  <tr><td><code>format/string</code></td><td class="num">2.89 ms</td><td class="num">47.8 MiB/s</td></tr>
+  <tr><td><code>diff/string</code></td><td class="num">40.86 ms</td><td class="num">3.4 MiB/s</td></tr>
+  <tr><td><code>tokens/marshal-out</code></td><td class="num">11.63 ms</td><td class="num">11.9 MiB/s</td></tr>
+  <tr><td><code>tokens/marshal-in</code></td><td class="num">10.74 ms</td><td class="num">12.9 MiB/s</td></tr>
+</table>
+
+<p>Native parse on the same fixture is ~250 µs; marshalling the token stream across the FFI is ~11.6 ms — roughly 46× the parse cost. FFI marshalling, not parsing, is the dominant cost in the browser. The token-in entry points (<code>lintTokens</code>, <code>formatTokens</code>, <code>diffTokens</code>) exist so callers that already have tokens can skip a re-marshal on repeated ops.</p>
+</section>
+
+<section id="test-data">
+<h2>Test data<a class="anchor" href="#test-data">#</a></h2>
+
+<p>The bulk of the conformance fixtures in <code>testData/</code> are drawn from the test suite maintained by the USFM/USX committee at <a href="https://github.com/usfm-bible/tcdocs">github.com/usfm-bible/tcdocs</a>. They're organized into folders by topic:</p>
+
+<table>
+  <tr><th>Location</th><th>Purpose</th></tr>
+  <tr><td><code>testData/basic</code> · <code>advanced</code> · <code>mandatory</code></td><td>Spec-conformance fixtures organized by complexity</td></tr>
+  <tr><td><code>testData/paratextTests</code> · <code>usfmjsTests</code></td><td>Compatibility cases from neighbouring projects</td></tr>
+  <tr><td><code>testData/samples-from-wild</code></td><td>Real-world weirdness — unclosed notes, mixed line endings, exotic markers</td></tr>
+  <tr><td><code>testData/specExamples</code></td><td>Snippets lifted directly from the USFM 3.x spec</td></tr>
+  <tr><td><code>testData/biblica</code> · <code>markers.ext</code> · <code>introductions</code></td><td>Topic-focused suites</td></tr>
+  <tr><td><code>example-corpora/en_ulb</code></td><td>English Unlocked Literal Bible — the "whole Bible" bench corpus (66 books)</td></tr>
+  <tr><td><code>example-corpora/en_ult</code></td><td>Alignment-heavy corpus (depth-400 nesting)</td></tr>
+  <tr><td><code>example-corpora/examples.bsb</code> · <code>bdf_reg</code></td><td>Smaller alternate corpora for bench variety</td></tr>
+</table>
+
+<h3>Alternative parsers</h3>
+
+<p>If you want to cross-check parser behavior against a different implementation, two starting points (there are many more in the wild):</p>
+<ul>
+  <li><strong><a href="https://github.com/Bridgeconn/usfm-grammar">Bridgeconn/usfm-grammar</a></strong> — JavaScript / TypeScript USFM parser using a tree-sitter-based grammar.</li>
+  <li><strong><a href="https://github.com/jcuenod/usfm3">jcuenod/usfm3</a></strong> — Rust USFM3 parser.</li>
+</ul>
+</section>
+
+<section id="run-it">
+<h2>Build, test, bench<a class="anchor" href="#run-it">#</a></h2>
+
+<pre><code><span class="cmt"># Build &amp; test</span>
+cargo build
+cargo test                              <span class="cmt"># full suite</span>
+cargo test &lt;name&gt;                       <span class="cmt"># filter by test name substring</span>
+cargo test --test &lt;file&gt;                <span class="cmt"># specific integration test file</span>
+
+<span class="cmt"># Benches — two harnesses</span>
+cargo bench --bench operations          <span class="cmt"># string-vs-tokens matrix on one book</span>
+cargo bench --bench parallelism         <span class="cmt"># serial vs rayon over full en_ulb</span>
+cargo run --release --example bench_report > BENCH_RESULTS.md
+
+<span class="cmt"># Different corpora</span>
+USFM_BENCH_CORPORA=examples.bsb cargo bench --bench operations
+USFM_BENCH_CORPORA=all cargo bench --bench parallelism
+
+<span class="cmt"># WASM build (root-level npm scripts)</span>
+npm run build:wasm                      <span class="cmt"># bundler + web targets, release</span>
+npm run check:wasm:web                  <span class="cmt"># cargo check against wasm32 target</span>
+npm run test:wasm                       <span class="cmt"># scripts/test-web-package.mjs against both targets</span></code></pre>
+</section>
+
+<section id="consumer-tips">
+<h2>Tips for consumers<a class="anchor" href="#consumer-tips">#</a></h2>
+
+<div class="callout">
+  <div class="label">If you're calling from the browser</div>
+  <p>Parse once, lint many. If you're going to run lint repeatedly on the same document (validation on edit, debouncing, etc.) call <code>tokens()</code> once and pass the resulting array into <code>lintTokens</code> on each subsequent call. That skips both a re-parse and the FFI parse round-trip.</p>
+  <p>Memoize <code>tokens()</code> at the consumer boundary. If you're inside a reactive UI, a <code>useMemo</code> (or equivalent) keyed on the source string is enough — there is no benefit to invalidating the memo until the source actually changes.</p>
+</div>
+
+<div class="callout">
+  <div class="label">If you're producing tokens from your own data model</div>
+  <p>Tree-shaped editors that maintain their own document state can flatten their tree into the <a href="#token-shape">JS <code>Token</code> shape</a> and lint/format/diff against the engine without ever round-tripping through a USFM string. Fill in <code>id</code>, <code>kind</code>, <code>text</code>, and whichever optional fields apply.</p>
+</div>
+
+<div class="callout">
+  <div class="label">If you're parallelizing work in Rust</div>
+  <p>The library is single-threaded. Parallelize at the file / document level with <code>rayon</code> — see <code>benches/parallelism.rs</code> for the pattern.</p>
+</div>
+</section>
+
+<section id="orient">
+<h2>Read order<a class="anchor" href="#orient">#</a></h2>
+
+<p>For a quick orientation to the codebase, read in this order:</p>
+
+<ol>
+  <li><strong><code>src/lib.rs</code></strong> — re-exports defining the public surface. Two pages.</li>
+  <li><strong><code>src/api.rs</code></strong> — the facade. <code>Usfm</code> → <code>ParsedUsfm</code> → <code>TokenStream</code> is the user story.</li>
+  <li><strong><code>src/token.rs</code></strong> — what a <code>Token</code> actually is. <code>TokenData</code> is the variant zoo.</li>
+  <li><strong><code>src/walker/mod.rs</code></strong> — visitor trait, scope stack, precedence rules. Module-level docs narrate the three design choices.</li>
+  <li><strong><code>src/marker_defs.rs</code></strong> — the type-level catalog (no data here, just shapes).</li>
+  <li><strong><code>src/lint_impl.rs</code></strong> — the largest visitor. <code>LintCode</code> at the top is the stable surface.</li>
+  <li><strong><code>crates/usfm_onion_wasm/src/lib.rs</code></strong> — the FFI layer. <code>WalkToken</code>'s doc comment explains the boundary between FFI types and walker types.</li>
+</ol>
+
+<p class="meta" style="margin-top: 32px;">Generated 2026-05-12 · regenerate by editing <code>docs/usfm-onion.html</code> directly.</p>
+</section>
+
+</main>
+</div>
+</body>
+</html>

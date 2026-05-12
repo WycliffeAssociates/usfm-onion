@@ -1,13 +1,14 @@
 //! HTML rendering, driven by the unified walker.
 //!
-//! Step 3 of the walker migration (see `docs/plan-walker-architecture.md`).
-//! The previous implementation maintained its own `OpenElement` stack
-//! and ad-hoc precedence logic (`close_for_new_block`,
-//! `close_inline_scopes`, `close_non_book_table_block_scopes`, etc.)
-//! that mirrored — and occasionally drifted from — the structural
-//! interpretation in CST and vref. All of that scope tracking is now
-//! delegated to `crate::walker`: this module is just a visitor that
-//! reacts to walker events with HTML emission.
+//! This module is a visitor over `crate::walker`'s events. All scope
+//! tracking (Block precedence, sidebar pops, inline closes, unclosed-
+//! note recovery) is the walker's responsibility — the visitor just
+//! reacts to walker events with HTML emission. Notes are deferred:
+//! the caller is captured from the first body text token (mirroring
+//! `parse_note_tokens`' first-text-is-caller rule); `<aside>`
+//! extraction or inline-span emission happens on
+//! `on_leave_scope(Note)`. `\esbe` is modelled as a phantom frame
+//! (occupies a walker scope slot but emits no HTML element).
 //!
 //! What remains here:
 //! - HTML option types (`HtmlOptions`, `HtmlNoteMode`, `HtmlCallerStyle`,

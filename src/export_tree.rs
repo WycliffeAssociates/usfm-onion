@@ -1,9 +1,7 @@
 //! Intermediate tree representation consumed by `crate::usj` and
-//! `crate::usx`. Originally a self-contained state machine duplicating
-//! `cst::recover_stack` / `pop_for_open_scope`. Step 4 of the walker
-//! migration replaces that state machine with a visitor over
-//! `crate::walker`'s events; the `ExportNode` shape, and therefore
-//! the UsjExporter / UsxExporter consumers, are unchanged.
+//! `crate::usx`. Built by a visitor over `crate::walker`'s events.
+//! The `ExportNode` shape is the contract for UsjExporter and
+//! UsxExporter — keep that stable across walker tweaks.
 
 use std::collections::HashSet;
 
