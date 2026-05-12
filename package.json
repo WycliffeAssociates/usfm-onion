@@ -36,6 +36,9 @@
     "test:wasm": "npm run test:wasm:bundler && npm run test:wasm:web",
     "golden:wasm": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
     "golden:wasm:update": "npm run build:wasm:bundler:dev && UPDATE_GOLDEN=1 node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
-    "golden:wasm:web": "npm run build:wasm:web:dev && node scripts/wasm-golden.mjs web"
+    "golden:wasm:web": "npm run build:wasm:web:dev && node scripts/wasm-golden.mjs web",
+    "bench:wasm": "npm run build:wasm:bundler && node --experimental-wasm-modules benches/wasm/run.mjs bundler",
+    "bench:wasm:web": "npm run build:wasm:web && node benches/wasm/run.mjs web",
+    "bench:wasm:report": "npm run build:wasm:bundler && BENCH_OUT=BENCH_RESULTS_WASM.md node --experimental-wasm-modules benches/wasm/run.mjs bundler"
   }
 }

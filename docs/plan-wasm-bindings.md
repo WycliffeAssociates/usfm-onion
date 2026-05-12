@@ -1,12 +1,36 @@
 # Plan: wasm crate cleanup via tsify + parity benches
 
-Status: deferred. Design locked; implementation is a single
-multi-step refactor of `crates/usfm_onion_wasm/src/lib.rs` plus a
-new `benches/wasm.rs` harness (or its node-driven equivalent). The
-walker refactor is already in; the marker-data work is in; the
-library API contractions from `b6094d3` (drop rayon, drop batch
-types, drop `PathBuf` constructors) are in. The wasm surface has
-nothing left to wait on.
+Status: **landed** in commits 0788a42..(latest). Phases 1–9 executed
+in sequence, each verified by the golden parity harness. Six drift
+bugs surfaced and were fixed along the way (see commit history for
+details). `BENCH_RESULTS_WASM.md` is generated from
+`benches/wasm/run.mjs`.
+
+The remaining follow-ups (open from this work):
+
+1. **`ParsedUsfm` lazy-parse caching.** Every method on `ParsedUsfm`
+   re-parses the source. The wasm bench made this visible:
+   `parse/string` and `tokens/marshal-out` cost almost the same
+   (~11.8ms each), meaning the per-call FFI marshalling dominates
+   over the underlying parse. A `ouroboros`/`self_cell` wrapper that
+   caches `ParseResult` would speed up every source-in op.
+2. **Mirror `UsjDocument` as a real Tsify type.** It's the last
+   hand-written declaration in `TS_TYPES`. ~15 variants, mostly
+   small. Straightforward but not trivial.
+3. **Fold `AdapterToken` onto `Token` directly** if we can find a
+   shape that doesn't force per-method conversion on hot lint/diff
+   paths. Not blocking anything; trade-off discussed below in the
+   "Phase 8" section.
+
+Original status preserved below for context:
+
+> Design locked; implementation is a single multi-step refactor of
+> `crates/usfm_onion_wasm/src/lib.rs` plus a new `benches/wasm.rs`
+> harness (or its node-driven equivalent). The walker refactor is
+> already in; the marker-data work is in; the library API
+> contractions from `b6094d3` (drop rayon, drop batch types, drop
+> `PathBuf` constructors) are in. The wasm surface has nothing left
+> to wait on.
 
 ## Why this exists
 
