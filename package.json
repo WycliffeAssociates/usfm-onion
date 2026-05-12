@@ -24,8 +24,7 @@
   "types": "./pkg-bundler/usfm_onion_web.d.ts",
   "scripts": {
     "build": "npm run build:wasm",
-    "build:wasm": "npm run build:wasm:all",
-    "build:wasm:all": "npm run build:wasm:bundler && npm run build:wasm:web",
+    "build:wasm": "npm run build:wasm:bundler && npm run build:wasm:web",
     "build:wasm:bundler": "wasm-pack build crates/usfm_onion_wasm --target bundler --release --out-dir ../../pkg-bundler --out-name usfm_onion_web && node scripts/restore-wasm-package-layout.mjs",
     "build:wasm:bundler:dev": "wasm-pack build crates/usfm_onion_wasm --target bundler --dev --out-dir ../../pkg-bundler --out-name usfm_onion_web && node scripts/restore-wasm-package-layout.mjs",
     "build:wasm:web": "wasm-pack build crates/usfm_onion_wasm --target web --release --out-dir ../../pkg-web --out-name usfm_onion_web && node scripts/restore-wasm-package-layout.mjs",

@@ -24,9 +24,9 @@ use usfm_onion::html::{
 use usfm_onion::lint::{
     LintCategory as NativeLintCategory, LintCode as NativeLintCode,
     LintIssueType as NativeLintIssueType, LintOptions as NativeLintOptions,
-    LintResult as NativeLintResult,
-    LintSeverity as NativeLintSeverity, LintSuppression as NativeLintSuppression, LintableToken,
-    TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
+    LintResult as NativeLintResult, LintSeverity as NativeLintSeverity,
+    LintSuppression as NativeLintSuppression, LintableToken, TokenFix as NativeTokenFix,
+    apply_token_fix, lint_tokens, lint_usfm,
 };
 use usfm_onion::marker_defs::{
     BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
@@ -36,7 +36,6 @@ use usfm_onion::marker_defs::{
     StructuralMarkerInfo as NativeStructuralMarkerInfo,
     StructuralScopeKind as NativeStructuralScopeKind,
 };
-use usfm_onion::walker::WalkableToken;
 use usfm_onion::markers::{
     MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
     UsfmMarkerInfo as NativeUsfmMarkerInfo, is_known_marker, marker_catalog, marker_info,
@@ -50,7 +49,9 @@ use usfm_onion::token::{
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
 use usfm_onion::vref::{VrefMap as NativeVrefMap, usfm_to_vref_map};
+use usfm_onion::walker::WalkableToken;
 
+// @ai? -> Can we do this please? What's What's needed? I'd rather not have to maintain any custom typescript section, generally speaking.
 #[wasm_bindgen(typescript_custom_section)]
 const TS_TYPES: &str = r#"
 // JSON Value type and USJ document tree.
@@ -104,7 +105,7 @@ export type UsjElement =
 // the previous stringify pairs produced. From impls in both directions keep
 // the boundary between native and FFI fully typed; no string parsing.
 // ---------------------------------------------------------------------------
-
+// @ai? I've generally not done a lot of Rust or WASM, but I like it because it forces LLMs to adhere to the compiler as well as it offers opportunities for speedy things.  Can you just generally sketch out what this entire file is doing? tsify, bindgen.  I was kind of under the impression you could get Wasm for free basically by dropping in that m T SFI macro and that was it, so like, what 2k lines of code here?
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -184,7 +185,9 @@ impl From<NumberRangeKind> for NativeNumberRangeKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify,
+)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "kebab-case")]
 pub enum LintCategory {
@@ -205,7 +208,9 @@ impl From<NativeLintCategory> for LintCategory {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify,
+)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "kebab-case")]
 pub enum LintSeverity {
@@ -222,7 +227,9 @@ impl From<NativeLintSeverity> for LintSeverity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify,
+)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "kebab-case")]
 pub enum LintIssueType {
@@ -239,7 +246,9 @@ impl From<NativeLintIssueType> for LintIssueType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify,
+)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "kebab-case")]
 pub enum LintCode {
@@ -483,7 +492,7 @@ pub enum HtmlCallerScope {
     DocumentSequential,
     VerseSequential,
 }
-
+// @ai? -> Again, maybe this is a mistake, but I've not handwritten a whole lot of Rust, but I'm still trying to learn things, so what is the "From" with a generic for?
 impl From<HtmlCallerScope> for NativeHtmlCallerScope {
     fn from(value: HtmlCallerScope) -> Self {
         match value {
@@ -704,7 +713,9 @@ impl From<NativeClosingBehavior> for ClosingBehavior {
         match value {
             NativeClosingBehavior::None => Self::None,
             NativeClosingBehavior::RequiredExplicit => Self::RequiredExplicit,
-            NativeClosingBehavior::OptionalExplicitUntilNoteEnd => Self::OptionalExplicitUntilNoteEnd,
+            NativeClosingBehavior::OptionalExplicitUntilNoteEnd => {
+                Self::OptionalExplicitUntilNoteEnd
+            }
             NativeClosingBehavior::SelfClosingMilestone => Self::SelfClosingMilestone,
         }
     }
@@ -828,6 +839,7 @@ pub enum MarkerDefKind {
 
 impl From<usfm_onion::marker_defs::MarkerDefKind> for MarkerDefKind {
     fn from(value: usfm_onion::marker_defs::MarkerDefKind) -> Self {
+        // @ai? -> why the generic cast as K?
         use usfm_onion::marker_defs::MarkerDefKind as K;
         match value {
             K::Paragraph => Self::Paragraph,
@@ -928,7 +940,9 @@ impl From<NativeNoteSubkind> for NoteSubkind {
     fn from(value: NativeNoteSubkind) -> Self {
         match value {
             NativeNoteSubkind::Structural => Self::Structural,
-            NativeNoteSubkind::StructuralKeepsNestedCharsOpen => Self::StructuralKeepsNestedCharsOpen,
+            NativeNoteSubkind::StructuralKeepsNestedCharsOpen => {
+                Self::StructuralKeepsNestedCharsOpen
+            }
         }
     }
 }
@@ -1119,7 +1133,11 @@ pub struct LintResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum TokenFix {
     ReplaceToken {
         code: String,
@@ -1319,8 +1337,17 @@ pub struct MarkerInfo {
     source: Option<String>,
 }
 
+/// Owned token shape that satisfies the library's `WalkableToken`,
+/// `LintableToken`, and `DiffableToken` traits with **native** enum
+/// types. The JS-facing `Token` carries the FFI mirror enums
+/// (`TokenKind`, `StructuralMarkerInfo`, …); converting them on every
+/// trait-method access inside a walker would cost several enum
+/// conversions per token per walker pass — tens of thousands of extra
+/// match statements for a Luke-sized document. So token-in entry
+/// points do one linear `Token` → `WalkToken` pass at call time and
+/// the walker runs over these.
 #[derive(Debug, Clone)]
-struct AdapterToken {
+struct WalkToken {
     id: String,
     kind: NativeTokenKind,
     text: String,
@@ -1331,7 +1358,7 @@ struct AdapterToken {
     number_info: Option<(u32, Option<u32>, NativeNumberRangeKind)>,
 }
 
-impl WalkableToken for AdapterToken {
+impl WalkableToken for WalkToken {
     fn kind(&self) -> NativeTokenKind {
         self.kind
     }
@@ -1349,7 +1376,7 @@ impl WalkableToken for AdapterToken {
     }
 }
 
-impl LintableToken for AdapterToken {
+impl LintableToken for WalkToken {
     fn span(&self) -> Option<NativeSpan> {
         self.span
     }
@@ -1367,7 +1394,7 @@ impl LintableToken for AdapterToken {
     }
 }
 
-impl DiffableToken for AdapterToken {
+impl DiffableToken for WalkToken {
     fn sid(&self) -> Option<&str> {
         self.sid.as_deref()
     }
@@ -1429,6 +1456,7 @@ impl ParsedUsfm {
         result.iter().map(map_format_token).collect()
     }
 
+    // @ai? -> This looks different than just mapping types. It looks like it's like a redoing of the entire function itself. Again, some of this is my understanding of how WASMBy and Gen TSFI works. Like I say, I thought you basically could put macros on these things and then you pretty much got 'em for free but this looks like reimplementing the logc? Or at least a lot of glue code to the native functions.
     #[wasm_bindgen(js_name = revertDiffBlock)]
     pub fn revert_diff_block(
         &self,
@@ -1545,11 +1573,8 @@ pub fn wasm_lint_usfm(source: &str, options: Option<LintOptions>) -> LintResult 
 }
 
 #[wasm_bindgen(js_name = lintTokens)]
-pub fn wasm_lint_tokens(
-    tokens: Vec<Token>,
-    options: Option<LintOptions>,
-) -> LintResult {
-    let tokens = parse_adapter_tokens_from_values(tokens);
+pub fn wasm_lint_tokens(tokens: Vec<Token>, options: Option<LintOptions>) -> LintResult {
+    let tokens = parse_walk_tokens_from_values(tokens);
     map_lint_result(lint_tokens(&tokens, lint_options_into_native(options)))
 }
 
@@ -1569,10 +1594,7 @@ pub fn wasm_format_usfm(source: &str, options: Option<FormatOptions>) -> String 
 }
 
 #[wasm_bindgen(js_name = formatTokens)]
-pub fn wasm_format_tokens(
-    tokens: Vec<Token>,
-    options: Option<FormatOptions>,
-) -> FormatResult {
+pub fn wasm_format_tokens(tokens: Vec<Token>, options: Option<FormatOptions>) -> FormatResult {
     let mut native_tokens = tokens
         .into_iter()
         .map(token_value_to_format_token)
@@ -1585,10 +1607,7 @@ pub fn wasm_format_tokens(
 }
 
 #[wasm_bindgen(js_name = formatTokensMut)]
-pub fn wasm_format_tokens_mut(
-    tokens: Vec<Token>,
-    options: Option<FormatOptions>,
-) -> Vec<Token> {
+pub fn wasm_format_tokens_mut(tokens: Vec<Token>, options: Option<FormatOptions>) -> Vec<Token> {
     let mut native_tokens = tokens
         .into_iter()
         .map(token_value_to_format_token)
@@ -1636,11 +1655,11 @@ pub fn wasm_diff_tokens(
     right: Vec<Token>,
     options: Option<BuildSidBlocksOptions>,
 ) -> Vec<ChapterTokenDiff> {
-    let left = parse_adapter_tokens_from_values(left);
-    let right = parse_adapter_tokens_from_values(right);
+    let left = parse_walk_tokens_from_values(left);
+    let right = parse_walk_tokens_from_values(right);
     let options = build_options_into_native(options);
     let diffs = diff_chapter_token_streams(&left, &right, &options);
-    map_adapter_diffs(&diffs)
+    map_walk_token_diffs(&diffs)
 }
 
 #[wasm_bindgen(js_name = revertDiffBlock)]
@@ -1708,7 +1727,10 @@ pub fn wasm_is_known_marker(marker: &str) -> bool {
 
 #[wasm_bindgen(js_name = lintCodes)]
 pub fn wasm_lint_codes() -> Vec<LintCode> {
-    lint_code_variants().into_iter().map(LintCode::from).collect()
+    lint_code_variants()
+        .into_iter()
+        .map(LintCode::from)
+        .collect()
 }
 
 #[wasm_bindgen(js_name = lintCodeMeta)]
@@ -1852,21 +1874,19 @@ fn html_options_into_native(value: Option<HtmlOptions>) -> NativeHtmlOptions {
     }
 }
 
-fn build_options_into_native(
-    value: Option<BuildSidBlocksOptions>,
-) -> NativeBuildSidBlocksOptions {
+fn build_options_into_native(value: Option<BuildSidBlocksOptions>) -> NativeBuildSidBlocksOptions {
     let value = value.unwrap_or_default();
     NativeBuildSidBlocksOptions {
         allow_empty_sid: value.allow_empty_sid.unwrap_or(true),
     }
 }
 
-fn parse_adapter_tokens_from_values(values: Vec<Token>) -> Vec<AdapterToken> {
-    values.into_iter().map(token_value_to_adapter).collect()
+fn parse_walk_tokens_from_values(values: Vec<Token>) -> Vec<WalkToken> {
+    values.into_iter().map(token_to_walk_token).collect()
 }
 
-fn token_value_to_adapter(value: Token) -> AdapterToken {
-    AdapterToken {
+fn token_to_walk_token(value: Token) -> WalkToken {
+    WalkToken {
         id: value.id,
         kind: value.kind.into(),
         text: value.text,
@@ -2214,15 +2234,11 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssue {
     }
 }
 
-fn map_chapter_diffs(
-    diffs: &[NativeChapterTokenDiff<NativeToken<'_>>],
-) -> Vec<ChapterTokenDiff> {
+fn map_chapter_diffs(diffs: &[NativeChapterTokenDiff<NativeToken<'_>>]) -> Vec<ChapterTokenDiff> {
     diffs.iter().map(map_native_chapter_diff).collect()
 }
 
-fn map_native_chapter_diff(
-    diff: &NativeChapterTokenDiff<NativeToken<'_>>,
-) -> ChapterTokenDiff {
+fn map_native_chapter_diff(diff: &NativeChapterTokenDiff<NativeToken<'_>>) -> ChapterTokenDiff {
     ChapterTokenDiff {
         block_id: diff.block_id.clone(),
         semantic_sid: diff.semantic_sid.clone(),
@@ -2253,11 +2269,11 @@ fn map_native_chapter_diff(
     }
 }
 
-fn map_adapter_diffs(diffs: &[NativeChapterTokenDiff<AdapterToken>]) -> Vec<ChapterTokenDiff> {
-    diffs.iter().map(map_adapter_chapter_diff).collect()
+fn map_walk_token_diffs(diffs: &[NativeChapterTokenDiff<WalkToken>]) -> Vec<ChapterTokenDiff> {
+    diffs.iter().map(map_walk_token_chapter_diff).collect()
 }
 
-fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> ChapterTokenDiff {
+fn map_walk_token_chapter_diff(diff: &NativeChapterTokenDiff<WalkToken>) -> ChapterTokenDiff {
     ChapterTokenDiff {
         block_id: diff.block_id.clone(),
         semantic_sid: diff.semantic_sid.clone(),
@@ -2270,8 +2286,8 @@ fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> Chap
         current_text_only: diff.current_text_only.clone(),
         is_whitespace_change: diff.is_whitespace_change,
         is_usfm_structure_change: diff.is_usfm_structure_change,
-        original_tokens: diff.original_tokens.iter().map(map_adapter_token).collect(),
-        current_tokens: diff.current_tokens.iter().map(map_adapter_token).collect(),
+        original_tokens: diff.original_tokens.iter().map(map_walk_token).collect(),
+        current_tokens: diff.current_tokens.iter().map(map_walk_token).collect(),
         original_alignment: diff
             .original_alignment
             .iter()
@@ -2288,7 +2304,7 @@ fn map_adapter_chapter_diff(diff: &NativeChapterTokenDiff<AdapterToken>) -> Chap
     }
 }
 
-fn map_adapter_token(token: &AdapterToken) -> Token {
+fn map_walk_token(token: &WalkToken) -> Token {
     Token {
         id: token.id.clone(),
         kind: token.kind.into(),
@@ -2330,8 +2346,7 @@ fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignment {
 
 fn map_diffs_by_chapter(
     diffs: &NativeDiffsByChapterMap<NativeChapterTokenDiff<NativeToken<'_>>>,
-) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiff>>>
-{
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiff>>> {
     diffs
         .iter()
         .map(|(book, chapters)| {
@@ -2461,7 +2476,7 @@ mod tests {
     fn lint_tokens_accepts_parsed_footnote_submarker_streams() {
         let source = "\\id GEN\n\\c 1\n\\pi1\n\\v 26 Then God said, “Let Us make man in Our image, after Our likeness, to rule over the fish of the sea and the birds of the air, over the livestock, and over all the earth itself\\f + \\fr 1:26 \\ft MT; Syriac \\fqa and over all the beasts of the earth\\f* and every creature that crawls upon it.”\n\\q1\n";
         let token_values = map_tokens(&native_parse(source).tokens);
-        let adapter_tokens = parse_adapter_tokens_from_values(token_values);
+        let adapter_tokens = parse_walk_tokens_from_values(token_values);
         let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
 
         assert!(
@@ -2486,7 +2501,7 @@ mod tests {
     fn lint_tokens_accepts_parsed_nested_cross_reference_char_streams() {
         let source = "\\id GEN\n\\c 1\n\\v 1 In the beginning\\x + \\xo 1:1 \\xt cross ref \\+xt nested\\+xt* tail\\x*\n";
         let token_values = map_tokens(&native_parse(source).tokens);
-        let adapter_tokens = parse_adapter_tokens_from_values(token_values);
+        let adapter_tokens = parse_walk_tokens_from_values(token_values);
         let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
 
         assert!(
@@ -2505,10 +2520,10 @@ mod tests {
             "\\id GEN\n\\c 1\n\\pi1\n\\v 26 Then God said\\f + \\fr 1:26 \\ft MT; Syriac \\fqa and over all the beasts of the earth\\f*\n",
             "\\id GEN\n\\c 1\n\\v 1 In the beginning\\x + \\xo 1:1 \\xt cross ref \\+xt nested\\+xt* tail\\x*\n",
         ];
-        let batches: Vec<Vec<AdapterToken>> = sources
+        let batches: Vec<Vec<WalkToken>> = sources
             .iter()
             .map(|source| map_tokens(&native_parse(source).tokens))
-            .map(parse_adapter_tokens_from_values)
+            .map(parse_walk_tokens_from_values)
             .collect();
 
         let results = batches
@@ -2549,7 +2564,15 @@ mod tests {
 
         let mapped = map_lint_issue(issue);
         assert_eq!(mapped.issue_type, LintIssueType::Content);
-        assert_eq!(mapped.message_params.get("expected"), Some(&"2".to_string()));
+        assert_eq!(
+            mapped.message_params.get("expected"),
+            Some(&"2".to_string())
+        );
         assert_eq!(mapped.message_params.get("found"), Some(&"3".to_string()));
     }
 }
+
+// @ai? Open questions: Please explain a little more to me regarindg: recap: Cleaning up the wasm crate by migrating to tsify-derived types; all 9 phases of docs/plan-wasm-bindings.md are landed across 7 commits with golden parity and bench
+//   1. ParsedUsfm lazy-parse caching (biggest perf win the bench surfaced)
+//   2. Mirror UsjDocument as a real tsify type — only thing left in TS_TYPES
+//   3. Optional: fold WalkToken onto Token directly if a shape can be found that doesn't force per-method conversion on hot lint/diff paths
