@@ -4,48 +4,48 @@
       "id": "GEN-0",
       "kind": "marker",
       "marker": "id",
+      "source": "\\id",
       "span": {
         "end": 3,
         "start": 0
       },
       "structural": {
         "scopeKind": "header"
-      },
-      "text": "\\id"
+      }
     },
     {
       "id": "GEN-1",
       "kind": "bookCode",
       "sid": "GEN 0:0",
+      "source": " GEN",
       "span": {
         "end": 7,
         "start": 3
-      },
-      "text": " GEN"
+      }
     },
     {
       "id": "GEN-2",
       "kind": "newline",
       "sid": "GEN 0:0",
+      "source": "\n",
       "span": {
         "end": 8,
         "start": 7
-      },
-      "text": "\n"
+      }
     },
     {
       "id": "GEN-3",
       "kind": "marker",
       "marker": "c",
       "sid": "GEN 1:0",
+      "source": "\\c",
       "span": {
         "end": 10,
         "start": 8
       },
       "structural": {
         "scopeKind": "chapter"
-      },
-      "text": "\\c"
+      }
     },
     {
       "id": "GEN-4",
@@ -55,27 +55,28 @@
         "start": 1
       },
       "sid": "GEN 1:0",
+      "source": " 1",
       "span": {
         "end": 12,
         "start": 10
-      },
-      "text": " 1"
+      }
     },
     {
       "id": "GEN-5",
       "kind": "newline",
       "sid": "GEN 1:0",
+      "source": "\n",
       "span": {
         "end": 13,
         "start": 12
-      },
-      "text": "\n"
+      }
     },
     {
       "id": "GEN-6",
       "kind": "marker",
       "marker": "p",
       "sid": "GEN 1:0",
+      "source": "\\p",
       "span": {
         "end": 15,
         "start": 13
@@ -83,32 +84,31 @@
       "structural": {
         "inlineContext": "para",
         "scopeKind": "block"
-      },
-      "text": "\\p"
+      }
     },
     {
       "id": "GEN-7",
       "kind": "newline",
       "sid": "GEN 1:0",
+      "source": "\n",
       "span": {
         "end": 16,
         "start": 15
-      },
-      "text": "\n"
+      }
     },
     {
       "id": "GEN-8",
       "kind": "marker",
       "marker": "v",
       "sid": "GEN 1:1",
+      "source": "\\v",
       "span": {
         "end": 18,
         "start": 16
       },
       "structural": {
         "scopeKind": "verse"
-      },
-      "text": "\\v"
+      }
     },
     {
       "id": "GEN-9",
@@ -118,35 +118,35 @@
         "start": 1
       },
       "sid": "GEN 1:1",
+      "source": " 1",
       "span": {
         "end": 20,
         "start": 18
-      },
-      "text": " 1"
+      }
     },
     {
       "id": "GEN-10",
       "kind": "text",
       "sid": "GEN 1:1",
+      "source": " the first verse",
       "span": {
         "end": 36,
         "start": 20
-      },
-      "text": " the first verse"
+      }
     },
     {
       "id": "GEN-12",
       "kind": "marker",
       "marker": "v",
       "sid": "GEN 1:2",
+      "source": " \\v",
       "span": {
         "end": 39,
         "start": 37
       },
       "structural": {
         "scopeKind": "verse"
-      },
-      "text": " \\v"
+      }
     },
     {
       "id": "GEN-13",
@@ -156,45 +156,45 @@
         "start": 2
       },
       "sid": "GEN 1:2",
+      "source": " 2",
       "span": {
         "end": 41,
         "start": 39
-      },
-      "text": " 2"
+      }
     },
     {
       "id": "GEN-14",
       "kind": "text",
       "sid": "GEN 1:2",
+      "source": " the second verse",
       "span": {
         "end": 58,
         "start": 41
-      },
-      "text": " the second verse"
+      }
     },
     {
       "id": "GEN-15",
       "kind": "newline",
       "sid": "GEN 1:2",
+      "source": "\n",
       "span": {
         "end": 59,
         "start": 58
-      },
-      "text": "\n"
+      }
     },
     {
       "id": "GEN-16",
       "kind": "marker",
       "marker": "c",
       "sid": "GEN 2:0",
+      "source": "\\c",
       "span": {
         "end": 61,
         "start": 59
       },
       "structural": {
         "scopeKind": "chapter"
-      },
-      "text": "\\c"
+      }
     },
     {
       "id": "GEN-17",
@@ -204,27 +204,28 @@
         "start": 2
       },
       "sid": "GEN 2:0",
+      "source": " 2",
       "span": {
         "end": 63,
         "start": 61
-      },
-      "text": " 2"
+      }
     },
     {
       "id": "GEN-18",
       "kind": "newline",
       "sid": "GEN 2:0",
+      "source": "\n",
       "span": {
         "end": 64,
         "start": 63
-      },
-      "text": "\n"
+      }
     },
     {
       "id": "GEN-19",
       "kind": "marker",
       "marker": "p",
       "sid": "GEN 2:0",
+      "source": "\\p",
       "span": {
         "end": 66,
         "start": 64
@@ -232,32 +233,31 @@
       "structural": {
         "inlineContext": "para",
         "scopeKind": "block"
-      },
-      "text": "\\p"
+      }
     },
     {
       "id": "GEN-20",
       "kind": "newline",
       "sid": "GEN 2:0",
+      "source": "\n",
       "span": {
         "end": 67,
         "start": 66
-      },
-      "text": "\n"
+      }
     },
     {
       "id": "GEN-21",
       "kind": "marker",
       "marker": "v",
       "sid": "GEN 2:1",
+      "source": "\\v",
       "span": {
         "end": 69,
         "start": 67
       },
       "structural": {
         "scopeKind": "verse"
-      },
-      "text": "\\v"
+      }
     },
     {
       "id": "GEN-22",
@@ -267,35 +267,35 @@
         "start": 1
       },
       "sid": "GEN 2:1",
+      "source": " 1",
       "span": {
         "end": 71,
         "start": 69
-      },
-      "text": " 1"
+      }
     },
     {
       "id": "GEN-23",
       "kind": "text",
       "sid": "GEN 2:1",
+      "source": " the third verse",
       "span": {
         "end": 87,
         "start": 71
-      },
-      "text": " the third verse"
+      }
     },
     {
       "id": "GEN-25",
       "kind": "marker",
       "marker": "v",
       "sid": "GEN 2:2",
+      "source": " \\v",
       "span": {
         "end": 90,
         "start": 88
       },
       "structural": {
         "scopeKind": "verse"
-      },
-      "text": " \\v"
+      }
     },
     {
       "id": "GEN-26",
@@ -305,21 +305,21 @@
         "start": 2
       },
       "sid": "GEN 2:2",
+      "source": " 2",
       "span": {
         "end": 92,
         "start": 90
-      },
-      "text": " 2"
+      }
     },
     {
       "id": "GEN-27",
       "kind": "text",
       "sid": "GEN 2:2",
+      "source": " the fourth verse",
       "span": {
         "end": 109,
         "start": 92
-      },
-      "text": " the fourth verse"
+      }
     }
   ],
   "usfm": "\\id GEN\n\\c 1\n\\p\n\\v 1 the first verse \\v 2 the second verse\n\\c 2\n\\p\n\\v 1 the third verse \\v 2 the fourth verse"

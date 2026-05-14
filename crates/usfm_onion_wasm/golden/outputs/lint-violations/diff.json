@@ -26,14 +26,14 @@
           "kind": "header"
         },
         "nested": false,
+        "source": "\\id",
         "span": {
           "end": 3,
           "start": 0
         },
         "structural": {
           "scopeKind": "header"
-        },
-        "text": "\\id"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -63,14 +63,14 @@
           "kind": "header"
         },
         "nested": false,
+        "source": "\\id",
         "span": {
           "end": 3,
           "start": 0
         },
         "structural": {
           "scopeKind": "header"
-        },
-        "text": "\\id"
+        }
       }
     ],
     "semanticSid": "",
@@ -106,21 +106,21 @@
         "id": "GEN-1",
         "kind": "bookCode",
         "sid": "GEN 0:0",
+        "source": " GEN",
         "span": {
           "end": 7,
           "start": 3
-        },
-        "text": " GEN"
+        }
       },
       {
         "id": "GEN-2",
         "kind": "newline",
         "sid": "GEN 0:0",
+        "source": "\n",
         "span": {
           "end": 8,
           "start": 7
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -152,21 +152,21 @@
         "id": "GEN-1",
         "kind": "bookCode",
         "sid": "GEN 0:0",
+        "source": " GEN",
         "span": {
           "end": 7,
           "start": 3
-        },
-        "text": " GEN"
+        }
       },
       {
         "id": "GEN-2",
         "kind": "newline",
         "sid": "GEN 0:0",
+        "source": "\n",
         "span": {
           "end": 8,
           "start": 7
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 0:0",
@@ -214,14 +214,14 @@
         },
         "nested": false,
         "sid": "GEN 1:0",
+        "source": "\\c",
         "span": {
           "end": 10,
           "start": 8
         },
         "structural": {
           "scopeKind": "chapter"
-        },
-        "text": "\\c"
+        }
       },
       {
         "id": "GEN-4",
@@ -231,21 +231,21 @@
           "start": 1
         },
         "sid": "GEN 1:0",
+        "source": " 1",
         "span": {
           "end": 12,
           "start": 10
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-5",
         "kind": "newline",
         "sid": "GEN 1:0",
+        "source": "\n",
         "span": {
           "end": 13,
           "start": 12
-        },
-        "text": "\n"
+        }
       },
       {
         "id": "GEN-6",
@@ -257,6 +257,7 @@
         },
         "nested": false,
         "sid": "GEN 1:0",
+        "source": "\\p",
         "span": {
           "end": 15,
           "start": 13
@@ -264,8 +265,7 @@
         "structural": {
           "inlineContext": "para",
           "scopeKind": "block"
-        },
-        "text": "\\p"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -309,14 +309,14 @@
         },
         "nested": false,
         "sid": "GEN 1:0",
+        "source": "\\c",
         "span": {
           "end": 10,
           "start": 8
         },
         "structural": {
           "scopeKind": "chapter"
-        },
-        "text": "\\c"
+        }
       },
       {
         "id": "GEN-4",
@@ -326,21 +326,21 @@
           "start": 1
         },
         "sid": "GEN 1:0",
+        "source": " 1",
         "span": {
           "end": 12,
           "start": 10
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-5",
         "kind": "newline",
         "sid": "GEN 1:0",
+        "source": "\n",
         "span": {
           "end": 13,
           "start": 12
-        },
-        "text": "\n"
+        }
       },
       {
         "id": "GEN-6",
@@ -352,6 +352,7 @@
         },
         "nested": false,
         "sid": "GEN 1:0",
+        "source": "\\p",
         "span": {
           "end": 15,
           "start": 13
@@ -359,8 +360,7 @@
         "structural": {
           "inlineContext": "para",
           "scopeKind": "block"
-        },
-        "text": "\\p"
+        }
       }
     ],
     "semanticSid": "GEN 1:0",
@@ -408,14 +408,14 @@
         },
         "nested": false,
         "sid": "GEN 1:1",
+        "source": "\\v",
         "span": {
           "end": 17,
           "start": 15
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-8",
@@ -425,31 +425,31 @@
           "start": 1
         },
         "sid": "GEN 1:1",
+        "source": " 1",
         "span": {
           "end": 19,
           "start": 17
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-9",
         "kind": "text",
         "sid": "GEN 1:1",
+        "source": " word with no space after marker",
         "span": {
           "end": 51,
           "start": 19
-        },
-        "text": " word with no space after marker"
+        }
       },
       {
         "id": "GEN-10",
         "kind": "newline",
         "sid": "GEN 1:1",
+        "source": "\n",
         "span": {
           "end": 52,
           "start": 51
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -493,14 +493,14 @@
         },
         "nested": false,
         "sid": "GEN 1:1",
+        "source": "\\v",
         "span": {
           "end": 17,
           "start": 15
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-8",
@@ -510,31 +510,31 @@
           "start": 1
         },
         "sid": "GEN 1:1",
+        "source": " 1",
         "span": {
           "end": 19,
           "start": 17
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-9",
         "kind": "text",
         "sid": "GEN 1:1",
+        "source": " word with no space after marker",
         "span": {
           "end": 51,
           "start": 19
-        },
-        "text": " word with no space after marker"
+        }
       },
       {
         "id": "GEN-10",
         "kind": "newline",
         "sid": "GEN 1:1",
+        "source": "\n",
         "span": {
           "end": 52,
           "start": 51
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 1:1",
@@ -582,14 +582,14 @@
         },
         "nested": false,
         "sid": "GEN 1:2",
+        "source": "\\v",
         "span": {
           "end": 54,
           "start": 52
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-12",
@@ -599,31 +599,31 @@
           "start": 2
         },
         "sid": "GEN 1:2",
+        "source": " 2",
         "span": {
           "end": 56,
           "start": 54
-        },
-        "text": " 2"
+        }
       },
       {
         "id": "GEN-13",
         "kind": "text",
         "sid": "GEN 1:2",
+        "source": " verse with    excess   whitespace",
         "span": {
           "end": 90,
           "start": 56
-        },
-        "text": " verse with    excess   whitespace"
+        }
       },
       {
         "id": "GEN-14",
         "kind": "newline",
         "sid": "GEN 1:2",
+        "source": "\n",
         "span": {
           "end": 91,
           "start": 90
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -667,14 +667,14 @@
         },
         "nested": false,
         "sid": "GEN 1:2",
+        "source": "\\v",
         "span": {
           "end": 54,
           "start": 52
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-12",
@@ -684,31 +684,31 @@
           "start": 2
         },
         "sid": "GEN 1:2",
+        "source": " 2",
         "span": {
           "end": 56,
           "start": 54
-        },
-        "text": " 2"
+        }
       },
       {
         "id": "GEN-13",
         "kind": "text",
         "sid": "GEN 1:2",
+        "source": " verse with    excess   whitespace",
         "span": {
           "end": 90,
           "start": 56
-        },
-        "text": " verse with    excess   whitespace"
+        }
       },
       {
         "id": "GEN-14",
         "kind": "newline",
         "sid": "GEN 1:2",
+        "source": "\n",
         "span": {
           "end": 91,
           "start": 90
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 1:2",
@@ -756,14 +756,14 @@
         },
         "nested": false,
         "sid": "GEN 1:3",
+        "source": "\\v",
         "span": {
           "end": 93,
           "start": 91
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-16",
@@ -773,31 +773,31 @@
           "start": 3
         },
         "sid": "GEN 1:3",
+        "source": " 3",
         "span": {
           "end": 95,
           "start": 93
-        },
-        "text": " 3"
+        }
       },
       {
         "id": "GEN-17",
         "kind": "text",
         "sid": "GEN 1:3",
+        "source": " verse three",
         "span": {
           "end": 107,
           "start": 95
-        },
-        "text": " verse three"
+        }
       },
       {
         "id": "GEN-18",
         "kind": "newline",
         "sid": "GEN 1:3",
+        "source": "\n",
         "span": {
           "end": 108,
           "start": 107
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -841,14 +841,14 @@
         },
         "nested": false,
         "sid": "GEN 1:3",
+        "source": "\\v",
         "span": {
           "end": 93,
           "start": 91
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-16",
@@ -858,31 +858,31 @@
           "start": 3
         },
         "sid": "GEN 1:3",
+        "source": " 3",
         "span": {
           "end": 95,
           "start": 93
-        },
-        "text": " 3"
+        }
       },
       {
         "id": "GEN-17",
         "kind": "text",
         "sid": "GEN 1:3",
+        "source": " verse three",
         "span": {
           "end": 107,
           "start": 95
-        },
-        "text": " verse three"
+        }
       },
       {
         "id": "GEN-18",
         "kind": "newline",
         "sid": "GEN 1:3",
+        "source": "\n",
         "span": {
           "end": 108,
           "start": 107
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 1:3",
@@ -926,14 +926,14 @@
         },
         "nested": false,
         "sid": "GEN 2:0",
+        "source": "\\c",
         "span": {
           "end": 110,
           "start": 108
         },
         "structural": {
           "scopeKind": "chapter"
-        },
-        "text": "\\c"
+        }
       },
       {
         "id": "GEN-20",
@@ -943,21 +943,21 @@
           "start": 2
         },
         "sid": "GEN 2:0",
+        "source": " 2",
         "span": {
           "end": 112,
           "start": 110
-        },
-        "text": " 2"
+        }
       },
       {
         "id": "GEN-21",
         "kind": "newline",
         "sid": "GEN 2:0",
+        "source": "\n",
         "span": {
           "end": 113,
           "start": 112
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -997,14 +997,14 @@
         },
         "nested": false,
         "sid": "GEN 2:0",
+        "source": "\\c",
         "span": {
           "end": 110,
           "start": 108
         },
         "structural": {
           "scopeKind": "chapter"
-        },
-        "text": "\\c"
+        }
       },
       {
         "id": "GEN-20",
@@ -1014,21 +1014,21 @@
           "start": 2
         },
         "sid": "GEN 2:0",
+        "source": " 2",
         "span": {
           "end": 112,
           "start": 110
-        },
-        "text": " 2"
+        }
       },
       {
         "id": "GEN-21",
         "kind": "newline",
         "sid": "GEN 2:0",
+        "source": "\n",
         "span": {
           "end": 113,
           "start": 112
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 2:0",
@@ -1082,14 +1082,14 @@
         },
         "nested": false,
         "sid": "GEN 2:1",
+        "source": "\\v",
         "span": {
           "end": 115,
           "start": 113
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-23",
@@ -1099,31 +1099,31 @@
           "start": 1
         },
         "sid": "GEN 2:1",
+        "source": " 1",
         "span": {
           "end": 117,
           "start": 115
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-24",
         "kind": "text",
         "sid": "GEN 2:1",
+        "source": " chapter two starts here",
         "span": {
           "end": 141,
           "start": 117
-        },
-        "text": " chapter two starts here"
+        }
       },
       {
         "id": "GEN-25",
         "kind": "newline",
         "sid": "GEN 2:1",
+        "source": "\n",
         "span": {
           "end": 142,
           "start": 141
-        },
-        "text": "\n"
+        }
       },
       {
         "id": "GEN-26",
@@ -1135,6 +1135,7 @@
         },
         "nested": false,
         "sid": "GEN 2:1",
+        "source": "\\p",
         "span": {
           "end": 144,
           "start": 142
@@ -1142,18 +1143,17 @@
         "structural": {
           "inlineContext": "para",
           "scopeKind": "block"
-        },
-        "text": "\\p"
+        }
       },
       {
         "id": "GEN-27",
         "kind": "newline",
         "sid": "GEN 2:1",
+        "source": "\n",
         "span": {
           "end": 145,
           "start": 144
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": true,
@@ -1197,14 +1197,14 @@
         },
         "nested": false,
         "sid": "GEN 2:1",
+        "source": "\\v",
         "span": {
           "end": 115,
           "start": 113
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-23",
@@ -1214,31 +1214,31 @@
           "start": 1
         },
         "sid": "GEN 2:1",
+        "source": " 1",
         "span": {
           "end": 117,
           "start": 115
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-24",
         "kind": "text",
         "sid": "GEN 2:1",
+        "source": " chapter two starts here",
         "span": {
           "end": 141,
           "start": 117
-        },
-        "text": " chapter two starts here"
+        }
       },
       {
         "id": "GEN-25",
         "kind": "newline",
         "sid": "GEN 2:1",
+        "source": "\n",
         "span": {
           "end": 142,
           "start": 141
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 2:1",
@@ -1282,14 +1282,14 @@
         },
         "nested": false,
         "sid": "GEN 2:99",
+        "source": "\\v",
         "span": {
           "end": 147,
           "start": 145
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-29",
@@ -1299,31 +1299,31 @@
           "start": 99
         },
         "sid": "GEN 2:99",
+        "source": " 99",
         "span": {
           "end": 150,
           "start": 147
-        },
-        "text": " 99"
+        }
       },
       {
         "id": "GEN-30",
         "kind": "text",
         "sid": "GEN 2:99",
+        "source": " trailing addition",
         "span": {
           "end": 168,
           "start": 150
-        },
-        "text": " trailing addition"
+        }
       },
       {
         "id": "GEN-31",
         "kind": "newline",
         "sid": "GEN 2:99",
+        "source": "\n",
         "span": {
           "end": 169,
           "start": 168
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,

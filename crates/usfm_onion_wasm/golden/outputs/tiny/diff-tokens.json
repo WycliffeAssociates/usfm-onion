@@ -21,14 +21,14 @@
         "id": "GEN-0",
         "kind": "marker",
         "marker": "id",
+        "source": "\\id",
         "span": {
           "end": 3,
           "start": 0
         },
         "structural": {
           "scopeKind": "header"
-        },
-        "text": "\\id"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -53,14 +53,14 @@
         "id": "GEN-0",
         "kind": "marker",
         "marker": "id",
+        "source": "\\id",
         "span": {
           "end": 3,
           "start": 0
         },
         "structural": {
           "scopeKind": "header"
-        },
-        "text": "\\id"
+        }
       }
     ],
     "semanticSid": "",
@@ -94,21 +94,21 @@
         "id": "GEN-1",
         "kind": "bookCode",
         "sid": "GEN 0:0",
+        "source": " GEN",
         "span": {
           "end": 7,
           "start": 3
-        },
-        "text": " GEN"
+        }
       },
       {
         "id": "GEN-2",
         "kind": "newline",
         "sid": "GEN 0:0",
+        "source": "\n",
         "span": {
           "end": 8,
           "start": 7
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -138,21 +138,21 @@
         "id": "GEN-1",
         "kind": "bookCode",
         "sid": "GEN 0:0",
+        "source": " GEN",
         "span": {
           "end": 7,
           "start": 3
-        },
-        "text": " GEN"
+        }
       },
       {
         "id": "GEN-2",
         "kind": "newline",
         "sid": "GEN 0:0",
+        "source": "\n",
         "span": {
           "end": 8,
           "start": 7
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 0:0",
@@ -199,14 +199,14 @@
         "kind": "marker",
         "marker": "c",
         "sid": "GEN 1:0",
+        "source": "\\c",
         "span": {
           "end": 10,
           "start": 8
         },
         "structural": {
           "scopeKind": "chapter"
-        },
-        "text": "\\c"
+        }
       },
       {
         "id": "GEN-4",
@@ -216,27 +216,28 @@
           "start": 1
         },
         "sid": "GEN 1:0",
+        "source": " 1",
         "span": {
           "end": 12,
           "start": 10
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-5",
         "kind": "newline",
         "sid": "GEN 1:0",
+        "source": "\n",
         "span": {
           "end": 13,
           "start": 12
-        },
-        "text": "\n"
+        }
       },
       {
         "id": "GEN-6",
         "kind": "marker",
         "marker": "p",
         "sid": "GEN 1:0",
+        "source": "\\p",
         "span": {
           "end": 15,
           "start": 13
@@ -244,18 +245,17 @@
         "structural": {
           "inlineContext": "para",
           "scopeKind": "block"
-        },
-        "text": "\\p"
+        }
       },
       {
         "id": "GEN-7",
         "kind": "newline",
         "sid": "GEN 1:0",
+        "source": "\n",
         "span": {
           "end": 16,
           "start": 15
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -298,14 +298,14 @@
         "kind": "marker",
         "marker": "c",
         "sid": "GEN 1:0",
+        "source": "\\c",
         "span": {
           "end": 10,
           "start": 8
         },
         "structural": {
           "scopeKind": "chapter"
-        },
-        "text": "\\c"
+        }
       },
       {
         "id": "GEN-4",
@@ -315,27 +315,28 @@
           "start": 1
         },
         "sid": "GEN 1:0",
+        "source": " 1",
         "span": {
           "end": 12,
           "start": 10
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-5",
         "kind": "newline",
         "sid": "GEN 1:0",
+        "source": "\n",
         "span": {
           "end": 13,
           "start": 12
-        },
-        "text": "\n"
+        }
       },
       {
         "id": "GEN-6",
         "kind": "marker",
         "marker": "p",
         "sid": "GEN 1:0",
+        "source": "\\p",
         "span": {
           "end": 15,
           "start": 13
@@ -343,18 +344,17 @@
         "structural": {
           "inlineContext": "para",
           "scopeKind": "block"
-        },
-        "text": "\\p"
+        }
       },
       {
         "id": "GEN-7",
         "kind": "newline",
         "sid": "GEN 1:0",
+        "source": "\n",
         "span": {
           "end": 16,
           "start": 15
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 1:0",
@@ -397,14 +397,14 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:1",
+        "source": "\\v",
         "span": {
           "end": 18,
           "start": 16
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-9",
@@ -414,31 +414,31 @@
           "start": 1
         },
         "sid": "GEN 1:1",
+        "source": " 1",
         "span": {
           "end": 20,
           "start": 18
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-10",
         "kind": "text",
         "sid": "GEN 1:1",
+        "source": " In the beginning God created the heavens and the earth.",
         "span": {
           "end": 76,
           "start": 20
-        },
-        "text": " In the beginning God created the heavens and the earth."
+        }
       },
       {
         "id": "GEN-11",
         "kind": "newline",
         "sid": "GEN 1:1",
+        "source": "\n",
         "span": {
           "end": 77,
           "start": 76
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,
@@ -477,14 +477,14 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:1",
+        "source": "\\v",
         "span": {
           "end": 18,
           "start": 16
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-9",
@@ -494,31 +494,31 @@
           "start": 1
         },
         "sid": "GEN 1:1",
+        "source": " 1",
         "span": {
           "end": 20,
           "start": 18
-        },
-        "text": " 1"
+        }
       },
       {
         "id": "GEN-10",
         "kind": "text",
         "sid": "GEN 1:1",
+        "source": " In the beginning God created the heavens and the earth.",
         "span": {
           "end": 76,
           "start": 20
-        },
-        "text": " In the beginning God created the heavens and the earth."
+        }
       },
       {
         "id": "GEN-11",
         "kind": "newline",
         "sid": "GEN 1:1",
+        "source": "\n",
         "span": {
           "end": 77,
           "start": 76
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 1:1",
@@ -567,14 +567,14 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:2",
+        "source": "\\v",
         "span": {
           "end": 79,
           "start": 77
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-13",
@@ -584,37 +584,38 @@
           "start": 2
         },
         "sid": "GEN 1:2",
+        "source": " 2",
         "span": {
           "end": 81,
           "start": 79
-        },
-        "text": " 2"
+        }
       },
       {
         "id": "GEN-14",
         "kind": "text",
         "sid": "GEN 1:2",
+        "source": " The earth was without form and void.",
         "span": {
           "end": 118,
           "start": 81
-        },
-        "text": " The earth was without form and void."
+        }
       },
       {
         "id": "GEN-15",
         "kind": "newline",
         "sid": "GEN 1:2",
+        "source": "\n",
         "span": {
           "end": 119,
           "start": 118
-        },
-        "text": "\n"
+        }
       },
       {
         "id": "GEN-16",
         "kind": "marker",
         "marker": "p",
         "sid": "GEN 1:2",
+        "source": "\\p",
         "span": {
           "end": 121,
           "start": 119
@@ -622,18 +623,17 @@
         "structural": {
           "inlineContext": "para",
           "scopeKind": "block"
-        },
-        "text": "\\p"
+        }
       },
       {
         "id": "GEN-17",
         "kind": "newline",
         "sid": "GEN 1:2",
+        "source": "\n",
         "span": {
           "end": 122,
           "start": 121
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": true,
@@ -672,14 +672,14 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:2",
+        "source": "\\v",
         "span": {
           "end": 79,
           "start": 77
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-13",
@@ -689,31 +689,31 @@
           "start": 2
         },
         "sid": "GEN 1:2",
+        "source": " 2",
         "span": {
           "end": 81,
           "start": 79
-        },
-        "text": " 2"
+        }
       },
       {
         "id": "GEN-14",
         "kind": "text",
         "sid": "GEN 1:2",
+        "source": " The earth was without form and void.",
         "span": {
           "end": 118,
           "start": 81
-        },
-        "text": " The earth was without form and void."
+        }
       },
       {
         "id": "GEN-15",
         "kind": "newline",
         "sid": "GEN 1:2",
+        "source": "\n",
         "span": {
           "end": 119,
           "start": 118
-        },
-        "text": "\n"
+        }
       }
     ],
     "semanticSid": "GEN 1:2",
@@ -752,14 +752,14 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:99",
+        "source": "\\v",
         "span": {
           "end": 124,
           "start": 122
         },
         "structural": {
           "scopeKind": "verse"
-        },
-        "text": "\\v"
+        }
       },
       {
         "id": "GEN-19",
@@ -769,31 +769,31 @@
           "start": 99
         },
         "sid": "GEN 1:99",
+        "source": " 99",
         "span": {
           "end": 127,
           "start": 124
-        },
-        "text": " 99"
+        }
       },
       {
         "id": "GEN-20",
         "kind": "text",
         "sid": "GEN 1:99",
+        "source": " trailing addition",
         "span": {
           "end": 145,
           "start": 127
-        },
-        "text": " trailing addition"
+        }
       },
       {
         "id": "GEN-21",
         "kind": "newline",
         "sid": "GEN 1:99",
+        "source": "\n",
         "span": {
           "end": 146,
           "start": 145
-        },
-        "text": "\n"
+        }
       }
     ],
     "isUsfmStructureChange": false,

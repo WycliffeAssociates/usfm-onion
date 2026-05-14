@@ -28,14 +28,14 @@
               "kind": "header"
             },
             "nested": false,
+            "source": "\\id",
             "span": {
               "end": 3,
               "start": 0
             },
             "structural": {
               "scopeKind": "header"
-            },
-            "text": "\\id"
+            }
           }
         ],
         "isUsfmStructureChange": false,
@@ -65,14 +65,14 @@
               "kind": "header"
             },
             "nested": false,
+            "source": "\\id",
             "span": {
               "end": 3,
               "start": 0
             },
             "structural": {
               "scopeKind": "header"
-            },
-            "text": "\\id"
+            }
           }
         ],
         "semanticSid": "",
@@ -108,21 +108,21 @@
             "id": "MAT-1",
             "kind": "bookCode",
             "sid": "MAT 0:0",
+            "source": " MAT",
             "span": {
               "end": 7,
               "start": 3
-            },
-            "text": " MAT"
+            }
           },
           {
             "id": "MAT-2",
             "kind": "newline",
             "sid": "MAT 0:0",
+            "source": "\n",
             "span": {
               "end": 8,
               "start": 7
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": false,
@@ -154,21 +154,21 @@
             "id": "MAT-1",
             "kind": "bookCode",
             "sid": "MAT 0:0",
+            "source": " MAT",
             "span": {
               "end": 7,
               "start": 3
-            },
-            "text": " MAT"
+            }
           },
           {
             "id": "MAT-2",
             "kind": "newline",
             "sid": "MAT 0:0",
+            "source": "\n",
             "span": {
               "end": 8,
               "start": 7
-            },
-            "text": "\n"
+            }
           }
         ],
         "semanticSid": "MAT 0:0",
@@ -221,14 +221,14 @@
             },
             "nested": false,
             "sid": "MAT 1:0",
+            "source": "\\c",
             "span": {
               "end": 10,
               "start": 8
             },
             "structural": {
               "scopeKind": "chapter"
-            },
-            "text": "\\c"
+            }
           },
           {
             "id": "MAT-4",
@@ -238,21 +238,21 @@
               "start": 1
             },
             "sid": "MAT 1:0",
+            "source": " 1",
             "span": {
               "end": 12,
               "start": 10
-            },
-            "text": " 1"
+            }
           },
           {
             "id": "MAT-5",
             "kind": "newline",
             "sid": "MAT 1:0",
+            "source": "\n",
             "span": {
               "end": 13,
               "start": 12
-            },
-            "text": "\n"
+            }
           },
           {
             "id": "MAT-6",
@@ -264,6 +264,7 @@
             },
             "nested": false,
             "sid": "MAT 1:0",
+            "source": "\\p",
             "span": {
               "end": 15,
               "start": 13
@@ -271,18 +272,17 @@
             "structural": {
               "inlineContext": "para",
               "scopeKind": "block"
-            },
-            "text": "\\p"
+            }
           },
           {
             "id": "MAT-7",
             "kind": "newline",
             "sid": "MAT 1:0",
+            "source": "\n",
             "span": {
               "end": 16,
               "start": 15
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": false,
@@ -329,14 +329,14 @@
             },
             "nested": false,
             "sid": "MAT 1:0",
+            "source": "\\c",
             "span": {
               "end": 10,
               "start": 8
             },
             "structural": {
               "scopeKind": "chapter"
-            },
-            "text": "\\c"
+            }
           },
           {
             "id": "MAT-4",
@@ -346,21 +346,21 @@
               "start": 1
             },
             "sid": "MAT 1:0",
+            "source": " 1",
             "span": {
               "end": 12,
               "start": 10
-            },
-            "text": " 1"
+            }
           },
           {
             "id": "MAT-5",
             "kind": "newline",
             "sid": "MAT 1:0",
+            "source": "\n",
             "span": {
               "end": 13,
               "start": 12
-            },
-            "text": "\n"
+            }
           },
           {
             "id": "MAT-6",
@@ -372,6 +372,7 @@
             },
             "nested": false,
             "sid": "MAT 1:0",
+            "source": "\\p",
             "span": {
               "end": 15,
               "start": 13
@@ -379,18 +380,17 @@
             "structural": {
               "inlineContext": "para",
               "scopeKind": "block"
-            },
-            "text": "\\p"
+            }
           },
           {
             "id": "MAT-7",
             "kind": "newline",
             "sid": "MAT 1:0",
+            "source": "\n",
             "span": {
               "end": 16,
               "start": 15
-            },
-            "text": "\n"
+            }
           }
         ],
         "semanticSid": "MAT 1:0",
@@ -438,14 +438,14 @@
             },
             "nested": false,
             "sid": "MAT 1:1",
+            "source": "\\v",
             "span": {
               "end": 18,
               "start": 16
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-9",
@@ -455,31 +455,31 @@
               "start": 1
             },
             "sid": "MAT 1:1",
+            "source": " 1",
             "span": {
               "end": 20,
               "start": 18
-            },
-            "text": " 1"
+            }
           },
           {
             "id": "MAT-10",
             "kind": "text",
             "sid": "MAT 1:1",
+            "source": " the first verse",
             "span": {
               "end": 36,
               "start": 20
-            },
-            "text": " the first verse"
+            }
           },
           {
             "id": "MAT-11",
             "kind": "newline",
             "sid": "MAT 1:1",
+            "source": "\n",
             "span": {
               "end": 37,
               "start": 36
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": false,
@@ -523,14 +523,14 @@
             },
             "nested": false,
             "sid": "MAT 1:1",
+            "source": "\\v",
             "span": {
               "end": 18,
               "start": 16
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-9",
@@ -540,31 +540,31 @@
               "start": 1
             },
             "sid": "MAT 1:1",
+            "source": " 1",
             "span": {
               "end": 20,
               "start": 18
-            },
-            "text": " 1"
+            }
           },
           {
             "id": "MAT-10",
             "kind": "text",
             "sid": "MAT 1:1",
+            "source": " the first verse",
             "span": {
               "end": 36,
               "start": 20
-            },
-            "text": " the first verse"
+            }
           },
           {
             "id": "MAT-11",
             "kind": "newline",
             "sid": "MAT 1:1",
+            "source": "\n",
             "span": {
               "end": 37,
               "start": 36
-            },
-            "text": "\n"
+            }
           }
         ],
         "semanticSid": "MAT 1:1",
@@ -612,14 +612,14 @@
             },
             "nested": false,
             "sid": "MAT 1:2",
+            "source": "\\v",
             "span": {
               "end": 39,
               "start": 37
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-13",
@@ -629,31 +629,31 @@
               "start": 2
             },
             "sid": "MAT 1:2",
+            "source": " 2",
             "span": {
               "end": 41,
               "start": 39
-            },
-            "text": " 2"
+            }
           },
           {
             "id": "MAT-14",
             "kind": "text",
             "sid": "MAT 1:2",
+            "source": " the second verse",
             "span": {
               "end": 58,
               "start": 41
-            },
-            "text": " the second verse"
+            }
           },
           {
             "id": "MAT-15",
             "kind": "newline",
             "sid": "MAT 1:2",
+            "source": "\n",
             "span": {
               "end": 59,
               "start": 58
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": false,
@@ -697,14 +697,14 @@
             },
             "nested": false,
             "sid": "MAT 1:2",
+            "source": "\\v",
             "span": {
               "end": 39,
               "start": 37
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-13",
@@ -714,31 +714,31 @@
               "start": 2
             },
             "sid": "MAT 1:2",
+            "source": " 2",
             "span": {
               "end": 41,
               "start": 39
-            },
-            "text": " 2"
+            }
           },
           {
             "id": "MAT-14",
             "kind": "text",
             "sid": "MAT 1:2",
+            "source": " the second verse",
             "span": {
               "end": 58,
               "start": 41
-            },
-            "text": " the second verse"
+            }
           },
           {
             "id": "MAT-15",
             "kind": "newline",
             "sid": "MAT 1:2",
+            "source": "\n",
             "span": {
               "end": 59,
               "start": 58
-            },
-            "text": "\n"
+            }
           }
         ],
         "semanticSid": "MAT 1:2",
@@ -822,14 +822,14 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\v",
             "span": {
               "end": 61,
               "start": 59
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-17",
@@ -839,21 +839,21 @@
               "start": 3
             },
             "sid": "MAT 1:3",
+            "source": " 3",
             "span": {
               "end": 63,
               "start": 61
-            },
-            "text": " 3"
+            }
           },
           {
             "id": "MAT-18",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " This is the Good News about Jesus Christ, the Son of God. ",
             "span": {
               "end": 122,
               "start": 63
-            },
-            "text": " This is the Good News about Jesus Christ, the Son of God. "
+            }
           },
           {
             "id": "MAT-19",
@@ -866,6 +866,7 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\f",
             "span": {
               "end": 124,
               "start": 122
@@ -873,18 +874,17 @@
             "structural": {
               "noteContext": "footnote",
               "scopeKind": "note"
-            },
-            "text": "\\f"
+            }
           },
           {
             "id": "MAT-20",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " + ",
             "span": {
               "end": 127,
               "start": 124
-            },
-            "text": " + "
+            }
           },
           {
             "id": "MAT-21",
@@ -897,24 +897,24 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\fr",
             "span": {
               "end": 130,
               "start": 127
             },
             "structural": {
               "scopeKind": "character"
-            },
-            "text": "\\fr"
+            }
           },
           {
             "id": "MAT-22",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " 1.1: ",
             "span": {
               "end": 136,
               "start": 130
-            },
-            "text": " 1.1: "
+            }
           },
           {
             "id": "MAT-23",
@@ -927,24 +927,24 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\ft",
             "span": {
               "end": 139,
               "start": 136
             },
             "structural": {
               "scopeKind": "character"
-            },
-            "text": "\\ft"
+            }
           },
           {
             "id": "MAT-24",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " Some manuscripts do not have ",
             "span": {
               "end": 169,
               "start": 139
-            },
-            "text": " Some manuscripts do not have "
+            }
           },
           {
             "id": "MAT-25",
@@ -957,24 +957,24 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\fq",
             "span": {
               "end": 172,
               "start": 169
             },
             "structural": {
               "scopeKind": "character"
-            },
-            "text": "\\fq"
+            }
           },
           {
             "id": "MAT-26",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " the Son of God.",
             "span": {
               "end": 188,
               "start": 172
-            },
-            "text": " the Son of God."
+            }
           },
           {
             "id": "MAT-27",
@@ -987,6 +987,7 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\f*",
             "span": {
               "end": 191,
               "start": 188
@@ -994,18 +995,17 @@
             "structural": {
               "noteContext": "footnote",
               "scopeKind": "note"
-            },
-            "text": "\\f*"
+            }
           },
           {
             "id": "MAT-28",
             "kind": "newline",
             "sid": "MAT 1:3",
+            "source": "\n",
             "span": {
               "end": 192,
               "start": 191
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": false,
@@ -1085,14 +1085,14 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\v",
             "span": {
               "end": 61,
               "start": 59
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-17",
@@ -1102,21 +1102,21 @@
               "start": 3
             },
             "sid": "MAT 1:3",
+            "source": " 3",
             "span": {
               "end": 63,
               "start": 61
-            },
-            "text": " 3"
+            }
           },
           {
             "id": "MAT-18",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " This is the Good News about Jesus Christ, the Son of God. ",
             "span": {
               "end": 122,
               "start": 63
-            },
-            "text": " This is the Good News about Jesus Christ, the Son of God. "
+            }
           },
           {
             "id": "MAT-19",
@@ -1129,6 +1129,7 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\f",
             "span": {
               "end": 124,
               "start": 122
@@ -1136,18 +1137,17 @@
             "structural": {
               "noteContext": "footnote",
               "scopeKind": "note"
-            },
-            "text": "\\f"
+            }
           },
           {
             "id": "MAT-20",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " + ",
             "span": {
               "end": 127,
               "start": 124
-            },
-            "text": " + "
+            }
           },
           {
             "id": "MAT-21",
@@ -1160,24 +1160,24 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\fr",
             "span": {
               "end": 130,
               "start": 127
             },
             "structural": {
               "scopeKind": "character"
-            },
-            "text": "\\fr"
+            }
           },
           {
             "id": "MAT-22",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " 1.1: ",
             "span": {
               "end": 136,
               "start": 130
-            },
-            "text": " 1.1: "
+            }
           },
           {
             "id": "MAT-23",
@@ -1190,24 +1190,24 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\ft",
             "span": {
               "end": 139,
               "start": 136
             },
             "structural": {
               "scopeKind": "character"
-            },
-            "text": "\\ft"
+            }
           },
           {
             "id": "MAT-24",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " Some manuscripts do not have ",
             "span": {
               "end": 169,
               "start": 139
-            },
-            "text": " Some manuscripts do not have "
+            }
           },
           {
             "id": "MAT-25",
@@ -1220,24 +1220,24 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\fq",
             "span": {
               "end": 172,
               "start": 169
             },
             "structural": {
               "scopeKind": "character"
-            },
-            "text": "\\fq"
+            }
           },
           {
             "id": "MAT-26",
             "kind": "text",
             "sid": "MAT 1:3",
+            "source": " the Son of God.",
             "span": {
               "end": 188,
               "start": 172
-            },
-            "text": " the Son of God."
+            }
           },
           {
             "id": "MAT-27",
@@ -1250,6 +1250,7 @@
             },
             "nested": false,
             "sid": "MAT 1:3",
+            "source": "\\f*",
             "span": {
               "end": 191,
               "start": 188
@@ -1257,18 +1258,17 @@
             "structural": {
               "noteContext": "footnote",
               "scopeKind": "note"
-            },
-            "text": "\\f*"
+            }
           },
           {
             "id": "MAT-28",
             "kind": "newline",
             "sid": "MAT 1:3",
+            "source": "\n",
             "span": {
               "end": 192,
               "start": 191
-            },
-            "text": "\n"
+            }
           }
         ],
         "semanticSid": "MAT 1:3",
@@ -1318,14 +1318,14 @@
             },
             "nested": false,
             "sid": "MAT 1:4",
+            "source": "\\v",
             "span": {
               "end": 194,
               "start": 192
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-30",
@@ -1335,21 +1335,21 @@
               "start": 4
             },
             "sid": "MAT 1:4",
+            "source": " 4",
             "span": {
               "end": 196,
               "start": 194
-            },
-            "text": " 4"
+            }
           },
           {
             "id": "MAT-31",
             "kind": "text",
             "sid": "MAT 1:4",
+            "source": " yet another verse.",
             "span": {
               "end": 215,
               "start": 196
-            },
-            "text": " yet another verse."
+            }
           },
           {
             "id": "MAT-32",
@@ -1361,6 +1361,7 @@
             },
             "nested": false,
             "sid": "MAT 1:4",
+            "source": "\\p",
             "span": {
               "end": 217,
               "start": 215
@@ -1368,18 +1369,17 @@
             "structural": {
               "inlineContext": "para",
               "scopeKind": "block"
-            },
-            "text": "\\p"
+            }
           },
           {
             "id": "MAT-33",
             "kind": "newline",
             "sid": "MAT 1:4",
+            "source": "\n",
             "span": {
               "end": 218,
               "start": 217
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": true,
@@ -1419,14 +1419,14 @@
             },
             "nested": false,
             "sid": "MAT 1:4",
+            "source": "\\v",
             "span": {
               "end": 194,
               "start": 192
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-30",
@@ -1436,21 +1436,21 @@
               "start": 4
             },
             "sid": "MAT 1:4",
+            "source": " 4",
             "span": {
               "end": 196,
               "start": 194
-            },
-            "text": " 4"
+            }
           },
           {
             "id": "MAT-31",
             "kind": "text",
             "sid": "MAT 1:4",
+            "source": " yet another verse.",
             "span": {
               "end": 215,
               "start": 196
-            },
-            "text": " yet another verse."
+            }
           }
         ],
         "semanticSid": "MAT 1:4",
@@ -1494,14 +1494,14 @@
             },
             "nested": false,
             "sid": "MAT 1:99",
+            "source": "\\v",
             "span": {
               "end": 220,
               "start": 218
             },
             "structural": {
               "scopeKind": "verse"
-            },
-            "text": "\\v"
+            }
           },
           {
             "id": "MAT-35",
@@ -1511,31 +1511,31 @@
               "start": 99
             },
             "sid": "MAT 1:99",
+            "source": " 99",
             "span": {
               "end": 223,
               "start": 220
-            },
-            "text": " 99"
+            }
           },
           {
             "id": "MAT-36",
             "kind": "text",
             "sid": "MAT 1:99",
+            "source": " trailing addition",
             "span": {
               "end": 241,
               "start": 223
-            },
-            "text": " trailing addition"
+            }
           },
           {
             "id": "MAT-37",
             "kind": "newline",
             "sid": "MAT 1:99",
+            "source": "\n",
             "span": {
               "end": 242,
               "start": 241
-            },
-            "text": "\n"
+            }
           }
         ],
         "isUsfmStructureChange": false,

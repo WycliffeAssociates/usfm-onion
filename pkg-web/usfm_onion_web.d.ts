@@ -59,6 +59,7 @@ export interface AttributeItem {
     text: string;
     key: string;
     value: string;
+    isDefault?: boolean;
 }
 
 export interface BuildSidBlocksOptions {
@@ -233,7 +234,7 @@ export interface StructuralMarkerInfo {
 export interface Token {
     id: string;
     kind: TokenKind;
-    text: string;
+    source: string;
     span?: Span;
     sid?: string;
     marker?: string;
