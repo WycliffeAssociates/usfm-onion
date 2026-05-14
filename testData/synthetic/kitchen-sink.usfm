@@ -1,0 +1,210 @@
+\id GEN — synthetic kitchen-sink fixture
+\usfm 3.2
+\ide UTF-8
+\sts Working Draft
+\rem This file deliberately exercises every marker in the catalog.
+\h Genesis
+\toc1 The Book of Genesis
+\toc2 Genesis
+\toc3 Gen
+\toca1 El Libro del Génesis
+\toca2 Génesis
+\toca3 Gén
+\mt1 GENESIS
+\mt2 The First Book of Moses
+\mt3 also called
+\mt4 BERESHIT
+\mte1 — end of GENESIS —
+\mte2 — fin —
+
+\imt1 Introduction
+\imt2 to the Book
+\imt3 of Genesis
+\imt4 (overview)
+\is1 Background and purpose
+\is2 Authorship
+\ip This is an \ior 1:1\ior* introduction paragraph.
+\ipi Indented intro paragraph.
+\im Flush-left intro paragraph.
+\imi Indented flush-left intro paragraph.
+\ipq Intro quotation paragraph.
+\imq Indented intro quotation paragraph.
+\ipr Right-aligned intro paragraph.
+\ipc Centered intro paragraph.
+\iq1 First-level intro poetry
+\iq2 second-level
+\iq3 third-level.
+\ib
+\iex This is an explanatory note that follows the intro.
+\iot Outline
+\io1 First outline entry
+\io2 Second-level entry
+\io3 Third-level
+\io4 Fourth-level
+\ili1 List item
+\ili2 second-level list item
+\imte1 — end of introduction —
+\imte2 — fin de la introducción —
+\ie
+
+\c 1
+\cl Chapter
+\cp 1
+\cd Chapter description.
+\ca 1\ca*
+
+\s1 Paragraph kinds
+\sr Genesis 1:1-31
+\r (Parallel passage)
+\sp Speaker label
+\p
+\v 1 In the beginning God created the heavens \add and the earth\add*.
+\v 2 And the earth was without form, and void;\f + \fr 1:2 \ft Hebrew: \+nd tohu wabohu\+nd*.\f* and darkness was upon the face of the deep.
+\m Continuation paragraph without first-line indent.
+\mi Indented continuation.
+\nb No-break paragraph.
+\pi1 Indented paragraph level 1.
+\pi2 Indented paragraph level 2.
+\pi3 Indented paragraph level 3.
+\po Letter opening.
+\pr Right-aligned paragraph.
+\cls Letter closing.
+\pmo Embedded text opening.
+\pm Embedded text paragraph.
+\pmc Embedded text closing.
+\pmr Embedded text refrain.
+\pc Centered paragraph.
+\b
+\pb
+\ph Hanging paragraph item.
+
+\s2 Poetry
+\q1
+\v 3 And God said,
+\q2 “Let there be light,”
+\q1 and there was light.
+\q3 Third-level poetry.
+\q4 Fourth-level poetry.
+\qa Acrostic heading
+\qc Centered poetic line.
+\qr Right-aligned poetic line.
+\qm1 Embedded poetic line 1.
+\qm2 Embedded poetic line 2.
+\qm3 Embedded poetic line 3.
+\qd Hebrew descriptive title.
+\b
+
+\c 2
+\s1 Lists
+\p
+\v 1 Thus the heavens and the earth were finished.
+\lh List header
+\li1 First entry
+\li2 Second-level entry
+\li3 Third-level
+\li4 Fourth-level
+\lim1 Embedded list paragraph 1.
+\lim2 Embedded list paragraph 2.
+\lim3 Embedded list paragraph 3.
+\lim4 Embedded list paragraph 4.
+\lf List footer
+\p
+\v 2 Some text with \lik Reuben\lik* and \liv1 Eliezer son of Zichri\liv1*; also \liv2 second\liv2*, \liv3 third\liv3*, \liv4 fourth\liv4*, \liv5 fifth\liv5*.
+
+\s2 Tables
+\p
+\v 3 A small table:
+\tr \th1 Name \th2 Age \thr3 Tribe
+\tr \tc1 Adam \tc2 930 \tcr3 —
+\tr \tc1 Seth \tcc2 ~912 \tcr3 —
+\tr \thc1 Centered header \tc2 cell \tcc3 centered cell
+
+\c 3
+\s1 Section headings
+\ms1 Major section level 1
+\ms2 Major section level 2
+\ms3 Major section level 3
+\mr (major section ref)
+\s1 Heading 1
+\s2 Heading 2
+\s3 Heading 3
+\s4 Heading 4
+\sd1 Semantic division 1
+\sd2 Semantic division 2
+\sd3 Semantic division 3
+\sd4 Semantic division 4
+
+\p
+\v 1 Section-tested paragraph.
+
+\c 4
+\s1 Footnotes and cross references
+\p
+\v 1 Then the man knew Eve his wife,\f + \fr 4:1 \fk knew \ft means to be intimate.\fdc Apocryphal context.\f* and she conceived.
+\v 2 Again she bore his brother Abel.\fe + \ft Extended-format footnote.\fe*
+\v 3 In the course of time\f + \fq selected text \fqa alt rendering \fv 3\fv* \fp paragraph break inside note. \fl label\fl* \fm material\fm* \fw witness\fw*\f*
+\v 4 Cain brought an offering.\x - \xo 4:4 \xt Heb 11:4\x*
+\v 5 But Abel’s offering pleased the LORD.\x - \xo 4:5 \xq selected\xq* \xk keyword\xk* \xta target attribute\xta* \xot OT ref\xot* \xnt NT ref\xnt* \xdc DC ref\xdc* \xop Pub origin\xop*\x*
+\v 6 Inline nested character markers inside a note\f + \fr 4:6 \ft Cited in \+xt Matt 19:4\+xt* and \+nd Lord\+nd*.\f*.
+\v 7 Alternate note kinds: \ef + \ft extended footnote variant.\ef* \ex - \ft extended xref variant.\ex*
+
+\c 5
+\s1 Character markers
+\p
+\v 1 \nd Lord\nd*, \bk Genesis\bk*, \add added\add*, \addpn referent\addpn*, \bd bold\bd*, \bdit bold-italic\bdit*, \it italic\it*, \em emphasized\em*, \sc small-caps\sc*, \sup super\sup*.
+\v 2 \dc deuterocanonical\dc*, \k keyword\k*, \no normal\no*, \ord 1st\ord*, \pn proper name\pn*, \png geographic\png*, \qac acrostic char\qac*, \qs Selah\qs*, \qt quoted\qt*, \rb ruby|gloss="gloss"\rb*.
+\v 3 \sig signature\sig*, \sls Selah-style\sls*, \tl transliterated\tl*, \w word|lemma="lemma"\w*, \wa Aramaic\wa*, \wg Greek\wg*, \wh Hebrew\wh*, \wj words of Jesus\wj*, \wl wordlist|index="x"\wl*.
+\v 4 Inline references and pronunciation: \rq inline ref\rq*, \jmp jump-link|link-href="#x"\jmp*, \pro pronunciation\pro*, \ref Gen 1:1\ref*, \iqt intro quoted\iqt*, \ior outline ref\ior*, \vp 4a\vp*, \va 4a\va*.
+\v 5 Optional break before pronunciation//transliteration. Two  spaces  inside  text  preserved.
+
+\c 6
+\s1 Milestones
+\p
+\v 1 Quotation milestones single-level: \qt-s |sid="qt.6.1.1" who="God"\*Be fruitful.\qt-e |eid="qt.6.1.1"\*
+\v 2 Numbered quotations nested: \qt1-s |sid="qt1.6.2" who="Outer"\*Outer says \qt2-s |sid="qt2.6.2"\*Inner says \qt3-s |sid="qt3.6.2"\*Deeper \qt4-s |sid="qt4.6.2"\*Deeper still \qt5-s |sid="qt5.6.2"\*Deepest\qt5-e |eid="qt5.6.2"\*\qt4-e |eid="qt4.6.2"\*\qt3-e |eid="qt3.6.2"\*\qt2-e |eid="qt2.6.2"\*\qt1-e |eid="qt1.6.2"\*
+\v 3 Translator section standalone: \ts\*
+\v 4 Translator section paired: \ts-s |sid="ts.6.4"\*chunk body\ts-e |eid="ts.6.4"\*
+\v 5 Table milestone paired: \t-s |sid="t.6.5"\*table body\t-e |eid="t.6.5"\*
+\v 6 List and table 3.2 milestones: \list |sid="list.6.6"\* contents \table |sid="table.6.6"\*
+\v 7 Verse-in-document milestones: \vid 6:7\vid* \vid-s |sid="vid.6.7"\*body\vid-e |eid="vid.6.7"\*
+
+\c 7
+\s1 Sidebars and peripherals
+\esb \cat Theme|key="cat.7"\cat*
+\p Sidebar opening paragraph.
+\q1
+\v 1 Sidebar verse one.
+\p Sidebar body.
+\esbe
+
+\p
+\v 2 After the sidebar.
+
+\periph Title Page |id="title"
+\p1 First peripheral paragraph.
+\p2 Second peripheral paragraph.
+
+\c 8
+\s1 Figures, attributes, verse ranges, whitespace edge cases
+\p
+\v 1-2 Verse range bridge.
+\v 3 Figure: \fig caption|src="example.jpg" size="col" loc="" copy="" ref="8.3"\fig*
+\d Hebrew superscription.
+\sp Speaker label paragraph
+\p
+\v 4 Word with attribute: \w salvation|strong="H3444"\w*.
+\v 5 Multiple        spaces and even
+
+  empty
+
+   lines        in the text preserved byte-identical.
+\v 6 Liturgical note paragraph follows.
+\lit Selah-equivalent liturgical note.
+
+\c 9
+\s1 Numbered intro-paragraph indent variants
+\p
+\v 1 The following variants are exercised structurally for round-trip coverage.
+\mi1 m-indent 1
+\mi2 m-indent 2
+\mi3 m-indent 3

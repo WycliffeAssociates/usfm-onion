@@ -1,0 +1,23 @@
+\id GEN — synthetic common-errors fixture
+\id GEN
+\rem This file is deliberately malformed. Each section is annotated with the
+\rem lint code it is intended to trigger.
+
+\p Paragraph before any chapter — content-before-first-chapter.
+
+\c 1
+\p
+\v 1 First verse text.
+\v 1 Duplicate verse number — duplicate-verse-number.
+\v 2 Inline unknown marker \foozy here — unknown-marker.
+\v 3 Stray close \nd*here — stray-close-marker.
+\v 4 Excess     whitespace     in     content — excess-whitespace-in-content.
+\v 6 Note submarker \fr 6:6 outside any note — note-submarker-outside-note.
+\v 7 Unclosed footnote \f + \fr 7:7 \ft body text but no close
+
+\c 6
+\s1 A section paragraph
+\v 1 Verse inside section heading — verse-in-section-or-other-paragraph.
+
+\c 7
+\v 2 Verse outside an explicit paragraph — verse-outside-explicit-paragraph.
