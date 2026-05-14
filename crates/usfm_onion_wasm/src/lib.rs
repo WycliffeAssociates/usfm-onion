@@ -51,6 +51,7 @@ use usfm_onion::usx::usfm_to_usx;
 use usfm_onion::vref::{VrefMap as NativeVrefMap, usfm_to_vref_map};
 use usfm_onion::walker::WalkableToken;
 
+// TODO: eventually move off of this ideally
 #[wasm_bindgen(typescript_custom_section)]
 const TS_TYPES: &str = r#"
 // JSON Value type and USJ document tree.
@@ -992,6 +993,8 @@ pub struct AttributeItem {
     text: String,
     key: String,
     value: String,
+    #[serde(default)]
+    is_default: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -1021,7 +1024,7 @@ pub struct NumberInfo {
 pub struct Token {
     id: String,
     kind: TokenKind,
-    text: String,
+    source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     span: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1885,7 +1888,7 @@ fn token_to_walk_token(value: Token) -> WalkToken {
     WalkToken {
         id: value.id,
         kind: value.kind.into(),
-        text: value.text,
+        text: value.source,
         span: value.span.map(native_span),
         sid: value.sid,
         marker: value.marker,
@@ -1897,7 +1900,7 @@ fn token_to_walk_token(value: Token) -> WalkToken {
 fn token_value_to_format_token(value: Token) -> NativeFormatToken {
     NativeFormatToken {
         kind: value.kind.into(),
-        text: value.text,
+        text: value.source,
         marker: value.marker,
         sid: value.sid,
         id: Some(value.id),
@@ -1988,7 +1991,7 @@ fn map_token(token: &NativeToken<'_>) -> Token {
     let mut value = Token {
         id: format!("{}-{}", token.id.book_code, token.id.index),
         kind: token.kind().into(),
-        text: token.source.to_string(),
+        source: token.source.to_string(),
         span: Some(map_span(token.span)),
         sid: token
             .sid
@@ -2060,7 +2063,7 @@ fn map_format_token(token: &NativeFormatToken) -> Token {
     Token {
         id: token.id.clone().unwrap_or_default(),
         kind: token.kind.into(),
-        text: token.text.clone(),
+        source: token.text.clone(),
         span: token.span.map(map_span),
         sid: token.sid.clone(),
         marker: token.marker.clone(),
@@ -2083,8 +2086,74 @@ fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItem {
         span: map_span(item.span),
         text: item.source.to_string(),
         key: item.key.to_string(),
-        value: item.value.to_string(),
+        value: decode_attr_value(item.value),
+        is_default: item.is_default,
     }
+}
+
+/// Decodes USFM-wire escapes in an attribute value so JS consumers see the
+/// logical string. Mirrors `encode_attr_value` on the emit side: `\\` → `\`,
+/// `\"` → `"`. Other backslash sequences are preserved verbatim (the lexer
+/// only recognizes those two escapes today).
+fn decode_attr_value(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.clone().next() {
+                Some('\\') => {
+                    chars.next();
+                    out.push('\\');
+                    continue;
+                }
+                Some('"') => {
+                    chars.next();
+                    out.push('"');
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Re-escapes a logical attribute value for USFM emit. Inverse of
+/// `decode_attr_value`. Editors that hand back a value containing a literal
+/// `"` or `\` get a well-formed `\"` / `\\` on the wire — the usfm-onion
+/// extension to USFM 3.1 covered by [D3] in `rfc.md`.
+fn encode_attr_value(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Renders a parsed attribute list as a `|key="value" ...` slice. The leading
+/// `|` is included; no trailing whitespace. `is_default` items are emitted as
+/// the bare value (USFM 3.1 default-attribute shorthand).
+fn format_attribute_list(attrs: &[AttributeItem]) -> String {
+    let mut out = String::from("|");
+    for (i, item) in attrs.iter().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        if item.is_default {
+            out.push_str(&encode_attr_value(&item.value));
+        } else {
+            out.push_str(&item.key);
+            out.push_str("=\"");
+            out.push_str(&encode_attr_value(&item.value));
+            out.push('"');
+        }
+    }
+    out
 }
 
 fn map_marker_metadata(metadata: NativeMarkerMetadata) -> MarkerMetadata {
@@ -2304,7 +2373,7 @@ fn map_walk_token(token: &WalkToken) -> Token {
     Token {
         id: token.id.clone(),
         kind: token.kind.into(),
-        text: token.text.clone(),
+        source: token.text.clone(),
         span: token.span.map(map_span),
         sid: token.sid.clone(),
         marker: token.marker.clone(),
@@ -2378,8 +2447,125 @@ fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfo {
     }
 }
 
+/// Stream-level emitter that re-attaches parsed attribute lists at their
+/// correct positions during USFM serialization. Replaces the previous
+/// `tokens.map(t => t.text).join("")` pattern, which silently dropped
+/// `|key="value"` slices because attributes are not part of any single
+/// token's `text` / `source`.
+///
+/// Algorithm: walk forward, push each Marker/Milestone opener with non-empty
+/// `attributes` onto a LIFO stack of pending attribute lists. Before
+/// emitting each token, drain any pending lists whose owning marker is
+/// closed by this token (matching `EndMarker`, `MilestoneEnd`,
+/// paragraph-terminating `Newline`, or another paragraph-level `Marker`).
+/// Any pending lists remaining at end-of-stream are flushed in LIFO order.
+///
+/// Marker form is resolved from `lookup_marker_metadata` so consumers do
+/// not need to preserve `marker_metadata` or `structural` through their
+/// intermediate representation — only `marker` and `attributes`.
 fn token_values_to_usfm(tokens: &[Token]) -> String {
-    tokens.iter().map(|token| token.text.as_str()).collect()
+    use usfm_onion::marker_defs::{MarkerDefKind, lookup_marker_metadata};
+
+    #[derive(Clone, Copy)]
+    enum CloserShape {
+        MatchingEndMarker,
+        MilestoneEnd,
+        ParagraphBoundary,
+    }
+
+    /// Decide how an attribute-bearing marker is closed. Milestones use the
+    /// token kind (authoritative — the lexer/parser already classified the
+    /// source as a `Milestone` token). For non-milestone openers we consult
+    /// the marker catalog by name to distinguish paragraph-style markers
+    /// (drain before next newline) from character-style markers (drain
+    /// before matching `\name*` close).
+    fn closer_shape(token_kind: TokenKind, marker_name: &str) -> CloserShape {
+        if matches!(token_kind, TokenKind::Milestone) {
+            return CloserShape::MilestoneEnd;
+        }
+        match lookup_marker_metadata(marker_name).map(|(_, kind, _)| kind) {
+            Some(
+                MarkerDefKind::Paragraph
+                | MarkerDefKind::Periph
+                | MarkerDefKind::Header
+                | MarkerDefKind::TableRow,
+            ) => CloserShape::ParagraphBoundary,
+            // Character, Note, Figure, TableCell, Chapter, Verse, Sidebar,
+            // Meta, and unknown markers all use the "matching EndMarker"
+            // rule. Unknown markers default to character behavior so a
+            // round-trip of unrecognized custom markers still positions
+            // their attribute lists correctly relative to a `\name*` close.
+            _ => CloserShape::MatchingEndMarker,
+        }
+    }
+
+    struct Pending<'a> {
+        marker_name: String,
+        shape: CloserShape,
+        attributes: &'a [AttributeItem],
+    }
+
+    fn is_paragraph_marker(token: &Token) -> bool {
+        if !matches!(token.kind, TokenKind::Marker) {
+            return false;
+        }
+        token
+            .marker
+            .as_deref()
+            .map(|name| {
+                matches!(
+                    closer_shape(TokenKind::Marker, name),
+                    CloserShape::ParagraphBoundary
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    fn token_closes(pending: &Pending<'_>, token: &Token) -> bool {
+        match pending.shape {
+            CloserShape::MatchingEndMarker => {
+                matches!(token.kind, TokenKind::EndMarker)
+                    && token.marker.as_deref() == Some(pending.marker_name.as_str())
+            }
+            CloserShape::MilestoneEnd => matches!(token.kind, TokenKind::MilestoneEnd),
+            CloserShape::ParagraphBoundary => {
+                matches!(token.kind, TokenKind::Newline) || is_paragraph_marker(token)
+            }
+        }
+    }
+
+    let mut output = String::new();
+    let mut pending: Vec<Pending<'_>> = Vec::new();
+
+    for token in tokens {
+        while let Some(top) = pending.last() {
+            if token_closes(top, token) {
+                let drained = pending.pop().unwrap();
+                output.push_str(&format_attribute_list(drained.attributes));
+            } else {
+                break;
+            }
+        }
+
+        output.push_str(&token.source);
+
+        if matches!(token.kind, TokenKind::Marker | TokenKind::Milestone)
+            && !token.attributes.is_empty()
+            && let Some(name) = token.marker.as_deref()
+        {
+            pending.push(Pending {
+                marker_name: name.to_string(),
+                shape: closer_shape(token.kind, name),
+                attributes: &token.attributes,
+            });
+        }
+    }
+
+    while let Some(drained) = pending.pop() {
+        output.push_str(&format_attribute_list(drained.attributes));
+    }
+
+    output
 }
 
 fn vref_to_object(map: NativeVrefMap) -> std::collections::BTreeMap<String, String> {
@@ -2467,6 +2653,130 @@ fn format_sid(book: &str, chapter: u16, verse: u16) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn round_trip(source: &str) -> String {
+        let tokens = map_tokens(&native_parse(source).tokens);
+        token_values_to_usfm(&tokens)
+    }
+
+    #[test]
+    fn round_trips_character_marker_with_attributes() {
+        // The canonical case the RFC was written to fix.
+        let source = "\\w word|lemma=\"lemma\"\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn round_trips_all_kitchen_sink_attribute_markers() {
+        for source in [
+            "\\w word|lemma=\"lemma\"\\w*",
+            "\\rb gloss|gloss=\"gloss\"\\rb*",
+            "\\wl word|index=\"x\"\\wl*",
+            "\\jmp text|link-href=\"#x\"\\jmp*",
+        ] {
+            assert_eq!(round_trip(source), source, "round-trip failed for {source}");
+        }
+    }
+
+    #[test]
+    fn round_trips_milestone_with_attributes() {
+        let source = "\\zaln-s |x-strong=\"H0430\"\\*word\\zaln-e\\*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn round_trips_default_attribute_shorthand() {
+        // `\w word|lemma\w*` — bare value, no key=. Round-trip preserves shorthand.
+        let source = "\\w word|lemma\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn round_trips_multiple_attributes() {
+        let source = "\\w word|lemma=\"x\" strong=\"H0430\"\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn round_trips_after_edit_inserting_text_in_marker_run() {
+        // Edit scenario: parse, then splice a synthetic Text token between
+        // the word content and the `\w*` closer. Span on the synthetic
+        // token is None (consumer-fabricated). The structural emitter
+        // must still drain the attribute slice before the closer.
+        let source = "\\w hello|lemma=\"x\"\\w*";
+        let mut tokens = map_tokens(&native_parse(source).tokens);
+        let closer_idx = tokens
+            .iter()
+            .position(|t| matches!(t.kind, TokenKind::EndMarker))
+            .expect("expected \\w* closer");
+        tokens.insert(
+            closer_idx,
+            Token {
+                id: "synthetic-1".into(),
+                kind: TokenKind::Text,
+                source: " world".into(),
+                span: None,
+                sid: None,
+                marker: None,
+                nested: None,
+                marker_metadata: None,
+                structural: None,
+                number_info: None,
+                book_code: None,
+                book_code_valid: None,
+                attributes: Vec::new(),
+            },
+        );
+        // Attribute slice still lands right before \w*, independent of
+        // the inserted Text token between word content and closer.
+        assert_eq!(
+            token_values_to_usfm(&tokens),
+            "\\w hello world|lemma=\"x\"\\w*"
+        );
+    }
+
+    #[test]
+    fn round_trips_embedded_double_quote_in_attribute_value() {
+        // Source uses USFM 3.1 + the usfm-onion `\"` extension (D3).
+        // Decode-on-map turns `\"` into `"` on the JS-facing value; the
+        // emitter re-escapes back to `\"` for byte-identical output.
+        let source = "\\w word|note=\"a\\\"b\"\\w*";
+        let tokens = map_tokens(&native_parse(source).tokens);
+        // The JS-facing AttributeItem.value is decoded.
+        let attr_token = tokens
+            .iter()
+            .find(|t| !t.attributes.is_empty())
+            .expect("expected attribute-bearing token");
+        assert_eq!(attr_token.attributes[0].value, "a\"b");
+        // Emit re-encodes the literal quote.
+        assert_eq!(token_values_to_usfm(&tokens), source);
+    }
+
+    #[test]
+    fn encode_attr_value_escapes_quote_and_backslash() {
+        assert_eq!(encode_attr_value("plain"), "plain");
+        assert_eq!(encode_attr_value("a\"b"), "a\\\"b");
+        assert_eq!(encode_attr_value("a\\b"), "a\\\\b");
+    }
+
+    #[test]
+    fn decode_attr_value_unescapes_quote_and_backslash() {
+        assert_eq!(decode_attr_value("plain"), "plain");
+        assert_eq!(decode_attr_value("a\\\"b"), "a\"b");
+        assert_eq!(decode_attr_value("a\\\\b"), "a\\b");
+    }
+
+    #[test]
+    fn empty_token_stream_emits_empty_string() {
+        assert_eq!(token_values_to_usfm(&[]), "");
+    }
+
+    #[test]
+    fn round_trip_no_attributes_unchanged() {
+        // Sanity: structural emit must not regress the no-attribute path.
+        let source = "\\id GEN\n\\c 1\n\\v 1 In the beginning.\n";
+        assert_eq!(round_trip(source), source);
+    }
 
     #[test]
     fn lint_tokens_accepts_parsed_footnote_submarker_streams() {
@@ -2567,4 +2877,3 @@ mod tests {
         assert_eq!(mapped.message_params.get("found"), Some(&"3".to_string()));
     }
 }
-
