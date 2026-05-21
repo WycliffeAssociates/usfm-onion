@@ -1,10 +1,13 @@
 {
   "name": "usfm-onion-web",
-  "version": "0.1.0",
+  "version": "0.0.4",
   "description": "WebAssembly bindings for usfm_onion",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./pkg-bundler/usfm_onion_web.js",
+    "./pkg-web/usfm_onion_web.js"
+  ],
   "files": [
     "pkg-bundler",
     "pkg-web",
