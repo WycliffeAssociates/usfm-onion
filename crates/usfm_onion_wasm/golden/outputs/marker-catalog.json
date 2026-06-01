@@ -77,6 +77,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "b",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/b.adoc"
   },
   {
@@ -207,6 +208,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "cd",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/cd.adoc"
   },
   {
@@ -224,6 +226,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "cl",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/cl.adoc"
   },
   {
@@ -240,6 +243,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "cls",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/cls.adoc"
   },
   {
@@ -272,6 +276,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "d",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/d.adoc"
   },
   {
@@ -674,6 +679,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "h",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/h.adoc"
   },
   {
@@ -689,6 +695,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ib",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ib.adoc"
   },
   {
@@ -719,6 +726,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ide",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/ide.adoc"
   },
   {
@@ -734,6 +742,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ie",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ie.adoc"
   },
   {
@@ -749,6 +758,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "iex",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/iex.adoc"
   },
   {
@@ -764,6 +774,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ili",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ili.adoc"
   },
   {
@@ -779,6 +790,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ili1",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ili.adoc"
   },
   {
@@ -794,6 +806,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ili2",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ili.adoc"
   },
   {
@@ -809,6 +822,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "im",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/im.adoc"
   },
   {
@@ -824,6 +838,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imi",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imi.adoc"
   },
   {
@@ -839,6 +854,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imq",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imq.adoc"
   },
   {
@@ -856,6 +872,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imt",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
   },
   {
@@ -873,6 +890,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imt1",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
   },
   {
@@ -890,6 +908,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imt2",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
   },
   {
@@ -907,6 +926,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imt3",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
   },
   {
@@ -924,6 +944,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imt4",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imt.adoc"
   },
   {
@@ -939,6 +960,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imte",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imte.adoc"
   },
   {
@@ -954,6 +976,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imte1",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imte.adoc"
   },
   {
@@ -969,6 +992,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "imte2",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/imte.adoc"
   },
   {
@@ -984,6 +1008,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "io",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
   },
   {
@@ -999,6 +1024,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "io1",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
   },
   {
@@ -1014,6 +1040,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "io2",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
   },
   {
@@ -1029,6 +1056,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "io3",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
   },
   {
@@ -1044,6 +1072,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "io4",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/io.adoc"
   },
   {
@@ -1074,6 +1103,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "iot",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/iot.adoc"
   },
   {
@@ -1091,6 +1121,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ip",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ip.adoc"
   },
   {
@@ -1106,6 +1137,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ipc",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ipc.adoc"
   },
   {
@@ -1121,6 +1153,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ipi",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ipi.adoc"
   },
   {
@@ -1136,6 +1169,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ipq",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ipq.adoc"
   },
   {
@@ -1151,6 +1185,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ipr",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/ipr.adoc"
   },
   {
@@ -1166,6 +1201,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "iq",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
   },
   {
@@ -1181,6 +1217,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "iq1",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
   },
   {
@@ -1196,6 +1233,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "iq2",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
   },
   {
@@ -1211,6 +1249,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "iq3",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/iq.adoc"
   },
   {
@@ -1241,6 +1280,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "is",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/is.adoc"
   },
   {
@@ -1256,6 +1296,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "is1",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/is.adoc"
   },
   {
@@ -1271,6 +1312,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "is2",
+    "paragraphCategory": "introduction",
     "source": "repos_to_compare/tcdocs-main/markers/para/is.adoc"
   },
   {
@@ -1353,6 +1395,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lf",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lf.adoc"
   },
   {
@@ -1370,6 +1413,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lh",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lh.adoc"
   },
   {
@@ -1387,6 +1431,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "li",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
   },
   {
@@ -1404,6 +1449,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "li1",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
   },
   {
@@ -1421,6 +1467,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "li2",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
   },
   {
@@ -1438,6 +1485,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "li3",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
   },
   {
@@ -1455,6 +1503,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "li4",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/li.adoc"
   },
   {
@@ -1489,6 +1538,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lim",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
   },
   {
@@ -1506,6 +1556,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lim1",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
   },
   {
@@ -1523,6 +1574,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lim2",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
   },
   {
@@ -1540,6 +1592,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lim3",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
   },
   {
@@ -1557,6 +1610,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lim4",
+    "paragraphCategory": "list",
     "source": "repos_to_compare/tcdocs-main/markers/para/lim.adoc"
   },
   {
@@ -1592,6 +1646,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "lit",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/lit.adoc"
   },
   {
@@ -1727,6 +1782,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "m",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/m.adoc"
   },
   {
@@ -1743,6 +1799,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mi",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
   },
   {
@@ -1759,6 +1816,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mi1",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
   },
   {
@@ -1775,6 +1833,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mi2",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
   },
   {
@@ -1791,6 +1850,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mi3",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/mi.adoc"
   },
   {
@@ -1808,6 +1868,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mr",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/mr.adoc"
   },
   {
@@ -1825,6 +1886,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ms",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
   },
   {
@@ -1842,6 +1904,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ms1",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
   },
   {
@@ -1859,6 +1922,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ms2",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
   },
   {
@@ -1876,6 +1940,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ms3",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/ms.adoc"
   },
   {
@@ -1892,6 +1957,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mt",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
   },
   {
@@ -1908,6 +1974,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mt1",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
   },
   {
@@ -1924,6 +1991,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mt2",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
   },
   {
@@ -1940,6 +2008,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mt3",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
   },
   {
@@ -1956,6 +2025,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mt4",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mt.adoc"
   },
   {
@@ -1972,6 +2042,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mte",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mte.adoc"
   },
   {
@@ -1988,6 +2059,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mte1",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mte.adoc"
   },
   {
@@ -2004,6 +2076,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "mte2",
+    "paragraphCategory": "title",
     "source": "repos_to_compare/tcdocs-main/markers/para/mte.adoc"
   },
   {
@@ -2020,6 +2093,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "nb",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/nb.adoc"
   },
   {
@@ -2100,6 +2174,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "p",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/p.adoc"
   },
   {
@@ -2116,6 +2191,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "p1",
+    "paragraphCategory": "peripheral",
     "source": "https://docs.usfm.bible/usfm/3.1.1/para/peripherals/p1.html"
   },
   {
@@ -2132,6 +2208,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "p2",
+    "paragraphCategory": "peripheral",
     "source": "https://docs.usfm.bible/usfm/3.1.1/para/peripherals/p2.html"
   },
   {
@@ -2148,6 +2225,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pb",
+    "paragraphCategory": "other",
     "source": "repos_to_compare/tcdocs-main/markers/para/pb.adoc"
   },
   {
@@ -2164,6 +2242,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pc",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pc.adoc"
   },
   {
@@ -2195,6 +2274,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "ph",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/ph.adoc"
   },
   {
@@ -2211,6 +2291,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pi",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
   },
   {
@@ -2227,6 +2308,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pi1",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
   },
   {
@@ -2243,6 +2325,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pi2",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
   },
   {
@@ -2259,6 +2342,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pi3",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pi.adoc"
   },
   {
@@ -2275,6 +2359,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pm",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pm.adoc"
   },
   {
@@ -2291,6 +2376,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pmc",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pmc.adoc"
   },
   {
@@ -2307,6 +2393,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pmo",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pmo.adoc"
   },
   {
@@ -2323,6 +2410,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pmr",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pmr.adoc"
   },
   {
@@ -2381,6 +2469,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "po",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/po.adoc"
   },
   {
@@ -2397,6 +2486,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "pr",
+    "paragraphCategory": "body",
     "source": "repos_to_compare/tcdocs-main/markers/para/pr.adoc"
   },
   {
@@ -2434,6 +2524,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "q",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
   },
   {
@@ -2450,6 +2541,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "q1",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
   },
   {
@@ -2466,6 +2558,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "q2",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
   },
   {
@@ -2482,6 +2575,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "q3",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
   },
   {
@@ -2498,6 +2592,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "q4",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/q.adoc"
   },
   {
@@ -2514,6 +2609,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qa",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qa.adoc"
   },
   {
@@ -2545,6 +2641,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qc",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qc.adoc"
   },
   {
@@ -2561,6 +2658,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qd",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qd.adoc"
   },
   {
@@ -2577,6 +2675,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qm",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
   },
   {
@@ -2593,6 +2692,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qm1",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
   },
   {
@@ -2609,6 +2709,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qm2",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
   },
   {
@@ -2625,6 +2726,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qm3",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qm.adoc"
   },
   {
@@ -2641,6 +2743,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "qr",
+    "paragraphCategory": "poetry",
     "source": "repos_to_compare/tcdocs-main/markers/para/qr.adoc"
   },
   {
@@ -2970,6 +3073,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "r",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/r.adoc"
   },
   {
@@ -3031,6 +3135,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "rem",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/rem.adoc"
   },
   {
@@ -3069,6 +3174,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "s",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
   },
   {
@@ -3086,6 +3192,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "s1",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
   },
   {
@@ -3103,6 +3210,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "s2",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
   },
   {
@@ -3120,6 +3228,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "s3",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
   },
   {
@@ -3137,6 +3246,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "s4",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/s.adoc"
   },
   {
@@ -3155,9 +3265,7 @@
       "footnote"
     ],
     "deprecated": false,
-    "family": "sectionParagraph",
     "familyRole": "canonical",
-    "inlineContext": "section",
     "kind": "character",
     "known": true,
     "marker": "sc",
@@ -3178,6 +3286,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sd",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
   },
   {
@@ -3195,6 +3304,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sd1",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
   },
   {
@@ -3212,6 +3322,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sd2",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
   },
   {
@@ -3229,6 +3340,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sd3",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
   },
   {
@@ -3246,6 +3358,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sd4",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sd.adoc"
   },
   {
@@ -3263,9 +3376,7 @@
       "table"
     ],
     "deprecated": false,
-    "family": "sectionParagraph",
     "familyRole": "canonical",
-    "inlineContext": "section",
     "kind": "character",
     "known": true,
     "marker": "sig",
@@ -3286,9 +3397,7 @@
       "table"
     ],
     "deprecated": false,
-    "family": "sectionParagraph",
     "familyRole": "canonical",
-    "inlineContext": "section",
     "kind": "character",
     "known": true,
     "marker": "sls",
@@ -3309,6 +3418,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sp",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sp.adoc"
   },
   {
@@ -3326,6 +3436,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sr",
+    "paragraphCategory": "section",
     "source": "repos_to_compare/tcdocs-main/markers/para/sr.adoc"
   },
   {
@@ -3341,6 +3452,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "sts",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/sts.adoc"
   },
   {
@@ -3359,9 +3471,7 @@
       "footnote"
     ],
     "deprecated": false,
-    "family": "sectionParagraph",
     "familyRole": "canonical",
-    "inlineContext": "section",
     "kind": "character",
     "known": true,
     "marker": "sup",
@@ -3566,6 +3676,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toc",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
   },
   {
@@ -3581,6 +3692,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toc1",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
   },
   {
@@ -3596,6 +3708,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toc2",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
   },
   {
@@ -3611,6 +3724,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toc3",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toc.adoc"
   },
   {
@@ -3626,6 +3740,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toca",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
   },
   {
@@ -3641,6 +3756,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toca1",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
   },
   {
@@ -3656,6 +3772,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toca2",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
   },
   {
@@ -3671,6 +3788,7 @@
     "kind": "paragraph",
     "known": true,
     "marker": "toca3",
+    "paragraphCategory": "identification",
     "source": "repos_to_compare/tcdocs-main/markers/para/toca.adoc"
   },
   {

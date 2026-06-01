@@ -196,6 +196,7 @@ export interface MarkerInfo {
     contexts: SpecContext[];
     blockBehavior?: BlockBehavior;
     closingBehavior?: ClosingBehavior;
+    paragraphCategory?: ParagraphCategory;
     source?: string;
 }
 
@@ -300,6 +301,8 @@ export type NoteFamily = "footnote" | "crossReference";
 export type NoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
 
 export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
+
+export type ParagraphCategory = "identification" | "introduction" | "title" | "section" | "body" | "poetry" | "list" | "table" | "peripheral" | "other";
 
 export type SpecContext = "scripture" | "bookIdentification" | "bookHeaders" | "bookTitles" | "bookIntroduction" | "bookIntroductionEndTitles" | "bookChapterLabel" | "chapterContent" | "peripheral" | "peripheralContent" | "peripheralDivision" | "chapter" | "verse" | "section" | "para" | "list" | "table" | "sidebar" | "footnote" | "crossReference";
 

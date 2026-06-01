@@ -652,17 +652,18 @@ pub fn lookup_marker_def(marker: &str) -> Option<MarkerDef> {
 pub fn lookup_marker_metadata(
     marker: &str,
 ) -> Option<(&'static str, MarkerDefKind, Option<MarkerFamily>)> {
-    if let Some(metadata) = fast_marker_metadata(marker) {
-        return Some(metadata);
-    }
-
-    let normalized = normalized_marker(marker)?;
-    let spec = lookup_spec_marker(normalized.canonical)?;
-    Some((
-        spec.marker,
-        spec.kind,
-        marker_family_for(spec.marker, spec.kind),
-    ))
+    // Resolve canonical name + kind via the fast path when possible, but always
+    // derive `family` from `marker_family_for` so this path cannot disagree with
+    // the catalog (`lookup_marker_def`), which is the single source for family.
+    let (canonical, kind) = match fast_marker_metadata(marker) {
+        Some(metadata) => metadata,
+        None => {
+            let normalized = normalized_marker(marker)?;
+            let spec = lookup_spec_marker(normalized.canonical)?;
+            (spec.marker, spec.kind)
+        }
+    };
+    Some((canonical, kind, marker_family_for(canonical, kind)))
 }
 
 pub fn lookup_marker_id(marker: &str) -> Option<MarkerId> {
@@ -1100,102 +1101,61 @@ fn marker_family_for(marker: &str, kind: MarkerDefKind) -> Option<MarkerFamily> 
     None
 }
 
-fn fast_marker_metadata(
-    marker: &str,
-) -> Option<(&'static str, MarkerDefKind, Option<MarkerFamily>)> {
+/// Fast canonical-name + kind resolution for the hottest markers, skipping the
+/// general normalization path. Deliberately does **not** return `family`:
+/// `family` has a single source (`marker_family_for`), which
+/// [`lookup_marker_metadata`] applies to this function's result. Returning a
+/// hardcoded family here previously let the two paths disagree (e.g. `r` / `s`).
+fn fast_marker_metadata(marker: &str) -> Option<(&'static str, MarkerDefKind)> {
     match marker {
-        "id" => Some(("id", MarkerDefKind::Header, None)),
-        "h" => Some(("h", MarkerDefKind::Paragraph, None)),
-        "c" => Some(("c", MarkerDefKind::Chapter, None)),
-        "v" => Some(("v", MarkerDefKind::Verse, None)),
-        "p" => Some(("p", MarkerDefKind::Paragraph, None)),
-        "m" => Some(("m", MarkerDefKind::Paragraph, None)),
-        "b" => Some(("b", MarkerDefKind::Paragraph, None)),
-        "r" => Some(("r", MarkerDefKind::Paragraph, None)),
-        "mt" => Some(("mt", MarkerDefKind::Paragraph, None)),
-        "mt1" => Some(("mt1", MarkerDefKind::Paragraph, None)),
-        "mt2" => Some(("mt2", MarkerDefKind::Paragraph, None)),
-        "mt3" => Some(("mt3", MarkerDefKind::Paragraph, None)),
-        "mt4" => Some(("mt4", MarkerDefKind::Paragraph, None)),
-        "s" => Some(("s", MarkerDefKind::Paragraph, None)),
-        "s1" => Some(("s1", MarkerDefKind::Paragraph, None)),
-        "s2" => Some(("s2", MarkerDefKind::Paragraph, None)),
-        "s3" => Some(("s3", MarkerDefKind::Paragraph, None)),
-        "s4" => Some(("s4", MarkerDefKind::Paragraph, None)),
-        "q" => Some(("q", MarkerDefKind::Paragraph, None)),
-        "q1" => Some(("q1", MarkerDefKind::Paragraph, None)),
-        "q2" => Some(("q2", MarkerDefKind::Paragraph, None)),
-        "q3" => Some(("q3", MarkerDefKind::Paragraph, None)),
-        "q4" => Some(("q4", MarkerDefKind::Paragraph, None)),
-        "f" | "fe" | "ef" => Some(("f", MarkerDefKind::Note, Some(MarkerFamily::Footnote))),
-        "x" | "ex" => Some(("x", MarkerDefKind::Note, Some(MarkerFamily::CrossReference))),
-        "ft" => Some(("ft", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fr" => Some(("fr", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fq" => Some(("fq", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fqa" => Some((
-            "fqa",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fk" => Some(("fk", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fl" => Some(("fl", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fw" => Some(("fw", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fp" => Some(("fp", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fv" => Some(("fv", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "fdc" => Some((
-            "fdc",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::Footnote),
-        )),
-        "fm" => Some(("fm", MarkerDefKind::Character, Some(MarkerFamily::Footnote))),
-        "xo" => Some((
-            "xo",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xop" => Some((
-            "xop",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xk" => Some((
-            "xk",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xq" => Some((
-            "xq",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xt" => Some((
-            "xt",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xta" => Some((
-            "xta",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xot" => Some((
-            "xot",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xnt" => Some((
-            "xnt",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "xdc" => Some((
-            "xdc",
-            MarkerDefKind::Character,
-            Some(MarkerFamily::CrossReference),
-        )),
-        "w" => Some(("w", MarkerDefKind::Character, None)),
-        "jmp" => Some(("jmp", MarkerDefKind::Character, None)),
-        "ref" => Some(("ref", MarkerDefKind::Character, None)),
+        "id" => Some(("id", MarkerDefKind::Header)),
+        "h" => Some(("h", MarkerDefKind::Paragraph)),
+        "c" => Some(("c", MarkerDefKind::Chapter)),
+        "v" => Some(("v", MarkerDefKind::Verse)),
+        "p" => Some(("p", MarkerDefKind::Paragraph)),
+        "m" => Some(("m", MarkerDefKind::Paragraph)),
+        "b" => Some(("b", MarkerDefKind::Paragraph)),
+        "r" => Some(("r", MarkerDefKind::Paragraph)),
+        "mt" => Some(("mt", MarkerDefKind::Paragraph)),
+        "mt1" => Some(("mt1", MarkerDefKind::Paragraph)),
+        "mt2" => Some(("mt2", MarkerDefKind::Paragraph)),
+        "mt3" => Some(("mt3", MarkerDefKind::Paragraph)),
+        "mt4" => Some(("mt4", MarkerDefKind::Paragraph)),
+        "s" => Some(("s", MarkerDefKind::Paragraph)),
+        "s1" => Some(("s1", MarkerDefKind::Paragraph)),
+        "s2" => Some(("s2", MarkerDefKind::Paragraph)),
+        "s3" => Some(("s3", MarkerDefKind::Paragraph)),
+        "s4" => Some(("s4", MarkerDefKind::Paragraph)),
+        "q" => Some(("q", MarkerDefKind::Paragraph)),
+        "q1" => Some(("q1", MarkerDefKind::Paragraph)),
+        "q2" => Some(("q2", MarkerDefKind::Paragraph)),
+        "q3" => Some(("q3", MarkerDefKind::Paragraph)),
+        "q4" => Some(("q4", MarkerDefKind::Paragraph)),
+        "f" | "fe" | "ef" => Some(("f", MarkerDefKind::Note)),
+        "x" | "ex" => Some(("x", MarkerDefKind::Note)),
+        "ft" => Some(("ft", MarkerDefKind::Character)),
+        "fr" => Some(("fr", MarkerDefKind::Character)),
+        "fq" => Some(("fq", MarkerDefKind::Character)),
+        "fqa" => Some(("fqa", MarkerDefKind::Character)),
+        "fk" => Some(("fk", MarkerDefKind::Character)),
+        "fl" => Some(("fl", MarkerDefKind::Character)),
+        "fw" => Some(("fw", MarkerDefKind::Character)),
+        "fp" => Some(("fp", MarkerDefKind::Character)),
+        "fv" => Some(("fv", MarkerDefKind::Character)),
+        "fdc" => Some(("fdc", MarkerDefKind::Character)),
+        "fm" => Some(("fm", MarkerDefKind::Character)),
+        "xo" => Some(("xo", MarkerDefKind::Character)),
+        "xop" => Some(("xop", MarkerDefKind::Character)),
+        "xk" => Some(("xk", MarkerDefKind::Character)),
+        "xq" => Some(("xq", MarkerDefKind::Character)),
+        "xt" => Some(("xt", MarkerDefKind::Character)),
+        "xta" => Some(("xta", MarkerDefKind::Character)),
+        "xot" => Some(("xot", MarkerDefKind::Character)),
+        "xnt" => Some(("xnt", MarkerDefKind::Character)),
+        "xdc" => Some(("xdc", MarkerDefKind::Character)),
+        "w" => Some(("w", MarkerDefKind::Character)),
+        "jmp" => Some(("jmp", MarkerDefKind::Character)),
+        "ref" => Some(("ref", MarkerDefKind::Character)),
         _ => None,
     }
 }
@@ -1287,11 +1247,14 @@ fn is_list_marker_name(marker: &str) -> bool {
 }
 
 fn is_section_marker_name(marker: &str) -> bool {
+    // Section markers are an explicit set, not "anything starting with s". The
+    // former `starts_with('s')` clause wrongly swept in character markers
+    // (`sc`, `sig`, `sls`, `sup`) and the identification marker `sts`. The `s`,
+    // `ms`, and `sd` families carry numbered variants (`s1`..`s4`, `ms1`.., `sd1`..).
     matches!(marker, "cd" | "cl" | "d" | "mr" | "r" | "sp" | "sr")
+        || matches!(marker, "s" | "s1" | "s2" | "s3" | "s4")
         || marker == "ms"
         || marker.starts_with("ms")
-        || marker == "s"
-        || (marker.starts_with('s') && marker != "sts")
         || marker == "sd"
         || marker.starts_with("sd")
 }

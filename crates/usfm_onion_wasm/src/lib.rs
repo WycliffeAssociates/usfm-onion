@@ -32,7 +32,8 @@ use usfm_onion::marker_defs::{
     BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
     InlineContext as NativeInlineContext, MarkerFamily as NativeMarkerFamily,
     MarkerFamilyRole as NativeMarkerFamilyRole, NoteFamily as NativeNoteFamily,
-    NoteSubkind as NativeNoteSubkind, SpecContext as NativeSpecContext,
+    NoteSubkind as NativeNoteSubkind, ParagraphCategory as NativeParagraphCategory,
+    SpecContext as NativeSpecContext,
     StructuralMarkerInfo as NativeStructuralMarkerInfo,
     StructuralScopeKind as NativeStructuralScopeKind,
 };
@@ -912,6 +913,39 @@ impl From<NativeMarkerFamilyRole> for MarkerFamilyRole {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
+pub enum ParagraphCategory {
+    Identification,
+    Introduction,
+    Title,
+    Section,
+    Body,
+    Poetry,
+    List,
+    Table,
+    Peripheral,
+    Other,
+}
+
+impl From<NativeParagraphCategory> for ParagraphCategory {
+    fn from(value: NativeParagraphCategory) -> Self {
+        match value {
+            NativeParagraphCategory::Identification => Self::Identification,
+            NativeParagraphCategory::Introduction => Self::Introduction,
+            NativeParagraphCategory::Title => Self::Title,
+            NativeParagraphCategory::Section => Self::Section,
+            NativeParagraphCategory::Body => Self::Body,
+            NativeParagraphCategory::Poetry => Self::Poetry,
+            NativeParagraphCategory::List => Self::List,
+            NativeParagraphCategory::Table => Self::Table,
+            NativeParagraphCategory::Peripheral => Self::Peripheral,
+            NativeParagraphCategory::Other => Self::Other,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
 pub enum NoteFamily {
     Footnote,
     CrossReference,
@@ -1333,6 +1367,8 @@ pub struct MarkerInfo {
     block_behavior: Option<BlockBehavior>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     closing_behavior: Option<ClosingBehavior>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    paragraph_category: Option<ParagraphCategory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source: Option<String>,
 }
@@ -2443,6 +2479,7 @@ fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfo {
         contexts: info.contexts.into_iter().map(Into::into).collect(),
         block_behavior: info.block_behavior.map(Into::into),
         closing_behavior: info.closing_behavior.map(Into::into),
+        paragraph_category: info.paragraph_category.map(Into::into),
         source: info.source,
     }
 }

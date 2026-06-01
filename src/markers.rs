@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::marker_defs::{
     BlockBehavior, ClosingBehavior, InlineContext, MarkerDef, MarkerFamily, MarkerFamilyRole,
-    NoteFamily, NoteSubkind, SpecContext, lookup_marker_def, marker_is_note_sub,
+    NoteFamily, NoteSubkind, ParagraphCategory, SpecContext, lookup_marker_def, marker_is_note_sub,
 };
 use crate::marker_defs_data::MARKER_SPECS;
 
@@ -139,6 +139,11 @@ pub struct UsfmMarkerInfo {
     pub contexts: Vec<SpecContext>,
     pub block_behavior: Option<BlockBehavior>,
     pub closing_behavior: Option<ClosingBehavior>,
+    /// Paragraph category per the USFM 3.2 para index. `Some` only for
+    /// paragraph-kind markers (`None` for every other kind, and for unknown
+    /// markers). This is the canonical signal for poetry (`Poetry`), sections
+    /// (`Section`), lists (`List`), and body paragraphs (`Body`).
+    pub paragraph_category: Option<ParagraphCategory>,
     pub source: Option<String>,
 }
 
@@ -209,6 +214,7 @@ pub fn marker_info(marker: &str) -> UsfmMarkerInfo {
             contexts: Vec::new(),
             block_behavior: None,
             closing_behavior: None,
+            paragraph_category: None,
             source: None,
         }
     }
@@ -235,6 +241,7 @@ fn marker_def_to_info(def: MarkerDef) -> UsfmMarkerInfo {
         contexts: def.contexts.to_vec(),
         block_behavior: Some(def.block_behavior),
         closing_behavior: Some(def.closing_behavior),
+        paragraph_category: def.paragraph_category,
         source: Some(def.source.to_string()),
     }
 }
