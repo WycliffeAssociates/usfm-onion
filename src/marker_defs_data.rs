@@ -369,13 +369,18 @@ pub(crate) static MARKER_SPECS: &[MarkerSpec] = &[
         source: "repos_to_compare/tcdocs-main/markers/para/cls.adoc",
         paragraph_category: Some(ParagraphCategory::Body),
     },
+    // `\cp pubnumber` does NOT close (cv railroad: `'\n\cp '` + TEXTNWS, no
+    // `\cp*`) — unlike its verse counterpart `\vp pubnumber\vp*`, which does.
+    // Paragraph kind mirrors `cl` (unclosed, value-taking, chapter-display
+    // slot); Character kind here caused false UnclosedMarker flags on every
+    // valid `\cp`. (Corrected 2026-06-04.)
     MarkerSpec {
         marker: "cp",
-        kind: MarkerDefKind::Character,
-        contexts: &[SpecContext::Chapter],
+        kind: MarkerDefKind::Paragraph,
+        contexts: &[SpecContext::ChapterContent],
         deprecated: false,
         source: "repos_to_compare/tcdocs-main/markers/cv/cp.adoc",
-        paragraph_category: None,
+        paragraph_category: Some(ParagraphCategory::Title),
     },
     MarkerSpec {
         marker: "d",
