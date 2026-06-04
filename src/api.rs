@@ -609,6 +609,25 @@ mod tests {
     }
 
     #[test]
+    fn vref_index_over_rehydrated_tokens_matches_source() {
+        // slice 2 guarantee: the editor's live path hands back rehydrated
+        // tokens (FormatToken) instead of re-parsing. The index built from
+        // those must be byte-identical to the index built from the source
+        // parse — same text, same segment ids and spans — so findings
+        // resolve identically regardless of path. Exercises a skipped
+        // heading, a stripped note, and a verse bridge.
+        let src = "\\id GEN\n\\c 1\n\\s1 Heading\n\\p\n\\v 1 Text \\f + \\ft note\\f* rest.\n\\v 2-3 Bridge here.\n";
+        let from_source = crate::vref::usfm_to_vref_index(src);
+        let rehydrated: Vec<_> = crate::parse::parse(src)
+            .tokens
+            .iter()
+            .map(format_token_with_identity)
+            .collect();
+        let from_tokens = crate::vref::tokens_to_vref_index(&rehydrated);
+        assert_eq!(from_source, from_tokens);
+    }
+
+    #[test]
     fn apply_token_fix_and_revert_diff_block_are_available() {
         let baseline = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1 Alpha\n");
         let changed = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1Alpha\n");

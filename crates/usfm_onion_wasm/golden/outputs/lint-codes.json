@@ -29,8 +29,7 @@
   "missing-whitespace-before-marker",
   "missing-horizontal-whitespace-after-marker-name",
   "missing-tag-end-delimiter-after-marker",
-  "excess-whitespace-around-marker",
-  "excess-whitespace-in-content",
   "missing-content-space-after-close-marker",
-  "verse-in-section-or-other-paragraph"
+  "verse-in-section-or-other-paragraph",
+  "content-after-blank-marker"
 ]

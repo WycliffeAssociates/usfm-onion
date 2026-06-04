@@ -181,18 +181,6 @@
   },
   {
     "category": "structure",
-    "code": "excess-whitespace-around-marker",
-    "issueType": "usfm",
-    "severity": "warning"
-  },
-  {
-    "category": "structure",
-    "code": "excess-whitespace-in-content",
-    "issueType": "usfm",
-    "severity": "warning"
-  },
-  {
-    "category": "structure",
     "code": "missing-content-space-after-close-marker",
     "issueType": "usfm",
     "severity": "warning"
@@ -200,6 +188,12 @@
   {
     "category": "context",
     "code": "verse-in-section-or-other-paragraph",
+    "issueType": "usfm",
+    "severity": "error"
+  },
+  {
+    "category": "structure",
+    "code": "content-after-blank-marker",
     "issueType": "usfm",
     "severity": "error"
   }

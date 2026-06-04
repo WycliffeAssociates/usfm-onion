@@ -174,6 +174,13 @@ export class ParsedUsfm {
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
         return v1;
     }
+    /**
+     * @returns {VrefIndex}
+     */
+    vrefIndex() {
+        const ret = wasm.parsedusfm_vrefIndex(this.__wbg_ptr);
+        return ret;
+    }
 }
 if (Symbol.dispose) ParsedUsfm.prototype[Symbol.dispose] = ParsedUsfm.prototype.free;
 
@@ -518,6 +525,31 @@ export function tokensToUsfm(tokens) {
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+}
+
+/**
+ * Build the vref index from an existing token stream (the editor's live
+ * path) — same rehydration as `lintTokens`, no reparse. Segment ids match
+ * the tokens passed in, so they line up with the editor's DOM `data-id`s.
+ * @param {Token[]} tokens
+ * @returns {VrefIndex}
+ */
+export function vrefIndexTokens(tokens) {
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.vrefIndexTokens(ptr0, len0);
+    return ret;
+}
+
+/**
+ * @param {string} source
+ * @returns {VrefIndex}
+ */
+export function vrefIndexUsfm(source) {
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.vrefIndexUsfm(ptr0, len0);
+    return ret;
 }
 
 function __wbg_get_imports() {

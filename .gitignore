@@ -29,3 +29,4 @@ whitespace.md
 profile.json.gz
 scheduled_tasks.lock
 scratchpad/
+.codegraph/

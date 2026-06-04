@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
+use serde::Serialize;
+
+use crate::lint_impl::LintableToken;
 use crate::marker_defs::{StructuralScopeKind, marker_paragraph_supports_verse};
 use crate::parse::parse;
-use crate::token::{Sid, Token};
-use crate::walker::{ScopeFrame, Visitor, WalkContext, walk_tokens};
+use crate::token::{Sid, Span, Token};
+use crate::walker::{ScopeFrame, Visitor, WalkContext, walk, walk_tokens};
 
 pub type VrefMap = BTreeMap<String, String>;
 
@@ -20,6 +23,61 @@ pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
 
 pub fn vref_map_to_json_string(map: &VrefMap) -> String {
     serde_json::to_string_pretty(map).expect("vref map should serialize")
+}
+
+/// UTF-16 code-unit offsets into a [`VerseProjection::text`]. Kept a
+/// distinct type from [`Span`] (byte offsets into the original source) so
+/// the unit is unmistakable at the call site and on the wire: JS/DOM
+/// consumers index the projected text in UTF-16, native consumers index
+/// the source in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Utf16Span {
+    pub start: u32,
+    pub end: u32,
+}
+
+/// One in-scope text token's contribution to a verse projection. Carries
+/// both resolution anchors so a `text` range maps to either a raw-source
+/// byte offset (`source_span`) or a node-based consumer's token
+/// (`token_id`, which the editor mirrors as a DOM `data-id`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Segment {
+    pub token_id: String,
+    /// Byte range into the original source — the raw-buffer anchor.
+    pub source_span: Span,
+    /// UTF-16 code-unit range into [`VerseProjection::text`].
+    pub text_span: Utf16Span,
+}
+
+/// Lossless plain-text projection of one verse, plus the segment map back
+/// to source / token coordinates. `text` is the verbatim concatenation of
+/// the verse's in-scope text-token sources — no whitespace collapse, no
+/// trim, markup excluded — so it matches a raw editor buffer byte-for-byte
+/// and a content range resolves to exact glyphs on either anchor.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct VerseProjection {
+    pub text: String,
+    pub segments: Vec<Segment>,
+}
+
+/// `sid` → its lossless verse projection. Same key set as [`VrefMap`]; the
+/// difference is losslessness plus the segment map.
+pub type VrefIndex = BTreeMap<String, VerseProjection>;
+
+pub fn usfm_to_vref_index(source: &str) -> VrefIndex {
+    let parsed = parse(source);
+    tokens_to_vref_index(&parsed.tokens)
+}
+
+/// Generic over the token representation so the same projection runs over
+/// freshly-parsed native `Token`s (the parse path) **and** the editor's
+/// rehydrated tokens (the live lint path) — no reparse, segments keyed by
+/// each token's own id. Driven by the generic [`walk`], which resolves
+/// chapter/verse opens from the slice exactly as `walk_tokens` does.
+pub fn tokens_to_vref_index<T: LintableToken>(tokens: &[T]) -> VrefIndex {
+    let mut visitor = IndexedVrefVisitor::default();
+    walk(tokens, &mut visitor);
+    visitor.finish()
 }
 
 #[derive(Debug, Default)]
@@ -127,6 +185,27 @@ fn verse_ref(sid: Option<Sid>, lexeme: &str) -> Option<String> {
     Some(format!("{} {}:{}", sid.book, chapter, verse_part))
 }
 
+/// Build the verse-reference key from a generic token's formatted `sid()`
+/// and its verse-number lexeme (`text()`). Mirrors [`verse_ref`] but works
+/// off the `LintableToken` surface so the index runs over any token
+/// representation. The verse part comes from the lexeme so bridges and
+/// sequences (`1-2`, `1,3`) survive verbatim; the book/chapter prefix comes
+/// from `sid`. `sid` is `"BOOK CHAPTER"` (verse 0) or `"BOOK CHAPTER:VERSE"`.
+fn verse_ref_str(sid: Option<String>, lexeme: &str) -> Option<String> {
+    let sid = sid?;
+    let verse_part = lexeme.trim();
+    if verse_part.is_empty() {
+        return None;
+    }
+    let prefix = sid.split(':').next().unwrap_or(sid.as_str());
+    // Mirror `verse_ref`'s chapter==0 guard (the chapter is the last
+    // whitespace-separated component of the prefix).
+    if prefix.rsplit(' ').next() == Some("0") {
+        return None;
+    }
+    Some(format!("{prefix}:{verse_part}"))
+}
+
 fn push_text(current: &mut String, fragment: &str) {
     if current.is_empty() {
         current.push_str(fragment);
@@ -143,10 +222,308 @@ fn push_text(current: &mut String, fragment: &str) {
     }
 }
 
+fn utf16_len(s: &str) -> u32 {
+    s.encode_utf16().count() as u32
+}
+
+/// Lossless sibling of [`VrefVisitor`]. Same scope gating (in a verse, not
+/// in a note, in a verse-supporting paragraph), but appends each in-scope
+/// text token's source verbatim — no boundary collapse, no trim — and
+/// records a [`Segment`] mapping that run back to the token's byte span
+/// and id. The raw text is what content analyzers operate on; the segments
+/// resolve their findings back to source or DOM coordinates.
+#[derive(Debug, Default)]
+struct IndexedVrefVisitor {
+    index: VrefIndex,
+    current_ref: Option<String>,
+    current: VerseProjection,
+    current_utf16_len: u32,
+    // Mirrors `VrefVisitor`: persists across paragraph boundaries.
+    current_block_supports_verse: Option<bool>,
+}
+
+impl IndexedVrefVisitor {
+    fn finish(mut self) -> VrefIndex {
+        self.flush_current_verse();
+        self.index
+    }
+
+    fn flush_current_verse(&mut self) {
+        if let Some(reference) = self.current_ref.take() {
+            // Match `VrefVisitor`: a whitespace-only verse produces no
+            // entry, so the index key set stays identical to `to_vref`.
+            if !self.current.text.trim().is_empty() {
+                self.index
+                    .insert(reference, std::mem::take(&mut self.current));
+            }
+        }
+        self.current = VerseProjection::default();
+        self.current_utf16_len = 0;
+    }
+
+    fn can_collect_text(&self, ctx: &WalkContext<'_, '_>) -> bool {
+        self.current_ref.is_some()
+            && !ctx.in_note()
+            && self.current_block_supports_verse.unwrap_or(true)
+    }
+
+    fn push_token<T: LintableToken>(&mut self, token: &T) {
+        let text = token.text();
+        let len = utf16_len(text);
+        self.current.segments.push(Segment {
+            token_id: token.id().unwrap_or_default(),
+            source_span: token.span().unwrap_or(Span::new(0, 0)),
+            text_span: Utf16Span {
+                start: self.current_utf16_len,
+                end: self.current_utf16_len + len,
+            },
+        });
+        self.current.text.push_str(text);
+        self.current_utf16_len += len;
+    }
+}
+
+impl<'tokens, T: LintableToken> Visitor<'tokens, T> for IndexedVrefVisitor {
+    fn on_enter_scope(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        frame: &ScopeFrame<'tokens>,
+        _token: &'tokens T,
+        _token_index: usize,
+    ) {
+        if frame.scope_kind == StructuralScopeKind::Block {
+            self.current_block_supports_verse = Some(marker_paragraph_supports_verse(frame.marker));
+        }
+    }
+
+    fn on_chapter(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens T,
+        _token_index: usize,
+    ) {
+        self.flush_current_verse();
+    }
+
+    fn on_verse(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        _token_index: usize,
+    ) {
+        self.flush_current_verse();
+        if let Some(reference) = verse_ref_str(token.sid(), token.text()) {
+            self.current_ref = Some(reference);
+        }
+    }
+
+    fn on_text(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        _token_index: usize,
+    ) {
+        if self.can_collect_text(ctx) {
+            self.push_token(token);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{tokens_to_vref_map, usfm_to_vref_map, vref_map_to_json_string};
+    use super::{
+        Utf16Span, push_text, tokens_to_vref_map, usfm_to_vref_index, usfm_to_vref_map,
+        vref_map_to_json_string,
+    };
     use crate::parse::parse;
+
+    /// Representative sources exercising the scope rules the index shares
+    /// with `to_vref`: plain verses, stripped notes, skipped headings,
+    /// verse-spanning paragraphs, and verse bridges.
+    const VREF_INDEX_FIXTURES: &[&str] = &[
+        "\\id GEN Genesis\n\\c 1\n\\p\n\\v 1 In the beginning God created the heavens and the earth.\n\\v 2 The earth was without form and void.\n",
+        "\\id GEN\n\\c 1\n\\p\n\\v 1 Text \\f + \\fr 1:1 \\ft note text \\f* rest.",
+        "\\id GEN\n\\c 1\n\\s1 The Creation\n\\p\n\\v 1 In the beginning.",
+        "\\id GEN\n\\c 1\n\\p\n\\v 1 First part.\n\\q1 Second part.",
+        "\\id GEN\n\\c 1\n\\p\n\\v 1-2 The first two verses share text.\n\\v 3 Third.",
+        // Poetry with trailing spaces before line breaks + inline char
+        // marker: exercises delimiter/join whitespace adjacency.
+        "\\id ISA\n\\c 9\n\\p\n\\v 2 The people who walked in darkness \n\\q2 have seen a \\nd great\\nd* light;\n\\q1 those who lived in the land, \n\\q2 the light has shone.\n",
+    ];
+
+    /// Read a UTF-16 sub-range back out of a projected verse text. Segment
+    /// boundaries always fall on token boundaries (whole codepoints), so
+    /// the slice never splits a surrogate pair.
+    fn utf16_slice(text: &str, span: Utf16Span) -> String {
+        let units: Vec<u16> = text.encode_utf16().collect();
+        String::from_utf16(&units[span.start as usize..span.end as usize])
+            .expect("segment boundaries fall on whole codepoints")
+    }
+
+    // Test 1 — scope parity: the index collects exactly the verses `to_vref`
+    // does (notes/headings excluded, whitespace-only verses dropped).
+    #[test]
+    fn vref_index_key_set_matches_to_vref() {
+        for &src in VREF_INDEX_FIXTURES {
+            let index = usfm_to_vref_index(src);
+            let map = usfm_to_vref_map(src);
+            let index_keys: std::collections::BTreeSet<_> = index.keys().cloned().collect();
+            let map_keys: std::collections::BTreeSet<_> = map.keys().cloned().collect();
+            assert_eq!(index_keys, map_keys, "key sets diverge for: {src:?}");
+        }
+    }
+
+    // Test 2 — derivation parity: replaying `to_vref`'s own boundary-dedup
+    // (`push_text`) + trim over the index's raw fragments must reproduce
+    // `to_vref` exactly. Proves the index is a faithful lossless superset.
+    #[test]
+    fn vref_index_reconstructs_to_vref_via_push_text() {
+        for &src in VREF_INDEX_FIXTURES {
+            let index = usfm_to_vref_index(src);
+            let map = usfm_to_vref_map(src);
+            for (sid, proj) in &index {
+                let mut rebuilt = String::new();
+                for seg in &proj.segments {
+                    push_text(&mut rebuilt, &utf16_slice(&proj.text, seg.text_span));
+                }
+                assert_eq!(
+                    rebuilt.trim(),
+                    map.get(sid).map(String::as_str).unwrap_or(""),
+                    "reconstructed to_vref mismatch for {sid} in {src:?}"
+                );
+            }
+        }
+    }
+
+    // Test 3 — segment integrity: segments partition the text contiguously
+    // in UTF-16, and each segment's byte/UTF-16 widths agree with its
+    // fragment. This is the substrate the resolver binary-searches.
+    #[test]
+    fn vref_index_segments_partition_text_contiguously() {
+        for &src in VREF_INDEX_FIXTURES {
+            let index = usfm_to_vref_index(src);
+            for (sid, proj) in &index {
+                let mut cursor = 0u32;
+                for seg in &proj.segments {
+                    assert_eq!(seg.text_span.start, cursor, "non-contiguous text span in {sid}");
+                    let frag = utf16_slice(&proj.text, seg.text_span);
+                    assert_eq!(
+                        seg.text_span.end - seg.text_span.start,
+                        frag.encode_utf16().count() as u32,
+                        "text_span width != fragment UTF-16 length in {sid}"
+                    );
+                    assert_eq!(
+                        seg.source_span.end - seg.source_span.start,
+                        frag.len() as u32,
+                        "source_span byte width != fragment UTF-8 length in {sid}"
+                    );
+                    cursor = seg.text_span.end;
+                }
+                assert_eq!(
+                    cursor,
+                    proj.text.encode_utf16().count() as u32,
+                    "segments do not cover full text in {sid}"
+                );
+            }
+        }
+    }
+
+    // Test 4a — source round-trip (the universal anchor): each segment's
+    // `source_span` reads back exactly the bytes the segment contributed to
+    // the projected text. This is what a raw-buffer consumer relies on.
+    #[test]
+    fn vref_index_segment_source_spans_map_to_original_bytes() {
+        for &src in VREF_INDEX_FIXTURES {
+            let index = usfm_to_vref_index(src);
+            for (sid, proj) in &index {
+                for seg in &proj.segments {
+                    let from_source = &src[seg.source_span.start as usize..seg.source_span.end as usize];
+                    let from_text = utf16_slice(&proj.text, seg.text_span);
+                    assert_eq!(
+                        from_source, from_text,
+                        "source_span bytes != projected text for a segment in {sid} ({src:?})"
+                    );
+                }
+            }
+        }
+    }
+
+    // The lossless projection makes whitespace separated only by markup or
+    // line structure ADJACENT in `text` (a line's trailing space + the next
+    // marker's tag-end delimiter space; ditto around inline char markers).
+    // That adjacency is intentional — stripping it would break the
+    // text == DOM == source-slice invariant the resolver depends on.
+    // Consumers must instead classify whitespace runs by the segment map:
+    // only a run STRICTLY INTERIOR to one segment is content whitespace; a
+    // run touching a segment boundary had markup between its characters and
+    // is structural. This test encodes that contract.
+    #[test]
+    fn vref_index_join_whitespace_is_identifiable_as_structural() {
+        let strictly_interior = |proj: &super::VerseProjection, a: u32, b: u32| {
+            proj.segments
+                .iter()
+                .any(|s| s.text_span.start < a && b < s.text_span.end)
+        };
+
+        // Poetry join: trailing content space + `\q2` delimiter space.
+        let src = "\\id ISA\n\\c 9\n\\p\n\\v 2 The people walked in  darkness \n\\q2 have seen a great light;\n";
+        let proj = usfm_to_vref_index(src)
+            .remove("ISA 9:2")
+            .expect("verse present");
+        let join = proj
+            .text
+            .find("darkness  have")
+            .expect("join adjacency preserved (lossless)") as u32;
+        let (a, b) = (join + 8, join + 10); // the two-space run (ASCII: byte == UTF-16)
+        assert!(
+            !strictly_interior(&proj, a, b),
+            "join run must touch a segment boundary (structural, not flaggable)"
+        );
+
+        // Genuine in-content double space IS strictly interior — flaggable.
+        let real = proj.text.find("in  darkness").expect("content run present") as u32 + 2;
+        assert!(
+            strictly_interior(&proj, real, real + 2),
+            "content run must be strictly interior to one segment"
+        );
+
+        // Inline char marker: same adjacency with no newline involved.
+        let src2 = "\\id GEN\n\\c 1\n\\p\n\\v 1 word \\nd Lord\\nd* more text.\n";
+        let proj2 = usfm_to_vref_index(src2)
+            .remove("GEN 1:1")
+            .expect("verse present");
+        let inline = proj2
+            .text
+            .find("word  Lord")
+            .expect("delimiter adjacency preserved (lossless)") as u32;
+        let (a2, b2) = (inline + 4, inline + 6);
+        assert!(
+            !strictly_interior(&proj2, a2, b2),
+            "marker-delimiter run must touch a segment boundary"
+        );
+    }
+
+    // Test 4b — the actual use case: a content finding (a double space)
+    // resolves from a projected-text range to the exact source bytes. The
+    // ASCII fixture makes UTF-16 and byte offsets coincide, so the intra-
+    // segment math is identity here.
+    #[test]
+    fn vref_index_resolves_a_double_space_range_to_source() {
+        let src = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the  beginning.\n";
+        let index = usfm_to_vref_index(src);
+        let proj = index.get("GEN 1:1").expect("verse present");
+        // Lossless: the double space survives verbatim in the projection.
+        let ws = proj.text.find("  ").expect("double space preserved in projection") as u32;
+        let (start, end) = (ws, ws + 2);
+        let seg = proj
+            .segments
+            .iter()
+            .find(|s| s.text_span.start <= start && end <= s.text_span.end)
+            .expect("range lands within one segment");
+        let intra = start - seg.text_span.start; // ASCII: UTF-16 == byte
+        let src_start = (seg.source_span.start + intra) as usize;
+        assert_eq!(&src[src_start..src_start + 2], "  ");
+    }
 
     #[test]
     fn basic_vref_extracts_plain_verse_text() {

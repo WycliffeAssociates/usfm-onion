@@ -48,50 +48,20 @@
       },
       "template": "\\{marker} needs a space before the text that follows.",
       "tokenId": "GEN-6"
-    },
-    {
-      "category": "structure",
-      "code": "excess-whitespace-in-content",
-      "fix": {
-        "code": "collapse-content-whitespace",
-        "label": "CollapseContentWhitespace",
-        "labelParams": {},
-        "replacements": [
-          {
-            "kind": "text",
-            "sid": "GEN 1:2",
-            "text": " verse with excess whitespace"
-          }
-        ],
-        "targetTokenId": "GEN-13",
-        "type": "replaceToken"
-      },
-      "issueType": "usfm",
-      "message": "Multiple spaces or a stray newline inside this text — collapse to a single space.",
-      "messageParams": {},
-      "severity": "warning",
-      "sid": "GEN 1:2",
-      "span": {
-        "end": 90,
-        "start": 56
-      },
-      "template": "Multiple spaces or a stray newline inside this text — collapse to a single space.",
-      "tokenId": "GEN-13"
     }
   ],
   "summary": {
     "byCategory": {
       "context": 1,
-      "structure": 2
+      "structure": 1
     },
     "byIssueType": {
-      "usfm": 3
+      "usfm": 2
     },
     "bySeverity": {
-      "error": 2,
-      "warning": 1
+      "error": 2
     },
     "suppressedCount": 0,
-    "totalCount": 3
+    "totalCount": 2
   }
 }

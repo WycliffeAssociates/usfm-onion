@@ -50,9 +50,45 @@ export type UsjElement =
 export type DiffsByChapterMap = Record<string, Record<number, ChapterTokenDiff[]>>;
 
 /**
+ * Lossless plain-text projection of one verse plus its segment map back to
+ * source / token coordinates.
+ */
+export interface VerseProjection {
+    text: string;
+    segments: Segment[];
+}
+
+/**
+ * One in-scope text token\'s contribution to a verse projection, with both
+ * resolution anchors: `sourceSpan` (bytes into source, for raw buffers) and
+ * `tokenId` (== the editor\'s DOM `data-id`). `textSpan` is UTF-16 into `text`.
+ */
+export interface Segment {
+    tokenId: string;
+    sourceSpan: Span;
+    textSpan: Utf16Span;
+}
+
+/**
+ * UTF-16 code-unit offsets into a `VerseProjection.text`. Deliberately a
+ * distinct type from `Span` (byte offsets into the source) so the unit is
+ * unmistakable on the wire — JS/DOM consumers index `text` in UTF-16.
+ */
+export interface Utf16Span {
+    start: number;
+    end: number;
+}
+
+/**
  * Verse-reference map: `{ \"GEN 1:1\": \"...\", \"GEN 1:2\": \"...\", ... }`.
  */
 export type VrefMap = Record<string, string>;
+
+/**
+ * `sid` -> lossless verse projection. Same key set as `VrefMap`; the
+ * difference is losslessness plus the segment map.
+ */
+export type VrefIndex = Record<string, VerseProjection>;
 
 export interface AttributeItem {
     span: Span;
@@ -280,7 +316,7 @@ export type InlineContext = "para" | "section" | "list" | "table";
 
 export type LintCategory = "document" | "structure" | "context" | "numbering";
 
-export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "chapter-expected-increase-by-one" | "inconsistent-chapter-label" | "duplicate-verse-number" | "verse-expected-increase-by-one" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "excess-whitespace-around-marker" | "excess-whitespace-in-content" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph";
+export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "chapter-expected-increase-by-one" | "inconsistent-chapter-label" | "duplicate-verse-number" | "verse-expected-increase-by-one" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph" | "content-after-blank-marker";
 
 export type LintIssueType = "usfm" | "content";
 
@@ -330,6 +366,7 @@ export class ParsedUsfm {
     toUsx(): string;
     toVref(): VrefMap;
     tokens(): Token[];
+    vrefIndex(): VrefIndex;
 }
 
 export class UsfmMarkerCatalog {
@@ -383,6 +420,15 @@ export function tokensToHtml(tokens: Token[], options?: HtmlOptions | null): str
 
 export function tokensToUsfm(tokens: Token[]): string;
 
+/**
+ * Build the vref index from an existing token stream (the editor's live
+ * path) — same rehydration as `lintTokens`, no reparse. Segment ids match
+ * the tokens passed in, so they line up with the editor's DOM `data-id`s.
+ */
+export function vrefIndexTokens(tokens: Token[]): VrefIndex;
+
+export function vrefIndexUsfm(source: string): VrefIndex;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -418,6 +464,7 @@ export interface InitOutput {
     readonly parsedusfm_toUsx: (a: number) => [number, number, number, number];
     readonly parsedusfm_toVref: (a: number) => any;
     readonly parsedusfm_tokens: (a: number) => [number, number];
+    readonly parsedusfm_vrefIndex: (a: number) => any;
     readonly revertDiffBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly revertDiffBlocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly tokensToHtml: (a: number, b: number, c: number) => [number, number];
@@ -425,6 +472,8 @@ export interface InitOutput {
     readonly usfmmarkercatalog_all: (a: number) => [number, number];
     readonly usfmmarkercatalog_contains: (a: number, b: number, c: number) => number;
     readonly usfmmarkercatalog_get: (a: number, b: number, c: number) => any;
+    readonly vrefIndexTokens: (a: number, b: number) => any;
+    readonly vrefIndexUsfm: (a: number, b: number) => any;
     readonly markerCatalog: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

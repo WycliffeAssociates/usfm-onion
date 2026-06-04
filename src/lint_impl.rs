@@ -181,14 +181,6 @@ pub enum LintCode {
     /// Covers paragraph / header / sidebar / note markers jammed
     /// against text — e.g. `\p word` is fine, `\pword` is not.
     MissingTagEndDelimiterAfterMarker,
-    /// Spec-driven: the actual whitespace run around the marker
-    /// exceeds what the requirement allows (e.g. five spaces where the
-    /// spec wants exactly one).
-    ExcessWhitespaceAroundMarker,
-    /// Content-style: a run of multiple horizontal whitespace
-    /// characters or an embedded newline appears inside a `Text` token,
-    /// not adjacent to sentence-ending punctuation.
-    ExcessWhitespaceInContent,
     /// Content-style flag-only rule: a closing character marker
     /// (`\nd*`, `\bk*`, …) is directly followed by alphabetic text
     /// with no space between. No autofix — the shape can be
@@ -200,6 +192,13 @@ pub enum LintCode {
     /// `current_paragraph_category` — fires on `on_enter_scope(Verse)`
     /// when the nearest open paragraph carries one of those categories.
     VerseInSectionOrOtherParagraph,
+    /// A no-content block marker (`\b`) carries content on its own line.
+    /// `\b` is a blank line and takes no content; the spec table marks it
+    /// `SingleNewline` after the name. Trailing horizontal whitespace
+    /// before the newline is fine (the formatter normalises it), so this
+    /// fires only on genuine content riding the same line — `\b here`,
+    /// not `\b ` followed by a newline. Anchored at the content.
+    ContentAfterBlankMarker,
 }
 
 impl LintCode {
@@ -239,12 +238,11 @@ impl LintCode {
                 "missing-horizontal-whitespace-after-marker-name"
             }
             Self::MissingTagEndDelimiterAfterMarker => "missing-tag-end-delimiter-after-marker",
-            Self::ExcessWhitespaceAroundMarker => "excess-whitespace-around-marker",
-            Self::ExcessWhitespaceInContent => "excess-whitespace-in-content",
             Self::MissingContentSpaceAfterCloseMarker => {
                 "missing-content-space-after-close-marker"
             }
             Self::VerseInSectionOrOtherParagraph => "verse-in-section-or-other-paragraph",
+            Self::ContentAfterBlankMarker => "content-after-blank-marker",
         }
     }
 
@@ -325,17 +323,14 @@ impl LintCode {
             Self::MissingTagEndDelimiterAfterMarker => {
                 "\\{marker} needs a space before the text that follows."
             }
-            Self::ExcessWhitespaceAroundMarker => {
-                "Too much whitespace {position, select, before {before} after {after} other {around}} \\{marker}."
-            }
-            Self::ExcessWhitespaceInContent => {
-                "Multiple spaces or a stray newline inside this text — collapse to a single space."
-            }
             Self::MissingContentSpaceAfterCloseMarker => {
                 "\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this."
             }
             Self::VerseInSectionOrOtherParagraph => {
                 "\\v is not allowed inside a {category, select, section {section heading} other {non-content paragraph}}; verses must appear inside body paragraphs, lists, or tables."
+            }
+            Self::ContentAfterBlankMarker => {
+                "This content shares a line with \\{marker}, but \\{marker} is a blank line that takes no content. Put it in its own paragraph (\\p, \\q, …) on the next line."
             }
         }
     }
@@ -361,9 +356,8 @@ impl LintCode {
             | Self::MissingWhitespaceBeforeMarker
             | Self::MissingHorizontalWhitespaceAfterMarkerName
             | Self::MissingTagEndDelimiterAfterMarker
-            | Self::ExcessWhitespaceAroundMarker
-            | Self::ExcessWhitespaceInContent
-            | Self::MissingContentSpaceAfterCloseMarker => LintCategory::Structure,
+            | Self::MissingContentSpaceAfterCloseMarker
+            | Self::ContentAfterBlankMarker => LintCategory::Structure,
             Self::NoteSubmarkerOutsideNote
             | Self::MetadataOutsideTarget
             | Self::MarkerNotValidInContext
@@ -382,8 +376,6 @@ impl LintCode {
     pub fn severity(self) -> LintSeverity {
         match self {
             Self::EmptyParagraph
-            | Self::ExcessWhitespaceAroundMarker
-            | Self::ExcessWhitespaceInContent
             | Self::MissingContentSpaceAfterCloseMarker => LintSeverity::Warning,
             _ => LintSeverity::Error,
         }
@@ -421,10 +413,9 @@ impl LintCode {
             | Self::MissingWhitespaceBeforeMarker
             | Self::MissingHorizontalWhitespaceAfterMarkerName
             | Self::MissingTagEndDelimiterAfterMarker
-            | Self::ExcessWhitespaceAroundMarker
-            | Self::ExcessWhitespaceInContent
             | Self::MissingContentSpaceAfterCloseMarker
-            | Self::VerseInSectionOrOtherParagraph => LintIssueType::Usfm,
+            | Self::VerseInSectionOrOtherParagraph
+            | Self::ContentAfterBlankMarker => LintIssueType::Usfm,
         }
     }
 }
@@ -938,9 +929,8 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     }
     if enabled.has_any(&[
         LintCode::MissingWhitespaceBeforeMarker,
-        LintCode::ExcessWhitespaceAroundMarker,
-        LintCode::ExcessWhitespaceInContent,
         LintCode::MissingContentSpaceAfterCloseMarker,
+        LintCode::ContentAfterBlankMarker,
     ]) {
         lint_whitespace_rules(tokens, &enabled, &mut issues);
     }
@@ -2012,11 +2002,6 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
 /// - **MissingTagEndDelimiterAfterMarker**: the marker's row says a
 ///   tag-end delimiter (WS, EOI, or `|`) is required after the marker
 ///   name, but the following token is none of those.
-/// - **ExcessWhitespaceAroundMarker**: the actual run of whitespace
-///   before/after the marker is longer than the requirement allows.
-/// - **ExcessWhitespaceInContent**: a `Text` token contains multi-space
-///   runs or embedded newlines, not adjacent to sentence-ending
-///   punctuation.
 /// - **MissingContentSpaceAfterCloseMarker**: a closing character
 ///   marker (`\nd*`, …) is immediately followed by alphabetic text
 ///   with no separating whitespace.
@@ -2028,37 +2013,18 @@ fn lint_whitespace_rules<T: LintableToken>(
     use crate::marker_defs::lookup_marker_whitespace;
     use crate::whitespace::{
         StructuralWhitespaceRequirement as Req, is_any_whitespace_char,
-        is_horizontal_whitespace_char, is_newline_char, is_sentence_ending_punctuation_char,
+        is_horizontal_whitespace_char, is_newline_char,
     };
 
-    // Spec-driven rules (1, 2, 3, 4) gated together — skip the
+    // Spec-driven rules (1, 2, 3) gated together — skip the
     // `lookup_marker_whitespace` per-token cost when none are enabled.
     let spec_rules_enabled = enabled.has(LintCode::MissingWhitespaceBeforeMarker)
         || enabled.has(LintCode::MissingHorizontalWhitespaceAfterMarkerName)
-        || enabled.has(LintCode::MissingTagEndDelimiterAfterMarker)
-        || enabled.has(LintCode::ExcessWhitespaceAroundMarker);
-    let content_rule_enabled = enabled.has(LintCode::ExcessWhitespaceInContent);
+        || enabled.has(LintCode::MissingTagEndDelimiterAfterMarker);
 
     for index in 0..tokens.len() {
         let token = &tokens[index];
         let token_kind = token.kind();
-
-        // Rule 5: excess whitespace inside content text.
-        if content_rule_enabled
-            && token_kind == TokenKind::Text
-            && let Some(marker) = scan_excess_content_whitespace(token.text())
-            && marker
-        {
-            let mut issue = simple_issue(
-                LintCode::ExcessWhitespaceInContent,
-                MessageParams::default(),
-                token,
-            );
-            if let Some(fix) = excess_content_whitespace_fix(token) {
-                issue = issue.with_fix(fix);
-            }
-            issues.push(issue);
-        }
 
         if !spec_rules_enabled {
             continue;
@@ -2139,7 +2105,27 @@ fn lint_whitespace_rules<T: LintableToken>(
         let next_text = next_token.map(|n| n.text()).unwrap_or("");
         let next_first = next_text.chars().next();
 
-        if !after_name_satisfied_by_marker_token {
+        if !after_name_satisfied_by_marker_token
+            && marker_is_intentionally_empty_block(marker)
+        {
+            // `\b` and other no-content block markers: the spec table
+            // marks them `SingleNewline` after the name, but the real
+            // requirement is "nothing on this line." A newline (or
+            // end-of-input) must arrive before any content; trailing
+            // horizontal whitespace before it is harmless and the
+            // formatter normalises it, so `\b \n` is clean. We flag only
+            // genuine content riding the same line (`\b here`), anchored
+            // at that content rather than at the marker.
+            if enabled.has(LintCode::ContentAfterBlankMarker)
+                && let Some(content) = content_after_blank_marker(tokens, index)
+            {
+                issues.push(simple_issue(
+                    LintCode::ContentAfterBlankMarker,
+                    marker_params(marker),
+                    content,
+                ));
+            }
+        } else if !after_name_satisfied_by_marker_token {
             match spec.required_after_open_name {
                 Req::AtLeastOneHorizontalWhitespace
                 | Req::AtLeastOneWhitespace
@@ -2212,51 +2198,6 @@ fn lint_whitespace_rules<T: LintableToken>(
                 _ => {}
             }
         }
-
-        // Rule 4: excess whitespace immediately after the marker name.
-        // The "after" run lives at the start of the next token's text.
-        if enabled.has(LintCode::ExcessWhitespaceAroundMarker)
-            && let Some(next) = next_token
-            && excess_leading_horizontal_whitespace(next.text())
-        {
-            let mut issue = simple_issue(
-                LintCode::ExcessWhitespaceAroundMarker,
-                message_params([
-                    ("marker", marker.to_string()),
-                    ("position", "after".to_string()),
-                ]),
-                token,
-            );
-            if let Some(fix) =
-                excess_leading_ws_fix(next, spec.format_preference_after_open_name)
-            {
-                issue = issue.with_fix(fix);
-            }
-            issues.push(issue);
-        }
-
-        // Rule 4 (mirror): excess whitespace immediately before the
-        // marker. Looks at the prior token's trailing whitespace run.
-        if enabled.has(LintCode::ExcessWhitespaceAroundMarker)
-            && index > 0
-            && excess_trailing_horizontal_whitespace(tokens[index - 1].text())
-        {
-            let prev = &tokens[index - 1];
-            let mut issue = simple_issue(
-                LintCode::ExcessWhitespaceAroundMarker,
-                message_params([
-                    ("marker", marker.to_string()),
-                    ("position", "before".to_string()),
-                ]),
-                token,
-            );
-            if let Some(fix) =
-                excess_trailing_ws_fix(prev, spec.format_preference_before_open)
-            {
-                issue = issue.with_fix(fix);
-            }
-            issues.push(issue);
-        }
     }
 
     // Rule 6: closing character marker immediately followed by
@@ -2289,9 +2230,6 @@ fn lint_whitespace_rules<T: LintableToken>(
             }
         }
     }
-
-    // Suppress unused-import warning when only some rules run.
-    let _ = is_sentence_ending_punctuation_char as fn(char) -> bool;
 }
 
 fn requirement_demands_leading_ws(req: crate::whitespace::StructuralWhitespaceRequirement) -> bool {
@@ -2304,80 +2242,6 @@ fn requirement_demands_leading_ws(req: crate::whitespace::StructuralWhitespaceRe
             | Req::AtLeastOneWhitespace
             | Req::AtLeastOneHorizontalWhitespace
     )
-}
-
-fn excess_leading_horizontal_whitespace(text: &str) -> bool {
-    let mut chars = text.chars();
-    let mut horizontal = 0usize;
-    for c in chars.by_ref() {
-        if c == ' ' || c == '\t' {
-            horizontal += 1;
-            if horizontal > 1 {
-                return true;
-            }
-        } else {
-            break;
-        }
-    }
-    false
-}
-
-fn excess_trailing_horizontal_whitespace(text: &str) -> bool {
-    let mut horizontal = 0usize;
-    for c in text.chars().rev() {
-        if c == ' ' || c == '\t' {
-            horizontal += 1;
-            if horizontal > 1 {
-                return true;
-            }
-        } else {
-            break;
-        }
-    }
-    false
-}
-
-/// Returns `Some(true)` when `text` contains a run of 2+ horizontal
-/// whitespace characters not preceded by sentence-ending punctuation,
-/// or an embedded newline run, indicating the content rule applies.
-fn scan_excess_content_whitespace(text: &str) -> Option<bool> {
-    // ASCII-byte scan. All predicates (horizontal WS, newline, sentence-
-    // ending punctuation, generic WS) are ASCII; non-ASCII bytes are
-    // text content. Operating on bytes avoids the per-token allocation
-    // of a `Vec<char>`.
-    let bytes = text.as_bytes();
-    let is_hs = |b: u8| b == b' ' || b == b'\t';
-    let is_sentence_end = |b: u8| matches!(b, b'.' | b'!' | b'?' | b':' | b';');
-    let is_ws = |b: u8| b == b' ' || b == b'\t' || b == b'\n' || b == b'\r';
-    let mut i = 0usize;
-    let mut saw_text = false;
-    let mut last_nonws: Option<u8> = None;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if is_hs(b) {
-            let run_start = i;
-            while i < bytes.len() && is_hs(bytes[i]) {
-                i += 1;
-            }
-            let run_len = i - run_start;
-            if run_len >= 2 && saw_text {
-                let protected = last_nonws.is_some_and(is_sentence_end);
-                if !protected {
-                    return Some(true);
-                }
-            }
-        } else if b == b'\n' || b == b'\r' {
-            if saw_text && bytes[i + 1..].iter().any(|&ch| !is_ws(ch)) {
-                return Some(true);
-            }
-            i += 1;
-        } else {
-            saw_text = true;
-            last_nonws = Some(b);
-            i += 1;
-        }
-    }
-    Some(false)
 }
 
 fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
@@ -2766,6 +2630,30 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
     matches!(marker, "b")
 }
 
+/// For a no-content block marker like `\b`, find the first token carrying
+/// genuine content on the same line — i.e. before the newline that must
+/// follow the marker. Trailing horizontal whitespace before that newline
+/// is allowed and skipped, so `\b \n` returns `None` (clean) while
+/// `\b here` returns the `here` token (flagged). End-of-input with only
+/// horizontal whitespace also counts as clean.
+fn content_after_blank_marker<T: LintableToken>(
+    tokens: &[T],
+    marker_index: usize,
+) -> Option<&T> {
+    use crate::whitespace::{is_horizontal_whitespace_char, is_newline_char};
+    for token in &tokens[marker_index + 1..] {
+        for ch in token.text().chars() {
+            if is_newline_char(ch) {
+                return None;
+            }
+            if !is_horizontal_whitespace_char(ch) {
+                return Some(token);
+            }
+        }
+    }
+    None
+}
+
 fn empty_paragraph_boundary_index<T: LintableToken>(
     tokens: &[T],
     marker_index: usize,
@@ -2877,150 +2765,6 @@ fn preferred_ws(pref: Option<crate::whitespace::FormatWhitespacePreference>) -> 
         Some(Pref::PreferRemoveAllWhitespace) => "",
         Some(Pref::PreferSingleSpace) | None => " ",
     }
-}
-
-/// Collapse a leading horizontal-whitespace run in `target`'s text down
-/// to a single occurrence of `pref` (or a single space if unset).
-/// Returns `None` if there's no excess to collapse or the target has
-/// no id (unfixable).
-fn excess_leading_ws_fix<T: LintableToken>(
-    target: &T,
-    pref: Option<crate::whitespace::FormatWhitespacePreference>,
-) -> Option<TokenFix> {
-    let id = target.id()?;
-    let text = target.text();
-    let leading_len: usize = text
-        .as_bytes()
-        .iter()
-        .take_while(|b| **b == b' ' || **b == b'\t')
-        .count();
-    if leading_len < 2 {
-        return None;
-    }
-    let replacement = preferred_ws(pref);
-    let new_text = format!("{}{}", replacement, &text[leading_len..]);
-    Some(TokenFix::ReplaceToken {
-        code: "collapse-whitespace-around-marker".to_string(),
-        label: "CollapseWhitespaceAroundMarker".to_string(),
-        label_params: MessageParams::default(),
-        target_token_id: id,
-        replacements: vec![crate::format::TokenTemplate {
-            kind: target.kind(),
-            text: new_text,
-            marker: target.marker().map(ToOwned::to_owned),
-            sid: target.sid(),
-        }],
-    })
-}
-
-/// Collapse a trailing horizontal-whitespace run in `target`'s text
-/// down to a single occurrence of `pref` (or a single space if unset).
-fn excess_trailing_ws_fix<T: LintableToken>(
-    target: &T,
-    pref: Option<crate::whitespace::FormatWhitespacePreference>,
-) -> Option<TokenFix> {
-    let id = target.id()?;
-    let text = target.text();
-    let bytes = text.as_bytes();
-    let trailing_len: usize = bytes
-        .iter()
-        .rev()
-        .take_while(|b| **b == b' ' || **b == b'\t')
-        .count();
-    if trailing_len < 2 {
-        return None;
-    }
-    let head_end = bytes.len() - trailing_len;
-    let replacement = preferred_ws(pref);
-    let new_text = format!("{}{}", &text[..head_end], replacement);
-    Some(TokenFix::ReplaceToken {
-        code: "collapse-whitespace-around-marker".to_string(),
-        label: "CollapseWhitespaceAroundMarker".to_string(),
-        label_params: MessageParams::default(),
-        target_token_id: id,
-        replacements: vec![crate::format::TokenTemplate {
-            kind: target.kind(),
-            text: new_text,
-            marker: target.marker().map(ToOwned::to_owned),
-            sid: target.sid(),
-        }],
-    })
-}
-
-/// Collapse multi-whitespace runs and embedded newlines inside a Text
-/// token to a single space. Preserves the sentence-ending-punctuation
-/// carve-out from `scan_excess_content_whitespace`: a multi-space run
-/// directly after `.!?:;` is kept as-is. Returns `None` when the token
-/// has no id or no excess was found.
-fn excess_content_whitespace_fix<T: LintableToken>(target: &T) -> Option<TokenFix> {
-    let id = target.id()?;
-    let text = target.text();
-    let bytes = text.as_bytes();
-    let is_hs = |b: u8| b == b' ' || b == b'\t';
-    let is_nl = |b: u8| b == b'\n' || b == b'\r';
-    let is_sentence_end = |b: u8| matches!(b, b'.' | b'!' | b'?' | b':' | b';');
-
-    let mut out = String::with_capacity(text.len());
-    let mut i = 0;
-    let mut changed = false;
-    let mut last_nonws: Option<u8> = None;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if is_hs(b) {
-            let run_start = i;
-            while i < bytes.len() && is_hs(bytes[i]) {
-                i += 1;
-            }
-            let run_len = i - run_start;
-            if run_len >= 2 && last_nonws.is_some_and(is_sentence_end) {
-                // Carve-out: preserve as-is.
-                out.push_str(&text[run_start..i]);
-            } else if run_len >= 2 {
-                out.push(' ');
-                changed = true;
-            } else {
-                // Single space, leave alone.
-                out.push(b as char);
-            }
-        } else if is_nl(b) {
-            // Skip the newline; treat as collapse-target. Multi-byte
-            // CRLF and runs of mixed CR/LF/space collapse together.
-            let run_start = i;
-            while i < bytes.len() && (is_nl(bytes[i]) || is_hs(bytes[i])) {
-                i += 1;
-            }
-            // Only collapse if there's non-whitespace content on both
-            // sides of the run. A trailing/leading newline run is
-            // preserved (matches scan's "saw_text && next non-WS"
-            // pattern).
-            let has_following_content = bytes[i..].iter().any(|&ch| !is_hs(ch) && !is_nl(ch));
-            if last_nonws.is_some() && has_following_content {
-                out.push(' ');
-                changed = true;
-            } else {
-                out.push_str(&text[run_start..i]);
-            }
-        } else {
-            out.push(b as char);
-            last_nonws = Some(b);
-            i += 1;
-        }
-    }
-    if !changed {
-        return None;
-    }
-    Some(TokenFix::ReplaceToken {
-        code: "collapse-content-whitespace".to_string(),
-        label: "CollapseContentWhitespace".to_string(),
-        label_params: MessageParams::default(),
-        target_token_id: id,
-        replacements: vec![crate::format::TokenTemplate {
-            kind: target.kind(),
-            text: out,
-            marker: target.marker().map(ToOwned::to_owned),
-            sid: target.sid(),
-        }],
-    })
 }
 
 /// Replace `target` with a token whose text is `prefix` + the target's
@@ -3296,158 +3040,46 @@ mod tests {
     }
 
     #[test]
-    fn excess_whitespace_around_marker_is_flagged() {
-        // Five spaces immediately after `\p` and before the paragraph
-        // text. Paragraph markers don't take a number, so the WS run
-        // sits at the start of the next Text token where the rule
-        // looks.
-        let result = lint_usfm(
-            "\\id GEN\n\\c 1\n\\p     paragraph text\n",
-            LintOptions::default(),
-        );
-        let flagged = result
-            .issues
-            .iter()
-            .any(|i| i.code == LintCode::ExcessWhitespaceAroundMarker);
+    fn content_after_blank_marker_distinguishes_content_from_trailing_whitespace() {
+        // `\b` is a blank line that takes no content. The rule must catch
+        // genuine content riding the same line, but must NOT fire on a
+        // bare trailing space before the newline (cosmetic — the formatter
+        // tidies it) or on content that sits on its own line after `\b`.
+        let has_blank = |src: &str| {
+            lint_usfm(src, LintOptions::default())
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::ContentAfterBlankMarker)
+        };
+
+        // Content on `\b`'s own line → flagged.
         assert!(
-            flagged,
-            "expected excess-whitespace-around-marker, got: {:?}",
-            result.issues.iter().map(|i| i.code).collect::<Vec<_>>()
+            has_blank("\\id GEN\n\\c 1\n\\v 1 text\n\\b here asdf\n"),
+            "content sharing \\b's line should be flagged"
         );
-    }
+        // Newline right after `\b`, content on the next line → clean.
+        assert!(
+            !has_blank("\\id GEN\n\\c 1\n\\v 1 text\n\\b\nhere asdf\n"),
+            "content on the line after \\b should not be flagged"
+        );
+        // Bare trailing space then newline → clean (formatter normalises).
+        assert!(
+            !has_blank("\\id GEN\n\\c 1\n\\v 1 text\n\\b \nhere asdf\n"),
+            "a trailing space before \\b's newline should not be flagged"
+        );
 
-    #[test]
-    fn excess_whitespace_around_marker_autofix_collapses_leading_run() {
-        // `\p` Marker followed by Text "     paragraph text" — five
-        // leading spaces. Rule 4 fires, autofix collapses to one space.
-        let tokens = vec![
-            crate::FormatToken {
-                kind: TokenKind::Marker,
-                text: "\\p".to_string(),
-                marker: Some("p".to_string()),
-                sid: Some("GEN 1:1".to_string()),
-                id: Some("GEN-0".to_string()),
-                span: None,
-                structural: None,
-                number_info: None,
-                marker_profile: None,
-            },
-            crate::FormatToken {
-                kind: TokenKind::Text,
-                text: "     paragraph text".to_string(),
-                marker: None,
-                sid: Some("GEN 1:1".to_string()),
-                id: Some("GEN-1".to_string()),
-                span: None,
-                structural: None,
-                number_info: None,
-                marker_profile: None,
-            },
-        ];
-
-        let result = lint_tokens(&tokens, LintOptions::default());
-        let issue = result
-            .issues
-            .into_iter()
-            .find(|i| i.code == LintCode::ExcessWhitespaceAroundMarker)
-            .expect("expected excess-whitespace-around-marker issue");
-        let fix = issue.fix.expect("expected autofix");
-        let fixed = apply_token_fix(&tokens, &fix);
-
-        assert_eq!(fixed.len(), 2);
-        assert_eq!(fixed[0].text, "\\p");
-        assert_eq!(fixed[1].text, " paragraph text");
-    }
-
-    #[test]
-    fn excess_whitespace_in_content_is_flagged_for_non_punctuation_runs() {
-        let result = lint_usfm(
-            "\\id GEN\n\\c 1\n\\p\n\\v 1 word  another word.\n",
+        // The reroute means the old, misleading whitespace code must no
+        // longer fire for `\b` content — the report names the real issue.
+        let case1 = lint_usfm(
+            "\\id GEN\n\\c 1\n\\v 1 text\n\\b here asdf\n",
             LintOptions::default(),
         );
         assert!(
-            result
+            !case1
                 .issues
                 .iter()
-                .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
-            "expected excess-whitespace-in-content"
-        );
-    }
-
-    #[test]
-    fn excess_whitespace_in_content_autofix_collapses_multispace() {
-        // Text token "word  another word." has a double-space run that
-        // isn't preceded by sentence-ending punctuation. Rule 5
-        // collapses it to a single space.
-        let tokens = vec![crate::FormatToken {
-            kind: TokenKind::Text,
-            text: "word  another word.".to_string(),
-            marker: None,
-            sid: Some("GEN 1:1".to_string()),
-            id: Some("GEN-0".to_string()),
-            span: None,
-            structural: None,
-            number_info: None,
-            marker_profile: None,
-        }];
-
-        let result = lint_tokens(&tokens, LintOptions::default());
-        let issue = result
-            .issues
-            .into_iter()
-            .find(|i| i.code == LintCode::ExcessWhitespaceInContent)
-            .expect("expected excess-whitespace-in-content issue");
-        let fix = issue.fix.expect("expected autofix");
-        let fixed = apply_token_fix(&tokens, &fix);
-
-        assert_eq!(fixed.len(), 1);
-        assert_eq!(fixed[0].text, "word another word.");
-    }
-
-    #[test]
-    fn excess_whitespace_in_content_autofix_preserves_sentence_punctuation_runs() {
-        // "End.  Next" has a double-space after `.` — carve-out kicks
-        // in and Rule 5 does not flag (so no fix). Belt-and-braces:
-        // if a fix were generated despite the carve-out, applying it
-        // would change the text. So we assert no issue is emitted at
-        // all (this is also the contract of the carve-out test
-        // upstream).
-        let tokens = vec![crate::FormatToken {
-            kind: TokenKind::Text,
-            text: "End.  Next sentence.".to_string(),
-            marker: None,
-            sid: Some("GEN 1:1".to_string()),
-            id: Some("GEN-0".to_string()),
-            span: None,
-            structural: None,
-            number_info: None,
-            marker_profile: None,
-        }];
-
-        let result = lint_tokens(&tokens, LintOptions::default());
-        assert!(
-            !result
-                .issues
-                .iter()
-                .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
-            "double-space after period must not trigger the rule"
-        );
-    }
-
-    #[test]
-    fn excess_whitespace_after_sentence_punctuation_is_allowed() {
-        // The carve-out from `is_sentence_ending_punctuation_char`:
-        // multi-space after `.` (or ! ? : ;) is intentional typography.
-        let result = lint_usfm(
-            "\\id GEN\n\\c 1\n\\p\n\\v 1 End.  Next sentence.\n",
-            LintOptions::default(),
-        );
-        assert!(
-            !result
-                .issues
-                .iter()
-                .any(|i| i.code == LintCode::ExcessWhitespaceInContent),
-            "double-space after period must not trigger the rule"
+                .any(|i| i.code == LintCode::MissingHorizontalWhitespaceAfterMarkerName),
+            "\\b content should report content-after-blank-marker, not missing-horizontal-whitespace"
         );
     }
 

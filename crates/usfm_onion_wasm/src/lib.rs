@@ -49,7 +49,11 @@ use usfm_onion::token::{
 };
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
-use usfm_onion::vref::{VrefMap as NativeVrefMap, usfm_to_vref_map};
+use usfm_onion::vref::{
+    Segment as NativeSegment, Utf16Span as NativeUtf16Span,
+    VerseProjection as NativeVerseProjection, VrefIndex as NativeVrefIndex, VrefMap as NativeVrefMap,
+    tokens_to_vref_index, usfm_to_vref_index, usfm_to_vref_map,
+};
 use usfm_onion::walker::WalkableToken;
 
 // TODO: eventually move off of this ideally
@@ -282,10 +286,9 @@ pub enum LintCode {
     MissingWhitespaceBeforeMarker,
     MissingHorizontalWhitespaceAfterMarkerName,
     MissingTagEndDelimiterAfterMarker,
-    ExcessWhitespaceAroundMarker,
-    ExcessWhitespaceInContent,
     MissingContentSpaceAfterCloseMarker,
     VerseInSectionOrOtherParagraph,
+    ContentAfterBlankMarker,
 }
 
 impl From<NativeLintCode> for LintCode {
@@ -327,12 +330,11 @@ impl From<NativeLintCode> for LintCode {
             NativeLintCode::MissingTagEndDelimiterAfterMarker => {
                 Self::MissingTagEndDelimiterAfterMarker
             }
-            NativeLintCode::ExcessWhitespaceAroundMarker => Self::ExcessWhitespaceAroundMarker,
-            NativeLintCode::ExcessWhitespaceInContent => Self::ExcessWhitespaceInContent,
             NativeLintCode::MissingContentSpaceAfterCloseMarker => {
                 Self::MissingContentSpaceAfterCloseMarker
             }
             NativeLintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
+            NativeLintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
         }
     }
 }
@@ -374,12 +376,11 @@ impl From<LintCode> for NativeLintCode {
                 Self::MissingHorizontalWhitespaceAfterMarkerName
             }
             LintCode::MissingTagEndDelimiterAfterMarker => Self::MissingTagEndDelimiterAfterMarker,
-            LintCode::ExcessWhitespaceAroundMarker => Self::ExcessWhitespaceAroundMarker,
-            LintCode::ExcessWhitespaceInContent => Self::ExcessWhitespaceInContent,
             LintCode::MissingContentSpaceAfterCloseMarker => {
                 Self::MissingContentSpaceAfterCloseMarker
             }
             LintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
+            LintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
         }
     }
 }
@@ -1007,6 +1008,46 @@ pub struct Span {
     end: u32,
 }
 
+/// UTF-16 code-unit offsets into a `VerseProjection.text`. Deliberately a
+/// distinct type from `Span` (byte offsets into the source) so the unit is
+/// unmistakable on the wire — JS/DOM consumers index `text` in UTF-16.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct Utf16Span {
+    start: u32,
+    end: u32,
+}
+
+/// One in-scope text token's contribution to a verse projection, with both
+/// resolution anchors: `sourceSpan` (bytes into source, for raw buffers) and
+/// `tokenId` (== the editor's DOM `data-id`). `textSpan` is UTF-16 into `text`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct Segment {
+    token_id: String,
+    source_span: Span,
+    text_span: Utf16Span,
+}
+
+/// Lossless plain-text projection of one verse plus its segment map back to
+/// source / token coordinates.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct VerseProjection {
+    text: String,
+    segments: Vec<Segment>,
+}
+
+/// `sid` -> lossless verse projection. Same key set as `VrefMap`; the
+/// difference is losslessness plus the segment map.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(transparent)]
+pub struct VrefIndex(pub std::collections::BTreeMap<String, VerseProjection>);
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -1551,6 +1592,11 @@ impl ParsedUsfm {
         VrefMap(vref_to_object(usfm_to_vref_map(&self.source)))
     }
 
+    #[wasm_bindgen(js_name = vrefIndex)]
+    pub fn vref_index(&self) -> VrefIndex {
+        map_vref_index(usfm_to_vref_index(&self.source))
+    }
+
     pub fn diff(
         &self,
         other: &ParsedUsfm,
@@ -1605,6 +1651,20 @@ pub fn wasm_parse(source: &str) -> ParsedUsfm {
 #[wasm_bindgen(js_name = lintUsfm)]
 pub fn wasm_lint_usfm(source: &str, options: Option<LintOptions>) -> LintResult {
     map_lint_result(lint_usfm(source, lint_options_into_native(options)))
+}
+
+#[wasm_bindgen(js_name = vrefIndexUsfm)]
+pub fn wasm_vref_index_usfm(source: &str) -> VrefIndex {
+    map_vref_index(usfm_to_vref_index(source))
+}
+
+/// Build the vref index from an existing token stream (the editor's live
+/// path) — same rehydration as `lintTokens`, no reparse. Segment ids match
+/// the tokens passed in, so they line up with the editor's DOM `data-id`s.
+#[wasm_bindgen(js_name = vrefIndexTokens)]
+pub fn wasm_vref_index_tokens(tokens: Vec<Token>) -> VrefIndex {
+    let tokens = parse_walk_tokens_from_values(tokens);
+    map_vref_index(tokens_to_vref_index(&tokens))
 }
 
 #[wasm_bindgen(js_name = lintTokens)]
@@ -2609,6 +2669,37 @@ fn vref_to_object(map: NativeVrefMap) -> std::collections::BTreeMap<String, Stri
     map.into_iter().collect()
 }
 
+fn map_vref_index(index: NativeVrefIndex) -> VrefIndex {
+    VrefIndex(
+        index
+            .into_iter()
+            .map(|(sid, projection)| (sid, map_verse_projection(projection)))
+            .collect(),
+    )
+}
+
+fn map_verse_projection(projection: NativeVerseProjection) -> VerseProjection {
+    VerseProjection {
+        text: projection.text,
+        segments: projection.segments.into_iter().map(map_segment).collect(),
+    }
+}
+
+fn map_segment(segment: NativeSegment) -> Segment {
+    Segment {
+        token_id: segment.token_id,
+        source_span: map_span(segment.source_span),
+        text_span: map_utf16_span(segment.text_span),
+    }
+}
+
+fn map_utf16_span(span: NativeUtf16Span) -> Utf16Span {
+    Utf16Span {
+        start: span.start,
+        end: span.end,
+    }
+}
+
 fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
     swb_to_js_value(value).map_err(js_serde_error)
 }
@@ -2659,10 +2750,9 @@ fn lint_code_variants() -> Vec<NativeLintCode> {
         NativeLintCode::MissingWhitespaceBeforeMarker,
         NativeLintCode::MissingHorizontalWhitespaceAfterMarkerName,
         NativeLintCode::MissingTagEndDelimiterAfterMarker,
-        NativeLintCode::ExcessWhitespaceAroundMarker,
-        NativeLintCode::ExcessWhitespaceInContent,
         NativeLintCode::MissingContentSpaceAfterCloseMarker,
         NativeLintCode::VerseInSectionOrOtherParagraph,
+        NativeLintCode::ContentAfterBlankMarker,
     ]
 }
 

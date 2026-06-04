@@ -66,7 +66,6 @@ fn common_errors_triggers_expected_lint_codes() {
         LintCode::UnclosedMarker,
         LintCode::StrayCloseMarker,
         LintCode::UnknownMarker,
-        LintCode::ExcessWhitespaceInContent,
         LintCode::DuplicateVerseNumber,
         LintCode::ChapterExpectedIncreaseByOne,
         LintCode::NoteSubmarkerOutsideNote,
