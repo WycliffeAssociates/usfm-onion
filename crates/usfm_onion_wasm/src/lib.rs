@@ -33,7 +33,7 @@ use usfm_onion::marker_defs::{
     InlineContext as NativeInlineContext, MarkerFamily as NativeMarkerFamily,
     MarkerFamilyRole as NativeMarkerFamilyRole, NoteFamily as NativeNoteFamily,
     NoteSubkind as NativeNoteSubkind, ParagraphCategory as NativeParagraphCategory,
-    SpecContext as NativeSpecContext,
+    MarkerPayload as NativeMarkerPayload, SpecContext as NativeSpecContext,
     StructuralMarkerInfo as NativeStructuralMarkerInfo,
     StructuralScopeKind as NativeStructuralScopeKind,
 };
@@ -718,6 +718,28 @@ impl From<NativeClosingBehavior> for ClosingBehavior {
                 Self::OptionalExplicitUntilNoteEnd
             }
             NativeClosingBehavior::SelfClosingMilestone => Self::SelfClosingMilestone,
+        }
+    }
+}
+
+/// Argument payload a marker's opening form consumes right after its name:
+/// `"bookCode"` for `\id`, `"numberRange"` for the chapter/verse family
+/// (`\c`, `\cp`, `\ca`, `\v`, `\vp`, `\va`). Shares one table with the
+/// lexer (`marker_defs::marker_payload`), so catalog and tokenization cannot
+/// drift.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum MarkerPayload {
+    BookCode,
+    NumberRange,
+}
+
+impl From<NativeMarkerPayload> for MarkerPayload {
+    fn from(value: NativeMarkerPayload) -> Self {
+        match value {
+            NativeMarkerPayload::BookCode => Self::BookCode,
+            NativeMarkerPayload::NumberRange => Self::NumberRange,
         }
     }
 }
@@ -1408,6 +1430,8 @@ pub struct MarkerInfo {
     block_behavior: Option<BlockBehavior>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     closing_behavior: Option<ClosingBehavior>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    payload: Option<MarkerPayload>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     paragraph_category: Option<ParagraphCategory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2539,6 +2563,7 @@ fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfo {
         contexts: info.contexts.into_iter().map(Into::into).collect(),
         block_behavior: info.block_behavior.map(Into::into),
         closing_behavior: info.closing_behavior.map(Into::into),
+        payload: info.payload.map(Into::into),
         paragraph_category: info.paragraph_category.map(Into::into),
         source: info.source,
     }

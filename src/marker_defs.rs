@@ -385,6 +385,28 @@ pub fn lookup_marker_whitespace(marker: &str) -> Option<MarkerWhitespace> {
     Some(default_marker_whitespace_for(spec))
 }
 
+/// Argument payload a marker's opening form consumes immediately after its
+/// name, before any content: the book code for `\id`, a chapter/verse
+/// number-range for the chapter/verse family (`\c`, `\cp`, `\ca`, `\v`,
+/// `\vp`, `\va`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum MarkerPayload {
+    BookCode,
+    NumberRange,
+}
+
+/// Single source of truth for marker argument payloads. The lexer's
+/// contextual-payload consumption (`pending_payload_for` in `lexer.rs`) and
+/// the marker catalog (`UsfmMarkerInfo.payload`) both read THIS function, so
+/// the two surfaces cannot drift.
+pub fn marker_payload(marker: &str) -> Option<MarkerPayload> {
+    match marker {
+        "id" => Some(MarkerPayload::BookCode),
+        "c" | "cp" | "ca" | "v" | "vp" | "va" => Some(MarkerPayload::NumberRange),
+        _ => None,
+    }
+}
+
 /// Per-marker default whitespace row. Used as a fallback when
 /// `MARKER_WHITESPACE` doesn't carry an explicit row.
 ///

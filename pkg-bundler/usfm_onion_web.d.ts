@@ -45,6 +45,15 @@ export type UsjElement =
 
 
 /**
+ * Argument payload a marker\'s opening form consumes right after its name:
+ * `\"bookCode\"` for `\\id`, `\"numberRange\"` for the chapter/verse family
+ * (`\\c`, `\\cp`, `\\ca`, `\\v`, `\\vp`, `\\va`). Shares one table with the
+ * lexer (`marker_defs::marker_payload`), so catalog and tokenization cannot
+ * drift.
+ */
+export type MarkerPayload = "bookCode" | "numberRange";
+
+/**
  * Diff result grouped by book and chapter: `{ \"GEN\": { 1: [...], 2: [...] } }`.
  */
 export type DiffsByChapterMap = Record<string, Record<number, ChapterTokenDiff[]>>;
@@ -232,6 +241,7 @@ export interface MarkerInfo {
     contexts: SpecContext[];
     blockBehavior?: BlockBehavior;
     closingBehavior?: ClosingBehavior;
+    payload?: MarkerPayload;
     paragraphCategory?: ParagraphCategory;
     source?: string;
 }

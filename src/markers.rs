@@ -25,7 +25,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::marker_defs::{
     BlockBehavior, ClosingBehavior, InlineContext, MarkerDef, MarkerFamily, MarkerFamilyRole,
-    NoteFamily, NoteSubkind, ParagraphCategory, SpecContext, lookup_marker_def, marker_is_note_sub,
+    MarkerPayload, NoteFamily, NoteSubkind, ParagraphCategory, SpecContext, lookup_marker_def,
+    marker_is_note_sub, marker_payload,
 };
 use crate::marker_defs_data::MARKER_SPECS;
 
@@ -139,6 +140,11 @@ pub struct UsfmMarkerInfo {
     pub contexts: Vec<SpecContext>,
     pub block_behavior: Option<BlockBehavior>,
     pub closing_behavior: Option<ClosingBehavior>,
+    /// Argument payload the marker's opening form consumes right after its
+    /// name (`\id` -> book code; `\c`/`\cp`/`\ca`/`\v`/`\vp`/`\va` ->
+    /// number range). Sourced from `marker_defs::marker_payload`, the same
+    /// table the lexer consumes — catalog and lexer cannot drift.
+    pub payload: Option<MarkerPayload>,
     /// Paragraph category per the USFM 3.2 para index. `Some` only for
     /// paragraph-kind markers (`None` for every other kind, and for unknown
     /// markers). This is the canonical signal for poetry (`Poetry`), sections
@@ -195,6 +201,7 @@ pub fn marker_info(marker: &str) -> UsfmMarkerInfo {
         let mut info = marker_def_to_info(def);
         info.marker = marker.to_string();
         info.category = classify_category(marker, info.kind);
+        info.payload = marker_payload(marker);
         info
     } else {
         let looked_up = lookup_marker(marker);
@@ -214,6 +221,7 @@ pub fn marker_info(marker: &str) -> UsfmMarkerInfo {
             contexts: Vec::new(),
             block_behavior: None,
             closing_behavior: None,
+            payload: marker_payload(marker),
             paragraph_category: None,
             source: None,
         }
@@ -241,6 +249,7 @@ fn marker_def_to_info(def: MarkerDef) -> UsfmMarkerInfo {
         contexts: def.contexts.to_vec(),
         block_behavior: Some(def.block_behavior),
         closing_behavior: Some(def.closing_behavior),
+        payload: marker_payload(def.marker),
         paragraph_category: def.paragraph_category,
         source: Some(def.source.to_string()),
     }

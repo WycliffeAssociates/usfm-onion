@@ -311,12 +311,17 @@ fn consume_inline_whitespace<'a>(
 }
 
 fn pending_payload_for(kind: RawTokenKind, marker_name: &str) -> Option<PendingPayload> {
+    use crate::marker_defs::{MarkerPayload, marker_payload};
     match kind {
-        RawTokenKind::Marker | RawTokenKind::NestedMarker => match marker_name {
-            "id" => Some(PendingPayload::BookCode),
-            "c" | "cp" | "ca" | "v" | "vp" | "va" => Some(PendingPayload::NumberRange),
-            _ => None,
-        },
+        RawTokenKind::Marker | RawTokenKind::NestedMarker => {
+            // Shared table with the marker catalog (`marker_payload`) so the
+            // lexer and `MarkerInfo.payload` cannot drift.
+            match marker_payload(marker_name) {
+                Some(MarkerPayload::BookCode) => Some(PendingPayload::BookCode),
+                Some(MarkerPayload::NumberRange) => Some(PendingPayload::NumberRange),
+                None => None,
+            }
+        }
         _ => None,
     }
 }

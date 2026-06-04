@@ -159,6 +159,7 @@
     "kind": "chapter",
     "known": true,
     "marker": "c",
+    "payload": "numberRange",
     "source": "repos_to_compare/tcdocs-main/markers/cv/c.adoc"
   },
   {
@@ -174,6 +175,7 @@
     "kind": "character",
     "known": true,
     "marker": "ca",
+    "payload": "numberRange",
     "source": "repos_to_compare/tcdocs-main/markers/cv/ca.adoc"
   },
   {
@@ -247,18 +249,21 @@
     "source": "repos_to_compare/tcdocs-main/markers/para/cls.adoc"
   },
   {
-    "blockBehavior": "none",
+    "blockBehavior": "paragraph",
     "canonical": "cp",
-    "category": "character",
-    "closingBehavior": "requiredExplicit",
+    "category": "paragraph",
+    "closingBehavior": "none",
     "contexts": [
-      "chapter"
+      "chapterContent"
     ],
     "deprecated": false,
     "familyRole": "canonical",
-    "kind": "character",
+    "inlineContext": "para",
+    "kind": "paragraph",
     "known": true,
     "marker": "cp",
+    "paragraphCategory": "title",
+    "payload": "numberRange",
     "source": "repos_to_compare/tcdocs-main/markers/cv/cp.adoc"
   },
   {
@@ -711,6 +716,7 @@
     "kind": "header",
     "known": true,
     "marker": "id",
+    "payload": "bookCode",
     "source": "repos_to_compare/tcdocs-main/markers/doc/id.adoc"
   },
   {
@@ -3887,6 +3893,7 @@
     "kind": "verse",
     "known": true,
     "marker": "v",
+    "payload": "numberRange",
     "source": "repos_to_compare/tcdocs-main/markers/cv/v.adoc"
   },
   {
@@ -3902,6 +3909,7 @@
     "kind": "character",
     "known": true,
     "marker": "va",
+    "payload": "numberRange",
     "source": "repos_to_compare/tcdocs-main/markers/cv/va.adoc"
   },
   {
@@ -3965,6 +3973,7 @@
     "kind": "character",
     "known": true,
     "marker": "vp",
+    "payload": "numberRange",
     "source": "repos_to_compare/tcdocs-main/markers/cv/vp.adoc"
   },
   {
