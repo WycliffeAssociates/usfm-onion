@@ -119,17 +119,13 @@ pub(crate) static MARKER_WHITESPACE: &[MarkerWhitespace] = &[
         format_preference_after_open_name: None,
         category_for_profiles: WhitespaceFormatCategory::Inline,
     },
-    // Quotation milestone — start form `qt-s`. Spec: `\\ + MILESTONE + Hs + ...`.
-    MarkerWhitespace {
-        marker: "qt",
-        required_before_open: Req::OptionalWhitespace,
-        required_after_open_name: Req::OptionalHorizontalWhitespace,
-        required_before_close: Req::NotRequired,
-        required_after_close: Req::AtLeastOneHorizontalWhitespace,
-        format_preference_before_open: None,
-        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
-        category_for_profiles: WhitespaceFormatCategory::Inline,
-    },
+    // NOTE: `qt` (quoted text) is a plain char marker (`\qt …\qt*`) and takes the
+    // Character-category default (TAGEND per the char railroad,
+    // docs.usfm.bible/usfm/3.1/char/features/qt.html). A previous explicit row here
+    // was written for the quotation MILESTONE forms (`qt#-s`/`qt#-e`) but mistakenly
+    // keyed to the char marker name; the milestone forms have their own MARKER_SPECS
+    // entries and resolve via the Milestone defaults. (Mislabeled row removed
+    // 2026-06-04.)
     // Standalone-or-paired translator-section milestone.
     MarkerWhitespace {
         marker: "ts",
@@ -152,7 +148,9 @@ pub(crate) static MARKER_WHITESPACE: &[MarkerWhitespace] = &[
         format_preference_after_open_name: None,
         category_for_profiles: WhitespaceFormatCategory::Block,
     },
-    // Note category. Spec: `\\cat$ws OR /\\cat${Hs}/ ... \\cat\*${HS}/`.
+    // Note category. Railroad: canonical `'\cat '` OR `/\\cat${Hs}/` — i.e. the
+    // requirement is zero-or-more hs (Optional), with single space as the canonical
+    // form. Requirement stays Optional; the preference records the canonical space.
     MarkerWhitespace {
         marker: "cat",
         required_before_open: Req::OptionalWhitespace,
@@ -160,28 +158,31 @@ pub(crate) static MARKER_WHITESPACE: &[MarkerWhitespace] = &[
         required_before_close: Req::NotRequired,
         required_after_close: Req::AtLeastOneHorizontalWhitespace,
         format_preference_before_open: None,
-        format_preference_after_open_name: None,
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
         category_for_profiles: WhitespaceFormatCategory::Inline,
     },
-    // Verse alternate number / publication number — same WS shape.
+    // Verse alternate number / publication number — same WS shape. Railroads
+    // (docs.usfm.bible/usfm/3.1, cv markers): open form is `'\va '` or
+    // `/\\va${HS}/` — HS (at-least-one), matching `ca` below. (Corrected from
+    // OptionalHorizontalWhitespace 2026-06-04.)
     MarkerWhitespace {
         marker: "va",
         required_before_open: Req::OptionalWhitespace,
-        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
         required_before_close: Req::NotRequired,
         required_after_close: Req::OptionalWhitespace,
         format_preference_before_open: None,
-        format_preference_after_open_name: None,
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
         category_for_profiles: WhitespaceFormatCategory::Inline,
     },
     MarkerWhitespace {
         marker: "vp",
         required_before_open: Req::OptionalWhitespace,
-        required_after_open_name: Req::OptionalHorizontalWhitespace,
+        required_after_open_name: Req::AtLeastOneHorizontalWhitespace,
         required_before_close: Req::NotRequired,
         required_after_close: Req::OptionalWhitespace,
         format_preference_before_open: None,
-        format_preference_after_open_name: None,
+        format_preference_after_open_name: Some(FormatWhitespacePreference::PreferSingleSpace),
         category_for_profiles: WhitespaceFormatCategory::Inline,
     },
     // Chapter alternate.

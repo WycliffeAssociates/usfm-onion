@@ -503,12 +503,20 @@ fn default_marker_whitespace_for(spec: &MarkerSpec) -> MarkerWhitespace {
             format_preference_after_open_name: None,
             category_for_profiles: Cat::Inline,
         },
-        // Milestones accept attributes via `|...` or self-close via
-        // `\*`. Tag-end delimiter is the right after-name shape.
+        // Milestones are terminated by `|` (attributes) or `\*` (self-close),
+        // never by whitespace — the ms railroad
+        // (docs.usfm.bible/usfm/3.1/ms/index.html) puts `${Hs}` (zero or
+        // more) between the name and what follows. Covers all forms:
+        // `\ts\*`, `\ts |sid="…"\*`, `\ts-s |sid="…"\*`, `\qt#-s`,
+        // `\zaln-s`, …. (Corrected from TagEndDelimiter 2026-06-04;
+        // TagEnd's whitespace branch is required-when-text-follows, which
+        // is a char-marker shape, not a milestone shape. Note suffixed
+        // forms like `ts-s`/`ts-e` resolve to their own spec entries and
+        // take THIS default — explicit base-name rows don't reach them.)
         MarkerDefKind::Milestone => MarkerWhitespace {
             marker: spec.marker,
             required_before_open: Req::OptionalWhitespace,
-            required_after_open_name: Req::TagEndDelimiter,
+            required_after_open_name: Req::OptionalHorizontalWhitespace,
             required_before_close: Req::NotRequired,
             required_after_close: Req::OptionalWhitespace,
             format_preference_before_open: None,
