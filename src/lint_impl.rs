@@ -12,9 +12,7 @@ use crate::marker_defs::{
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind};
-use crate::walker::{
-    LeaveReason, ScopeFrame, Visitor, WalkContext, WalkableToken, walk,
-};
+use crate::walker::{LeaveReason, ScopeFrame, Visitor, WalkContext, WalkableToken, walk};
 
 /// Public token-shape contract for `lint_tokens` and friends.
 ///
@@ -238,9 +236,7 @@ impl LintCode {
                 "missing-horizontal-whitespace-after-marker-name"
             }
             Self::MissingTagEndDelimiterAfterMarker => "missing-tag-end-delimiter-after-marker",
-            Self::MissingContentSpaceAfterCloseMarker => {
-                "missing-content-space-after-close-marker"
-            }
+            Self::MissingContentSpaceAfterCloseMarker => "missing-content-space-after-close-marker",
             Self::VerseInSectionOrOtherParagraph => "verse-in-section-or-other-paragraph",
             Self::ContentAfterBlankMarker => "content-after-blank-marker",
         }
@@ -252,9 +248,7 @@ impl LintCode {
     pub const fn template(self) -> &'static str {
         match self {
             Self::MissingIdMarker => "File is missing its \\id (book identifier).",
-            Self::DuplicateIdMarker => {
-                "This file has more than one \\id; only one is allowed."
-            }
+            Self::DuplicateIdMarker => "This file has more than one \\id; only one is allowed.",
             Self::IdMarkerNotAtFileStart => "\\id must come before any other content.",
             Self::EmptyParagraph => {
                 "\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between."
@@ -295,9 +289,7 @@ impl LintCode {
             Self::UnclosedMarker => {
                 "{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}"
             }
-            Self::DuplicateChapterNumber => {
-                "Chapter {chapter, number} appears more than once."
-            }
+            Self::DuplicateChapterNumber => "Chapter {chapter, number} appears more than once.",
             Self::ChapterExpectedIncreaseByOne => {
                 "Chapters should count up by one: expected chapter {expected, number}, found chapter {found, number}."
             }
@@ -314,9 +306,7 @@ impl LintCode {
             Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
                 "This number range is not preceded by a marker that expects a number (like \\c or \\v)."
             }
-            Self::MissingWhitespaceBeforeMarker => {
-                "\\{marker} needs a space or newline before it."
-            }
+            Self::MissingWhitespaceBeforeMarker => "\\{marker} needs a space or newline before it.",
             Self::MissingHorizontalWhitespaceAfterMarkerName => {
                 "\\{marker} needs a space after the marker name."
             }
@@ -375,8 +365,9 @@ impl LintCode {
 
     pub fn severity(self) -> LintSeverity {
         match self {
-            Self::EmptyParagraph
-            | Self::MissingContentSpaceAfterCloseMarker => LintSeverity::Warning,
+            Self::EmptyParagraph | Self::MissingContentSpaceAfterCloseMarker => {
+                LintSeverity::Warning
+            }
             _ => LintSeverity::Error,
         }
     }
@@ -929,6 +920,8 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     }
     if enabled.has_any(&[
         LintCode::MissingWhitespaceBeforeMarker,
+        LintCode::MissingHorizontalWhitespaceAfterMarkerName,
+        LintCode::MissingTagEndDelimiterAfterMarker,
         LintCode::MissingContentSpaceAfterCloseMarker,
         LintCode::ContentAfterBlankMarker,
     ]) {
@@ -1189,10 +1182,7 @@ fn lint_structure_rules<T: LintableToken>(
             {
                 issues.push(simple_issue(
                     LintCode::ContentBeforeFirstChapter,
-                    message_params([
-                        ("kind", "verse".to_string()),
-                        ("marker", "v".to_string()),
-                    ]),
+                    message_params([("kind", "verse".to_string()), ("marker", "v".to_string())]),
                     token,
                 ));
             }
@@ -1576,8 +1566,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
             }
         }
 
-        if enabled.has(LintCode::VerseIsEmpty)
-            && !verse_has_text_or_note(tokens, number_index + 1)
+        if enabled.has(LintCode::VerseIsEmpty) && !verse_has_text_or_note(tokens, number_index + 1)
         {
             issues.push(simple_issue_with_marker(
                 LintCode::VerseIsEmpty,
@@ -1840,9 +1829,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
                             fix: None,
                         });
                     }
-                    if !victims.is_empty()
-                        && self.enabled.has(LintCode::ImplicitlyClosedMarker)
-                    {
+                    if !victims.is_empty() && self.enabled.has(LintCode::ImplicitlyClosedMarker) {
                         for victim in victims {
                             let open_token = &self.tokens[victim.token_index];
                             self.issues.push(simple_issue_with_marker(
@@ -2049,10 +2036,9 @@ fn lint_whitespace_rules<T: LintableToken>(
             let prev = &tokens[index - 1];
             let prev_text = prev.text();
             let satisfied = match spec.required_before_open {
-                Req::SingleNewline | Req::AtLeastOneNewline => prev_text
-                    .chars()
-                    .next_back()
-                    .is_some_and(is_newline_char),
+                Req::SingleNewline | Req::AtLeastOneNewline => {
+                    prev_text.chars().next_back().is_some_and(is_newline_char)
+                }
                 Req::NewlineOrAnyWhitespaceBeforeMarker | Req::AtLeastOneWhitespace => prev_text
                     .chars()
                     .next_back()
@@ -2086,28 +2072,23 @@ fn lint_whitespace_rules<T: LintableToken>(
         // name. Rule 2 fires when the spec demands HS / newline / any
         // WS; rule 3 fires when the spec demands a tag-end delimiter
         // (WS, EOI, or the `|` attribute opener).
-        let after_name_satisfied_by_marker_token = matches!(
-            spec.required_after_open_name,
-            Req::AtLeastOneHorizontalWhitespace
-                | Req::AtLeastOneWhitespace
-                | Req::SingleNewline
-                | Req::AtLeastOneNewline
-                | Req::OptionalHorizontalWhitespace
-                | Req::OptionalWhitespace
-                | Req::TagEndDelimiter
-        ) && token
-            .text()
-            .chars()
-            .next_back()
-            .is_some_and(is_any_whitespace_char);
+        let marker_tail = token.text().chars().next_back();
+        let after_name_satisfied_by_marker_token = match spec.required_after_open_name {
+            Req::AtLeastOneHorizontalWhitespace => {
+                marker_tail.is_some_and(is_horizontal_whitespace_char)
+            }
+            Req::AtLeastOneWhitespace => marker_tail.is_some_and(is_any_whitespace_char),
+            Req::SingleNewline | Req::AtLeastOneNewline => marker_tail.is_some_and(is_newline_char),
+            Req::OptionalHorizontalWhitespace | Req::OptionalWhitespace => true,
+            Req::TagEndDelimiter => marker_tail.is_some_and(is_any_whitespace_char),
+            _ => true,
+        };
 
         let next_token = tokens.get(index + 1);
         let next_text = next_token.map(|n| n.text()).unwrap_or("");
         let next_first = next_text.chars().next();
 
-        if !after_name_satisfied_by_marker_token
-            && marker_is_intentionally_empty_block(marker)
-        {
+        if !after_name_satisfied_by_marker_token && marker_is_intentionally_empty_block(marker) {
             // `\b` and other no-content block markers: the spec table
             // marks them `SingleNewline` after the name, but the real
             // requirement is "nothing on this line." A newline (or
@@ -2137,28 +2118,24 @@ fn lint_whitespace_rules<T: LintableToken>(
                         Req::AtLeastOneHorizontalWhitespace => {
                             next_first.is_some_and(is_horizontal_whitespace_char)
                         }
-                        Req::AtLeastOneWhitespace => {
-                            next_first.is_some_and(is_any_whitespace_char)
-                        }
+                        Req::AtLeastOneWhitespace => next_first.is_some_and(is_any_whitespace_char),
                         Req::SingleNewline | Req::AtLeastOneNewline => {
                             next_first.is_some_and(is_newline_char)
                         }
                         _ => true,
                     };
-                    if !satisfied
-                        && let Some(next) = next_token
-                    {
+                    if !satisfied && let Some(_next) = next_token {
                         let prefix = preferred_ws(spec.format_preference_after_open_name);
                         let mut issue = simple_issue(
                             LintCode::MissingHorizontalWhitespaceAfterMarkerName,
                             marker_params(marker),
                             token,
                         );
-                        if !prefix.is_empty() && next.id().is_some() {
-                            issue = issue.with_fix(prepend_ws_fix(
+                        if !prefix.is_empty() && token.id().is_some() {
+                            issue = issue.with_fix(append_ws_fix(
                                 "insert-whitespace-after-marker-name",
                                 "InsertWhitespaceAfterMarkerName",
-                                next,
+                                token,
                                 prefix,
                             ));
                         }
@@ -2175,20 +2152,18 @@ fn lint_whitespace_rules<T: LintableToken>(
                                 || matches!(next_first, Some('|'))
                         }
                     };
-                    if !satisfied
-                        && let Some(next) = next_token
-                    {
+                    if !satisfied && let Some(_next) = next_token {
                         let prefix = preferred_ws(spec.format_preference_after_open_name);
                         let mut issue = simple_issue(
                             LintCode::MissingTagEndDelimiterAfterMarker,
                             marker_params(marker),
                             token,
                         );
-                        if !prefix.is_empty() && next.id().is_some() {
-                            issue = issue.with_fix(prepend_ws_fix(
+                        if !prefix.is_empty() && token.id().is_some() {
+                            issue = issue.with_fix(append_ws_fix(
                                 "insert-tag-end-delimiter-after-marker",
                                 "InsertTagEndDelimiterAfterMarker",
-                                next,
+                                token,
                                 prefix,
                             ));
                         }
@@ -2217,11 +2192,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                 continue;
             }
             let next_text = next.text();
-            if next_text
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_alphabetic())
-            {
+            if next_text.chars().next().is_some_and(|c| c.is_alphabetic()) {
                 issues.push(simple_issue(
                     LintCode::MissingContentSpaceAfterCloseMarker,
                     marker_params(marker),
@@ -2636,10 +2607,7 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
 /// is allowed and skipped, so `\b \n` returns `None` (clean) while
 /// `\b here` returns the `here` token (flagged). End-of-input with only
 /// horizontal whitespace also counts as clean.
-fn content_after_blank_marker<T: LintableToken>(
-    tokens: &[T],
-    marker_index: usize,
-) -> Option<&T> {
+fn content_after_blank_marker<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<&T> {
     use crate::whitespace::{is_horizontal_whitespace_char, is_newline_char};
     for token in &tokens[marker_index + 1..] {
         for ch in token.text().chars() {
@@ -2686,7 +2654,6 @@ fn empty_paragraph_boundary_token<T: LintableToken>(token: &T) -> bool {
             | MarkerKind::Unknown
     )
 }
-
 
 fn is_note_close_marker(marker: &str) -> bool {
     matches!(marker, "f" | "fe" | "ef" | "x" | "ex")
@@ -2779,6 +2746,23 @@ fn prepend_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, prefix:
         replacements: vec![crate::format::TokenTemplate {
             kind: target.kind(),
             text: format!("{}{}", prefix, target.text()),
+            marker: target.marker().map(ToOwned::to_owned),
+            sid: target.sid(),
+        }],
+    }
+}
+
+/// Missing after-name separators now belong to the marker token itself.
+/// The fix preserves the following content token exactly as typed.
+fn append_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, suffix: &str) -> TokenFix {
+    TokenFix::ReplaceToken {
+        code: code.to_string(),
+        label: label.to_string(),
+        label_params: MessageParams::default(),
+        target_token_id: target.id().expect("fixable token should have id"),
+        replacements: vec![crate::format::TokenTemplate {
+            kind: target.kind(),
+            text: format!("{}{}", target.text(), suffix),
             marker: target.marker().map(ToOwned::to_owned),
             sid: target.sid(),
         }],
@@ -2889,17 +2873,16 @@ mod tests {
     #[test]
     fn template_renders_number_placeholders() {
         let params = message_params([("chapter", "3".to_string())]);
-        let rendered = render_template("Chapter {chapter, number} appears more than once.", &params);
+        let rendered =
+            render_template("Chapter {chapter, number} appears more than once.", &params);
         assert_eq!(rendered, "Chapter 3 appears more than once.");
     }
 
     #[test]
     fn template_renders_select_arms() {
         let template = "{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened.";
-        let note_params = message_params([
-            ("kind", "note".to_string()),
-            ("marker", "f".to_string()),
-        ]);
+        let note_params =
+            message_params([("kind", "note".to_string()), ("marker", "f".to_string())]);
         assert_eq!(
             render_template(template, &note_params),
             "Note \\f was opened."
@@ -3035,8 +3018,8 @@ mod tests {
         let fixed = apply_token_fix(&tokens, &fix);
 
         assert_eq!(fixed.len(), 2);
-        assert_eq!(fixed[0].text, "\\c");
-        assert_eq!(fixed[1].text, " 1");
+        assert_eq!(fixed[0].text, "\\c ");
+        assert_eq!(fixed[1].text, "1");
     }
 
     #[test]
@@ -3104,10 +3087,7 @@ mod tests {
 
     #[test]
     fn verse_in_body_paragraph_is_not_flagged_as_section_violation() {
-        let result = lint_usfm(
-            "\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n",
-            LintOptions::default(),
-        );
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n", LintOptions::default());
         assert!(
             !result
                 .issues
@@ -3277,8 +3257,8 @@ mod tests {
         let fixed = apply_token_fix(&tokens, &fix);
 
         assert_eq!(fixed.len(), 2);
-        assert_eq!(fixed[0].text, "\\p");
-        assert_eq!(fixed[1].text, " Alpha");
+        assert_eq!(fixed[0].text, "\\p ");
+        assert_eq!(fixed[1].text, "Alpha");
     }
 
     #[test]
@@ -3375,8 +3355,7 @@ mod tests {
             .iter()
             .find(|issue| {
                 issue.code == LintCode::MetadataOutsideTarget
-                    && issue.message_params.get("target").map(String::as_str)
-                        == Some("verse")
+                    && issue.message_params.get("target").map(String::as_str) == Some("verse")
             })
             .expect("verse-metadata issue");
         assert_eq!(
@@ -3388,8 +3367,7 @@ mod tests {
             .iter()
             .find(|issue| {
                 issue.code == LintCode::MetadataOutsideTarget
-                    && issue.message_params.get("target").map(String::as_str)
-                        == Some("chapter")
+                    && issue.message_params.get("target").map(String::as_str) == Some("chapter")
             })
             .expect("chapter-metadata issue");
         assert_eq!(

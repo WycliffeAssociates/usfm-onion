@@ -6,7 +6,7 @@
       "endExclusive": 1,
       "semanticSid": "",
       "start": 0,
-      "textFull": "\\id"
+      "textFull": "\\id "
     },
     "currentAlignment": [
       {
@@ -14,16 +14,16 @@
         "counterpartIndex": 0
       }
     ],
-    "currentText": "\\id",
+    "currentText": "\\id ",
     "currentTextOnly": "",
     "currentTokens": [
       {
         "id": "GEN-0",
         "kind": "marker",
         "marker": "id",
-        "source": "\\id",
+        "source": "\\id ",
         "span": {
-          "end": 3,
+          "end": 4,
           "start": 0
         },
         "structural": {
@@ -38,7 +38,7 @@
       "endExclusive": 1,
       "semanticSid": "",
       "start": 0,
-      "textFull": "\\id"
+      "textFull": "\\id "
     },
     "originalAlignment": [
       {
@@ -46,16 +46,16 @@
         "counterpartIndex": 0
       }
     ],
-    "originalText": "\\id",
+    "originalText": "\\id ",
     "originalTextOnly": "",
     "originalTokens": [
       {
         "id": "GEN-0",
         "kind": "marker",
         "marker": "id",
-        "source": "\\id",
+        "source": "\\id ",
         "span": {
-          "end": 3,
+          "end": 4,
           "start": 0
         },
         "structural": {
@@ -75,7 +75,7 @@
       "prevBlockId": "::GEN-0",
       "semanticSid": "GEN 0:0",
       "start": 1,
-      "textFull": " GEN\n"
+      "textFull": "GEN\n"
     },
     "currentAlignment": [
       {
@@ -87,17 +87,17 @@
         "counterpartIndex": 1
       }
     ],
-    "currentText": " GEN\n",
+    "currentText": "GEN\n",
     "currentTextOnly": "GEN",
     "currentTokens": [
       {
         "id": "GEN-1",
         "kind": "bookCode",
         "sid": "GEN 0:0",
-        "source": " GEN",
+        "source": "GEN",
         "span": {
           "end": 7,
-          "start": 3
+          "start": 4
         }
       },
       {
@@ -119,7 +119,7 @@
       "prevBlockId": "::GEN-0",
       "semanticSid": "GEN 0:0",
       "start": 1,
-      "textFull": " GEN\n"
+      "textFull": "GEN\n"
     },
     "originalAlignment": [
       {
@@ -131,17 +131,17 @@
         "counterpartIndex": 1
       }
     ],
-    "originalText": " GEN\n",
+    "originalText": "GEN\n",
     "originalTextOnly": "GEN",
     "originalTokens": [
       {
         "id": "GEN-1",
         "kind": "bookCode",
         "sid": "GEN 0:0",
-        "source": " GEN",
+        "source": "GEN",
         "span": {
           "end": 7,
-          "start": 3
+          "start": 4
         }
       },
       {
@@ -199,9 +199,9 @@
         "kind": "marker",
         "marker": "c",
         "sid": "GEN 1:0",
-        "source": "\\c",
+        "source": "\\c ",
         "span": {
-          "end": 10,
+          "end": 11,
           "start": 8
         },
         "structural": {
@@ -216,10 +216,10 @@
           "start": 1
         },
         "sid": "GEN 1:0",
-        "source": " 1",
+        "source": "1",
         "span": {
           "end": 12,
-          "start": 10
+          "start": 11
         }
       },
       {
@@ -298,9 +298,9 @@
         "kind": "marker",
         "marker": "c",
         "sid": "GEN 1:0",
-        "source": "\\c",
+        "source": "\\c ",
         "span": {
-          "end": 10,
+          "end": 11,
           "start": 8
         },
         "structural": {
@@ -315,10 +315,10 @@
           "start": 1
         },
         "sid": "GEN 1:0",
-        "source": " 1",
+        "source": "1",
         "span": {
           "end": 12,
-          "start": 10
+          "start": 11
         }
       },
       {
@@ -397,9 +397,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:1",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 18,
+          "end": 19,
           "start": 16
         },
         "structural": {
@@ -414,20 +414,20 @@
           "start": 1
         },
         "sid": "GEN 1:1",
-        "source": " 1",
+        "source": "1 ",
         "span": {
-          "end": 20,
-          "start": 18
+          "end": 21,
+          "start": 19
         }
       },
       {
         "id": "GEN-10",
         "kind": "text",
         "sid": "GEN 1:1",
-        "source": " the first verse",
+        "source": "the first verse",
         "span": {
           "end": 36,
-          "start": 20
+          "start": 21
         }
       },
       {
@@ -477,9 +477,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:1",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 18,
+          "end": 19,
           "start": 16
         },
         "structural": {
@@ -494,20 +494,20 @@
           "start": 1
         },
         "sid": "GEN 1:1",
-        "source": " 1",
+        "source": "1 ",
         "span": {
-          "end": 20,
-          "start": 18
+          "end": 21,
+          "start": 19
         }
       },
       {
         "id": "GEN-10",
         "kind": "text",
         "sid": "GEN 1:1",
-        "source": " the first verse",
+        "source": "the first verse",
         "span": {
           "end": 36,
-          "start": 20
+          "start": 21
         }
       },
       {
@@ -561,9 +561,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:2",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 39,
+          "end": 40,
           "start": 37
         },
         "structural": {
@@ -578,20 +578,20 @@
           "start": 2
         },
         "sid": "GEN 1:2",
-        "source": " 2",
+        "source": "2 ",
         "span": {
-          "end": 41,
-          "start": 39
+          "end": 42,
+          "start": 40
         }
       },
       {
         "id": "GEN-14",
         "kind": "text",
         "sid": "GEN 1:2",
-        "source": " the second verse",
+        "source": "the second verse",
         "span": {
           "end": 58,
-          "start": 41
+          "start": 42
         }
       },
       {
@@ -641,9 +641,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 1:2",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 39,
+          "end": 40,
           "start": 37
         },
         "structural": {
@@ -658,20 +658,20 @@
           "start": 2
         },
         "sid": "GEN 1:2",
-        "source": " 2",
+        "source": "2 ",
         "span": {
-          "end": 41,
-          "start": 39
+          "end": 42,
+          "start": 40
         }
       },
       {
         "id": "GEN-14",
         "kind": "text",
         "sid": "GEN 1:2",
-        "source": " the second verse",
+        "source": "the second verse",
         "span": {
           "end": 58,
-          "start": 41
+          "start": 42
         }
       },
       {
@@ -729,9 +729,9 @@
         "kind": "marker",
         "marker": "c",
         "sid": "GEN 2:0",
-        "source": "\\c",
+        "source": "\\c ",
         "span": {
-          "end": 61,
+          "end": 62,
           "start": 59
         },
         "structural": {
@@ -746,10 +746,10 @@
           "start": 2
         },
         "sid": "GEN 2:0",
-        "source": " 2",
+        "source": "2",
         "span": {
           "end": 63,
-          "start": 61
+          "start": 62
         }
       },
       {
@@ -828,9 +828,9 @@
         "kind": "marker",
         "marker": "c",
         "sid": "GEN 2:0",
-        "source": "\\c",
+        "source": "\\c ",
         "span": {
-          "end": 61,
+          "end": 62,
           "start": 59
         },
         "structural": {
@@ -845,10 +845,10 @@
           "start": 2
         },
         "sid": "GEN 2:0",
-        "source": " 2",
+        "source": "2",
         "span": {
           "end": 63,
-          "start": 61
+          "start": 62
         }
       },
       {
@@ -927,9 +927,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 2:1",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 69,
+          "end": 70,
           "start": 67
         },
         "structural": {
@@ -944,20 +944,20 @@
           "start": 1
         },
         "sid": "GEN 2:1",
-        "source": " 1",
+        "source": "1 ",
         "span": {
-          "end": 71,
-          "start": 69
+          "end": 72,
+          "start": 70
         }
       },
       {
         "id": "GEN-23",
         "kind": "text",
         "sid": "GEN 2:1",
-        "source": " the third verse",
+        "source": "the third verse",
         "span": {
           "end": 87,
-          "start": 71
+          "start": 72
         }
       },
       {
@@ -1007,9 +1007,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 2:1",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 69,
+          "end": 70,
           "start": 67
         },
         "structural": {
@@ -1024,20 +1024,20 @@
           "start": 1
         },
         "sid": "GEN 2:1",
-        "source": " 1",
+        "source": "1 ",
         "span": {
-          "end": 71,
-          "start": 69
+          "end": 72,
+          "start": 70
         }
       },
       {
         "id": "GEN-23",
         "kind": "text",
         "sid": "GEN 2:1",
-        "source": " the third verse",
+        "source": "the third verse",
         "span": {
           "end": 87,
-          "start": 71
+          "start": 72
         }
       },
       {
@@ -1093,9 +1093,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 2:2",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 90,
+          "end": 91,
           "start": 88
         },
         "structural": {
@@ -1110,20 +1110,20 @@
           "start": 2
         },
         "sid": "GEN 2:2",
-        "source": " 2",
+        "source": "2 ",
         "span": {
-          "end": 92,
-          "start": 90
+          "end": 93,
+          "start": 91
         }
       },
       {
         "id": "GEN-27",
         "kind": "text",
         "sid": "GEN 2:2",
-        "source": " the fourth verse",
+        "source": "the fourth verse",
         "span": {
           "end": 109,
-          "start": 92
+          "start": 93
         }
       },
       {
@@ -1184,9 +1184,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 2:2",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 90,
+          "end": 91,
           "start": 88
         },
         "structural": {
@@ -1201,20 +1201,20 @@
           "start": 2
         },
         "sid": "GEN 2:2",
-        "source": " 2",
+        "source": "2 ",
         "span": {
-          "end": 92,
-          "start": 90
+          "end": 93,
+          "start": 91
         }
       },
       {
         "id": "GEN-27",
         "kind": "text",
         "sid": "GEN 2:2",
-        "source": " the fourth verse",
+        "source": "the fourth verse",
         "span": {
           "end": 109,
-          "start": 92
+          "start": 93
         }
       }
     ],
@@ -1254,9 +1254,9 @@
         "kind": "marker",
         "marker": "v",
         "sid": "GEN 2:99",
-        "source": "\\v",
+        "source": "\\v ",
         "span": {
-          "end": 114,
+          "end": 115,
           "start": 112
         },
         "structural": {
@@ -1271,20 +1271,20 @@
           "start": 99
         },
         "sid": "GEN 2:99",
-        "source": " 99",
+        "source": "99 ",
         "span": {
-          "end": 117,
-          "start": 114
+          "end": 118,
+          "start": 115
         }
       },
       {
         "id": "GEN-32",
         "kind": "text",
         "sid": "GEN 2:99",
-        "source": " trailing addition",
+        "source": "trailing addition",
         "span": {
           "end": 135,
-          "start": 117
+          "start": 118
         }
       },
       {

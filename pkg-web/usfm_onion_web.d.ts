@@ -306,6 +306,10 @@ export interface TokenTemplate {
     sid?: string;
 }
 
+export interface VrefOptions {
+    trim?: boolean | null;
+}
+
 export type BlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "sidebarStart" | "sidebarEnd";
 
 export type ClosingBehavior = "none" | "requiredExplicit" | "optionalExplicitUntilNoteEnd" | "selfClosingMilestone";
@@ -374,7 +378,7 @@ export class ParsedUsfm {
     toUsfm(): string;
     toUsj(): any;
     toUsx(): string;
-    toVref(): VrefMap;
+    toVref(options?: VrefOptions | null): VrefMap;
     tokens(): Token[];
     vrefIndex(): VrefIndex;
 }
@@ -472,7 +476,7 @@ export interface InitOutput {
     readonly parsedusfm_toUsfm: (a: number) => [number, number];
     readonly parsedusfm_toUsj: (a: number) => [number, number, number];
     readonly parsedusfm_toUsx: (a: number) => [number, number, number, number];
-    readonly parsedusfm_toVref: (a: number) => any;
+    readonly parsedusfm_toVref: (a: number, b: number) => any;
     readonly parsedusfm_tokens: (a: number) => [number, number];
     readonly parsedusfm_vrefIndex: (a: number) => any;
     readonly revertDiffBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];

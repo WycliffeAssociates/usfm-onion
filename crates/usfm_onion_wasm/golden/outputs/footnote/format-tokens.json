@@ -4,9 +4,9 @@
       "id": "MAT-0",
       "kind": "marker",
       "marker": "id",
-      "source": "\\id",
+      "source": "\\id ",
       "span": {
-        "end": 3,
+        "end": 4,
         "start": 0
       },
       "structural": {
@@ -17,10 +17,10 @@
       "id": "MAT-1",
       "kind": "bookCode",
       "sid": "MAT 0:0",
-      "source": " MAT",
+      "source": "MAT",
       "span": {
         "end": 7,
-        "start": 3
+        "start": 4
       }
     },
     {
@@ -38,9 +38,9 @@
       "kind": "marker",
       "marker": "c",
       "sid": "MAT 1:0",
-      "source": "\\c",
+      "source": "\\c ",
       "span": {
-        "end": 10,
+        "end": 11,
         "start": 8
       },
       "structural": {
@@ -55,10 +55,10 @@
         "start": 1
       },
       "sid": "MAT 1:0",
-      "source": " 1",
+      "source": "1",
       "span": {
         "end": 12,
-        "start": 10
+        "start": 11
       }
     },
     {
@@ -101,9 +101,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:1",
-      "source": "\\v",
+      "source": "\\v ",
       "span": {
-        "end": 18,
+        "end": 19,
         "start": 16
       },
       "structural": {
@@ -118,20 +118,20 @@
         "start": 1
       },
       "sid": "MAT 1:1",
-      "source": " 1",
+      "source": "1 ",
       "span": {
-        "end": 20,
-        "start": 18
+        "end": 21,
+        "start": 19
       }
     },
     {
       "id": "MAT-10",
       "kind": "text",
       "sid": "MAT 1:1",
-      "source": " the first verse",
+      "source": "the first verse",
       "span": {
         "end": 36,
-        "start": 20
+        "start": 21
       }
     },
     {
@@ -139,9 +139,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:2",
-      "source": " \\v",
+      "source": " \\v ",
       "span": {
-        "end": 39,
+        "end": 40,
         "start": 37
       },
       "structural": {
@@ -156,20 +156,20 @@
         "start": 2
       },
       "sid": "MAT 1:2",
-      "source": " 2",
+      "source": "2 ",
       "span": {
-        "end": 41,
-        "start": 39
+        "end": 42,
+        "start": 40
       }
     },
     {
       "id": "MAT-14",
       "kind": "text",
       "sid": "MAT 1:2",
-      "source": " the second verse",
+      "source": "the second verse",
       "span": {
         "end": 58,
-        "start": 41
+        "start": 42
       }
     },
     {
@@ -177,9 +177,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:3",
-      "source": " \\v",
+      "source": " \\v ",
       "span": {
-        "end": 61,
+        "end": 62,
         "start": 59
       },
       "structural": {
@@ -194,20 +194,20 @@
         "start": 3
       },
       "sid": "MAT 1:3",
-      "source": " 3",
+      "source": "3 ",
       "span": {
-        "end": 63,
-        "start": 61
+        "end": 64,
+        "start": 62
       }
     },
     {
       "id": "MAT-18",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " This is the Good News about Jesus Christ, the Son of God. ",
+      "source": "This is the Good News about Jesus Christ, the Son of God. ",
       "span": {
         "end": 122,
-        "start": 63
+        "start": 64
       }
     },
     {
@@ -215,9 +215,9 @@
       "kind": "marker",
       "marker": "f",
       "sid": "MAT 1:3",
-      "source": "\\f",
+      "source": "\\f ",
       "span": {
-        "end": 124,
+        "end": 125,
         "start": 122
       },
       "structural": {
@@ -229,10 +229,10 @@
       "id": "MAT-20",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " + ",
+      "source": "+ ",
       "span": {
         "end": 127,
-        "start": 124
+        "start": 125
       }
     },
     {
@@ -240,9 +240,9 @@
       "kind": "marker",
       "marker": "fr",
       "sid": "MAT 1:3",
-      "source": "\\fr",
+      "source": "\\fr ",
       "span": {
-        "end": 130,
+        "end": 131,
         "start": 127
       },
       "structural": {
@@ -253,10 +253,10 @@
       "id": "MAT-22",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " 1.1: ",
+      "source": "1.1: ",
       "span": {
         "end": 136,
-        "start": 130
+        "start": 131
       }
     },
     {
@@ -264,9 +264,9 @@
       "kind": "marker",
       "marker": "ft",
       "sid": "MAT 1:3",
-      "source": "\\ft",
+      "source": "\\ft ",
       "span": {
-        "end": 139,
+        "end": 140,
         "start": 136
       },
       "structural": {
@@ -277,10 +277,10 @@
       "id": "MAT-24",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " Some manuscripts do not have ",
+      "source": "Some manuscripts do not have ",
       "span": {
         "end": 169,
-        "start": 139
+        "start": 140
       }
     },
     {
@@ -288,9 +288,9 @@
       "kind": "marker",
       "marker": "fq",
       "sid": "MAT 1:3",
-      "source": "\\fq",
+      "source": "\\fq ",
       "span": {
-        "end": 172,
+        "end": 173,
         "start": 169
       },
       "structural": {
@@ -301,10 +301,10 @@
       "id": "MAT-26",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " the Son of God.",
+      "source": "the Son of God.",
       "span": {
         "end": 188,
-        "start": 172
+        "start": 173
       }
     },
     {
@@ -327,9 +327,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:4",
-      "source": "\\v",
+      "source": "\\v ",
       "span": {
-        "end": 194,
+        "end": 195,
         "start": 192
       },
       "structural": {
@@ -344,20 +344,20 @@
         "start": 4
       },
       "sid": "MAT 1:4",
-      "source": " 4",
+      "source": "4 ",
       "span": {
-        "end": 196,
-        "start": 194
+        "end": 197,
+        "start": 195
       }
     },
     {
       "id": "MAT-31",
       "kind": "text",
       "sid": "MAT 1:4",
-      "source": " yet another verse.",
+      "source": "yet another verse.",
       "span": {
         "end": 215,
-        "start": 196
+        "start": 197
       }
     }
   ],

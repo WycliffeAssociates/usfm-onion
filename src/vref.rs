@@ -10,13 +10,32 @@ use crate::walker::{ScopeFrame, Visitor, WalkContext, walk, walk_tokens};
 
 pub type VrefMap = BTreeMap<String, String>;
 
+/// Options for the lossy `to_vref` projection.
+///
+/// Separator insertion at structural breaks (see `push_collected_text`) is
+/// unconditional — it is what makes the projection correct, not a mode. If a
+/// consumer ever needs raw joins, expose it here as a new optional field
+/// defaulting to today's behavior; that is purely additive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct VrefOptions {
+    pub trim: bool,
+}
+
 pub fn usfm_to_vref_map(source: &str) -> VrefMap {
+    usfm_to_vref_map_with_options(source, VrefOptions::default())
+}
+
+pub fn usfm_to_vref_map_with_options(source: &str, options: VrefOptions) -> VrefMap {
     let parsed = parse(source);
-    tokens_to_vref_map(&parsed.tokens)
+    tokens_to_vref_map_with_options(&parsed.tokens, options)
 }
 
 pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
-    let mut visitor = VrefVisitor::default();
+    tokens_to_vref_map_with_options(tokens, VrefOptions::default())
+}
+
+pub fn tokens_to_vref_map_with_options(tokens: &[Token<'_>], options: VrefOptions) -> VrefMap {
+    let mut visitor = VrefVisitor::new(options);
     walk_tokens(tokens, &mut visitor);
     visitor.finish()
 }
@@ -82,9 +101,11 @@ pub fn tokens_to_vref_index<T: LintableToken>(tokens: &[T]) -> VrefIndex {
 
 #[derive(Debug, Default)]
 struct VrefVisitor {
+    options: VrefOptions,
     map: VrefMap,
     current_ref: Option<String>,
     current_text: String,
+    pending_separator: bool,
     // Persists across paragraph boundaries: once any Block has been
     // seen, this reflects the latest Block's supports-verse status, even
     // after that Block closes. Matches the pre-walker behaviour.
@@ -92,6 +113,13 @@ struct VrefVisitor {
 }
 
 impl VrefVisitor {
+    fn new(options: VrefOptions) -> Self {
+        Self {
+            options,
+            ..Self::default()
+        }
+    }
+
     fn finish(mut self) -> VrefMap {
         self.flush_current_verse();
         self.map
@@ -102,17 +130,38 @@ impl VrefVisitor {
             self.current_text.clear();
             return;
         };
-        let trimmed = self.current_text.trim();
-        if !trimmed.is_empty() {
-            self.map.insert(reference, trimmed.to_string());
+        let output = if self.options.trim {
+            self.current_text.trim()
+        } else {
+            self.current_text.as_str()
+        };
+        if !output.trim().is_empty() {
+            self.map.insert(reference, output.to_string());
         }
         self.current_text.clear();
+        self.pending_separator = false;
     }
 
     fn can_collect_text(&self, ctx: &WalkContext<'_, '_>) -> bool {
         self.current_ref.is_some()
             && !ctx.in_note()
             && self.current_block_supports_verse.unwrap_or(true)
+    }
+
+    fn push_collected_text(&mut self, fragment: &str) {
+        if self.pending_separator
+            && !self.current_text.is_empty()
+            && !self
+                .current_text
+                .chars()
+                .last()
+                .is_some_and(char::is_whitespace)
+            && !fragment.chars().next().is_some_and(char::is_whitespace)
+        {
+            self.current_text.push(' ');
+        }
+        self.pending_separator = false;
+        self.current_text.push_str(fragment);
     }
 }
 
@@ -126,6 +175,7 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
     ) {
         if frame.scope_kind == StructuralScopeKind::Block {
             self.current_block_supports_verse = Some(marker_paragraph_supports_verse(frame.marker));
+            self.pending_separator = true;
         }
     }
 
@@ -157,8 +207,17 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
         _token_index: usize,
     ) {
         if self.can_collect_text(ctx) {
-            push_text(&mut self.current_text, token.source);
+            self.push_collected_text(token.source);
         }
+    }
+
+    fn on_newline(
+        &mut self,
+        _ctx: &WalkContext<'tokens, '_>,
+        _token: &'tokens Token<'src>,
+        _token_index: usize,
+    ) {
+        self.pending_separator = true;
     }
 }
 
@@ -204,22 +263,6 @@ fn verse_ref_str(sid: Option<String>, lexeme: &str) -> Option<String> {
         return None;
     }
     Some(format!("{prefix}:{verse_part}"))
-}
-
-fn push_text(current: &mut String, fragment: &str) {
-    if current.is_empty() {
-        current.push_str(fragment);
-        return;
-    }
-
-    let current_ends_with_ws = current.chars().last().is_some_and(char::is_whitespace);
-    let fragment_starts_with_ws = fragment.chars().next().is_some_and(char::is_whitespace);
-
-    if current_ends_with_ws && fragment_starts_with_ws {
-        current.push_str(fragment.trim_start());
-    } else {
-        current.push_str(fragment);
-    }
 }
 
 fn utf16_len(s: &str) -> u32 {
@@ -317,12 +360,7 @@ impl<'tokens, T: LintableToken> Visitor<'tokens, T> for IndexedVrefVisitor {
         }
     }
 
-    fn on_text(
-        &mut self,
-        ctx: &WalkContext<'tokens, '_>,
-        token: &'tokens T,
-        _token_index: usize,
-    ) {
+    fn on_text(&mut self, ctx: &WalkContext<'tokens, '_>, token: &'tokens T, _token_index: usize) {
         if self.can_collect_text(ctx) {
             self.push_token(token);
         }
@@ -332,8 +370,8 @@ impl<'tokens, T: LintableToken> Visitor<'tokens, T> for IndexedVrefVisitor {
 #[cfg(test)]
 mod tests {
     use super::{
-        Utf16Span, push_text, tokens_to_vref_map, usfm_to_vref_index, usfm_to_vref_map,
-        vref_map_to_json_string,
+        Utf16Span, VrefOptions, tokens_to_vref_map, usfm_to_vref_index, usfm_to_vref_map,
+        usfm_to_vref_map_with_options, vref_map_to_json_string,
     };
     use crate::parse::parse;
 
@@ -373,23 +411,21 @@ mod tests {
         }
     }
 
-    // Test 2 — derivation parity: replaying `to_vref`'s own boundary-dedup
-    // (`push_text`) + trim over the index's raw fragments must reproduce
-    // `to_vref` exactly. Proves the index is a faithful lossless superset.
+    // Test 2 — text purity: the index is a content projection, not a
+    // formatting pass. Structural separators for `to_vref` are inserted
+    // by that visitor; the index stores only source-backed content bytes.
     #[test]
-    fn vref_index_reconstructs_to_vref_via_push_text() {
+    fn vref_index_fragments_are_source_backed_content() {
         for &src in VREF_INDEX_FIXTURES {
             let index = usfm_to_vref_index(src);
-            let map = usfm_to_vref_map(src);
             for (sid, proj) in &index {
                 let mut rebuilt = String::new();
                 for seg in &proj.segments {
-                    push_text(&mut rebuilt, &utf16_slice(&proj.text, seg.text_span));
+                    rebuilt.push_str(&utf16_slice(&proj.text, seg.text_span));
                 }
                 assert_eq!(
-                    rebuilt.trim(),
-                    map.get(sid).map(String::as_str).unwrap_or(""),
-                    "reconstructed to_vref mismatch for {sid} in {src:?}"
+                    rebuilt, proj.text,
+                    "index text must be exactly the concatenated content segments for {sid} in {src:?}"
                 );
             }
         }
@@ -405,7 +441,10 @@ mod tests {
             for (sid, proj) in &index {
                 let mut cursor = 0u32;
                 for seg in &proj.segments {
-                    assert_eq!(seg.text_span.start, cursor, "non-contiguous text span in {sid}");
+                    assert_eq!(
+                        seg.text_span.start, cursor,
+                        "non-contiguous text span in {sid}"
+                    );
                     let frag = utf16_slice(&proj.text, seg.text_span);
                     assert_eq!(
                         seg.text_span.end - seg.text_span.start,
@@ -437,7 +476,8 @@ mod tests {
             let index = usfm_to_vref_index(src);
             for (sid, proj) in &index {
                 for seg in &proj.segments {
-                    let from_source = &src[seg.source_span.start as usize..seg.source_span.end as usize];
+                    let from_source =
+                        &src[seg.source_span.start as usize..seg.source_span.end as usize];
                     let from_text = utf16_slice(&proj.text, seg.text_span);
                     assert_eq!(
                         from_source, from_text,
@@ -448,37 +488,24 @@ mod tests {
         }
     }
 
-    // The lossless projection makes whitespace separated only by markup or
-    // line structure ADJACENT in `text` (a line's trailing space + the next
-    // marker's tag-end delimiter space; ditto around inline char markers).
-    // That adjacency is intentional — stripping it would break the
-    // text == DOM == source-slice invariant the resolver depends on.
-    // Consumers must instead classify whitespace runs by the segment map:
-    // only a run STRICTLY INTERIOR to one segment is content whitespace; a
-    // run touching a segment boundary had markup between its characters and
-    // is structural. This test encodes that contract.
+    // Marker delimiters are markup, so they do not appear in the lossless
+    // content projection. Real content whitespace still maps back to the
+    // exact source bytes through one segment.
     #[test]
-    fn vref_index_join_whitespace_is_identifiable_as_structural() {
+    fn vref_index_marker_joins_are_content_pure() {
         let strictly_interior = |proj: &super::VerseProjection, a: u32, b: u32| {
             proj.segments
                 .iter()
                 .any(|s| s.text_span.start < a && b < s.text_span.end)
         };
 
-        // Poetry join: trailing content space + `\q2` delimiter space.
+        // Poetry join: trailing content space stays, `\q2` delimiter does not.
         let src = "\\id ISA\n\\c 9\n\\p\n\\v 2 The people walked in  darkness \n\\q2 have seen a great light;\n";
         let proj = usfm_to_vref_index(src)
             .remove("ISA 9:2")
             .expect("verse present");
-        let join = proj
-            .text
-            .find("darkness  have")
-            .expect("join adjacency preserved (lossless)") as u32;
-        let (a, b) = (join + 8, join + 10); // the two-space run (ASCII: byte == UTF-16)
-        assert!(
-            !strictly_interior(&proj, a, b),
-            "join run must touch a segment boundary (structural, not flaggable)"
-        );
+        assert!(proj.text.contains("darkness have"));
+        assert!(!proj.text.contains("darkness  have"));
 
         // Genuine in-content double space IS strictly interior — flaggable.
         let real = proj.text.find("in  darkness").expect("content run present") as u32 + 2;
@@ -487,20 +514,13 @@ mod tests {
             "content run must be strictly interior to one segment"
         );
 
-        // Inline char marker: same adjacency with no newline involved.
+        // Inline char marker: delimiter before `Lord` is markup and drops out.
         let src2 = "\\id GEN\n\\c 1\n\\p\n\\v 1 word \\nd Lord\\nd* more text.\n";
         let proj2 = usfm_to_vref_index(src2)
             .remove("GEN 1:1")
             .expect("verse present");
-        let inline = proj2
-            .text
-            .find("word  Lord")
-            .expect("delimiter adjacency preserved (lossless)") as u32;
-        let (a2, b2) = (inline + 4, inline + 6);
-        assert!(
-            !strictly_interior(&proj2, a2, b2),
-            "marker-delimiter run must touch a segment boundary"
-        );
+        assert!(proj2.text.contains("word Lord"));
+        assert!(!proj2.text.contains("word  Lord"));
     }
 
     // Test 4b — the actual use case: a content finding (a double space)
@@ -513,7 +533,10 @@ mod tests {
         let index = usfm_to_vref_index(src);
         let proj = index.get("GEN 1:1").expect("verse present");
         // Lossless: the double space survives verbatim in the projection.
-        let ws = proj.text.find("  ").expect("double space preserved in projection") as u32;
+        let ws = proj
+            .text
+            .find("  ")
+            .expect("double space preserved in projection") as u32;
         let (start, end) = (ws, ws + 2);
         let seg = proj
             .segments
@@ -576,6 +599,34 @@ mod tests {
     }
 
     #[test]
+    fn structural_break_inserts_separator_without_leaking_delimiters() {
+        let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\nGod created.");
+        assert_eq!(
+            map.get("GEN 1:1").map(String::as_str),
+            Some("In the beginning God created.")
+        );
+
+        let malformed = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 word\\nd Lord\\nd* more.");
+        assert_eq!(
+            malformed.get("GEN 1:1").map(String::as_str),
+            Some("wordLord more.")
+        );
+    }
+
+    #[test]
+    fn to_vref_preserves_edge_content_whitespace_unless_trim_is_requested() {
+        let src = "\\id GEN\n\\c 1\n\\p\n\\v 1  padded \n";
+        let map = usfm_to_vref_map(src);
+        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some(" padded "));
+
+        let trimmed = usfm_to_vref_map_with_options(
+            src,
+            VrefOptions { trim: true },
+        );
+        assert_eq!(trimmed.get("GEN 1:1").map(String::as_str), Some("padded"));
+    }
+
+    #[test]
     fn root_level_verses_are_collected() {
         let parsed = parse("\\id GEN\n\\c 1\n\\v 1 In the beginning.\n\\v 2 And God said.");
         let map = tokens_to_vref_map(&parsed.tokens);
@@ -621,10 +672,7 @@ mod tests {
     #[test]
     fn verse_sequence_lexeme_is_preserved() {
         let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1,3 Combined.\n");
-        assert_eq!(
-            map.get("GEN 1:1,3").map(String::as_str),
-            Some("Combined."),
-        );
+        assert_eq!(map.get("GEN 1:1,3").map(String::as_str), Some("Combined."),);
     }
 
     #[test]

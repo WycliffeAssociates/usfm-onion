@@ -4,9 +4,9 @@
       "id": "MAT-0",
       "kind": "marker",
       "marker": "id",
-      "source": "\\id",
+      "source": "\\id ",
       "span": {
-        "end": 3,
+        "end": 4,
         "start": 0
       },
       "structural": {
@@ -17,10 +17,10 @@
       "id": "MAT-1",
       "kind": "bookCode",
       "sid": "MAT 0:0",
-      "source": " MAT",
+      "source": "MAT",
       "span": {
         "end": 7,
-        "start": 3
+        "start": 4
       }
     },
     {
@@ -38,9 +38,9 @@
       "kind": "marker",
       "marker": "c",
       "sid": "MAT 1:0",
-      "source": "\\c",
+      "source": "\\c ",
       "span": {
-        "end": 10,
+        "end": 11,
         "start": 8
       },
       "structural": {
@@ -55,10 +55,10 @@
         "start": 1
       },
       "sid": "MAT 1:0",
-      "source": " 1",
+      "source": "1",
       "span": {
         "end": 12,
-        "start": 10
+        "start": 11
       }
     },
     {
@@ -101,9 +101,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:1",
-      "source": "\\v",
+      "source": "\\v ",
       "span": {
-        "end": 18,
+        "end": 19,
         "start": 16
       },
       "structural": {
@@ -118,20 +118,20 @@
         "start": 1
       },
       "sid": "MAT 1:1",
-      "source": " 1",
+      "source": "1 ",
       "span": {
-        "end": 20,
-        "start": 18
+        "end": 21,
+        "start": 19
       }
     },
     {
       "id": "MAT-10",
       "kind": "text",
       "sid": "MAT 1:1",
-      "source": " the first verse",
+      "source": "the first verse",
       "span": {
         "end": 36,
-        "start": 20
+        "start": 21
       }
     },
     {
@@ -139,9 +139,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:2",
-      "source": " \\v",
+      "source": " \\v ",
       "span": {
-        "end": 39,
+        "end": 40,
         "start": 37
       },
       "structural": {
@@ -156,20 +156,20 @@
         "start": 2
       },
       "sid": "MAT 1:2",
-      "source": " 2",
+      "source": "2 ",
       "span": {
-        "end": 41,
-        "start": 39
+        "end": 42,
+        "start": 40
       }
     },
     {
       "id": "MAT-14",
       "kind": "text",
       "sid": "MAT 1:2",
-      "source": " the second verse",
+      "source": "the second verse",
       "span": {
         "end": 58,
-        "start": 41
+        "start": 42
       }
     },
     {
@@ -177,9 +177,9 @@
       "kind": "marker",
       "marker": "v",
       "sid": "MAT 1:3",
-      "source": " \\v",
+      "source": " \\v ",
       "span": {
-        "end": 61,
+        "end": 62,
         "start": 59
       },
       "structural": {
@@ -194,30 +194,20 @@
         "start": 3
       },
       "sid": "MAT 1:3",
-      "source": " 3",
+      "source": "3 ",
       "span": {
-        "end": 63,
-        "start": 61
+        "end": 64,
+        "start": 62
       }
     },
     {
       "id": "MAT-18",
-      "kind": "text",
-      "sid": "MAT 1:3",
-      "source": " ",
-      "span": {
-        "end": 64,
-        "start": 63
-      }
-    },
-    {
-      "id": "MAT-19",
       "kind": "marker",
       "marker": "x",
       "sid": "MAT 1:3",
-      "source": "\\x",
+      "source": "\\x ",
       "span": {
-        "end": 66,
+        "end": 67,
         "start": 64
       },
       "structural": {
@@ -226,23 +216,23 @@
       }
     },
     {
-      "id": "MAT-20",
+      "id": "MAT-19",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " - ",
+      "source": "- ",
       "span": {
         "end": 69,
-        "start": 66
+        "start": 67
       }
     },
     {
-      "id": "MAT-21",
+      "id": "MAT-20",
       "kind": "marker",
       "marker": "xo",
       "sid": "MAT 1:3",
-      "source": "\\xo",
+      "source": "\\xo ",
       "span": {
-        "end": 72,
+        "end": 73,
         "start": 69
       },
       "structural": {
@@ -250,23 +240,23 @@
       }
     },
     {
-      "id": "MAT-22",
+      "id": "MAT-21",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " 2.23: ",
+      "source": "2.23: ",
       "span": {
         "end": 79,
-        "start": 72
+        "start": 73
       }
     },
     {
-      "id": "MAT-23",
+      "id": "MAT-22",
       "kind": "marker",
       "marker": "xt",
       "sid": "MAT 1:3",
-      "source": "\\xt",
+      "source": "\\xt ",
       "span": {
-        "end": 82,
+        "end": 83,
         "start": 79
       },
       "structural": {
@@ -274,17 +264,17 @@
       }
     },
     {
-      "id": "MAT-24",
+      "id": "MAT-23",
       "kind": "text",
       "sid": "MAT 1:3",
-      "source": " Mrk 1.24; Luk 2.39; Jhn 1.45.",
+      "source": "Mrk 1.24; Luk 2.39; Jhn 1.45.",
       "span": {
         "end": 112,
-        "start": 82
+        "start": 83
       }
     },
     {
-      "id": "MAT-25",
+      "id": "MAT-24",
       "kind": "endMarker",
       "marker": "x",
       "sid": "MAT 1:3",
@@ -299,7 +289,7 @@
       }
     },
     {
-      "id": "MAT-26",
+      "id": "MAT-25",
       "kind": "text",
       "sid": "MAT 1:3",
       "source": "and made his home in a town named Nazareth.",

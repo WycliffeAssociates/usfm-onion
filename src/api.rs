@@ -664,7 +664,8 @@ mod tests {
         let fix = issue.fix.expect("expected concrete token fix");
         let fixed = TokenStream::from_tokens(malformed_tokens).apply_token_fix(&fix);
         assert_eq!(fixed.len(), 2);
-        assert_eq!(fixed[1].text, " Alpha");
+        assert_eq!(fixed[0].text, "\\p ");
+        assert_eq!(fixed[1].text, "Alpha");
 
         let baseline_parsed = baseline.parse_owned();
         let changed_parsed = changed.parse_owned();

@@ -9,7 +9,7 @@ use crate::export_tree::{
     ExportContainerKind, ExportContainerNode, ExportDocument, ExportNode, build_export_document,
 };
 use crate::marker_defs::{
-    NoteSubkind, MarkerDefKind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
+    MarkerDefKind, NoteSubkind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
 };
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, TokenData};
@@ -608,8 +608,11 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         if node.close_index.is_none() {
             return self.export_unclosed_figure(node, marker);
         }
-        let (content, extra) =
-            self.export_inline_content_and_attributes(marker, &node.children, Some(node.token_index));
+        let (content, extra) = self.export_inline_content_and_attributes(
+            marker,
+            &node.children,
+            Some(node.token_index),
+        );
         UsjElement::Figure {
             marker: marker.to_string(),
             content,
@@ -758,7 +761,8 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
         unmatched: bool,
     ) -> UsjElement {
         let content = self.export_non_attribute_children(&node.children);
-        let extra = self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker));
+        let extra =
+            self.collect_attribute_map(&node.children, Some(node.token_index), Some(marker));
         if unmatched {
             UsjElement::Unmatched {
                 marker: marker.to_string(),
@@ -847,7 +851,6 @@ impl<'a, 'doc> UsjExporter<'a, 'doc> {
             })
         )
     }
-
 }
 
 #[derive(Default)]
@@ -1599,11 +1602,11 @@ mod tests {
         let UsjNode::Element(UsjElement::Para { content, .. }) = &usj.content[2] else {
             panic!("expected paragraph");
         };
-        assert!(matches!(
-            &content[2],
+        assert!(content.iter().any(|node| matches!(
+            node,
             UsjNode::Element(UsjElement::Char { marker, extra, .. })
                 if marker == "w" && extra.get("lemma").map(String::as_str) == Some("grace")
-        ));
+        )));
     }
 
     #[test]
@@ -2008,7 +2011,9 @@ mod attributes_spec {
     fn first_char_attrs(source: &str, marker: &str) -> std::collections::BTreeMap<String, String> {
         let usj = usfm_to_usj(source).expect("USJ export should succeed");
         for node in walk(&usj.content) {
-            if let UsjNode::Element(UsjElement::Char { marker: m, extra, .. }) = node
+            if let UsjNode::Element(UsjElement::Char {
+                marker: m, extra, ..
+            }) = node
                 && m == marker
             {
                 return extra.clone();

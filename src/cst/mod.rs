@@ -570,14 +570,14 @@ mod tests {
 
         let footnote = walked
             .iter()
-            .find(|(_, source, _, _)| source == "\\f")
+            .find(|(_, source, _, _)| source == "\\f ")
             .expect("footnote marker");
         assert_eq!(footnote.2, 1);
         assert_eq!(footnote.3.len(), 1);
 
         let footnote_text = walked
             .iter()
-            .find(|(_, source, _, _)| source == " + ")
+            .find(|(_, source, _, _)| source == "+ ")
             .expect("footnote text");
         assert_eq!(footnote_text.2, 2);
         assert_eq!(footnote_text.3.len(), 2);
@@ -626,4 +626,3 @@ mod tests {
         ancestor.len() < descendant.len() && descendant.starts_with(ancestor)
     }
 }
-

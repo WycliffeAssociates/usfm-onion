@@ -31,9 +31,9 @@ use usfm_onion::lint::{
 use usfm_onion::marker_defs::{
     BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
     InlineContext as NativeInlineContext, MarkerFamily as NativeMarkerFamily,
-    MarkerFamilyRole as NativeMarkerFamilyRole, NoteFamily as NativeNoteFamily,
-    NoteSubkind as NativeNoteSubkind, ParagraphCategory as NativeParagraphCategory,
-    MarkerPayload as NativeMarkerPayload, SpecContext as NativeSpecContext,
+    MarkerFamilyRole as NativeMarkerFamilyRole, MarkerPayload as NativeMarkerPayload,
+    NoteFamily as NativeNoteFamily, NoteSubkind as NativeNoteSubkind,
+    ParagraphCategory as NativeParagraphCategory, SpecContext as NativeSpecContext,
     StructuralMarkerInfo as NativeStructuralMarkerInfo,
     StructuralScopeKind as NativeStructuralScopeKind,
 };
@@ -51,8 +51,9 @@ use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
 use usfm_onion::vref::{
     Segment as NativeSegment, Utf16Span as NativeUtf16Span,
-    VerseProjection as NativeVerseProjection, VrefIndex as NativeVrefIndex, VrefMap as NativeVrefMap,
-    tokens_to_vref_index, usfm_to_vref_index, usfm_to_vref_map,
+    VerseProjection as NativeVerseProjection, VrefIndex as NativeVrefIndex,
+    VrefMap as NativeVrefMap, VrefOptions as NativeVrefOptions, tokens_to_vref_index,
+    usfm_to_vref_index, usfm_to_vref_map_with_options,
 };
 use usfm_onion::walker::WalkableToken;
 
@@ -1022,6 +1023,14 @@ pub struct DiffsByChapterMap(
 #[serde(transparent)]
 pub struct VrefMap(pub std::collections::BTreeMap<String, String>);
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct VrefOptions {
+    #[serde(default)]
+    trim: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -1612,8 +1621,12 @@ impl ParsedUsfm {
     }
 
     #[wasm_bindgen(js_name = toVref)]
-    pub fn to_vref(&self) -> VrefMap {
-        VrefMap(vref_to_object(usfm_to_vref_map(&self.source)))
+    pub fn to_vref(&self, options: Option<VrefOptions>) -> VrefMap {
+        let options = vref_options_into_native(options);
+        VrefMap(vref_to_object(usfm_to_vref_map_with_options(
+            &self.source,
+            options,
+        )))
     }
 
     #[wasm_bindgen(js_name = vrefIndex)]
@@ -2692,6 +2705,16 @@ fn token_values_to_usfm(tokens: &[Token]) -> String {
 
 fn vref_to_object(map: NativeVrefMap) -> std::collections::BTreeMap<String, String> {
     map.into_iter().collect()
+}
+
+fn vref_options_into_native(options: Option<VrefOptions>) -> NativeVrefOptions {
+    let defaults = NativeVrefOptions::default();
+    let Some(options) = options else {
+        return defaults;
+    };
+    NativeVrefOptions {
+        trim: options.trim.unwrap_or(defaults.trim),
+    }
 }
 
 fn map_vref_index(index: NativeVrefIndex) -> VrefIndex {

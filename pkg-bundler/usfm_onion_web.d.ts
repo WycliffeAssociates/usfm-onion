@@ -306,6 +306,10 @@ export interface TokenTemplate {
     sid?: string;
 }
 
+export interface VrefOptions {
+    trim?: boolean | null;
+}
+
 export type BlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "sidebarStart" | "sidebarEnd";
 
 export type ClosingBehavior = "none" | "requiredExplicit" | "optionalExplicitUntilNoteEnd" | "selfClosingMilestone";
@@ -374,7 +378,7 @@ export class ParsedUsfm {
     toUsfm(): string;
     toUsj(): any;
     toUsx(): string;
-    toVref(): VrefMap;
+    toVref(options?: VrefOptions | null): VrefMap;
     tokens(): Token[];
     vrefIndex(): VrefIndex;
 }

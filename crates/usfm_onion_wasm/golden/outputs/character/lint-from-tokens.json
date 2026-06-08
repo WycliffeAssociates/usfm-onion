@@ -17,8 +17,8 @@
       "severity": "error",
       "sid": "GEN 1:15",
       "span": {
-        "end": 64,
-        "start": 61
+        "end": 65,
+        "start": 62
       },
       "template": "Verses should count up by one: expected verse {expected, number}, found verse {found, number}.",
       "tokenId": "GEN-17"

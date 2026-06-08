@@ -16,7 +16,7 @@
         "start": 112
       },
       "template": "\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.",
-      "tokenId": "MAT-25"
+      "tokenId": "MAT-24"
     }
   ],
   "summary": {

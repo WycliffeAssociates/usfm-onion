@@ -157,10 +157,11 @@ export class ParsedUsfm {
         }
     }
     /**
+     * @param {VrefOptions | null} [options]
      * @returns {VrefMap}
      */
-    toVref() {
-        const ret = wasm.parsedusfm_toVref(this.__wbg_ptr);
+    toVref(options) {
+        const ret = wasm.parsedusfm_toVref(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
     /**

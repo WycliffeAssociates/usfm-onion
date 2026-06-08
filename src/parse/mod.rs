@@ -1,9 +1,10 @@
 use crate::lexer::lex;
-use crate::marker_defs::structural_marker_info;
+use crate::marker_defs::{lookup_marker_whitespace, structural_marker_info};
 use crate::token::{
     AttributeItem, BookId, Lexeme, NumberRangeToken, ParseAnalysis, ParseResult, ScanToken, Sid,
     Span, Token, TokenData, TokenId, TokenKind, tokens_to_usfm,
 };
+use crate::whitespace::StructuralWhitespaceRequirement as WhitespaceReq;
 
 pub fn parse(source: &str) -> ParseResult<'_> {
     let lexed = lex(source);
@@ -34,12 +35,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                 };
                 push_token(source, &mut tokens, token);
             } else {
-                attach_attributes_to_preceding_marker(
-                    &mut tokens,
-                    entries,
-                    attr_span,
-                    attr_source,
-                );
+                attach_attributes_to_preceding_marker(&mut tokens, entries, attr_span, attr_source);
             }
             cursor = next_cursor;
             continue;
@@ -47,7 +43,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
 
         match lexemes[cursor] {
             ScanToken::Whitespace(ws) => {
-                state.pending_ws = Some(ws.span);
+                park_ws(source, &mut state, &mut tokens, ws.span);
                 cursor += 1;
             }
             ScanToken::Newline(token) => {
@@ -92,12 +88,12 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                     );
                     push_token(source, &mut tokens, marker_token);
 
-                    state.pending_ws = book_code.leading_ws;
+                    if let Some(ws) = book_code.leading_ws {
+                        park_ws(source, &mut state, &mut tokens, ws);
+                    }
                     state.current_book_code = Some(book_code.lexeme);
                     state.current_book = BookId::from_str(book_code.lexeme);
-                    state.current_sid = state
-                        .current_book
-                        .map(|book| Sid::new(book, 0, 0));
+                    state.current_sid = state.current_book.map(|book| Sid::new(book, 0, 0));
                     let book_token = token_with_current_ws_and_sid(
                         source,
                         &mut state,
@@ -131,8 +127,11 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         next_sid.clone(),
                     );
                     push_token(source, &mut tokens, marker_token);
-                    state.pending_ws = number.leading_ws;
+                    if let Some(ws) = number.leading_ws {
+                        park_ws(source, &mut state, &mut tokens, ws);
+                    }
                     update_sid_state(&mut state, marker.name, &number.number);
+                    state.cv_number = CvNumber::ExpectingNumber;
                     let number_token = token_with_current_ws_and_sid(
                         source,
                         &mut state,
@@ -158,7 +157,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: false,
                         attributes: Vec::new(),
-                            attribute_source: None,
+                        attribute_source: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -175,7 +174,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         structural: structural_marker_info(marker.name, marker.metadata.kind),
                         nested: true,
                         attributes: Vec::new(),
-                            attribute_source: None,
+                        attribute_source: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -221,7 +220,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                         metadata: marker.metadata,
                         structural: structural_marker_info(marker.name, marker.metadata.kind),
                         attributes: Vec::new(),
-                            attribute_source: None,
+                        attribute_source: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -243,9 +242,7 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                 }
                 state.current_book_code = Some(book.lexeme);
                 state.current_book = BookId::from_str(book.lexeme);
-                state.current_sid = state
-                    .current_book
-                    .map(|b| Sid::new(b, 0, 0));
+                state.current_sid = state.current_book.map(|b| Sid::new(b, 0, 0));
                 let token = token_with_current_ws_and_sid(
                     source,
                     &mut state,
@@ -273,8 +270,19 @@ pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult
                 cursor += 1;
             }
             ScanToken::Text(text) => {
+                let span =
+                    if let Some(ws) = leading_horizontal_whitespace_span(text.span, text.lexeme) {
+                        park_ws(source, &mut state, &mut tokens, ws);
+                        if ws.end == text.span.end {
+                            cursor += 1;
+                            continue;
+                        }
+                        Span::new(ws.end, text.span.end)
+                    } else {
+                        text.span
+                    };
                 let token =
-                    token_with_current_ws_and_sid(source, &mut state, text.span, TokenData::Text);
+                    token_with_current_ws_and_sid(source, &mut state, span, TokenData::Text);
                 push_token(source, &mut tokens, token);
                 cursor += 1;
             }
@@ -295,6 +303,24 @@ struct ParseState<'a> {
     current_chapter: u32,
     current_sid: Option<Sid>,
     pending_ws: Option<Span>,
+    cv_number: CvNumber,
+}
+
+/// One-shot tracker for the number argument of a chapter/verse marker.
+///
+/// `delimiter_absorption` needs to distinguish a just-emitted `Number` token
+/// that is the argument of `\c`/`\v` (whose trailing space is a tag-end
+/// delimiter it should own) from an ordinary number in content (which owns
+/// nothing). Lifecycle: armed when the marker's number argument is
+/// recognized, latched for exactly the next emitted token, then back to idle.
+#[derive(Default, Clone, Copy, PartialEq)]
+enum CvNumber {
+    #[default]
+    Idle,
+    /// The next emitted token, if a `Number`, is a chapter/verse argument.
+    ExpectingNumber,
+    /// The token just emitted was a chapter/verse argument number.
+    JustEmitted,
 }
 
 #[derive(Clone, Copy)]
@@ -525,6 +551,13 @@ fn token_with_current_ws<'a>(
     data: TokenData<'a>,
     sid: Option<Sid>,
 ) -> Token<'a> {
+    let is_cv_argument_number = state.cv_number == CvNumber::ExpectingNumber
+        && matches!(data, TokenData::Number { .. });
+    state.cv_number = if is_cv_argument_number {
+        CvNumber::JustEmitted
+    } else {
+        CvNumber::Idle
+    };
     let start = state
         .pending_ws
         .map(|ws| ws.start.min(span.start))
@@ -538,6 +571,77 @@ fn token_with_current_ws<'a>(
         source: &source[span.as_range()],
         data,
     }
+}
+
+/// Decides who owns whitespace that follows a token, then parks it.
+///
+/// In USFM, the first space/tab after a marker name (`\v •1`) or after a
+/// chapter/verse number or `\id` book code (`\v 1•In`) is the tag-end
+/// delimiter — markup required by the syntax, not content. We absorb that one
+/// byte onto the owning token's span so following content tokens are
+/// content-pure: text projections (`to_vref`, `vref_index`) would otherwise
+/// leak the delimiter into verse text as a phantom leading space. Only the
+/// single required byte is absorbed; any excess whitespace flows forward to
+/// the next token as before, where lint can see and flag it.
+/// Byte-losslessness holds either way — the byte changes owner, it is never
+/// dropped.
+///
+/// The `+ 1` below is safe: whitespace spans are built exclusively from ASCII
+/// space/tab (`consume_inline_whitespace`,
+/// `leading_horizontal_whitespace_span`), so the first char is always one
+/// byte.
+fn park_ws<'a>(source: &'a str, state: &mut ParseState<'a>, tokens: &mut Vec<Token<'a>>, ws: Span) {
+    let should_absorb = tokens
+        .last()
+        .is_some_and(|token| delimiter_absorption(token, state));
+
+    if should_absorb {
+        let absorbed_end = ws.start + 1;
+        let last = tokens
+            .last_mut()
+            .expect("last token exists when absorption is requested");
+        last.span = Span::new(last.span.start, absorbed_end);
+        last.source = &source[last.span.as_range()];
+
+        state.pending_ws = (absorbed_end < ws.end).then_some(Span::new(absorbed_end, ws.end));
+    } else {
+        state.pending_ws = Some(ws);
+    }
+}
+
+/// Whether `token` owns the whitespace that follows it as its tag-end
+/// delimiter.
+///
+/// Driven by the marker whitespace table: a marker absorbs only when the spec
+/// *requires* trailing whitespace after its name. Closers, milestones,
+/// optional-whitespace markers, and unknown markers never absorb — and
+/// "the token happens to end at a space" is deliberately NOT the predicate;
+/// absorption is a property of the marker's syntax, not of the bytes.
+/// A `Number` absorbs only as the argument of `\c`/`\v` (which the delimiter
+/// terminates), never as an in-content number.
+fn delimiter_absorption(token: &Token<'_>, state: &ParseState<'_>) -> bool {
+    match &token.data {
+        TokenData::Marker { name, .. } => lookup_marker_whitespace(name).is_some_and(|spec| {
+            matches!(
+                spec.required_after_open_name,
+                WhitespaceReq::TagEndDelimiter
+                    | WhitespaceReq::AtLeastOneHorizontalWhitespace
+                    | WhitespaceReq::AtLeastOneWhitespace
+            )
+        }),
+        TokenData::Number { .. } => state.cv_number == CvNumber::JustEmitted,
+        TokenData::BookCode { .. } => true,
+        _ => false,
+    }
+}
+
+fn leading_horizontal_whitespace_span(span: Span, source: &str) -> Option<Span> {
+    let len = source
+        .chars()
+        .take_while(|ch| matches!(ch, ' ' | '\t'))
+        .map(char::len_utf8)
+        .sum::<usize>();
+    (len > 0).then_some(Span::new(span.start, span.start + len as u32))
 }
 
 fn flush_pending_whitespace<'a>(
@@ -622,21 +726,21 @@ mod tests {
             .iter()
             .find(|token| matches!(token.data, TokenData::BookCode { code: "GEN", .. }))
             .expect("book code token");
-        assert_eq!(book.sid, Some(Sid::new(gen_book,0, 0)));
+        assert_eq!(book.sid, Some(Sid::new(gen_book, 0, 0)));
 
         let chapter_marker = parsed
             .tokens
             .iter()
             .find(|token| matches!(token.data, TokenData::Marker { name: "c", .. }))
             .expect("chapter marker token");
-        assert_eq!(chapter_marker.sid, Some(Sid::new(gen_book,1, 0)));
+        assert_eq!(chapter_marker.sid, Some(Sid::new(gen_book, 1, 0)));
 
         let verse_marker = parsed
             .tokens
             .iter()
             .find(|token| matches!(token.data, TokenData::Marker { name: "v", .. }))
             .expect("verse marker token");
-        assert_eq!(verse_marker.sid, Some(Sid::new(gen_book,1, 2)));
+        assert_eq!(verse_marker.sid, Some(Sid::new(gen_book, 1, 2)));
     }
 
     #[test]
@@ -675,6 +779,9 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(parsed.tokens[1].source, " 12");
+        assert_eq!(parsed.tokens[0].source, "\\v ");
+        assert_eq!(parsed.tokens[1].source, "12 ");
+        assert_eq!(parsed.tokens[2].source, "text");
+        assert_eq!(into_usfm_from_tokens(&parsed.tokens), "\\v 12 text");
     }
 }

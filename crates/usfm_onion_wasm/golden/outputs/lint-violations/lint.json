@@ -10,7 +10,7 @@
       "severity": "error",
       "sid": "GEN 2:1",
       "span": {
-        "end": 115,
+        "end": 116,
         "start": 113
       },
       "template": "Verses must appear inside a paragraph, list, or table.",
@@ -26,12 +26,12 @@
         "replacements": [
           {
             "kind": "marker",
-            "marker": "v",
-            "sid": "GEN 1:1",
-            "text": " \\v"
+            "marker": "p",
+            "sid": "GEN 1",
+            "text": "\\p "
           }
         ],
-        "targetTokenId": "GEN-7",
+        "targetTokenId": "GEN-6",
         "type": "replaceToken"
       },
       "issueType": "usfm",
