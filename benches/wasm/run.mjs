@@ -75,8 +75,8 @@ const ops = [
   ["usx/string", () => pkg.parse(source).toUsx()],
   ["html/string", () => pkg.parse(source).toHtml()],
   ["html/tokens", () => pkg.tokensToHtml(tokens)],
-  ["lint/string", () => pkg.lintUsfm(source)],
-  ["lint/tokens", () => pkg.lintTokens(tokens)],
+  ["lint/string", () => pkg.lintUsfm(source, { scope: "book" })],
+  ["lint/tokens", () => pkg.lintTokens(tokens, { scope: "book" })],
   ["format/string", () => pkg.formatUsfm(source)],
   ["format/tokens", () => pkg.formatTokens(tokens)],
   ["diff/string", () => pkg.diffUsfm(source, editedSource)],
@@ -86,14 +86,14 @@ const ops = [
   // tokens. Before the cache this paid two parses per call; after, one.
   ["editor/lint+tokens", () => {
     const p = pkg.parse(source);
-    p.lint();
+    p.lint({ scope: "book" });
     p.tokens();
   }],
   // Workspace-open pattern: same parsed, multiple downstream views.
   ["editor/full-open", () => {
     const p = pkg.parse(source);
     p.tokens();
-    p.lint();
+    p.lint({ scope: "book" });
     p.cst();
     p.toHtml();
     p.toVref();

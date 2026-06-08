@@ -1,6 +1,6 @@
 {
   "name": "usfm-onion-web",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "WebAssembly bindings for usfm_onion",
   "license": "MIT",
   "type": "module",

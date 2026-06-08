@@ -20,14 +20,14 @@ use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_mai
 use rayon::prelude::*;
 use usfm_onion::format::{FormatOptions, format_usfm};
 use usfm_onion::html::{HtmlOptions, usfm_to_html};
-use usfm_onion::lint::{LintOptions, lint_usfm};
+use usfm_onion::lint::{LintOptions, LintScope, lint_usfm};
 use usfm_onion::parse::parse;
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
 
 fn benchmark_parallelism(c: &mut Criterion) {
     let corpus = load_en_ulb();
-    let lint_options = LintOptions::default();
+    let lint_options = LintOptions::scoped(LintScope::Book);
     let format_options = FormatOptions::default();
     let html_options = HtmlOptions::default();
 

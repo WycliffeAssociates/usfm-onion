@@ -1,4 +1,9 @@
+//#region exports
+
 export class ParsedUsfm {
+    constructor() {
+        throw new Error('cannot invoke `new` directly');
+    }
     static __wrap(ptr) {
         ptr = ptr >>> 0;
         const obj = Object.create(ParsedUsfm.prototype);
@@ -21,6 +26,8 @@ export class ParsedUsfm {
      * @returns {Token[]}
      */
     applyTokenFix(fix) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_applyTokenFix(this.__wbg_ptr, fix);
         var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
@@ -30,6 +37,8 @@ export class ParsedUsfm {
      * @returns {CstDocument}
      */
     cst() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_cst(this.__wbg_ptr);
         return ret;
     }
@@ -39,7 +48,12 @@ export class ParsedUsfm {
      * @returns {ChapterTokenDiff[]}
      */
     diff(other, options) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         _assertClass(other, ParsedUsfm);
+        if (other.__wbg_ptr === 0) {
+            throw new Error('Attempt to use a moved value');
+        }
         const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
@@ -51,7 +65,12 @@ export class ParsedUsfm {
      * @returns {DiffsByChapterMap}
      */
     diffByChapter(other, options) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         _assertClass(other, ParsedUsfm);
+        if (other.__wbg_ptr === 0) {
+            throw new Error('Attempt to use a moved value');
+        }
         const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
@@ -63,6 +82,8 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_format(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
@@ -72,11 +93,13 @@ export class ParsedUsfm {
         }
     }
     /**
-     * @param {LintOptions | null} [options]
+     * @param {LintOptions} options
      * @returns {LintResult}
      */
     lint(options) {
-        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, options);
         return ret;
     }
     /**
@@ -86,7 +109,12 @@ export class ParsedUsfm {
      * @returns {Token[]}
      */
     revertDiffBlock(current, block_id, options) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         _assertClass(current, ParsedUsfm);
+        if (current.__wbg_ptr === 0) {
+            throw new Error('Attempt to use a moved value');
+        }
         const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.parsedusfm_revertDiffBlock(this.__wbg_ptr, current.__wbg_ptr, ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
@@ -102,6 +130,8 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_toHtml(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
@@ -117,6 +147,8 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_toUsfm(this.__wbg_ptr);
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
@@ -129,6 +161,8 @@ export class ParsedUsfm {
      * @returns {any}
      */
     toUsj() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_toUsj(this.__wbg_ptr);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
@@ -142,6 +176,8 @@ export class ParsedUsfm {
         let deferred2_0;
         let deferred2_1;
         try {
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
             const ret = wasm.parsedusfm_toUsx(this.__wbg_ptr);
             var ptr1 = ret[0];
             var len1 = ret[1];
@@ -161,6 +197,8 @@ export class ParsedUsfm {
      * @returns {VrefMap}
      */
     toVref(options) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_toVref(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
@@ -168,6 +206,8 @@ export class ParsedUsfm {
      * @returns {Token[]}
      */
     tokens() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_tokens(this.__wbg_ptr);
         var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
@@ -177,6 +217,8 @@ export class ParsedUsfm {
      * @returns {VrefIndex}
      */
     vrefIndex() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_vrefIndex(this.__wbg_ptr);
         return ret;
     }
@@ -184,6 +226,9 @@ export class ParsedUsfm {
 if (Symbol.dispose) ParsedUsfm.prototype[Symbol.dispose] = ParsedUsfm.prototype.free;
 
 export class UsfmMarkerCatalog {
+    constructor() {
+        throw new Error('cannot invoke `new` directly');
+    }
     static __wrap(ptr) {
         ptr = ptr >>> 0;
         const obj = Object.create(UsfmMarkerCatalog.prototype);
@@ -205,6 +250,8 @@ export class UsfmMarkerCatalog {
      * @returns {MarkerInfo[]}
      */
     all() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.usfmmarkercatalog_all(this.__wbg_ptr);
         var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
@@ -215,6 +262,8 @@ export class UsfmMarkerCatalog {
      * @returns {boolean}
      */
     contains(marker) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.usfmmarkercatalog_contains(this.__wbg_ptr, ptr0, len0);
@@ -225,6 +274,8 @@ export class UsfmMarkerCatalog {
      * @returns {MarkerInfo | undefined}
      */
     get(marker) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.usfmmarkercatalog_get(this.__wbg_ptr, ptr0, len0);
@@ -395,25 +446,25 @@ export function lintCodes() {
 
 /**
  * @param {Token[]} tokens
- * @param {LintOptions | null} [options]
+ * @param {LintOptions} options
  * @returns {LintResult}
  */
 export function lintTokens(tokens, options) {
     const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.lintTokens(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    const ret = wasm.lintTokens(ptr0, len0, options);
     return ret;
 }
 
 /**
  * @param {string} source
- * @param {LintOptions | null} [options]
+ * @param {LintOptions} options
  * @returns {LintResult}
  */
 export function lintUsfm(source, options) {
     const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.lintUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    const ret = wasm.lintUsfm(ptr0, len0, options);
     return ret;
 }
 
@@ -550,12 +601,23 @@ export function vrefIndexUsfm(source) {
     const ret = wasm.vrefIndexUsfm(ptr0, len0);
     return ret;
 }
-export function __wbg_Error_83742b46f01ce22d(arg0, arg1) {
+
+//#endregion
+
+//#region wasm imports
+export function __wbg_Error_83742b46f01ce22d() { return logError(function (arg0, arg1) {
     const ret = Error(getStringFromWasm0(arg0, arg1));
     return ret;
-}
-export function __wbg_String_8564e559799eccda(arg0, arg1) {
+}, arguments); }
+export function __wbg_String_8564e559799eccda() { return logError(function (arg0, arg1) {
     const ret = String(arg1);
+    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+    getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+}, arguments); }
+export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
+    const ret = debugString(arg1);
     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
@@ -563,10 +625,12 @@ export function __wbg_String_8564e559799eccda(arg0, arg1) {
 }
 export function __wbg___wbindgen_is_string_7ef6b97b02428fae(arg0) {
     const ret = typeof(arg0) === 'string';
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_undefined_52709e72fb9f179c(arg0) {
     const ret = arg0 === undefined;
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
@@ -580,41 +644,41 @@ export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
 export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
 }
-export function __wbg_new_49d5571bd3f0c4d4() {
+export function __wbg_new_49d5571bd3f0c4d4() { return logError(function () {
     const ret = new Map();
     return ret;
-}
-export function __wbg_new_a70fbab9066b301f() {
+}, arguments); }
+export function __wbg_new_a70fbab9066b301f() { return logError(function () {
     const ret = new Array();
     return ret;
-}
-export function __wbg_new_ab79df5bd7c26067() {
+}, arguments); }
+export function __wbg_new_ab79df5bd7c26067() { return logError(function () {
     const ret = new Object();
     return ret;
-}
+}, arguments); }
 export function __wbg_parse_e9eddd2a82c706eb() { return handleError(function (arg0, arg1) {
     const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
     return ret;
 }, arguments); }
-export function __wbg_set_282384002438957f(arg0, arg1, arg2) {
+export function __wbg_set_282384002438957f() { return logError(function (arg0, arg1, arg2) {
     arg0[arg1 >>> 0] = arg2;
-}
-export function __wbg_set_6be42768c690e380(arg0, arg1, arg2) {
+}, arguments); }
+export function __wbg_set_6be42768c690e380() { return logError(function (arg0, arg1, arg2) {
     arg0[arg1] = arg2;
-}
-export function __wbg_set_bf7251625df30a02(arg0, arg1, arg2) {
+}, arguments); }
+export function __wbg_set_bf7251625df30a02() { return logError(function (arg0, arg1, arg2) {
     const ret = arg0.set(arg1, arg2);
     return ret;
-}
+}, arguments); }
 export function __wbg_stringify_5ae93966a84901ac() { return handleError(function (arg0) {
     const ret = JSON.stringify(arg0);
     return ret;
 }, arguments); }
-export function __wbindgen_cast_0000000000000001(arg0, arg1) {
+export function __wbindgen_cast_0000000000000001() { return logError(function (arg0, arg1) {
     // Cast intrinsic for `Ref(String) -> Externref`.
     const ret = getStringFromWasm0(arg0, arg1);
     return ret;
-}
+}, arguments); }
 export function __wbindgen_init_externref_table() {
     const table = wasm.__wbindgen_externrefs;
     const offset = table.grow(4);
@@ -624,6 +688,8 @@ export function __wbindgen_init_externref_table() {
     table.set(offset + 2, true);
     table.set(offset + 3, false);
 }
+
+//#endregion
 const ParsedUsfmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfm_free(ptr >>> 0, 1));
@@ -631,16 +697,93 @@ const UsfmMarkerCatalogFinalization = (typeof FinalizationRegistry === 'undefine
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_usfmmarkercatalog_free(ptr >>> 0, 1));
 
+
+//#region intrinsics
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
     return idx;
 }
 
+function _assertBoolean(n) {
+    if (typeof(n) !== 'boolean') {
+        throw new Error(`expected a boolean argument, found ${typeof(n)}`);
+    }
+}
+
 function _assertClass(instance, klass) {
     if (!(instance instanceof klass)) {
         throw new Error(`expected instance of ${klass.name}`);
     }
+}
+
+function _assertNum(n) {
+    if (typeof(n) !== 'number') throw new Error(`expected a number argument, found ${typeof(n)}`);
+}
+
+function debugString(val) {
+    // primitive types
+    const type = typeof val;
+    if (type == 'number' || type == 'boolean' || val == null) {
+        return  `${val}`;
+    }
+    if (type == 'string') {
+        return `"${val}"`;
+    }
+    if (type == 'symbol') {
+        const description = val.description;
+        if (description == null) {
+            return 'Symbol';
+        } else {
+            return `Symbol(${description})`;
+        }
+    }
+    if (type == 'function') {
+        const name = val.name;
+        if (typeof name == 'string' && name.length > 0) {
+            return `Function(${name})`;
+        } else {
+            return 'Function';
+        }
+    }
+    // objects
+    if (Array.isArray(val)) {
+        const length = val.length;
+        let debug = '[';
+        if (length > 0) {
+            debug += debugString(val[0]);
+        }
+        for(let i = 1; i < length; i++) {
+            debug += ', ' + debugString(val[i]);
+        }
+        debug += ']';
+        return debug;
+    }
+    // Test for built-in
+    const builtInMatches = /\[object ([^\]]+)\]/.exec(toString.call(val));
+    let className;
+    if (builtInMatches && builtInMatches.length > 1) {
+        className = builtInMatches[1];
+    } else {
+        // Failed to match the standard '[object ClassName]'
+        return toString.call(val);
+    }
+    if (className == 'Object') {
+        // we're a user defined class or Object
+        // JSON.stringify avoids problems with cycles, and is generally much
+        // easier than looping through ownProperties of `val`.
+        try {
+            return 'Object(' + JSON.stringify(val) + ')';
+        } catch (_) {
+            return 'Object';
+        }
+    }
+    // errors
+    if (val instanceof Error) {
+        return `${val.name}: ${val.message}\n${val.stack}`;
+    }
+    // TODO we could test for more things here, like `Set`s and `Map`s.
+    return className;
 }
 
 function getArrayJsValueFromWasm0(ptr, len) {
@@ -688,6 +831,22 @@ function isLikeNone(x) {
     return x === undefined || x === null;
 }
 
+function logError(f, args) {
+    try {
+        return f.apply(this, args);
+    } catch (e) {
+        let error = (function () {
+            try {
+                return e instanceof Error ? `${e.message}\n\nStack:\n${e.stack}` : e.toString();
+            } catch(_) {
+                return "<failed to stringify thrown value>";
+            }
+        }());
+        console.error("wasm-bindgen: imported JS function that was not marked as `catch` threw an error:", error);
+        throw e;
+    }
+}
+
 function passArrayJsValueToWasm0(array, malloc) {
     const ptr = malloc(array.length * 4, 4) >>> 0;
     for (let i = 0; i < array.length; i++) {
@@ -699,6 +858,7 @@ function passArrayJsValueToWasm0(array, malloc) {
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
+    if (typeof(arg) !== 'string') throw new Error(`expected a string argument, found ${typeof(arg)}`);
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
         const ptr = malloc(buf.length, 1) >>> 0;
@@ -726,7 +886,7 @@ function passStringToWasm0(arg, malloc, realloc) {
         ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
         const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
         const ret = cachedTextEncoder.encodeInto(arg, view);
-
+        if (ret.read !== arg.length) throw new Error('failed to pass whole string');
         offset += ret.written;
         ptr = realloc(ptr, len, offset, 1) >>> 0;
     }
@@ -771,7 +931,13 @@ if (!('encodeInto' in cachedTextEncoder)) {
 let WASM_VECTOR_LEN = 0;
 
 
+//#endregion
+
+//#region wasm loading
+
 let wasm;
 export function __wbg_set_wasm(val) {
     wasm = val;
 }
+
+//#endregion

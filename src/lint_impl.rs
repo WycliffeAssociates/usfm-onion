@@ -157,10 +157,7 @@ pub enum LintCode {
     /// the previously-distinct semantics.
     UnclosedMarker,
     DuplicateChapterNumber,
-    ChapterExpectedIncreaseByOne,
-    InconsistentChapterLabel,
     DuplicateVerseNumber,
-    VerseExpectedIncreaseByOne,
     InvalidNumberRange,
     NumberRangeNotPrecededByMarkerExpectingNumber,
     /// Spec-driven: the `MARKER_WHITESPACE` row for a marker says
@@ -223,10 +220,7 @@ impl LintCode {
             Self::ImplicitlyClosedMarker => "implicitly-closed-marker",
             Self::UnclosedMarker => "unclosed-marker",
             Self::DuplicateChapterNumber => "duplicate-chapter-number",
-            Self::ChapterExpectedIncreaseByOne => "chapter-expected-increase-by-one",
-            Self::InconsistentChapterLabel => "inconsistent-chapter-label",
             Self::DuplicateVerseNumber => "duplicate-verse-number",
-            Self::VerseExpectedIncreaseByOne => "verse-expected-increase-by-one",
             Self::InvalidNumberRange => "invalid-number-range",
             Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
                 "number-range-not-preceded-by-marker-expecting-number"
@@ -290,17 +284,8 @@ impl LintCode {
                 "{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}"
             }
             Self::DuplicateChapterNumber => "Chapter {chapter, number} appears more than once.",
-            Self::ChapterExpectedIncreaseByOne => {
-                "Chapters should count up by one: expected chapter {expected, number}, found chapter {found, number}."
-            }
-            Self::InconsistentChapterLabel => {
-                "Chapter label '{found}' does not match the label '{expected}' used elsewhere in this file."
-            }
             Self::DuplicateVerseNumber => {
                 "Verse {verse} appears more than once in chapter {chapter, number}."
-            }
-            Self::VerseExpectedIncreaseByOne => {
-                "Verses should count up by one: expected verse {expected, number}, found verse {found, number}."
             }
             Self::InvalidNumberRange => "'{verse}' is not a valid verse range.",
             Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
@@ -354,12 +339,9 @@ impl LintCode {
             | Self::VerseOutsideExplicitParagraph
             | Self::VerseInSectionOrOtherParagraph => LintCategory::Context,
             Self::DuplicateChapterNumber
-            | Self::ChapterExpectedIncreaseByOne
             | Self::DuplicateVerseNumber
-            | Self::VerseExpectedIncreaseByOne
             | Self::InvalidNumberRange
-            | Self::NumberRangeNotPrecededByMarkerExpectingNumber
-            | Self::InconsistentChapterLabel => LintCategory::Numbering,
+            | Self::NumberRangeNotPrecededByMarkerExpectingNumber => LintCategory::Numbering,
         }
     }
 
@@ -378,12 +360,9 @@ impl LintCode {
             | Self::MissingChapterNumber
             | Self::MissingVerseNumber
             | Self::DuplicateChapterNumber
-            | Self::ChapterExpectedIncreaseByOne
             | Self::DuplicateVerseNumber
-            | Self::VerseExpectedIncreaseByOne
             | Self::InvalidNumberRange
-            | Self::NumberRangeNotPrecededByMarkerExpectingNumber
-            | Self::InconsistentChapterLabel => LintIssueType::Content,
+            | Self::NumberRangeNotPrecededByMarkerExpectingNumber => LintIssueType::Content,
             Self::MissingIdMarker
             | Self::EmptyParagraph
             | Self::UnknownToken
@@ -638,12 +617,56 @@ pub struct LintSuppression {
     pub sid: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+/// What the caller is handing the linter. USFM is per-book; the only
+/// non-chapter unit in a book is the pre-`\c` front matter. Scope gates the
+/// document-level rules (`LintCategory::Document`): they run only when the
+/// slice can contain the book head — `Front` or `Book` — never on a bare
+/// `Chapter`, so a mid-book chapter slice can't produce a spurious
+/// "missing-id". The chapter number on `Chapter` is for the caller's own
+/// result keying; the linter itself doesn't branch on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LintScope {
+    /// The book's front matter: `\id`, `\h`, `\toc`, `\mt`, intros, periphs —
+    /// everything before the first `\c`.
+    Front,
+    /// A single chapter: `\c n` through the token before the next `\c`.
+    Chapter(u32),
+    /// A whole book (front matter + all chapters).
+    Book,
+}
+
+impl LintScope {
+    /// Document-level rules run only when the slice can hold the book head.
+    fn runs_document_rules(self) -> bool {
+        matches!(self, LintScope::Front | LintScope::Book)
+    }
+}
+
+// No `Default`: `scope` has no sane default — a caller must declare what it
+// is sending (see `scoped`). A defaulted scope would let a chapter-grain
+// caller silently get whole-book id-behavior.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LintOptions {
+    pub scope: LintScope,
     pub enabled_codes: Option<Vec<LintCode>>,
     pub disabled_codes: Vec<LintCode>,
     pub suppressed: Vec<LintSuppression>,
     pub allow_implicit_chapter_content_verse: bool,
+}
+
+impl LintOptions {
+    /// A scope with all rules enabled and no suppressions — the common case.
+    /// NOT a default: the caller still names the scope. `scoped(LintScope::Book)`
+    /// reproduces whole-book linting (today's behavior).
+    pub fn scoped(scope: LintScope) -> Self {
+        Self {
+            scope,
+            enabled_codes: None,
+            disabled_codes: Vec::new(),
+            suppressed: Vec::new(),
+            allow_implicit_chapter_content_verse: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -676,15 +699,16 @@ struct DocumentLintState {
 struct EnabledCodes {
     allowed: Option<BTreeSet<LintCode>>,
     disabled: BTreeSet<LintCode>,
+    /// When false (scope is `Chapter`), `LintCategory::Document` codes are
+    /// suppressed at the `has` chokepoint — they need the book head.
+    run_document_rules: bool,
 }
 
 #[derive(Default)]
 struct VerseState {
     seen: HashSet<u32>,
-    last: u32,
 }
 
-type ChapterLabelEntry = (Option<Span>, Option<String>, Option<String>);
 
 impl Default for DocumentLintState {
     fn default() -> Self {
@@ -837,11 +861,15 @@ impl EnabledCodes {
                 .as_ref()
                 .map(|codes| codes.iter().copied().collect()),
             disabled: options.disabled_codes.iter().copied().collect(),
+            run_document_rules: options.scope.runs_document_rules(),
         }
     }
 
     fn has(&self, code: LintCode) -> bool {
         if self.disabled.contains(&code) {
+            return false;
+        }
+        if !self.run_document_rules && code.category() == LintCategory::Document {
             return false;
         }
         self.allowed
@@ -892,18 +920,13 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     if enabled.has(LintCode::UnknownCloseMarker) {
         lint_unknown_close_markers(tokens, &mut issues);
     }
-    if enabled.has_any(&[
-        LintCode::DuplicateChapterNumber,
-        LintCode::ChapterExpectedIncreaseByOne,
-        LintCode::InconsistentChapterLabel,
-    ]) {
+    if enabled.has(LintCode::DuplicateChapterNumber) {
         lint_chapter_rules(tokens, &enabled, &mut issues);
     }
     if enabled.has_any(&[
         LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
         LintCode::InvalidNumberRange,
         LintCode::DuplicateVerseNumber,
-        LintCode::VerseExpectedIncreaseByOne,
         LintCode::VerseIsEmpty,
     ]) {
         lint_number_and_verse_rules(tokens, &enabled, &mut issues);
@@ -1368,9 +1391,6 @@ fn lint_chapter_rules<T: LintableToken>(
     issues: &mut Vec<LintIssue>,
 ) {
     let mut seen_chapters = HashSet::new();
-    let mut last_chapter: Option<u32> = None;
-    let mut labels: BTreeMap<String, Vec<ChapterLabelEntry>> = BTreeMap::new();
-
     let mut index = 0usize;
     while index < tokens.len() {
         let token = &tokens[index];
@@ -1391,85 +1411,10 @@ fn lint_chapter_rules<T: LintableToken>(
                     &tokens[number_index],
                 ));
             }
-            if enabled.has(LintCode::ChapterExpectedIncreaseByOne) {
-                let expected = last_chapter.map_or(1, |last| last + 1);
-                if chapter != expected {
-                    issues.push(simple_issue_with_marker(
-                        LintCode::ChapterExpectedIncreaseByOne,
-                        message_params([
-                            ("expected", expected.to_string()),
-                            ("found", chapter.to_string()),
-                            ("chapter", chapter.to_string()),
-                            ("marker", "c".to_string()),
-                            ("context", "chapter-number".to_string()),
-                        ]),
-                        "c",
-                        &tokens[number_index],
-                    ));
-                }
-            }
             seen_chapters.insert(chapter);
-            last_chapter = Some(chapter);
-        }
-
-        if enabled.has(LintCode::InconsistentChapterLabel)
-            && token.kind() == TokenKind::Marker
-            && token.marker() == Some("cl")
-            && let Some(text_index) = next_text_token_index(tokens, index + 1)
-        {
-            let label = strip_digits(tokens[text_index].text().trim())
-                .trim()
-                .to_string();
-            if !label.is_empty() {
-                labels.entry(label).or_default().push((
-                    tokens[text_index].span(),
-                    tokens[text_index].id(),
-                    tokens[text_index].sid(),
-                ));
-            }
         }
 
         index += 1;
-    }
-
-    if enabled.has(LintCode::InconsistentChapterLabel) && labels.len() > 1 {
-        let canonical = labels
-            .iter()
-            .max_by_key(|(_, entries)| entries.len())
-            .map(|(label, _)| label.clone());
-        if let Some(canonical) = canonical {
-            for (label, entries) in labels {
-                if label == canonical {
-                    continue;
-                }
-                for (span, token_id, sid) in entries {
-                    let code = LintCode::InconsistentChapterLabel;
-                    let template = code.template();
-                    let params = message_params([
-                        ("expected", canonical.clone()),
-                        ("found", label.clone()),
-                        ("marker", "cl".to_string()),
-                        ("context", "chapter-label".to_string()),
-                    ]);
-                    issues.push(LintIssue {
-                        code,
-                        category: code.category(),
-                        severity: code.severity(),
-                        issue_type: code.issue_type(),
-                        template,
-                        message: render_template(template, &params),
-                        message_params: params,
-                        span,
-                        related_span: None,
-                        token_id,
-                        related_token_id: None,
-                        sid,
-                        marker: Some("cl".to_string()),
-                        fix: None,
-                    });
-                }
-            }
-        }
     }
 }
 
@@ -1547,23 +1492,6 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 "v",
                 number_token,
             ));
-        } else if enabled.has(LintCode::VerseExpectedIncreaseByOne) {
-            let expected = chapter_state.last + 1;
-            if start != expected {
-                issues.push(simple_issue_with_marker(
-                    LintCode::VerseExpectedIncreaseByOne,
-                    message_params([
-                        ("expected", expected.to_string()),
-                        ("found", start.to_string()),
-                        ("chapter", chapter.to_string()),
-                        ("verse", value.to_string()),
-                        ("marker", "v".to_string()),
-                        ("context", "verse-number".to_string()),
-                    ]),
-                    "v",
-                    number_token,
-                ));
-            }
         }
 
         if enabled.has(LintCode::VerseIsEmpty) && !verse_has_text_or_note(tokens, number_index + 1)
@@ -1579,7 +1507,6 @@ fn lint_number_and_verse_rules<T: LintableToken>(
         for verse in start..=end {
             chapter_state.seen.insert(verse);
         }
-        chapter_state.last = end;
     }
 }
 
@@ -2508,17 +2435,6 @@ fn next_number_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Opti
     None
 }
 
-fn next_text_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
-    for (index, token) in tokens.iter().enumerate().skip(start) {
-        match token.kind() {
-            TokenKind::Newline => continue,
-            TokenKind::Text => return Some(index),
-            _ => return None,
-        }
-    }
-    None
-}
-
 fn next_significant_token_index<T: LintableToken>(tokens: &[T], start: usize) -> Option<usize> {
     for (index, token) in tokens.iter().enumerate().skip(start) {
         if token.kind() != TokenKind::Newline {
@@ -2537,13 +2453,6 @@ fn previous_significant_token_index<T: LintableToken>(tokens: &[T], end: usize) 
         }
     }
     None
-}
-
-fn strip_digits(text: &str) -> &str {
-    let first_digit = text
-        .find(|ch: char| ch.is_ascii_digit())
-        .unwrap_or(text.len());
-    &text[..first_digit]
 }
 
 fn is_body_paragraph_marker(marker: &str) -> bool {
@@ -2921,7 +2830,7 @@ mod tests {
         // NewlineOrAnyWhitespaceBeforeMarker.
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p first\\p second\n",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         let flagged = result
             .issues
@@ -2964,7 +2873,7 @@ mod tests {
             },
         ];
 
-        let result = lint_tokens(&tokens, LintOptions::default());
+        let result = lint_tokens(&tokens, LintOptions::scoped(LintScope::Book));
         let issue = result
             .issues
             .into_iter()
@@ -3008,7 +2917,7 @@ mod tests {
             },
         ];
 
-        let result = lint_tokens(&tokens, LintOptions::default());
+        let result = lint_tokens(&tokens, LintOptions::scoped(LintScope::Book));
         let issue = result
             .issues
             .into_iter()
@@ -3029,7 +2938,7 @@ mod tests {
         // bare trailing space before the newline (cosmetic — the formatter
         // tidies it) or on content that sits on its own line after `\b`.
         let has_blank = |src: &str| {
-            lint_usfm(src, LintOptions::default())
+            lint_usfm(src, LintOptions::scoped(LintScope::Book))
                 .issues
                 .iter()
                 .any(|i| i.code == LintCode::ContentAfterBlankMarker)
@@ -3055,7 +2964,7 @@ mod tests {
         // longer fire for `\b` content — the report names the real issue.
         let case1 = lint_usfm(
             "\\id GEN\n\\c 1\n\\v 1 text\n\\b here asdf\n",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             !case1
@@ -3072,7 +2981,7 @@ mod tests {
         // one violates USFM 3.2 §verse-placement.
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\s1 Section\n\\v 1 Text\n",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         let flagged = result
             .issues
@@ -3087,7 +2996,7 @@ mod tests {
 
     #[test]
     fn verse_in_body_paragraph_is_not_flagged_as_section_violation() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n", LintOptions::default());
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n", LintOptions::scoped(LintScope::Book));
         assert!(
             !result
                 .issues
@@ -3104,7 +3013,7 @@ mod tests {
         // None so the linter is reporting a hint, not changing content.
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p\n\\v 1 \\nd Lord\\nd*walks.\n",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             result
@@ -3119,7 +3028,7 @@ mod tests {
     fn unclosed_marker_emits_collapsed_code_with_kind_param() {
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         let issue = result
             .issues
@@ -3181,9 +3090,9 @@ mod tests {
     #[test]
     fn lint_usfm_matches_lint_tokens() {
         let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 text";
-        let from_source = lint_usfm(source, LintOptions::default());
+        let from_source = lint_usfm(source, LintOptions::scoped(LintScope::Book));
         let parsed = parse(source);
-        let from_tokens = lint_tokens(&parsed.tokens, LintOptions::default());
+        let from_tokens = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
         assert_eq!(from_source, from_tokens);
     }
 
@@ -3210,7 +3119,7 @@ mod tests {
             },
         ];
 
-        let issues = lint_tokens(&tokens, LintOptions::default());
+        let issues = lint_tokens(&tokens, LintOptions::scoped(LintScope::Book));
         assert!(
             issues
                 .issues
@@ -3247,7 +3156,7 @@ mod tests {
             },
         ];
 
-        let result = lint_tokens(&tokens, LintOptions::default());
+        let result = lint_tokens(&tokens, LintOptions::scoped(LintScope::Book));
         let issue = result
             .issues
             .into_iter()
@@ -3263,7 +3172,7 @@ mod tests {
 
     #[test]
     fn missing_id_is_reported() {
-        let result = lint_usfm("\\c 1\n\\v 1 text", LintOptions::default());
+        let result = lint_usfm("\\c 1\n\\v 1 text", LintOptions::scoped(LintScope::Book));
         assert!(
             result
                 .issues
@@ -3276,7 +3185,7 @@ mod tests {
     fn duplicate_id_is_reported() {
         let result = lint_usfm(
             "\\id GEN\n\\id EXO\n\\c 1\n\\v 1 text",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             result
@@ -3288,7 +3197,7 @@ mod tests {
 
     #[test]
     fn unknown_markers_do_not_also_report_context_errors() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\zzz bogus\n", LintOptions::default());
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\zzz bogus\n", LintOptions::scoped(LintScope::Book));
         assert!(
             result
                 .issues
@@ -3309,7 +3218,7 @@ mod tests {
             "\\id GEN\n\\c 1\n\\fr orphan\n",
             LintOptions {
                 enabled_codes: Some(vec![LintCode::MarkerNotValidInContext]),
-                ..LintOptions::default()
+                ..LintOptions::scoped(LintScope::Book)
             },
         );
         assert_eq!(result.issues.len(), 1);
@@ -3318,7 +3227,7 @@ mod tests {
 
     #[test]
     fn missing_chapter_and_verse_numbers_are_reported() {
-        let result = lint_usfm("\\id GEN\n\\c\n\\v text", LintOptions::default());
+        let result = lint_usfm("\\id GEN\n\\c\n\\v text", LintOptions::scoped(LintScope::Book));
         assert!(
             result
                 .issues
@@ -3337,7 +3246,7 @@ mod tests {
     fn note_submarker_outside_note_is_reported() {
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\ft outside note\n",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             result
@@ -3349,7 +3258,7 @@ mod tests {
 
     #[test]
     fn chapter_and_verse_metadata_attachment_is_checked() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\vp 2\n\\ca 3", LintOptions::default());
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\vp 2\n\\ca 3", LintOptions::scoped(LintScope::Book));
         let verse_issue = result
             .issues
             .iter()
@@ -3378,9 +3287,12 @@ mod tests {
 
     #[test]
     fn numbering_rules_are_reported() {
+        // Uniqueness rules fire: a verse and a chapter that each appear twice.
+        // Monotonicity (increment) rules left the library — see
+        // the `dropped_consistency_rules_no_longer_fire` test.
         let result = lint_usfm(
-            "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n\\c 3\n",
-            LintOptions::default(),
+            "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n\\c 1\n",
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             result
@@ -3392,73 +3304,108 @@ mod tests {
             result
                 .issues
                 .iter()
-                .any(|issue| issue.code == LintCode::ChapterExpectedIncreaseByOne)
+                .any(|issue| issue.code == LintCode::DuplicateChapterNumber)
+        );
+    }
+
+    #[test]
+    fn dropped_consistency_rules_no_longer_fire() {
+        // Chapter gap (1 -> 5), verse gap (1 -> 3), and inconsistent chapter
+        // labels are all valid USFM — content-consistency heuristics, not
+        // markup validity. They moved to the consumer;
+        // the library must stay silent on them.
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\v 1 a\n\\v 3 b\n\\c 5\n\\cl Chapter 5\n\\c 6\n\\cl Chapitre 6\n",
+            LintOptions::scoped(LintScope::Book),
+        );
+        let dropped = [
+            "chapter-expected-increase-by-one",
+            "verse-expected-increase-by-one",
+            "inconsistent-chapter-label",
+        ];
+        for issue in &result.issues {
+            assert!(
+                !dropped.contains(&issue.code.code()),
+                "dropped rule still fired: {}",
+                issue.code.code()
+            );
+        }
+    }
+
+    #[test]
+    fn document_rules_run_only_for_front_and_book_scopes() {
+        // Every document-category code must fire under Front and stay silent
+        // under Chapter — otherwise a mid-book chapter relint would falsely
+        // report e.g. a missing id. One fixture per code (they can't all
+        // coexist: "no id" excludes "duplicate id").
+        let cases: [(&str, LintCode); 4] = [
+            ("\\p\n\\v 1 text\n", LintCode::MissingIdMarker), // no \id at all
+            ("\\id GEN\n\\id MAT\n", LintCode::DuplicateIdMarker), // two \id
+            ("\\p before\n\\id GEN\n", LintCode::IdMarkerNotAtFileStart), // \id after content
+            ("\\p\n\\v 1 text\n", LintCode::ContentBeforeFirstChapter), // content before any \c
+        ];
+        for (src, code) in cases {
+            let front = lint_usfm(src, LintOptions::scoped(LintScope::Front));
+            assert!(
+                front.issues.iter().any(|i| i.code == code),
+                "{} should fire under Front for {src:?}",
+                code.code()
+            );
+            let chapter = lint_usfm(src, LintOptions::scoped(LintScope::Chapter(1)));
+            assert!(
+                !chapter.issues.iter().any(|i| i.code == code),
+                "{} must be suppressed under Chapter for {src:?}",
+                code.code()
+            );
+        }
+
+        // Category-wide guarantee: no document-category finding survives a
+        // Chapter-scoped lint, even on a slice that opens with its own \c.
+        let chapter =
+            lint_usfm("\\c 5\n\\p\n\\v 1 text\n", LintOptions::scoped(LintScope::Chapter(5)));
+        assert!(
+            !chapter
+                .issues
+                .iter()
+                .any(|i| i.category == LintCategory::Document),
+            "Chapter scope must not emit document-category findings, got: {:?}",
+            chapter
+                .issues
+                .iter()
+                .filter(|i| i.category == LintCategory::Document)
+                .map(|i| i.code.code())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn chapter_slice_and_book_agree_on_unclosed_note_finding() {
+        // \c 1 carries an unclosed footnote. A new \c closes everything below
+        // it (walker precedence), so the unclosed-marker recovery fires
+        // whether the chapter is linted alone (recovers at slice EOF) or
+        // inside a book (recovers at the \c 2 boundary). The `location` param
+        // may differ; the *finding* must agree.
+        let book = "\\id MRK\n\\c 1\n\\v 1 a \\f + \\ft note\n\\c 2\n\\v 1 b\n";
+        let chapter = "\\c 1\n\\v 1 a \\f + \\ft note\n";
+
+        let book_flags_it = lint_usfm(book, LintOptions::scoped(LintScope::Book))
+            .issues
+            .iter()
+            .any(|i| i.code == LintCode::UnclosedMarker && i.sid.as_deref() == Some("MRK 1:1"));
+        let chapter_flags_it = lint_usfm(chapter, LintOptions::scoped(LintScope::Chapter(1)))
+            .issues
+            .iter()
+            .any(|i| i.code == LintCode::UnclosedMarker);
+
+        assert!(book_flags_it, "book scope should flag the unclosed note in ch1");
+        assert!(
+            chapter_flags_it,
+            "chapter scope should flag the same unclosed note"
         );
     }
 
     #[test]
     fn numbering_message_params_are_exposed_for_localized_rendering() {
-        let result = lint_usfm(
-            "\\id GEN\n\\c 1\n\\v 1 text\n\\v 3 text\n\\v 4-2 text\n\\c 4\n\\cl Chapter 4\n\\c 5\n\\cl Chapitre 5\n",
-            LintOptions::default(),
-        );
-
-        let chapter_issue = result
-            .issues
-            .iter()
-            .find(|issue| issue.code == LintCode::ChapterExpectedIncreaseByOne)
-            .expect("expected chapter-number issue");
-        assert_eq!(
-            chapter_issue.message_params.get("expected"),
-            Some(&"2".to_string())
-        );
-        assert_eq!(
-            chapter_issue.message_params.get("found"),
-            Some(&"4".to_string())
-        );
-        assert_eq!(
-            chapter_issue.message_params.get("chapter"),
-            Some(&"4".to_string())
-        );
-        assert_eq!(
-            chapter_issue.message_params.get("marker"),
-            Some(&"c".to_string())
-        );
-        assert_eq!(
-            chapter_issue.message_params.get("context"),
-            Some(&"chapter-number".to_string())
-        );
-
-        let verse_issue = result
-            .issues
-            .iter()
-            .find(|issue| issue.code == LintCode::VerseExpectedIncreaseByOne)
-            .expect("expected verse-number issue");
-        assert_eq!(
-            verse_issue.message_params.get("expected"),
-            Some(&"2".to_string())
-        );
-        assert_eq!(
-            verse_issue.message_params.get("found"),
-            Some(&"3".to_string())
-        );
-        assert_eq!(
-            verse_issue.message_params.get("chapter"),
-            Some(&"1".to_string())
-        );
-        assert_eq!(
-            verse_issue.message_params.get("verse"),
-            Some(&"3".to_string())
-        );
-        assert_eq!(
-            verse_issue.message_params.get("marker"),
-            Some(&"v".to_string())
-        );
-        assert_eq!(
-            verse_issue.message_params.get("context"),
-            Some(&"verse-number".to_string())
-        );
-
         let invalid_range_tokens = vec![
             crate::FormatToken {
                 kind: TokenKind::Marker,
@@ -3483,7 +3430,7 @@ mod tests {
                 marker_profile: None,
             },
         ];
-        let invalid_range_result = lint_tokens(&invalid_range_tokens, LintOptions::default());
+        let invalid_range_result = lint_tokens(&invalid_range_tokens, LintOptions::scoped(LintScope::Book));
         let range_issue = invalid_range_result
             .issues
             .iter()
@@ -3505,35 +3452,13 @@ mod tests {
             range_issue.message_params.get("context"),
             Some(&"verse-range".to_string())
         );
-
-        let label_issue = result
-            .issues
-            .iter()
-            .find(|issue| issue.code == LintCode::InconsistentChapterLabel)
-            .expect("expected inconsistent-label issue");
-        assert_eq!(
-            label_issue.message_params.get("expected"),
-            Some(&"Chapter".to_string())
-        );
-        assert_eq!(
-            label_issue.message_params.get("found"),
-            Some(&"Chapitre".to_string())
-        );
-        assert_eq!(
-            label_issue.message_params.get("marker"),
-            Some(&"cl".to_string())
-        );
-        assert_eq!(
-            label_issue.message_params.get("context"),
-            Some(&"chapter-label".to_string())
-        );
     }
 
     #[test]
     fn structural_balance_rules_are_reported() {
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p \\f + \\ft note\n\\p text",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             result
@@ -3547,7 +3472,7 @@ mod tests {
     fn note_structural_submarkers_do_not_report_implicit_or_misnested_close_on_note_end() {
         let result = lint_usfm(
             "\\id GEN\n\\c 1\n\\p \\f + \\ft note\\f*",
-            LintOptions::default(),
+            LintOptions::scoped(LintScope::Book),
         );
         assert!(
             !result
@@ -3567,7 +3492,7 @@ mod tests {
     fn rule_filtering_and_suppressions_work() {
         let mut options = LintOptions {
             enabled_codes: Some(vec![LintCode::DuplicateVerseNumber]),
-            ..LintOptions::default()
+            ..LintOptions::scoped(LintScope::Book)
         };
         let result = lint_usfm("\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text", options.clone());
         assert_eq!(result.issues.len(), 1);
@@ -3590,7 +3515,7 @@ mod tests {
 
     #[test]
     fn summary_counts_by_category_and_severity() {
-        let result = lint_usfm("\\c 2\n\\v 1 text\n\\v 1 text", LintOptions::default());
+        let result = lint_usfm("\\c 2\n\\v 1 text\n\\v 1 text", LintOptions::scoped(LintScope::Book));
         assert!(result.summary.total_count > 0);
         assert!(
             result

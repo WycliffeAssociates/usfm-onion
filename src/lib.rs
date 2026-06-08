@@ -35,9 +35,9 @@ pub use format::{
 };
 pub use html::{HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions};
 pub use lint_impl::{
-    LintCategory, LintCode, LintIssue, LintIssueType, LintOptions, LintResult, LintSeverity,
-    LintSummary, LintSuppression, LintableToken, MessageParams as LintMessageParams, TokenFix,
-    apply_token_fix,
+    LintCategory, LintCode, LintIssue, LintIssueType, LintOptions, LintResult, LintScope,
+    LintSeverity, LintSummary, LintSuppression, LintableToken, MessageParams as LintMessageParams,
+    TokenFix, apply_token_fix,
 };
 pub use marker_defs::{
     InlineContext, MarkerWhitespace, NoteFamily, NoteSubkind, lookup_marker_whitespace,

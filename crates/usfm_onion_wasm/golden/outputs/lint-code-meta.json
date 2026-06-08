@@ -127,25 +127,7 @@
   },
   {
     "category": "numbering",
-    "code": "chapter-expected-increase-by-one",
-    "issueType": "content",
-    "severity": "error"
-  },
-  {
-    "category": "numbering",
-    "code": "inconsistent-chapter-label",
-    "issueType": "content",
-    "severity": "error"
-  },
-  {
-    "category": "numbering",
     "code": "duplicate-verse-number",
-    "issueType": "content",
-    "severity": "error"
-  },
-  {
-    "category": "numbering",
-    "code": "verse-expected-increase-by-one",
     "issueType": "content",
     "severity": "error"
   },

@@ -244,7 +244,7 @@
 
 <nav class="toc">
   <div class="brand">usfm_onion</div>
-  <div class="version">engine overview · 2026-05-12</div>
+  <div class="version">engine overview · 2026-06-08</div>
 
   <h2>Read first</h2>
   <a href="#what">What it is</a>
@@ -639,6 +639,8 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
 </table>
 
 <p>Every row cites its spec source URL, so the provenance of any given marker's metadata is auditable from the row itself.</p>
+
+<p>A marker whose opening form consumes an argument right after its name carries a <code>payload</code>: <code>BookCode</code> for <code>\id</code>, <code>NumberRange</code> for the chapter/verse family (<code>\c</code>, <code>\cp</code>, <code>\ca</code>, <code>\v</code>, <code>\vp</code>, <code>\va</code>). The same table (<code>marker_defs::marker_payload</code>) feeds both the catalog and the lexer, so what the catalog advertises and what tokenization expects cannot drift. On the JS side it surfaces as <code>MarkerInfo.payload</code> (<code>"bookCode" | "numberRange"</code>).</p>
 </section>
 
 <section id="whitespace">
@@ -651,6 +653,15 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
 </ul>
 
 <p>One table, two consumers: the formatter writes it, the linter flags violations against it. If a row says <code>\c</code> requires <code>AtLeastOneHorizontalWhitespace</code> after the marker name, then <code>\c1</code> is a lint finding and the autofix is exactly what the formatter would insert — a single space.</p>
+
+<h3>The tag-end delimiter belongs to the marker</h3>
+
+<p>The first space after a marker name (<code>\v␣1</code>), after a chapter/verse number, or after an <code>\id</code> book code (<code>\v 1␣In</code>) is the <em>tag-end delimiter</em> — markup the syntax requires, not content. The parser absorbs that one required byte onto the owning token's span, so the tokens that follow are <strong>content-pure</strong>: a verse-text projection sees <code>In the beginning</code>, never a phantom leading space. Any whitespace beyond the single required byte flows forward to the next token, where lint can still see and flag it.</p>
+
+<div class="callout why">
+  <div class="label">Why this doesn't break losslessness</div>
+  The delimiter byte changes <em>owner</em>; it is never dropped. <code>tokens_to_usfm(parse(s)) == s</code> still holds exactly. Absorption is driven by the <code>MARKER_WHITESPACE</code> table — an opening marker absorbs only when its row <em>requires</em> trailing whitespace; closers, milestones, optional-whitespace and unknown markers never do, and a number absorbs only as the argument of <code>\c</code>/<code>\v</code>. "The token happens to end at a space" is deliberately not the test. Newlines are never absorbed.
+</div>
 </section>
 
 <section id="rust-facade">
@@ -665,25 +676,30 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <tr><td><code>TokenStream&lt;T&gt;</code></td><td>A <code>Vec&lt;T&gt;</code> for any token type implementing the relevant traits.</td><td>You already have tokens — borrowed <code>Token&lt;'a&gt;</code> straight from <code>parse</code>, or owned <code>FormatToken</code>, or any other type that implements the public token traits.</td></tr>
 </table>
 
-<pre><code><span class="kw">use</span> usfm_onion::{<span class="ty">FormatOptions</span>, <span class="ty">HtmlOptions</span>, <span class="ty">LintOptions</span>, <span class="ty">Usfm</span>};
+<pre><code><span class="kw">use</span> usfm_onion::{<span class="ty">FormatOptions</span>, <span class="ty">HtmlOptions</span>, <span class="ty">LintOptions</span>, <span class="ty">LintScope</span>, <span class="ty">Usfm</span>};
 
 <span class="cmt">// One-off: each call re-parses internally.</span>
 <span class="kw">let</span> doc = <span class="ty">Usfm</span>::<span class="fn">from_str</span>(source);
-<span class="kw">let</span> issues = doc.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">default</span>());
+<span class="kw">let</span> issues = doc.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">scoped</span>(<span class="ty">LintScope</span>::Book));
 <span class="kw">let</span> html   = doc.<span class="fn">to_html</span>(<span class="ty">HtmlOptions</span>::<span class="fn">default</span>());
 
 <span class="cmt">// Several ops on the same document: parse once, reuse the tokens.</span>
 <span class="kw">let</span> owned = doc.<span class="fn">parse_owned</span>();
-<span class="kw">let</span> issues = owned.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">default</span>());
+<span class="kw">let</span> issues = owned.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">scoped</span>(<span class="ty">LintScope</span>::Book));
 <span class="kw">let</span> formatted = owned.<span class="fn">format</span>(<span class="ty">FormatOptions</span>::<span class="fn">default</span>());
 
 <span class="cmt">// You already have tokens (from your own data model, or a prior parse).</span>
 <span class="kw">use</span> usfm_onion::{<span class="ty">TokenStream</span>, parse::parse};
 <span class="kw">let</span> parsed = <span class="fn">parse</span>(source);
 <span class="kw">let</span> stream = <span class="ty">TokenStream</span>::<span class="fn">from_tokens</span>(parsed.tokens);
-<span class="kw">let</span> issues = stream.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">default</span>());</code></pre>
+<span class="kw">let</span> issues = stream.<span class="fn">lint</span>(<span class="ty">LintOptions</span>::<span class="fn">scoped</span>(<span class="ty">LintScope</span>::Book));</code></pre>
 
 <p>The library is string-in, data-out. It does no file I/O and does no parallelism — both belong to callers. For an example of parallelizing across a whole corpus, see the <code>parallelism</code> benchmark, which uses <code>rayon</code> at the file level.</p>
+
+<div class="callout why">
+  <div class="label">Lint requires a scope</div>
+  <code>LintOptions</code> has no <code>Default</code> — the caller must declare what slice it is linting via <code>LintScope</code>: <code>Front</code> (the pre-<code>\c</code> book matter), <code>Chapter(n)</code> (one chapter), or <code>Book</code>. Document-level rules (missing/duplicate <code>\id</code>, id-position, content-before-first-chapter) run only for <code>Front</code> and <code>Book</code>; under <code>Chapter</code> they are suppressed, so a mid-book chapter relint can't falsely report a missing id. <code>LintOptions::scoped(LintScope::Book)</code> reproduces whole-document linting. A USFM file is one <em>book</em>; cross-book and cross-project consistency are deliberately a consumer concern, not this library's.
+</div>
 </section>
 
 <section id="wasm-surface">
@@ -695,17 +711,21 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <tr><th>JS name</th><th>Shape</th><th>Notes</th></tr>
   <tr><td><code>parse(source)</code></td><td>→ <code>ParsedUsfm</code></td><td>Returns a typed handle. Methods on it operate on the stored source.</td></tr>
   <tr><td><code>ParsedUsfm.tokens()</code></td><td>→ <code>Token[]</code></td><td>Marshals the full token stream out as JS objects.</td></tr>
-  <tr><td><code>ParsedUsfm.lint(opts)</code></td><td>→ <code>LintResult</code></td><td>String-in (re-parses internally).</td></tr>
-  <tr><td><code>lintTokens(tokens, opts)</code></td><td>→ <code>LintResult</code></td><td>Token-in. Skips a second parse when you already have tokens.</td></tr>
+  <tr><td><code>ParsedUsfm.lint(opts)</code></td><td>→ <code>LintResult</code></td><td>String-in (re-parses internally). <code>opts</code> is required and carries the <code>scope</code>.</td></tr>
+  <tr><td><code>lintTokens(tokens, opts)</code></td><td>→ <code>LintResult</code></td><td>Token-in. Skips a second parse when you already have tokens. <code>opts</code> required.</td></tr>
   <tr><td><code>formatTokens / formatTokensMut</code></td><td>→ <code>Token[]</code></td><td>Token-in format.</td></tr>
   <tr><td><code>diffTokens</code></td><td>→ <code>ChapterTokenDiff[]</code></td><td>Token-in diff.</td></tr>
-  <tr><td><code>ParsedUsfm.toUsj / toUsx / toHtml / toVref</code></td><td>→ JSON / string / map</td><td>String-in only; lossy projections.</td></tr>
-  <tr><td><code>UsfmMarkerCatalog</code></td><td>typed</td><td>The marker catalog reachable from JS.</td></tr>
+  <tr><td><code>ParsedUsfm.toUsj / toUsx / toHtml</code></td><td>→ JSON / string</td><td>String-in only; lossy projections.</td></tr>
+  <tr><td><code>ParsedUsfm.toVref(opts?)</code></td><td>→ <code>VrefMap</code></td><td>Flat verse-keyed text. <code>VrefOptions { trim }</code> — <code>trim</code> is opt-in; edge content whitespace is preserved by default.</td></tr>
+  <tr><td><code>vrefIndex() / vrefIndexUsfm / vrefIndexTokens(tokens)</code></td><td>→ <code>VrefIndex</code></td><td>Lossless verse projection + segment map (see below). Token-in form for the editor's live path.</td></tr>
+  <tr><td><code>UsfmMarkerCatalog</code></td><td>typed</td><td>The marker catalog reachable from JS; each <code>MarkerInfo</code> may carry <code>payload</code>.</td></tr>
 </table>
+
+<p>The <strong>vref index</strong> is a content-byte-lossless projection of each verse: <code>{ sid → { text, segments } }</code>, where every <code>Segment</code> maps a UTF-16 range of <code>text</code> back to both a source byte span and the originating token id. It exists so a node-based consumer (the editor's DOM, keyed by <code>data-id</code>) can translate between projected verse text and the tokens that produced it — finding-highlighting without re-deriving offsets. With the tag-end delimiter now owned by its marker, those joins are content-pure (no leaked delimiter space). Unlike <code>toVref</code> (a flat, lossy string map), the index round-trips content bytes and is the surface for offset-mapping consumers.</p>
 
 <div class="callout">
   <div class="label">Why some ops are token-in and others aren't</div>
-  Lint, format, and diff are the operations a caller is most likely to run <em>repeatedly</em> on the same document (e.g. validating on every change to a buffer). Token-in entry points let those callers skip a re-parse on each call. USJ, USX, HTML, vref, and CST are typically one-shot per document — adding a parallel token-in surface would just double the API for no real-world payoff. The surface is intentionally minimal.
+  Lint, format, and diff are the operations a caller is most likely to run <em>repeatedly</em> on the same document (e.g. validating on every change to a buffer). Token-in entry points let those callers skip a re-parse on each call. The vref index joins them — <code>vrefIndexTokens</code> exists because the editor re-derives it on every edit from tokens it already holds. USJ, USX, HTML, the flat vref map, and CST are typically one-shot per document, so they stay string-in only — adding a parallel token-in surface would just double the API for no real-world payoff. The surface is intentionally minimal.
 </div>
 </section>
 
@@ -718,10 +738,12 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <span class="ty">id</span>: <span class="ty">string</span>;                  <span class="cmt">// stable token identity</span>
   <span class="ty">kind</span>: <span class="str">"marker"</span> | <span class="str">"endMarker"</span> | <span class="str">"milestone"</span> | <span class="str">"milestoneEnd"</span>
       | <span class="str">"bookCode"</span> | <span class="str">"number"</span> | <span class="str">"text"</span> | <span class="str">"newline"</span> | <span class="str">"optBreak"</span>;
-  <span class="ty">text</span>: <span class="ty">string</span>;                <span class="cmt">// the literal source slice</span>
+  <span class="ty">source</span>: <span class="ty">string</span>;              <span class="cmt">// literal source slice; on a marker/number/bookCode it includes the absorbed tag-end delimiter</span>
   <span class="ty">marker</span>?: <span class="ty">string</span>;             <span class="cmt">// e.g. "p", "v", "f", "nd"</span>
+  <span class="ty">nested</span>?: <span class="ty">boolean</span>;            <span class="cmt">// "+"-prefixed nested character marker</span>
   <span class="ty">span</span>?: { <span class="ty">start</span>: <span class="ty">number</span>; <span class="ty">end</span>: <span class="ty">number</span> };
   <span class="ty">sid</span>?: <span class="ty">string</span>;                <span class="cmt">// e.g. "GEN 1:1" — set on chapter/verse openers</span>
+  <span class="ty">attributes</span>?: <span class="ty">AttributeItem</span>[]; <span class="cmt">// |key="value" list on character markers</span>
   <span class="ty">structural</span>?: {              <span class="cmt">// present on marker / endMarker / milestone tokens</span>
     <span class="ty">scopeKind</span>: <span class="str">"block"</span> | <span class="str">"note"</span> | <span class="str">"character"</span> | <span class="str">"milestone"</span>
               | <span class="str">"chapter"</span> | <span class="str">"verse"</span> | <span class="str">"tableRow"</span> | <span class="str">"tableCell"</span>
@@ -732,7 +754,7 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <span class="ty">numberInfo</span>?: [<span class="ty">number</span>, <span class="ty">number</span> | <span class="kw">null</span>, <span class="ty">NumberRangeKind</span>];
 };</code></pre>
 
-<p>If you produce tokens from your own data model — converting a tree, normalizing a draft, replaying edits — fill in <code>id</code>, <code>kind</code>, <code>text</code>, and whichever optional fields apply to your token type. The walker only needs <code>kind</code>, <code>marker</code>, <code>text</code>, and <code>structural</code>; lint and diff additionally look at <code>span</code>, <code>sid</code>, <code>id</code>, and <code>numberInfo</code>.</p>
+<p>If you produce tokens from your own data model — converting a tree, normalizing a draft, replaying edits — fill in <code>id</code>, <code>kind</code>, <code>source</code>, and whichever optional fields apply to your token type. The walker only needs <code>kind</code>, <code>marker</code>, <code>source</code>, and <code>structural</code>; lint and diff additionally look at <code>span</code>, <code>sid</code>, <code>id</code>, and <code>numberInfo</code>. Concatenating every token's <code>source</code> in order reproduces the original bytes — that is <code>tokensToUsfm</code>.</p>
 
 <h3>Pattern: lint without re-parsing</h3>
 
@@ -742,10 +764,11 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
 <span class="kw">const</span> tokens = doc.<span class="fn">tokens</span>();
 
 <span class="cmt">// Repeated lint calls on the same tokens — no second parse, no marshalling overhead.</span>
-<span class="kw">const</span> issues = <span class="fn">lintTokens</span>(tokens, {});
+<span class="cmt">// scope is required: "book", "front", or { chapter: n }.</span>
+<span class="kw">const</span> issues = <span class="fn">lintTokens</span>(tokens, { scope: <span class="str">"book"</span> });
 
-<span class="cmt">// Mutate tokens in your editor, then lint again on what you actually have:</span>
-<span class="kw">const</span> nextIssues = <span class="fn">lintTokens</span>(currentTokens, {});</code></pre>
+<span class="cmt">// Mutate one chapter in your editor, then re-lint just that chapter:</span>
+<span class="kw">const</span> nextIssues = <span class="fn">lintTokens</span>(chapterTokens, { scope: { chapter: <span class="num">5</span> } });</code></pre>
 </section>
 
 <section id="stability">
@@ -757,7 +780,7 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <div class="panel tight">
     <h4>WalkableToken</h4>
     <p>Required by the walker. Implemented for every token type that flows through any structural consumer.</p>
-    <p>Needs: <code>kind</code>, <code>marker</code>, <code>text</code>, <code>structural</code>.</p>
+    <p>Needs: <code>kind</code>, <code>marker</code>, <code>source</code>, and <code>structural</code> (present on marker-family tokens; absent elsewhere).</p>
   </div>
   <div class="panel tight">
     <h4>LintableToken</h4>
@@ -803,10 +826,7 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <tr><td><code>implicitly-closed-marker</code></td><td><span class="ex">\p <span class="bad">\bd bold</span> \p next</span></td><td>—</td></tr>
   <tr><td><code>unclosed-marker</code></td><td><span class="ex">\p <span class="bad">\f +</span> body \p next</span></td><td>—</td></tr>
   <tr><td><code>duplicate-chapter-number</code></td><td><span class="ex">\c 1 ... <span class="bad">\c 1</span></span></td><td>—</td></tr>
-  <tr><td><code>chapter-expected-increase-by-one</code></td><td><span class="ex">\c 1 ... <span class="bad">\c 3</span></span></td><td>—</td></tr>
-  <tr><td><code>inconsistent-chapter-label</code></td><td><span class="ex">\cl Chapter \c 1 \v 1 ... <span class="bad">\cl Capítulo \c 2</span></span></td><td>—</td></tr>
   <tr><td><code>duplicate-verse-number</code></td><td><span class="ex">\v 1 ... <span class="bad">\v 1</span></span></td><td>—</td></tr>
-  <tr><td><code>verse-expected-increase-by-one</code></td><td><span class="ex">\v 1 ... <span class="bad">\v 3</span></span></td><td>—</td></tr>
   <tr><td><code>invalid-number-range</code></td><td><span class="ex"><span class="bad">\v 5-3</span> text</span></td><td>—</td></tr>
   <tr><td><code>number-range-not-preceded-by-marker-expecting-number</code></td><td><span class="ex">\p <span class="bad">1-2</span> text</span></td><td>—</td></tr>
   <tr><td><code>missing-whitespace-before-marker</code></td><td><span class="ex">text<span class="bad">\p</span> next</span></td><td><span class="pill ok">✓</span></td></tr>
@@ -821,6 +841,11 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <div class="label">Parametric codes</div>
   A handful of codes carry <code>kind</code> / <code>target</code> / <code>location</code> params that distinguish closely-related cases — e.g. <code>content-before-first-chapter</code> has <code>kind: paragraph | verse</code>; <code>unclosed-marker</code> has <code>kind: note | character | other</code> and <code>location: at-eof | at-boundary</code>. Resolve them via the ICU template against <code>message_params</code> to produce the localized human-readable string.
 </div>
+
+<div class="callout why">
+  <div class="label">Scope, and what lint does <em>not</em> check</div>
+  Every rule is either <strong>chapter-invariant</strong> (fires only on a pattern present within the slice — most rules) or <strong>document-level</strong> (the four <code>Document</code>-category codes above: missing/duplicate <code>\id</code>, id-position, content-before-first-chapter). Document codes run only under <code>Front</code> / <code>Book</code> scope, never <code>Chapter(n)</code> — so a consumer can lint one chapter without a spurious missing-id, and the same finding for a chapter agrees whether it was linted alone or inside the whole book. Three former rules — <code>chapter-expected-increase-by-one</code>, <code>verse-expected-increase-by-one</code>, <code>inconsistent-chapter-label</code> — were <strong>removed</strong>: non-sequential chapters/verses (bridges, omitted verses) and label variation are valid USFM, so they are <em>consistency</em> heuristics, not markup validity. Uniqueness still counts (<code>duplicate-*</code> stays): two <code>\v 5</code> make an ambiguous address. Consistency belongs to a consumer or to <code>scripture-sous-chef</code>, not here.
+</div>
 </section>
 
 <section id="export-shapes">
@@ -831,7 +856,7 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
   <tr><td><strong>USJ</strong></td><td>JSON consumers, web editors, anything speaking the <code>.usj</code> format.</td><td>Insufficient trivia to round-trip exact USFM whitespace.</td></tr>
   <tr><td><strong>USX</strong></td><td>Paratext-adjacent tooling, XML pipelines.</td><td>XML structure drops byte-level fidelity.</td></tr>
   <tr><td><strong>HTML</strong></td><td>Browser display, preview panes, reading apps.</td><td>Summary output; not designed to round-trip.</td></tr>
-  <tr><td><strong>VREF</strong></td><td>Verse-keyed text extraction (search indexes, alignment tools).</td><td>Drops everything but the verse text.</td></tr>
+  <tr><td><strong>VREF</strong></td><td>Verse-keyed text extraction (search indexes, alignment tools).</td><td>Drops everything but the verse text. (The <em>vref index</em> — see WASM surface — is the content-lossless counterpart with a segment map back to tokens.)</td></tr>
 </table>
 
 <p>All four route through the walker for structural traversal — the shared recovery contract lives in one place so behavior is consistent across export formats.</p>
@@ -840,6 +865,7 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
 <section id="perf-native">
 <h2>Performance — native<a class="anchor" href="#perf-native">#</a></h2>
 <p class="meta">aarch64-macos · <code>[profile.bench]</code> opt-level 3, thin LTO · fixture: <code>43-LUK.usfm</code> (141.7 KiB)</p>
+<p class="meta">These figures predate the tag-end-delimiter-absorption pass, which added roughly 20–25% to <code>parse/string</code> (the per-marker whitespace-table lookup) and is an accepted trade for content-pure tokens and faster lint. Re-measure before quoting parse latency precisely.</p>
 
 <h3>Per operation</h3>
 <table>
@@ -953,7 +979,7 @@ npm run test:wasm                       <span class="cmt"># scripts/test-web-pac
 
 <div class="callout">
   <div class="label">If you're producing tokens from your own data model</div>
-  <p>Tree-shaped editors that maintain their own document state can flatten their tree into the <a href="#token-shape">JS <code>Token</code> shape</a> and lint/format/diff against the engine without ever round-tripping through a USFM string. Fill in <code>id</code>, <code>kind</code>, <code>text</code>, and whichever optional fields apply.</p>
+  <p>Tree-shaped editors that maintain their own document state can flatten their tree into the <a href="#token-shape">JS <code>Token</code> shape</a> and lint/format/diff against the engine without ever round-tripping through a USFM string. Fill in <code>id</code>, <code>kind</code>, <code>source</code>, and whichever optional fields apply.</p>
 </div>
 
 <div class="callout">

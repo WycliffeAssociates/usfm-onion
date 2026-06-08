@@ -6,7 +6,7 @@
 //! without re-running parse-time structural classification. The walker
 //! should derive the missing context from the marker name on the fly.
 
-use usfm_onion::lint::{LintCode, LintOptions, LintableToken, lint_tokens};
+use usfm_onion::lint::{LintCode, LintOptions, LintScope, LintableToken, lint_tokens};
 use usfm_onion::marker_defs::StructuralMarkerInfo;
 use usfm_onion::token::{NumberRangeKind, Span, TokenKind};
 use usfm_onion::walker::WalkableToken;
@@ -124,7 +124,7 @@ fn fixture_nested_xt() -> Vec<BareToken> {
 #[test]
 fn bare_tokens_with_nested_xt_pair_correctly() {
     let tokens = fixture_nested_xt();
-    let result = lint_tokens(&tokens, LintOptions::default());
+    let result = lint_tokens(&tokens, LintOptions::scoped(LintScope::Book));
     let stray: Vec<_> = result
         .issues
         .iter()
@@ -159,7 +159,7 @@ fn bare_tokens_implicit_close_at_f_star_does_not_flag_stray_close() {
         BareToken::end("f"),
         BareToken::newline(),
     ];
-    let result = lint_tokens(&tokens, LintOptions::default());
+    let result = lint_tokens(&tokens, LintOptions::scoped(LintScope::Book));
     let stray: Vec<_> = result
         .issues
         .iter()

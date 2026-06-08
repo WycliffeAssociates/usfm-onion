@@ -34,7 +34,7 @@ const cst = parsed.cst();
 assert.ok(Array.isArray(cst.tokens), "cst.tokens is an array");
 assert.ok(Array.isArray(cst.roots), "cst.roots is an array");
 
-const lintResult = parsed.lint();
+const lintResult = parsed.lint({ scope: "book" });
 assert.ok(Array.isArray(lintResult.issues), "lint().issues is an array");
 assert.ok(typeof lintResult.summary === "object", "lint().summary is an object");
 assert.equal(typeof lintResult.summary.totalCount, "number");
@@ -72,7 +72,7 @@ assert.equal(typeof diffsByChapter, "object", "diffByChapter() returns object");
 
 // --- standalone source-in functions ------------------------------------
 
-const lintFromSource = pkg.lintUsfm(source);
+const lintFromSource = pkg.lintUsfm(source, { scope: "book" });
 assert.deepEqual(
   lintFromSource.issues.map((i) => i.code).sort(),
   lintResult.issues.map((i) => i.code).sort(),
@@ -97,7 +97,7 @@ assert.equal(usfmFromTokens, source, "tokensToUsfm() round-trips");
 const htmlFromTokens = pkg.tokensToHtml(tokens);
 assert.match(htmlFromTokens, /<(article|main|section|p)/);
 
-const lintFromTokens = pkg.lintTokens(tokens);
+const lintFromTokens = pkg.lintTokens(tokens, { scope: "book" });
 assert.ok(Array.isArray(lintFromTokens.issues), "lintTokens() returns issues");
 
 const formattedTokens = pkg.formatTokens(tokens);
@@ -114,7 +114,7 @@ assert.ok(Array.isArray(tokenDiffs), "diffTokens() returns an array");
 // --- token fix flow ----------------------------------------------------
 
 const fixableSource = "\\id GEN\n\\c 1\n\\p\\v 1 Word\n";
-const fixableLint = pkg.lintUsfm(fixableSource);
+const fixableLint = pkg.lintUsfm(fixableSource, { scope: "book" });
 const fixableIssue = fixableLint.issues.find((i) => i.fix);
 assert.ok(fixableIssue, "fixture produces at least one issue with a fix");
 const fixedTokens = pkg.parse(fixableSource).applyTokenFix(fixableIssue.fix);
@@ -167,7 +167,7 @@ assert.equal(pkg.isKnownMarker("__nope__"), false);
 
 const lintCodes = pkg.lintCodes();
 assert.ok(Array.isArray(lintCodes));
-assert.ok(lintCodes.length > 30, "many lint codes registered");
+assert.ok(lintCodes.length > 25, "many lint codes registered");
 assert.ok(lintCodes.includes("verse-is-empty"), "new lint codes present");
 
 const lintMeta = pkg.lintCodeMeta();

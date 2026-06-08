@@ -551,7 +551,7 @@ fn chapter_key_from_semantic_sid(semantic_sid: &str) -> (String, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::LintCode;
+    use crate::{LintCode, LintScope};
 
     #[test]
     fn usfm_from_str_works() {
@@ -563,8 +563,8 @@ mod tests {
     fn usfm_singular_methods_match_engines() {
         let doc = Usfm::from_str("\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n");
         assert_eq!(
-            doc.lint(LintOptions::default()),
-            lint_usfm(doc.source(), LintOptions::default())
+            doc.lint(LintOptions::scoped(LintScope::Book)),
+            lint_usfm(doc.source(), LintOptions::scoped(LintScope::Book))
         );
         assert_eq!(
             doc.to_html(HtmlOptions::default()),
@@ -603,8 +603,8 @@ mod tests {
         let tokens = doc.tokens();
         let stream = TokenStream::from_tokens(tokens.clone());
         assert_eq!(
-            stream.lint(LintOptions::default()),
-            lint_tokens(&tokens, LintOptions::default())
+            stream.lint(LintOptions::scoped(LintScope::Book)),
+            lint_tokens(&tokens, LintOptions::scoped(LintScope::Book))
         );
     }
 
@@ -656,7 +656,7 @@ mod tests {
             },
         ];
         let issue = TokenStream::from_tokens(malformed_tokens.clone())
-            .lint(LintOptions::default())
+            .lint(LintOptions::scoped(LintScope::Book))
             .issues
             .into_iter()
             .find(|issue| issue.code == LintCode::MissingTagEndDelimiterAfterMarker)

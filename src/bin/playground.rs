@@ -15,7 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use usfm_onion::{BuildSidBlocksOptions, FormatOptions, HtmlOptions, LintOptions};
+use usfm_onion::{BuildSidBlocksOptions, FormatOptions, HtmlOptions, LintOptions, LintScope};
 
 // ---- default fixtures ----------------------------------------------------
 
@@ -85,10 +85,10 @@ fn run_cst(sources: &[(String, String)], iters: usize) {
 
 fn run_lint(sources: &[(String, String)], iters: usize) {
     time_op("lint", sources, iters, |s| {
-        let _ = usfm_onion::lint::lint_usfm(s, LintOptions::default());
+        let _ = usfm_onion::lint::lint_usfm(s, LintOptions::scoped(LintScope::Book));
     });
     if let Some((label, source)) = single(sources, iters) {
-        let result = usfm_onion::lint::lint_usfm(source, LintOptions::default());
+        let result = usfm_onion::lint::lint_usfm(source, LintOptions::scoped(LintScope::Book));
         write_json("playgroundOut.json", &result);
         eprintln!("wrote playgroundOut.json (lint of {label})");
     }

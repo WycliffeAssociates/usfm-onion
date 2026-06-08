@@ -16,7 +16,7 @@ use usfm_onion::diff::{BuildSidBlocksOptions, diff_chapter_token_streams, diff_u
 use usfm_onion::format::{FormatOptions, format_tokens, format_usfm, into_format_tokens};
 use usfm_onion::html::{HtmlOptions, tokens_to_html, usfm_to_html};
 use usfm_onion::lexer::lex;
-use usfm_onion::lint::{LintOptions, lint_tokens, lint_usfm};
+use usfm_onion::lint::{LintOptions, LintScope, lint_tokens, lint_usfm};
 use usfm_onion::parse::parse;
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -25,7 +25,7 @@ fn benchmark_operations(c: &mut Criterion) {
     let book = load_luke();
     let parsed = parse(&book.source);
     let format_token_seed = into_format_tokens(&parsed.tokens);
-    let lint_options = LintOptions::default();
+    let lint_options = LintOptions::scoped(LintScope::Book);
     let format_options = FormatOptions::default();
     let html_options = HtmlOptions::default();
     let diff_options = BuildSidBlocksOptions::default();

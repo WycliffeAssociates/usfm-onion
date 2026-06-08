@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use usfm_onion::lint::{LintCode, LintOptions, lint_usfm};
+use usfm_onion::lint::{LintCode, LintOptions, LintScope, lint_usfm};
 use usfm_onion::parse::parse;
 use usfm_onion::token::tokens_to_usfm;
 
@@ -46,7 +46,7 @@ fn kitchen_sink_round_trips_byte_identical() {
 
 #[test]
 fn common_errors_triggers_expected_lint_codes() {
-    let result = lint_usfm(COMMON_ERRORS, LintOptions::default());
+    let result = lint_usfm(COMMON_ERRORS, LintOptions::scoped(LintScope::Book));
     let observed: BTreeSet<LintCode> = result.issues.iter().map(|i| i.code).collect();
 
     // The fixture is deliberately broken; each section triggers one code.
@@ -67,7 +67,6 @@ fn common_errors_triggers_expected_lint_codes() {
         LintCode::StrayCloseMarker,
         LintCode::UnknownMarker,
         LintCode::DuplicateVerseNumber,
-        LintCode::ChapterExpectedIncreaseByOne,
         LintCode::NoteSubmarkerOutsideNote,
         LintCode::VerseInSectionOrOtherParagraph,
     ];

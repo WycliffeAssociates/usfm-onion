@@ -94,6 +94,13 @@ export interface Utf16Span {
 export type VrefMap = Record<string, string>;
 
 /**
+ * What the caller is linting. Gates the document-level rules: they run only
+ * for `\"front\"` and `\"book\"`, never a bare `{ chapter }` slice. TS shape:
+ * `\"front\" | { chapter: number } | \"book\"`.
+ */
+export type LintScope = "front" | { chapter: number } | "book";
+
+/**
  * `sid` -> lossless verse projection. Same key set as `VrefMap`; the
  * difference is losslessness plus the segment map.
  */
@@ -201,6 +208,11 @@ export interface LintIssue {
 }
 
 export interface LintOptions {
+    /**
+     * Required — no default. A defaulted scope would let a chapter-grain
+     * caller silently get whole-book id-behavior.
+     */
+    scope: LintScope;
     enabledCodes?: LintCode[] | null;
     disabledCodes?: LintCode[];
     suppressed?: LintSuppression[];
@@ -330,7 +342,7 @@ export type InlineContext = "para" | "section" | "list" | "table";
 
 export type LintCategory = "document" | "structure" | "context" | "numbering";
 
-export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "chapter-expected-increase-by-one" | "inconsistent-chapter-label" | "duplicate-verse-number" | "verse-expected-increase-by-one" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph" | "content-after-blank-marker";
+export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "duplicate-verse-number" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph" | "content-after-blank-marker";
 
 export type LintIssueType = "usfm" | "content";
 
@@ -372,7 +384,7 @@ export class ParsedUsfm {
     diff(other: ParsedUsfm, options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
     diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions | null): DiffsByChapterMap;
     format(options?: FormatOptions | null): string;
-    lint(options?: LintOptions | null): LintResult;
+    lint(options: LintOptions): LintResult;
     revertDiffBlock(current: ParsedUsfm, block_id: string, options?: BuildSidBlocksOptions | null): Token[];
     toHtml(options?: HtmlOptions | null): string;
     toUsfm(): string;
@@ -416,9 +428,9 @@ export function lintCodeMeta(): LintCodeMeta[];
 
 export function lintCodes(): LintCode[];
 
-export function lintTokens(tokens: Token[], options?: LintOptions | null): LintResult;
+export function lintTokens(tokens: Token[], options: LintOptions): LintResult;
 
-export function lintUsfm(source: string, options?: LintOptions | null): LintResult;
+export function lintUsfm(source: string, options: LintOptions): LintResult;
 
 export function markerCatalog(): UsfmMarkerCatalog;
 
@@ -461,8 +473,8 @@ export interface InitOutput {
     readonly isKnownMarker: (a: number, b: number) => number;
     readonly lintCodeMeta: () => [number, number];
     readonly lintCodes: () => [number, number];
-    readonly lintTokens: (a: number, b: number, c: number) => any;
-    readonly lintUsfm: (a: number, b: number, c: number) => any;
+    readonly lintTokens: (a: number, b: number, c: any) => any;
+    readonly lintUsfm: (a: number, b: number, c: any) => any;
     readonly markerInfo: (a: number, b: number) => any;
     readonly parse: (a: number, b: number) => number;
     readonly parsedusfm_applyTokenFix: (a: number, b: any) => [number, number];
@@ -470,7 +482,7 @@ export interface InitOutput {
     readonly parsedusfm_diff: (a: number, b: number, c: number) => [number, number];
     readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => any;
     readonly parsedusfm_format: (a: number, b: number) => [number, number];
-    readonly parsedusfm_lint: (a: number, b: number) => any;
+    readonly parsedusfm_lint: (a: number, b: any) => any;
     readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly parsedusfm_toHtml: (a: number, b: number) => [number, number];
     readonly parsedusfm_toUsfm: (a: number) => [number, number];

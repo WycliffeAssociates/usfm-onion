@@ -92,7 +92,7 @@ for (const fixture of fixtures) {
   const tokens = parsed.tokens();
   await check(`${stem}/tokens.json`, pretty(tokens));
   await check(`${stem}/cst.json`, pretty(parsed.cst()));
-  await check(`${stem}/lint.json`, pretty(parsed.lint()));
+  await check(`${stem}/lint.json`, pretty(parsed.lint({ scope: "book" })));
   await check(`${stem}/usj.json`, pretty(parsed.toUsj()));
   await check(`${stem}/usx.xml`, parsed.toUsx());
   await check(`${stem}/html.html`, parsed.toHtml());
@@ -101,7 +101,7 @@ for (const fixture of fixtures) {
   await check(`${stem}/to-usfm.usfm`, parsed.toUsfm());
 
   // Token-in pathways must agree with their source-in counterparts.
-  await check(`${stem}/lint-from-tokens.json`, pretty(pkg.lintTokens(tokens)));
+  await check(`${stem}/lint-from-tokens.json`, pretty(pkg.lintTokens(tokens, { scope: "book" })));
   await check(`${stem}/tokens-to-usfm.usfm`, pkg.tokensToUsfm(tokens));
   await check(`${stem}/tokens-to-html.html`, pkg.tokensToHtml(tokens));
   await check(`${stem}/format-tokens.json`, pretty(pkg.formatTokens(tokens)));

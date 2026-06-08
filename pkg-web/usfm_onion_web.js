@@ -74,11 +74,11 @@ export class ParsedUsfm {
         }
     }
     /**
-     * @param {LintOptions | null} [options]
+     * @param {LintOptions} options
      * @returns {LintResult}
      */
     lint(options) {
-        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, options);
         return ret;
     }
     /**
@@ -397,25 +397,25 @@ export function lintCodes() {
 
 /**
  * @param {Token[]} tokens
- * @param {LintOptions | null} [options]
+ * @param {LintOptions} options
  * @returns {LintResult}
  */
 export function lintTokens(tokens, options) {
     const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.lintTokens(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    const ret = wasm.lintTokens(ptr0, len0, options);
     return ret;
 }
 
 /**
  * @param {string} source
- * @param {LintOptions | null} [options]
+ * @param {LintOptions} options
  * @returns {LintResult}
  */
 export function lintUsfm(source, options) {
     const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.lintUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    const ret = wasm.lintUsfm(ptr0, len0, options);
     return ret;
 }
 

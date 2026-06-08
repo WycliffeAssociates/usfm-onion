@@ -24,7 +24,7 @@ use usfm_onion::html::{
 use usfm_onion::lint::{
     LintCategory as NativeLintCategory, LintCode as NativeLintCode,
     LintIssueType as NativeLintIssueType, LintOptions as NativeLintOptions,
-    LintResult as NativeLintResult, LintSeverity as NativeLintSeverity,
+    LintResult as NativeLintResult, LintScope as NativeLintScope, LintSeverity as NativeLintSeverity,
     LintSuppression as NativeLintSuppression, LintableToken, TokenFix as NativeTokenFix,
     apply_token_fix, lint_tokens, lint_usfm,
 };
@@ -278,10 +278,7 @@ pub enum LintCode {
     ImplicitlyClosedMarker,
     UnclosedMarker,
     DuplicateChapterNumber,
-    ChapterExpectedIncreaseByOne,
-    InconsistentChapterLabel,
     DuplicateVerseNumber,
-    VerseExpectedIncreaseByOne,
     InvalidNumberRange,
     NumberRangeNotPrecededByMarkerExpectingNumber,
     MissingWhitespaceBeforeMarker,
@@ -316,10 +313,7 @@ impl From<NativeLintCode> for LintCode {
             NativeLintCode::ImplicitlyClosedMarker => Self::ImplicitlyClosedMarker,
             NativeLintCode::UnclosedMarker => Self::UnclosedMarker,
             NativeLintCode::DuplicateChapterNumber => Self::DuplicateChapterNumber,
-            NativeLintCode::ChapterExpectedIncreaseByOne => Self::ChapterExpectedIncreaseByOne,
-            NativeLintCode::InconsistentChapterLabel => Self::InconsistentChapterLabel,
             NativeLintCode::DuplicateVerseNumber => Self::DuplicateVerseNumber,
-            NativeLintCode::VerseExpectedIncreaseByOne => Self::VerseExpectedIncreaseByOne,
             NativeLintCode::InvalidNumberRange => Self::InvalidNumberRange,
             NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
                 Self::NumberRangeNotPrecededByMarkerExpectingNumber
@@ -364,10 +358,7 @@ impl From<LintCode> for NativeLintCode {
             LintCode::ImplicitlyClosedMarker => Self::ImplicitlyClosedMarker,
             LintCode::UnclosedMarker => Self::UnclosedMarker,
             LintCode::DuplicateChapterNumber => Self::DuplicateChapterNumber,
-            LintCode::ChapterExpectedIncreaseByOne => Self::ChapterExpectedIncreaseByOne,
-            LintCode::InconsistentChapterLabel => Self::InconsistentChapterLabel,
             LintCode::DuplicateVerseNumber => Self::DuplicateVerseNumber,
-            LintCode::VerseExpectedIncreaseByOne => Self::VerseExpectedIncreaseByOne,
             LintCode::InvalidNumberRange => Self::InvalidNumberRange,
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
                 Self::NumberRangeNotPrecededByMarkerExpectingNumber
@@ -1177,10 +1168,25 @@ pub struct LintSuppression {
     sid: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+/// What the caller is linting. Gates the document-level rules: they run only
+/// for `"front"` and `"book"`, never a bare `{ chapter }` slice. TS shape:
+/// `"front" | { chapter: number } | "book"`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum LintScope {
+    Front,
+    Chapter(u32),
+    Book,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct LintOptions {
+    /// Required — no default. A defaulted scope would let a chapter-grain
+    /// caller silently get whole-book id-behavior.
+    scope: LintScope,
     #[serde(default)]
     enabled_codes: Option<Vec<LintCode>>,
     #[serde(default)]
@@ -1550,7 +1556,7 @@ impl ParsedUsfm {
         map_cst_document(&cst)
     }
 
-    pub fn lint(&self, options: Option<LintOptions>) -> LintResult {
+    pub fn lint(&self, options: LintOptions) -> LintResult {
         map_lint_result(lint_usfm(&self.source, lint_options_into_native(options)))
     }
 
@@ -1686,7 +1692,7 @@ pub fn wasm_parse(source: &str) -> ParsedUsfm {
 }
 
 #[wasm_bindgen(js_name = lintUsfm)]
-pub fn wasm_lint_usfm(source: &str, options: Option<LintOptions>) -> LintResult {
+pub fn wasm_lint_usfm(source: &str, options: LintOptions) -> LintResult {
     map_lint_result(lint_usfm(source, lint_options_into_native(options)))
 }
 
@@ -1705,7 +1711,7 @@ pub fn wasm_vref_index_tokens(tokens: Vec<Token>) -> VrefIndex {
 }
 
 #[wasm_bindgen(js_name = lintTokens)]
-pub fn wasm_lint_tokens(tokens: Vec<Token>, options: Option<LintOptions>) -> LintResult {
+pub fn wasm_lint_tokens(tokens: Vec<Token>, options: LintOptions) -> LintResult {
     let tokens = parse_walk_tokens_from_values(tokens);
     map_lint_result(lint_tokens(&tokens, lint_options_into_native(options)))
 }
@@ -1897,9 +1903,17 @@ pub fn wasm_format_rule_meta() -> Vec<FormatRuleMeta> {
         .collect()
 }
 
-fn lint_options_into_native(value: Option<LintOptions>) -> NativeLintOptions {
-    let value = value.unwrap_or_default();
+fn lint_scope_into_native(value: LintScope) -> NativeLintScope {
+    match value {
+        LintScope::Front => NativeLintScope::Front,
+        LintScope::Chapter(n) => NativeLintScope::Chapter(n),
+        LintScope::Book => NativeLintScope::Book,
+    }
+}
+
+fn lint_options_into_native(value: LintOptions) -> NativeLintOptions {
     NativeLintOptions {
+        scope: lint_scope_into_native(value.scope),
         enabled_codes: value
             .enabled_codes
             .map(|codes| codes.into_iter().map(NativeLintCode::from).collect()),
@@ -2789,10 +2803,7 @@ fn lint_code_variants() -> Vec<NativeLintCode> {
         NativeLintCode::ImplicitlyClosedMarker,
         NativeLintCode::UnclosedMarker,
         NativeLintCode::DuplicateChapterNumber,
-        NativeLintCode::ChapterExpectedIncreaseByOne,
-        NativeLintCode::InconsistentChapterLabel,
         NativeLintCode::DuplicateVerseNumber,
-        NativeLintCode::VerseExpectedIncreaseByOne,
         NativeLintCode::InvalidNumberRange,
         NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
         NativeLintCode::MissingWhitespaceBeforeMarker,
@@ -2958,7 +2969,7 @@ mod tests {
         let source = "\\id GEN\n\\c 1\n\\pi1\n\\v 26 Then God said, “Let Us make man in Our image, after Our likeness, to rule over the fish of the sea and the birds of the air, over the livestock, and over all the earth itself\\f + \\fr 1:26 \\ft MT; Syriac \\fqa and over all the beasts of the earth\\f* and every creature that crawls upon it.”\n\\q1\n";
         let token_values = map_tokens(&native_parse(source).tokens);
         let adapter_tokens = parse_walk_tokens_from_values(token_values);
-        let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
+        let result = lint_tokens(&adapter_tokens, NativeLintOptions::scoped(NativeLintScope::Book));
 
         assert!(
             !result
@@ -2983,7 +2994,7 @@ mod tests {
         let source = "\\id GEN\n\\c 1\n\\v 1 In the beginning\\x + \\xo 1:1 \\xt cross ref \\+xt nested\\+xt* tail\\x*\n";
         let token_values = map_tokens(&native_parse(source).tokens);
         let adapter_tokens = parse_walk_tokens_from_values(token_values);
-        let result = lint_tokens(&adapter_tokens, NativeLintOptions::default());
+        let result = lint_tokens(&adapter_tokens, NativeLintOptions::scoped(NativeLintScope::Book));
 
         assert!(
             !result
@@ -3009,7 +3020,7 @@ mod tests {
 
         let results = batches
             .iter()
-            .map(|tokens| lint_tokens(tokens, NativeLintOptions::default()))
+            .map(|tokens| lint_tokens(tokens, NativeLintOptions::scoped(NativeLintScope::Book)))
             .collect::<Vec<_>>();
 
         assert!(results.iter().all(|result| {
@@ -3022,7 +3033,7 @@ mod tests {
 
     #[test]
     fn lint_issue_types_and_mapping_include_message_params() {
-        let code = usfm_onion::LintCode::VerseExpectedIncreaseByOne;
+        let code = usfm_onion::LintCode::DuplicateVerseNumber;
         let issue = usfm_onion::LintIssue {
             code,
             category: code.category(),
