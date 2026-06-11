@@ -2,13 +2,22 @@
 name = "usfm_onion"
 autobins = true
 autobenches = false
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "Rust-first USFM parsing, linting, formatting, conversion, and diffing"
-license = "MIT"
+license.workspace = true
 readme = "README.md"
 keywords = ["usfm", "parser", "formatter", "bible", "text"]
 categories = ["parser-implementations", "text-processing"]
+
+[workspace]
+members = [".", "crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.1"
+edition = "2024"
+license = "MIT"
 
 [lib]
 crate-type = ["rlib"]
@@ -45,9 +54,6 @@ opt-level = 3
 lto = "thin"
 codegen-units = 16
 debug = false
-
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-bulk-memory"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
