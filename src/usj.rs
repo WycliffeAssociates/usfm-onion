@@ -1425,7 +1425,7 @@ fn format_chapter_sid(sid: Option<&crate::token::Sid>) -> Option<String> {
 }
 
 fn format_verse_sid(sid: Option<&crate::token::Sid>) -> Option<String> {
-    sid.map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse))
+    sid.map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator()))
 }
 
 fn number_source_to_usj(

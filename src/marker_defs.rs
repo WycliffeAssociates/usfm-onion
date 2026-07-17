@@ -27,7 +27,7 @@ use crate::markers::MarkerKind;
 use crate::whitespace::{
     FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
 };
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
@@ -574,34 +574,34 @@ fn default_marker_whitespace_for(spec: &MarkerSpec) -> MarkerWhitespace {
     }
 }
 
-fn whitespace_index() -> &'static HashMap<&'static str, &'static MarkerWhitespace> {
-    static INDEX: OnceLock<HashMap<&'static str, &'static MarkerWhitespace>> = OnceLock::new();
+fn whitespace_index() -> &'static FxHashMap<&'static str, &'static MarkerWhitespace> {
+    static INDEX: OnceLock<FxHashMap<&'static str, &'static MarkerWhitespace>> = OnceLock::new();
     INDEX.get_or_init(|| {
         MARKER_WHITESPACE
             .iter()
             .map(|row| (row.marker, row))
-            .collect::<HashMap<_, _>>()
+            .collect::<FxHashMap<_, _>>()
     })
 }
 
-fn exact_spec_index() -> &'static HashMap<&'static str, &'static MarkerSpec> {
-    static INDEX: OnceLock<HashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
+fn exact_spec_index() -> &'static FxHashMap<&'static str, &'static MarkerSpec> {
+    static INDEX: OnceLock<FxHashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
     INDEX.get_or_init(|| {
         MARKER_SPECS
             .iter()
             .map(|spec| (spec.marker, spec))
-            .collect::<HashMap<_, _>>()
+            .collect::<FxHashMap<_, _>>()
     })
 }
 
-fn table_cell_spec_index() -> &'static HashMap<&'static str, &'static MarkerSpec> {
-    static INDEX: OnceLock<HashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
+fn table_cell_spec_index() -> &'static FxHashMap<&'static str, &'static MarkerSpec> {
+    static INDEX: OnceLock<FxHashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
     INDEX.get_or_init(|| {
         MARKER_SPECS
             .iter()
             .filter(|spec| spec.kind == MarkerDefKind::TableCell)
             .map(|spec| (spec.marker, spec))
-            .collect::<HashMap<_, _>>()
+            .collect::<FxHashMap<_, _>>()
     })
 }
 

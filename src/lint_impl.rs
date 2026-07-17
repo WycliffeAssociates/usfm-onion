@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::format::FormatToken;
@@ -2700,7 +2701,7 @@ fn marker_params(marker: &str) -> MessageParams {
 }
 
 fn dedupe_issues(issues: Vec<LintIssue>) -> Vec<LintIssue> {
-    let mut seen = HashSet::new();
+    let mut seen = FxHashSet::default();
     let mut deduped = Vec::new();
     for issue in issues {
         let identity = (

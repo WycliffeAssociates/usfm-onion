@@ -19,5 +19,13 @@ usfm_onion = { path = "../.." }
 usfm_onion_dto = { path = "../usfm_onion_dto", features = ["wasm"] }
 wasm-bindgen = "0.2"
 
+# Vestigial: `[profile.release]` at the workspace root is native-tuned now
+# (plain Cargo defaults), not the wasm size squeeze this metadata implies —
+# `wasm-pack build --release` (the built-in flag) would run wasm-opt with
+# these flags on top of *native*-profile rustc codegen, which is worse than
+# either of the purpose-built `wasm-release`/`wasm-release-fast` profiles.
+# Don't build wasm this way — use `npm run build:wasm:bundler`/`build:wasm:web`,
+# which drive `wasm-pack build --profile wasm-release-fast --no-opt` and
+# then invoke `wasm-opt` explicitly (see root `Cargo.toml` and `package.json`).
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-Oz", "--enable-bulk-memory"]

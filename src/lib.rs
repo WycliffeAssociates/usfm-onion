@@ -25,9 +25,10 @@ pub mod whitespace;
 pub use api::{OwnedParseAnalysis, ParsedUsfm, SourceTokenText, TokenStream, Usfm, Usj, Usx};
 pub use cst::{CstDocument, CstNode, CstWalkIter, WalkItem};
 pub use diff::{
-    BuildSidBlocksOptions, ChapterTokenDiff, DiffStatus, DiffTokenChange, DiffUndoSide,
-    DiffableToken, DiffsByChapterMap, SidBlock, SidBlockDiff, TokenAlignment,
-    apply_revert_by_block_id, apply_reverts_by_block_id,
+    Anchor, CoveredBy, CoveredSide, DecisionStatus, DecisionUnit, DecisionUnitKind, DiffSkeleton,
+    DiffableToken, DupContext, MergeError, MergeSide, SidBlock, Slot, SlotRole, UnitId,
+    diff_skeleton, diff_skeleton_by_chapter, diff_skeleton_canonical, merge_diff_blocks,
+    merge_skeleton, revert_diff_block,
 };
 pub use format::{
     FormatFix, FormatLabel, FormatOptions, FormatProfile, FormatRule, FormatTimings, FormatToken,

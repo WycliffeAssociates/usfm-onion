@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 856e13d63fd086263b892357f40b4773780db78eb0024526cf425577bac84e78 # shrinks to (baseline, current) = (Doc { eol: Lf, chapters: [Chapter { number: 1, open_marker: "m", heading: None, verses: [Verse { number: 1, end: Some(3), words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }] }] }, Doc { eol: Lf, chapters: [Chapter { number: 1, open_marker: "m", heading: None, verses: [Verse { number: 1, end: Some(3), words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }] }] }), (decisions, default_side) = ({UnitId("GEN 0:0"): Baseline, UnitId("GEN 1:0"): Baseline, UnitId("GEN 1:1"): Baseline}, Current)
+cc e2c9d3a9822e0c7266cc0b88a50b15272963263da3dcadea60b1321b981ad6d0 # shrinks to x = "eta", y = "eta"

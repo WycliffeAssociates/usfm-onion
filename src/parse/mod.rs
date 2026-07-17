@@ -509,11 +509,16 @@ fn advanced_sid(
     let book = state.current_book?;
     match marker_name {
         "c" => Some(Sid::new(book, saturating_u16(number.start), 0)),
-        "v" => Some(Sid::new(
-            book,
-            saturating_u16(state.current_chapter),
-            saturating_u16(number.start),
-        )),
+        "v" => {
+            let verse = saturating_u16(number.start);
+            let verse_end = number.end.map(saturating_u16).unwrap_or(verse);
+            Some(Sid::with_range(
+                book,
+                saturating_u16(state.current_chapter),
+                verse,
+                verse_end,
+            ))
+        }
         _ => state.current_sid,
     }
 }
@@ -741,6 +746,49 @@ mod tests {
             .find(|token| matches!(token.data, TokenData::Marker { name: "v", .. }))
             .expect("verse marker token");
         assert_eq!(verse_marker.sid, Some(Sid::new(gen_book, 1, 2)));
+    }
+
+    #[test]
+    fn parse_carries_bridge_range_end_on_the_verse_sid() {
+        let parsed = parse("\\id GEN\n\\c 1\n\\v 1-2 text\n\\v 3 more\n");
+        let gen_book = BookId::from_str("GEN").expect("GEN parses");
+
+        let verse_marker = parsed
+            .tokens
+            .iter()
+            .find(|token| matches!(token.data, TokenData::Marker { name: "v", .. }))
+            .expect("verse marker token");
+        assert_eq!(
+            verse_marker.sid,
+            Some(Sid::with_range(gen_book, 1, 1, 2))
+        );
+        assert_eq!(verse_marker.sid.unwrap().to_string(), "GEN 1:1-2");
+
+        // Every following token keeps the full-range sid until the next
+        // chapter/verse marker advances it.
+        let text_after_bridge = parsed
+            .tokens
+            .iter()
+            .find(|token| matches!(token.data, TokenData::Text) && token.source.trim() == "text")
+            .expect("text token inside the bridge verse");
+        assert_eq!(text_after_bridge.sid, Some(Sid::with_range(gen_book, 1, 1, 2)));
+    }
+
+    #[test]
+    fn parse_saturates_an_oversized_bridge_span() {
+        // \v 1-999 pin: no real chapter can span 999 verses, so the u8 delta
+        // saturates at verse + 255 rather than silently truncating elsewhere.
+        let parsed = parse("\\id GEN\n\\c 1\n\\v 1-999 text\n");
+        let gen_book = BookId::from_str("GEN").expect("GEN parses");
+        let verse_marker = parsed
+            .tokens
+            .iter()
+            .find(|token| matches!(token.data, TokenData::Marker { name: "v", .. }))
+            .expect("verse marker token");
+        let sid = verse_marker.sid.expect("verse sid");
+        assert_eq!(sid.book, gen_book);
+        assert_eq!(sid.verse, 1);
+        assert_eq!(sid.verse_end(), 1 + 255);
     }
 
     #[test]

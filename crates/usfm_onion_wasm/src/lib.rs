@@ -5,12 +5,14 @@ use wasm_bindgen::prelude::*;
 
 use usfm_onion::cst::{CstDocument as NativeCstDocument, CstNode as NativeCstNode, parse_cst};
 use usfm_onion::diff::{
-    BuildSidBlocksOptions as NativeBuildSidBlocksOptions,
-    ChapterTokenDiff as NativeChapterTokenDiff, DiffStatus as NativeDiffStatus,
-    DiffTokenChange as NativeDiffTokenChange, DiffUndoSide as NativeDiffUndoSide, DiffableToken,
-    DiffsByChapterMap as NativeDiffsByChapterMap, SidBlock as NativeSidBlock,
-    TokenAlignment as NativeTokenAlignment, apply_revert_by_block_id, apply_reverts_by_block_id,
-    diff_chapter_token_streams, diff_usfm_sources, diff_usfm_sources_by_chapter,
+    Anchor as NativeAnchor, CoveredBy as NativeCoveredBy, CoveredSide as NativeCoveredSide,
+    DecisionStatus as NativeDecisionStatus, DecisionUnit as NativeDecisionUnit,
+    DecisionUnitKind as NativeDecisionUnitKind, DiffSkeleton as NativeDiffSkeleton, DiffableToken,
+    MergeSide as NativeMergeSide, Slot as NativeSlot, SlotRole as NativeSlotRole,
+    UnitId as NativeUnitId, derive_canonical_sids as native_derive_canonical_sids,
+    diff_skeleton as native_diff_skeleton, diff_skeleton_by_chapter as native_diff_skeleton_by_chapter,
+    diff_skeleton_canonical as native_diff_skeleton_canonical,
+    merge_diff_blocks as native_merge_diff_blocks, revert_diff_block as native_revert_diff_block,
 };
 use usfm_onion::format::{
     FormatOptions as NativeFormatOptions, FormatRule as NativeFormatRule,
@@ -36,8 +38,9 @@ use usfm_onion::markers::{is_known_marker, marker_catalog, marker_info};
 use usfm_onion::parse::parse as native_parse;
 use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
-    NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
-    TokenData as NativeTokenData, TokenKind as NativeTokenKind, tokens_to_usfm,
+    NumberRangeKind as NativeNumberRangeKind, Sid as NativeSid, Span as NativeSpan,
+    Token as NativeToken, TokenData as NativeTokenData, TokenKind as NativeTokenKind,
+    tokens_to_usfm,
 };
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -376,59 +379,110 @@ impl From<LintCode> for NativeLintCode {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "lowercase")]
-pub enum DiffStatus {
-    Added,
-    Deleted,
-    Modified,
-    Unchanged,
+#[serde(rename_all = "camelCase")]
+pub enum SlotRole {
+    Shared,
+    BaselineOnly,
+    CurrentOnly,
+    PairBaseline,
+    PairCurrent,
 }
 
-impl From<NativeDiffStatus> for DiffStatus {
-    fn from(value: NativeDiffStatus) -> Self {
+impl From<NativeSlotRole> for SlotRole {
+    fn from(value: NativeSlotRole) -> Self {
         match value {
-            NativeDiffStatus::Added => Self::Added,
-            NativeDiffStatus::Deleted => Self::Deleted,
-            NativeDiffStatus::Modified => Self::Modified,
-            NativeDiffStatus::Unchanged => Self::Unchanged,
+            NativeSlotRole::Shared => Self::Shared,
+            NativeSlotRole::BaselineOnly => Self::BaselineOnly,
+            NativeSlotRole::CurrentOnly => Self::CurrentOnly,
+            NativeSlotRole::PairBaseline => Self::PairBaseline,
+            NativeSlotRole::PairCurrent => Self::PairCurrent,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "lowercase")]
-pub enum DiffTokenChange {
-    Unchanged,
+#[serde(rename_all = "camelCase")]
+pub enum DecisionUnitKind {
+    Shared,
     Added,
     Deleted,
-    Modified,
+    Coalesced,
 }
 
-impl From<NativeDiffTokenChange> for DiffTokenChange {
-    fn from(value: NativeDiffTokenChange) -> Self {
+impl From<NativeDecisionUnitKind> for DecisionUnitKind {
+    fn from(value: NativeDecisionUnitKind) -> Self {
         match value {
-            NativeDiffTokenChange::Unchanged => Self::Unchanged,
-            NativeDiffTokenChange::Added => Self::Added,
-            NativeDiffTokenChange::Deleted => Self::Deleted,
-            NativeDiffTokenChange::Modified => Self::Modified,
+            NativeDecisionUnitKind::Shared => Self::Shared,
+            NativeDecisionUnitKind::Added => Self::Added,
+            NativeDecisionUnitKind::Deleted => Self::Deleted,
+            NativeDecisionUnitKind::Coalesced => Self::Coalesced,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "lowercase")]
-pub enum DiffUndoSide {
-    Original,
+#[serde(rename_all = "camelCase")]
+pub enum DecisionStatus {
+    Unchanged,
+    Modified,
+    Added,
+    Deleted,
+    Moved,
+}
+
+impl From<NativeDecisionStatus> for DecisionStatus {
+    fn from(value: NativeDecisionStatus) -> Self {
+        match value {
+            NativeDecisionStatus::Unchanged => Self::Unchanged,
+            NativeDecisionStatus::Modified => Self::Modified,
+            NativeDecisionStatus::Added => Self::Added,
+            NativeDecisionStatus::Deleted => Self::Deleted,
+            NativeDecisionStatus::Moved => Self::Moved,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum MergeSide {
+    Baseline,
     Current,
 }
 
-impl From<NativeDiffUndoSide> for DiffUndoSide {
-    fn from(value: NativeDiffUndoSide) -> Self {
+impl From<NativeMergeSide> for MergeSide {
+    fn from(value: NativeMergeSide) -> Self {
         match value {
-            NativeDiffUndoSide::Original => Self::Original,
-            NativeDiffUndoSide::Current => Self::Current,
+            NativeMergeSide::Baseline => Self::Baseline,
+            NativeMergeSide::Current => Self::Current,
+        }
+    }
+}
+
+impl From<MergeSide> for NativeMergeSide {
+    fn from(value: MergeSide) -> Self {
+        match value {
+            MergeSide::Baseline => Self::Baseline,
+            MergeSide::Current => Self::Current,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum CoveredSide {
+    Baseline,
+    Current,
+}
+
+impl From<NativeCoveredSide> for CoveredSide {
+    fn from(value: NativeCoveredSide) -> Self {
+        match value {
+            NativeCoveredSide::Baseline => Self::Baseline,
+            NativeCoveredSide::Current => Self::Current,
         }
     }
 }
@@ -605,7 +659,7 @@ impl From<usfm_onion::marker_defs::MarkerDefKind> for MarkerDefKind {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(transparent)]
 pub struct DiffsByChapterMap(
-    pub std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiff>>>,
+    pub std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>>,
 );
 
 /// Verse-reference map: `{ "GEN 1:1": "...", "GEN 1:2": "...", ... }`.
@@ -945,58 +999,79 @@ pub struct HtmlOptions {
     caller_scope: Option<HtmlCallerScope>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub struct BuildSidBlocksOptions {
-    #[serde(default)]
-    allow_empty_sid: Option<bool>,
+pub struct Anchor {
+    unit_id: String,
+    sid: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub struct SidBlock {
-    block_id: String,
-    semantic_sid: String,
-    start: usize,
-    end_exclusive: usize,
+pub struct Slot {
+    unit_id: String,
+    role: SlotRole,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    prev_block_id: Option<String>,
-    text_full: String,
+    after: Option<Anchor>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct DupContext {
+    baseline_count: u32,
+    current_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub struct TokenAlignment {
-    change: DiffTokenChange,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    counterpart_index: Option<usize>,
+pub struct CoveredBy {
+    unit_id: String,
+    sid: String,
+    side: CoveredSide,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub struct ChapterTokenDiff {
-    block_id: String,
-    semantic_sid: String,
-    status: DiffStatus,
+pub struct DecisionUnit {
+    id: String,
+    kind: DecisionUnitKind,
+    status: DecisionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    original: Option<SidBlock>,
+    baseline_sid: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    current: Option<SidBlock>,
-    original_text: String,
-    current_text: String,
-    original_text_only: String,
-    current_text_only: String,
+    current_sid: Option<String>,
+    baseline_tokens: Vec<Token>,
+    current_tokens: Vec<Token>,
+    displaced: bool,
+    relabeled: bool,
+    dup_context: DupContext,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    covered_by: Option<CoveredBy>,
     is_whitespace_change: bool,
     is_usfm_structure_change: bool,
-    original_tokens: Vec<Token>,
-    current_tokens: Vec<Token>,
-    original_alignment: Vec<TokenAlignment>,
-    current_alignment: Vec<TokenAlignment>,
-    undo_side: DiffUndoSide,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffSkeleton {
+    slots: Vec<Slot>,
+    units: Vec<DecisionUnit>,
+}
+
+/// Staged decisions for [`wasm_merge_diff_blocks`]: `Record<string,
+/// MergeSide>` plus the default applied to any unit not present in the map.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeRequest {
+    decisions: std::collections::BTreeMap<String, MergeSide>,
+    default_side: MergeSide,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -1137,12 +1212,7 @@ impl ParsedUsfm {
     }
 
     #[wasm_bindgen(js_name = revertDiffBlock)]
-    pub fn revert_diff_block(
-        &self,
-        current: &ParsedUsfm,
-        block_id: &str,
-        options: Option<BuildSidBlocksOptions>,
-    ) -> Vec<Token> {
+    pub fn revert_diff_block(&self, current: &ParsedUsfm, block_id: &str) -> Result<Vec<Token>, JsError> {
         let baseline = native_parse(&self.source);
         let current = native_parse(&current.source);
         let baseline = baseline
@@ -1155,13 +1225,8 @@ impl ParsedUsfm {
             .iter()
             .map(format_token_with_identity)
             .collect::<Vec<_>>();
-        let reverted = apply_revert_by_block_id(
-            block_id,
-            &baseline,
-            &current,
-            &build_options_into_native(options),
-        );
-        reverted.iter().map(map_format_token).collect()
+        let reverted = native_revert_diff_block(block_id, &baseline, &current).map_err(js_error)?;
+        Ok(reverted.iter().map(map_format_token).collect())
     }
 
     pub fn format(&self, options: Option<FormatOptions>) -> String {
@@ -1204,25 +1269,16 @@ impl ParsedUsfm {
         map_vref_index(usfm_to_vref_index(&self.source))
     }
 
-    pub fn diff(
-        &self,
-        other: &ParsedUsfm,
-        options: Option<BuildSidBlocksOptions>,
-    ) -> Vec<ChapterTokenDiff> {
-        let options = build_options_into_native(options);
-        let diffs = diff_usfm_sources(&self.source, &other.source, &options);
-        map_chapter_diffs(&diffs)
+    pub fn diff(&self, other: &ParsedUsfm) -> DiffSkeleton {
+        map_native_skeleton(&native_diff_usfm(&self.source, &other.source), map_token)
     }
 
     #[wasm_bindgen(js_name = diffByChapter)]
-    pub fn diff_by_chapter(
-        &self,
-        other: &ParsedUsfm,
-        options: Option<BuildSidBlocksOptions>,
-    ) -> DiffsByChapterMap {
-        let options = build_options_into_native(options);
-        let diffs = diff_usfm_sources_by_chapter(&self.source, &other.source, &options);
-        DiffsByChapterMap(map_diffs_by_chapter(&diffs))
+    pub fn diff_by_chapter(&self, other: &ParsedUsfm) -> DiffsByChapterMap {
+        DiffsByChapterMap(map_diffs_by_chapter(
+            &native_diff_skeleton_by_chapter(&self.source, &other.source),
+            map_token,
+        ))
     }
 }
 
@@ -1329,39 +1385,56 @@ pub fn wasm_tokens_to_html(tokens: Vec<Token>, options: Option<HtmlOptions>) -> 
     usfm_to_html(&usfm, html_options_into_native(options))
 }
 
+fn native_diff_usfm<'a>(baseline_usfm: &'a str, current_usfm: &'a str) -> NativeDiffSkeleton<NativeToken<'a>> {
+    let baseline = native_parse(baseline_usfm);
+    let current = native_parse(current_usfm);
+    let baseline_book = baseline.analysis.book_code.unwrap_or("unknown");
+    let current_book = current.analysis.book_code.unwrap_or("unknown");
+    native_diff_skeleton_canonical(&baseline.tokens, baseline_book, &current.tokens, current_book)
+}
+
 #[wasm_bindgen(js_name = diffUsfm)]
-pub fn wasm_diff_usfm(
-    left: &str,
-    right: &str,
-    options: Option<BuildSidBlocksOptions>,
-) -> Vec<ChapterTokenDiff> {
-    let options = build_options_into_native(options);
-    let diffs = diff_usfm_sources(left, right, &options);
-    map_chapter_diffs(&diffs)
+pub fn wasm_diff_usfm(left: &str, right: &str) -> DiffSkeleton {
+    map_native_skeleton(&native_diff_usfm(left, right), map_token)
 }
 
 #[wasm_bindgen(js_name = diffUsfmByChapter)]
-pub fn wasm_diff_usfm_by_chapter(
-    left: &str,
-    right: &str,
-    options: Option<BuildSidBlocksOptions>,
-) -> DiffsByChapterMap {
-    let options = build_options_into_native(options);
-    let diffs = diff_usfm_sources_by_chapter(left, right, &options);
-    DiffsByChapterMap(map_diffs_by_chapter(&diffs))
+pub fn wasm_diff_usfm_by_chapter(left: &str, right: &str) -> DiffsByChapterMap {
+    DiffsByChapterMap(map_diffs_by_chapter(
+        &native_diff_skeleton_by_chapter(left, right),
+        map_token,
+    ))
 }
 
 #[wasm_bindgen(js_name = diffTokens)]
-pub fn wasm_diff_tokens(
-    left: Vec<Token>,
-    right: Vec<Token>,
-    options: Option<BuildSidBlocksOptions>,
-) -> Vec<ChapterTokenDiff> {
+pub fn wasm_diff_tokens(left: Vec<Token>, right: Vec<Token>) -> DiffSkeleton {
     let left = parse_walk_tokens_from_values(left);
     let right = parse_walk_tokens_from_values(right);
-    let options = build_options_into_native(options);
-    let diffs = diff_chapter_token_streams(&left, &right, &options);
-    map_walk_token_diffs(&diffs)
+    map_native_skeleton(&native_diff_skeleton(&left, &right), map_walk_token)
+}
+
+#[wasm_bindgen(js_name = mergeDiffBlocks)]
+pub fn wasm_merge_diff_blocks(
+    baseline: Vec<Token>,
+    current: Vec<Token>,
+    request: MergeRequest,
+) -> Result<Vec<Token>, JsError> {
+    let baseline = baseline
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Vec<_>>();
+    let current = current
+        .into_iter()
+        .map(token_value_to_format_token)
+        .collect::<Vec<_>>();
+    let decisions = request
+        .decisions
+        .into_iter()
+        .map(|(id, side)| (NativeUnitId::new(id), side.into()))
+        .collect();
+    let merged = native_merge_diff_blocks(&baseline, &current, &decisions, request.default_side.into())
+        .map_err(js_error)?;
+    Ok(merged.iter().map(map_format_token).collect())
 }
 
 #[wasm_bindgen(js_name = revertDiffBlock)]
@@ -1369,8 +1442,7 @@ pub fn wasm_revert_diff_block(
     baseline: Vec<Token>,
     current: Vec<Token>,
     block_id: &str,
-    options: Option<BuildSidBlocksOptions>,
-) -> Vec<Token> {
+) -> Result<Vec<Token>, JsError> {
     let baseline = baseline
         .into_iter()
         .map(token_value_to_format_token)
@@ -1379,37 +1451,23 @@ pub fn wasm_revert_diff_block(
         .into_iter()
         .map(token_value_to_format_token)
         .collect::<Vec<_>>();
-    let reverted = apply_revert_by_block_id(
-        block_id,
-        &baseline,
-        &current,
-        &build_options_into_native(options),
-    );
-    reverted.iter().map(map_format_token).collect()
+    let reverted = native_revert_diff_block(block_id, &baseline, &current).map_err(js_error)?;
+    Ok(reverted.iter().map(map_format_token).collect())
 }
 
-#[wasm_bindgen(js_name = revertDiffBlocks)]
-pub fn wasm_revert_diff_blocks(
-    baseline: Vec<Token>,
-    current: Vec<Token>,
-    block_ids: Vec<String>,
-    options: Option<BuildSidBlocksOptions>,
-) -> Vec<Token> {
-    let baseline = baseline
+#[wasm_bindgen(js_name = normalizeTokenSids)]
+pub fn wasm_normalize_token_sids(tokens: Vec<Token>, book_code: &str) -> Vec<Token> {
+    let native_tokens: Vec<NativeFormatToken> =
+        tokens.iter().cloned().map(token_value_to_format_token).collect();
+    let canonical = native_derive_canonical_sids(&native_tokens, book_code);
+    tokens
         .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let current = current
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let reverted = apply_reverts_by_block_id(
-        &block_ids,
-        &baseline,
-        &current,
-        &build_options_into_native(options),
-    );
-    reverted.iter().map(map_format_token).collect()
+        .zip(canonical)
+        .map(|(mut token, sid)| {
+            token.sid = Some(sid);
+            token
+        })
+        .collect()
 }
 
 #[wasm_bindgen(js_name = markerCatalog)]
@@ -1584,13 +1642,6 @@ fn html_options_into_native(value: Option<HtmlOptions>) -> NativeHtmlOptions {
     }
 }
 
-fn build_options_into_native(value: Option<BuildSidBlocksOptions>) -> NativeBuildSidBlocksOptions {
-    let value = value.unwrap_or_default();
-    NativeBuildSidBlocksOptions {
-        allow_empty_sid: value.allow_empty_sid.unwrap_or(true),
-    }
-}
-
 fn parse_walk_tokens_from_values(values: Vec<Token>) -> Vec<WalkToken> {
     values.into_iter().map(token_to_walk_token).collect()
 }
@@ -1626,7 +1677,7 @@ fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
     let mut owned = NativeFormatToken::from(token);
     owned.sid = token
         .sid
-        .map(|sid| format_sid(sid.book.as_str(), sid.chapter, sid.verse));
+        .map(format_sid);
     owned.id = Some(format!("{}-{}", token.id.book_code, token.id.index));
     owned
 }
@@ -1706,7 +1757,7 @@ fn map_token(token: &NativeToken<'_>) -> Token {
         span: Some(map_span(token.span)),
         sid: token
             .sid
-            .map(|sid| format_sid(sid.book.as_str(), sid.chapter, sid.verse)),
+            .map(format_sid),
         marker: token.marker_name().map(ToOwned::to_owned),
         nested: None,
         marker_metadata: None,
@@ -2010,73 +2061,57 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssue {
     }
 }
 
-fn map_chapter_diffs(diffs: &[NativeChapterTokenDiff<NativeToken<'_>>]) -> Vec<ChapterTokenDiff> {
-    diffs.iter().map(map_native_chapter_diff).collect()
-}
-
-fn map_native_chapter_diff(diff: &NativeChapterTokenDiff<NativeToken<'_>>) -> ChapterTokenDiff {
-    ChapterTokenDiff {
-        block_id: diff.block_id.clone(),
-        semantic_sid: diff.semantic_sid.clone(),
-        status: diff.status.into(),
-        original: diff.original.as_ref().map(map_sid_block),
-        current: diff.current.as_ref().map(map_sid_block),
-        original_text: diff.original_text.clone(),
-        current_text: diff.current_text.clone(),
-        original_text_only: diff.original_text_only.clone(),
-        current_text_only: diff.current_text_only.clone(),
-        is_whitespace_change: diff.is_whitespace_change,
-        is_usfm_structure_change: diff.is_usfm_structure_change,
-        original_tokens: map_tokens(&diff.original_tokens),
-        current_tokens: map_tokens(&diff.current_tokens),
-        original_alignment: diff
-            .original_alignment
-            .iter()
-            .copied()
-            .map(map_alignment)
-            .collect(),
-        current_alignment: diff
-            .current_alignment
-            .iter()
-            .copied()
-            .map(map_alignment)
-            .collect(),
-        undo_side: diff.undo_side.into(),
+fn map_native_skeleton<T>(
+    skeleton: &NativeDiffSkeleton<T>,
+    map_token: impl Fn(&T) -> Token,
+) -> DiffSkeleton {
+    DiffSkeleton {
+        slots: skeleton.slots.iter().map(map_native_slot).collect(),
+        units: skeleton.units.iter().map(|unit| map_native_decision_unit(unit, &map_token)).collect(),
     }
 }
 
-fn map_walk_token_diffs(diffs: &[NativeChapterTokenDiff<WalkToken>]) -> Vec<ChapterTokenDiff> {
-    diffs.iter().map(map_walk_token_chapter_diff).collect()
+fn map_native_slot(slot: &NativeSlot) -> Slot {
+    Slot {
+        unit_id: slot.unit_id.to_string(),
+        role: slot.role.into(),
+        after: slot.after.as_ref().map(map_native_anchor),
+    }
 }
 
-fn map_walk_token_chapter_diff(diff: &NativeChapterTokenDiff<WalkToken>) -> ChapterTokenDiff {
-    ChapterTokenDiff {
-        block_id: diff.block_id.clone(),
-        semantic_sid: diff.semantic_sid.clone(),
-        status: diff.status.into(),
-        original: diff.original.as_ref().map(map_sid_block),
-        current: diff.current.as_ref().map(map_sid_block),
-        original_text: diff.original_text.clone(),
-        current_text: diff.current_text.clone(),
-        original_text_only: diff.original_text_only.clone(),
-        current_text_only: diff.current_text_only.clone(),
-        is_whitespace_change: diff.is_whitespace_change,
-        is_usfm_structure_change: diff.is_usfm_structure_change,
-        original_tokens: diff.original_tokens.iter().map(map_walk_token).collect(),
-        current_tokens: diff.current_tokens.iter().map(map_walk_token).collect(),
-        original_alignment: diff
-            .original_alignment
-            .iter()
-            .copied()
-            .map(map_alignment)
-            .collect(),
-        current_alignment: diff
-            .current_alignment
-            .iter()
-            .copied()
-            .map(map_alignment)
-            .collect(),
-        undo_side: diff.undo_side.into(),
+fn map_native_anchor(anchor: &NativeAnchor) -> Anchor {
+    Anchor {
+        unit_id: anchor.unit_id.to_string(),
+        sid: anchor.sid.clone(),
+    }
+}
+
+fn map_native_decision_unit<T>(unit: &NativeDecisionUnit<T>, map_token: &impl Fn(&T) -> Token) -> DecisionUnit {
+    DecisionUnit {
+        id: unit.id.to_string(),
+        kind: unit.kind.into(),
+        status: unit.status.into(),
+        baseline_sid: unit.baseline_sid.clone(),
+        current_sid: unit.current_sid.clone(),
+        baseline_tokens: unit.baseline_tokens.iter().map(map_token).collect(),
+        current_tokens: unit.current_tokens.iter().map(map_token).collect(),
+        displaced: unit.displaced,
+        relabeled: unit.relabeled,
+        dup_context: DupContext {
+            baseline_count: unit.dup_context.baseline_count,
+            current_count: unit.dup_context.current_count,
+        },
+        covered_by: unit.covered_by.as_ref().map(map_native_covered_by),
+        is_whitespace_change: unit.is_whitespace_change,
+        is_usfm_structure_change: unit.is_usfm_structure_change,
+    }
+}
+
+fn map_native_covered_by(covered_by: &NativeCoveredBy) -> CoveredBy {
+    CoveredBy {
+        unit_id: covered_by.unit_id.to_string(),
+        sid: covered_by.sid.clone(),
+        side: covered_by.side.into(),
     }
 }
 
@@ -2102,35 +2137,18 @@ fn map_walk_token(token: &WalkToken) -> Token {
     }
 }
 
-fn map_sid_block(block: &NativeSidBlock) -> SidBlock {
-    SidBlock {
-        block_id: block.block_id.clone(),
-        semantic_sid: block.semantic_sid.clone(),
-        start: block.start,
-        end_exclusive: block.end_exclusive,
-        prev_block_id: block.prev_block_id.clone(),
-        text_full: block.text_full.clone(),
-    }
-}
-
-fn map_alignment(alignment: NativeTokenAlignment) -> TokenAlignment {
-    TokenAlignment {
-        change: alignment.change.into(),
-        counterpart_index: alignment.counterpart_index,
-    }
-}
-
-fn map_diffs_by_chapter(
-    diffs: &NativeDiffsByChapterMap<NativeChapterTokenDiff<NativeToken<'_>>>,
-) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Vec<ChapterTokenDiff>>> {
-    diffs
+fn map_diffs_by_chapter<T>(
+    by_chapter: &std::collections::BTreeMap<String, std::collections::BTreeMap<u32, NativeDiffSkeleton<T>>>,
+    map_token: impl Fn(&T) -> Token,
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>> {
+    by_chapter
         .iter()
         .map(|(book, chapters)| {
             (
                 book.clone(),
                 chapters
                     .iter()
-                    .map(|(chapter, diffs)| (*chapter, map_chapter_diffs(diffs)))
+                    .map(|(chapter, skeleton)| (*chapter, map_native_skeleton(skeleton, &map_token)))
                     .collect(),
             )
         })
@@ -2373,8 +2391,8 @@ fn token_kind_wire_key(kind: NativeTokenKind) -> &'static str {
     }
 }
 
-fn format_sid(book: &str, chapter: u16, verse: u16) -> String {
-    format!("{book} {chapter}:{verse}")
+fn format_sid(sid: NativeSid) -> String {
+    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
 }
 
 #[cfg(test)]
@@ -2422,6 +2440,53 @@ mod tests {
     fn round_trips_multiple_attributes() {
         let source = "\\w word|lemma=\"x\" strong=\"H0430\"\\w*";
         assert_eq!(round_trip(source), source);
+    }
+
+    /// Parity contract for `normalizeTokenSids`, pinned on the onion side.
+    ///
+    /// The other half of this contract — comparing these exact values
+    /// against a live Zephyr `mutAddSids(tokens, bookCode)` call — cannot
+    /// run in this repo: `mutAddSids` is Zephyr application code, not a
+    /// dependency of onion, and vendoring or importing it here would defeat
+    /// the point of keeping the two implementations independent. This test
+    /// is onion's half of the parity gate: the exact sid strings
+    /// `normalizeTokenSids` must produce for bridge, duplicate, and intro
+    /// streams, which Zephyr's consumer migration diffs its own
+    /// `mutAddSids` output against before retiring it (see
+    /// `plans/zephyr-handoff-merge-projection.md`). If this test ever
+    /// changes, that is a signal the Zephyr-side comparison needs
+    /// re-running, not just a golden update.
+    #[test]
+    fn normalize_token_sids_bridge_dup_intro_parity_contract() {
+        let source = "\\id GEN\n\\h Genesis\n\\c 1\n\\v 1 a\n\\v 1-2 b\n\\v 1 c\n";
+        let tokens = map_tokens(&native_parse(source).tokens);
+        let normalized = wasm_normalize_token_sids(tokens.clone(), "GEN");
+
+        assert_eq!(tokens.len(), normalized.len(), "normalizeTokenSids must preserve length/order");
+        for (before, after) in tokens.iter().zip(&normalized) {
+            assert_eq!(before.id, after.id, "id must be untouched");
+            assert_eq!(before.source, after.source, "source/text must be untouched");
+            assert_eq!(format!("{:?}", before.kind), format!("{:?}", after.kind), "kind must be untouched");
+        }
+
+        let sid_of = |text: &str| -> String {
+            normalized
+                .iter()
+                .find(|t| t.source.trim() == text)
+                .unwrap_or_else(|| panic!("no token with text {text:?}"))
+                .sid
+                .clone()
+                .unwrap_or_else(|| panic!("token {text:?} has no sid"))
+        };
+
+        // intro: book code precedes any \c.
+        assert_eq!(sid_of("Genesis"), "GEN 0:0");
+        // single verse.
+        assert_eq!(sid_of("a"), "GEN 1:1");
+        // bridge: range end encoded.
+        assert_eq!(sid_of("b"), "GEN 1:1-2");
+        // duplicate: second occurrence of the same base sid gets _dup_1.
+        assert_eq!(sid_of("c"), "GEN 1:1_dup_1");
     }
 
     #[test]

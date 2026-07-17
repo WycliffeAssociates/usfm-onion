@@ -1,1339 +1,1015 @@
-[
-  {
-    "blockId": "::GEN-0",
-    "current": {
-      "blockId": "::GEN-0",
-      "endExclusive": 1,
-      "semanticSid": "",
-      "start": 0,
-      "textFull": "\\id "
+{
+  "slots": [
+    {
+      "role": "shared",
+      "unitId": "GEN 0:0"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      }
-    ],
-    "currentText": "\\id ",
-    "currentTextOnly": "",
-    "currentTokens": [
-      {
-        "id": "GEN-0",
-        "kind": "marker",
-        "marker": "id",
-        "markerMetadata": {
-          "canonical": "id",
-          "kind": "header"
-        },
-        "nested": false,
-        "source": "\\id ",
-        "span": {
-          "end": 4,
-          "start": 0
-        },
-        "structural": {
-          "scopeKind": "header"
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "::GEN-0",
-      "endExclusive": 1,
-      "semanticSid": "",
-      "start": 0,
-      "textFull": "\\id "
-    },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      }
-    ],
-    "originalText": "\\id ",
-    "originalTextOnly": "",
-    "originalTokens": [
-      {
-        "id": "GEN-0",
-        "kind": "marker",
-        "marker": "id",
-        "markerMetadata": {
-          "canonical": "id",
-          "kind": "header"
-        },
-        "nested": false,
-        "source": "\\id ",
-        "span": {
-          "end": 4,
-          "start": 0
-        },
-        "structural": {
-          "scopeKind": "header"
-        }
-      }
-    ],
-    "semanticSid": "",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 0:0::GEN-1",
-    "current": {
-      "blockId": "GEN 0:0::GEN-1",
-      "endExclusive": 3,
-      "prevBlockId": "::GEN-0",
-      "semanticSid": "GEN 0:0",
-      "start": 1,
-      "textFull": "GEN\n"
-    },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      }
-    ],
-    "currentText": "GEN\n",
-    "currentTextOnly": "GEN",
-    "currentTokens": [
-      {
-        "bookCode": "GEN",
-        "bookCodeValid": true,
-        "id": "GEN-1",
-        "kind": "bookCode",
+    {
+      "after": {
         "sid": "GEN 0:0",
-        "source": "GEN",
-        "span": {
-          "end": 7,
-          "start": 4
-        }
+        "unitId": "GEN 0:0"
       },
-      {
-        "id": "GEN-2",
-        "kind": "newline",
-        "sid": "GEN 0:0",
-        "source": "\n",
-        "span": {
-          "end": 8,
-          "start": 7
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 0:0::GEN-1",
-      "endExclusive": 3,
-      "prevBlockId": "::GEN-0",
-      "semanticSid": "GEN 0:0",
-      "start": 1,
-      "textFull": "GEN\n"
+      "role": "shared",
+      "unitId": "GEN 1:0"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      }
-    ],
-    "originalText": "GEN\n",
-    "originalTextOnly": "GEN",
-    "originalTokens": [
-      {
-        "bookCode": "GEN",
-        "bookCodeValid": true,
-        "id": "GEN-1",
-        "kind": "bookCode",
-        "sid": "GEN 0:0",
-        "source": "GEN",
-        "span": {
-          "end": 7,
-          "start": 4
-        }
-      },
-      {
-        "id": "GEN-2",
-        "kind": "newline",
-        "sid": "GEN 0:0",
-        "source": "\n",
-        "span": {
-          "end": 8,
-          "start": 7
-        }
-      }
-    ],
-    "semanticSid": "GEN 0:0",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:0::GEN-3",
-    "current": {
-      "blockId": "GEN 1:0::GEN-3",
-      "endExclusive": 7,
-      "prevBlockId": "GEN 0:0::GEN-1",
-      "semanticSid": "GEN 1:0",
-      "start": 3,
-      "textFull": "\\c 1\n\\p"
-    },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "currentText": "\\c 1\n\\p",
-    "currentTextOnly": "1",
-    "currentTokens": [
-      {
-        "id": "GEN-3",
-        "kind": "marker",
-        "marker": "c",
-        "markerMetadata": {
-          "canonical": "c",
-          "kind": "chapter"
-        },
-        "nested": false,
+    {
+      "after": {
         "sid": "GEN 1:0",
-        "source": "\\c ",
-        "span": {
-          "end": 11,
-          "start": 8
-        },
-        "structural": {
-          "scopeKind": "chapter"
-        }
+        "unitId": "GEN 1:0"
       },
-      {
-        "id": "GEN-4",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
-        },
-        "sid": "GEN 1:0",
-        "source": "1",
-        "span": {
-          "end": 12,
-          "start": 11
-        }
-      },
-      {
-        "id": "GEN-5",
-        "kind": "newline",
-        "sid": "GEN 1:0",
-        "source": "\n",
-        "span": {
-          "end": 13,
-          "start": 12
-        }
-      },
-      {
-        "id": "GEN-6",
-        "kind": "marker",
-        "marker": "p",
-        "markerMetadata": {
-          "canonical": "p",
-          "kind": "paragraph"
-        },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\p",
-        "span": {
-          "end": 15,
-          "start": 13
-        },
-        "structural": {
-          "inlineContext": "para",
-          "scopeKind": "block"
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:0::GEN-3",
-      "endExclusive": 7,
-      "prevBlockId": "GEN 0:0::GEN-1",
-      "semanticSid": "GEN 1:0",
-      "start": 3,
-      "textFull": "\\c 1\n\\p"
+      "role": "shared",
+      "unitId": "GEN 1:1"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 1:1",
+        "unitId": "GEN 1:1"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\c 1\n\\p",
-    "originalTextOnly": "1",
-    "originalTokens": [
-      {
-        "id": "GEN-3",
-        "kind": "marker",
-        "marker": "c",
-        "markerMetadata": {
-          "canonical": "c",
-          "kind": "chapter"
-        },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\c ",
-        "span": {
-          "end": 11,
-          "start": 8
-        },
-        "structural": {
-          "scopeKind": "chapter"
-        }
-      },
-      {
-        "id": "GEN-4",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
-        },
-        "sid": "GEN 1:0",
-        "source": "1",
-        "span": {
-          "end": 12,
-          "start": 11
-        }
-      },
-      {
-        "id": "GEN-5",
-        "kind": "newline",
-        "sid": "GEN 1:0",
-        "source": "\n",
-        "span": {
-          "end": 13,
-          "start": 12
-        }
-      },
-      {
-        "id": "GEN-6",
-        "kind": "marker",
-        "marker": "p",
-        "markerMetadata": {
-          "canonical": "p",
-          "kind": "paragraph"
-        },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\p",
-        "span": {
-          "end": 15,
-          "start": 13
-        },
-        "structural": {
-          "inlineContext": "para",
-          "scopeKind": "block"
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:0",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:1::GEN-7",
-    "current": {
-      "blockId": "GEN 1:1::GEN-7",
-      "endExclusive": 11,
-      "prevBlockId": "GEN 1:0::GEN-3",
-      "semanticSid": "GEN 1:1",
-      "start": 7,
-      "textFull": "\\v 1 word with no space after marker\n"
+      "role": "shared",
+      "unitId": "GEN 1:2"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 1:2",
+        "unitId": "GEN 1:2"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "currentText": "\\v 1 word with no space after marker\n",
-    "currentTextOnly": "1 word with no space after marker",
-    "currentTokens": [
-      {
-        "id": "GEN-7",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:1",
-        "source": "\\v ",
-        "span": {
-          "end": 18,
-          "start": 15
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-8",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
-        },
-        "sid": "GEN 1:1",
-        "source": "1 ",
-        "span": {
-          "end": 20,
-          "start": 18
-        }
-      },
-      {
-        "id": "GEN-9",
-        "kind": "text",
-        "sid": "GEN 1:1",
-        "source": "word with no space after marker",
-        "span": {
-          "end": 51,
-          "start": 20
-        }
-      },
-      {
-        "id": "GEN-10",
-        "kind": "newline",
-        "sid": "GEN 1:1",
-        "source": "\n",
-        "span": {
-          "end": 52,
-          "start": 51
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:1::GEN-7",
-      "endExclusive": 11,
-      "prevBlockId": "GEN 1:0::GEN-3",
-      "semanticSid": "GEN 1:1",
-      "start": 7,
-      "textFull": "\\v 1 word with no space after marker\n"
+      "role": "shared",
+      "unitId": "GEN 1:3"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 1:3",
+        "unitId": "GEN 1:3"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\v 1 word with no space after marker\n",
-    "originalTextOnly": "1 word with no space after marker",
-    "originalTokens": [
-      {
-        "id": "GEN-7",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:1",
-        "source": "\\v ",
-        "span": {
-          "end": 18,
-          "start": 15
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-8",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
-        },
-        "sid": "GEN 1:1",
-        "source": "1 ",
-        "span": {
-          "end": 20,
-          "start": 18
-        }
-      },
-      {
-        "id": "GEN-9",
-        "kind": "text",
-        "sid": "GEN 1:1",
-        "source": "word with no space after marker",
-        "span": {
-          "end": 51,
-          "start": 20
-        }
-      },
-      {
-        "id": "GEN-10",
-        "kind": "newline",
-        "sid": "GEN 1:1",
-        "source": "\n",
-        "span": {
-          "end": 52,
-          "start": 51
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:1",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:2::GEN-11",
-    "current": {
-      "blockId": "GEN 1:2::GEN-11",
-      "endExclusive": 15,
-      "prevBlockId": "GEN 1:1::GEN-7",
-      "semanticSid": "GEN 1:2",
-      "start": 11,
-      "textFull": "\\v 2 verse with    excess   whitespace\n"
+      "role": "shared",
+      "unitId": "GEN 2:0"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "currentText": "\\v 2 verse with    excess   whitespace\n",
-    "currentTextOnly": "2 verse with excess whitespace",
-    "currentTokens": [
-      {
-        "id": "GEN-11",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:2",
-        "source": "\\v ",
-        "span": {
-          "end": 55,
-          "start": 52
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-12",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 2
-        },
-        "sid": "GEN 1:2",
-        "source": "2 ",
-        "span": {
-          "end": 57,
-          "start": 55
-        }
-      },
-      {
-        "id": "GEN-13",
-        "kind": "text",
-        "sid": "GEN 1:2",
-        "source": "verse with    excess   whitespace",
-        "span": {
-          "end": 90,
-          "start": 57
-        }
-      },
-      {
-        "id": "GEN-14",
-        "kind": "newline",
-        "sid": "GEN 1:2",
-        "source": "\n",
-        "span": {
-          "end": 91,
-          "start": 90
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:2::GEN-11",
-      "endExclusive": 15,
-      "prevBlockId": "GEN 1:1::GEN-7",
-      "semanticSid": "GEN 1:2",
-      "start": 11,
-      "textFull": "\\v 2 verse with    excess   whitespace\n"
-    },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\v 2 verse with    excess   whitespace\n",
-    "originalTextOnly": "2 verse with excess whitespace",
-    "originalTokens": [
-      {
-        "id": "GEN-11",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:2",
-        "source": "\\v ",
-        "span": {
-          "end": 55,
-          "start": 52
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-12",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 2
-        },
-        "sid": "GEN 1:2",
-        "source": "2 ",
-        "span": {
-          "end": 57,
-          "start": 55
-        }
-      },
-      {
-        "id": "GEN-13",
-        "kind": "text",
-        "sid": "GEN 1:2",
-        "source": "verse with    excess   whitespace",
-        "span": {
-          "end": 90,
-          "start": 57
-        }
-      },
-      {
-        "id": "GEN-14",
-        "kind": "newline",
-        "sid": "GEN 1:2",
-        "source": "\n",
-        "span": {
-          "end": 91,
-          "start": 90
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:2",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:3::GEN-15",
-    "current": {
-      "blockId": "GEN 1:3::GEN-15",
-      "endExclusive": 19,
-      "prevBlockId": "GEN 1:2::GEN-11",
-      "semanticSid": "GEN 1:3",
-      "start": 15,
-      "textFull": "\\v 3 verse three\n"
-    },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "currentText": "\\v 3 verse three\n",
-    "currentTextOnly": "3 verse three",
-    "currentTokens": [
-      {
-        "id": "GEN-15",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:3",
-        "source": "\\v ",
-        "span": {
-          "end": 94,
-          "start": 91
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-16",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 3
-        },
-        "sid": "GEN 1:3",
-        "source": "3 ",
-        "span": {
-          "end": 96,
-          "start": 94
-        }
-      },
-      {
-        "id": "GEN-17",
-        "kind": "text",
-        "sid": "GEN 1:3",
-        "source": "verse three",
-        "span": {
-          "end": 107,
-          "start": 96
-        }
-      },
-      {
-        "id": "GEN-18",
-        "kind": "newline",
-        "sid": "GEN 1:3",
-        "source": "\n",
-        "span": {
-          "end": 108,
-          "start": 107
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:3::GEN-15",
-      "endExclusive": 19,
-      "prevBlockId": "GEN 1:2::GEN-11",
-      "semanticSid": "GEN 1:3",
-      "start": 15,
-      "textFull": "\\v 3 verse three\n"
-    },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\v 3 verse three\n",
-    "originalTextOnly": "3 verse three",
-    "originalTokens": [
-      {
-        "id": "GEN-15",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:3",
-        "source": "\\v ",
-        "span": {
-          "end": 94,
-          "start": 91
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-16",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 3
-        },
-        "sid": "GEN 1:3",
-        "source": "3 ",
-        "span": {
-          "end": 96,
-          "start": 94
-        }
-      },
-      {
-        "id": "GEN-17",
-        "kind": "text",
-        "sid": "GEN 1:3",
-        "source": "verse three",
-        "span": {
-          "end": 107,
-          "start": 96
-        }
-      },
-      {
-        "id": "GEN-18",
-        "kind": "newline",
-        "sid": "GEN 1:3",
-        "source": "\n",
-        "span": {
-          "end": 108,
-          "start": 107
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:3",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 2:0::GEN-19",
-    "current": {
-      "blockId": "GEN 2:0::GEN-19",
-      "endExclusive": 22,
-      "prevBlockId": "GEN 1:3::GEN-15",
-      "semanticSid": "GEN 2:0",
-      "start": 19,
-      "textFull": "\\c 2\n"
-    },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      }
-    ],
-    "currentText": "\\c 2\n",
-    "currentTextOnly": "2",
-    "currentTokens": [
-      {
-        "id": "GEN-19",
-        "kind": "marker",
-        "marker": "c",
-        "markerMetadata": {
-          "canonical": "c",
-          "kind": "chapter"
-        },
-        "nested": false,
+    {
+      "after": {
         "sid": "GEN 2:0",
-        "source": "\\c ",
-        "span": {
-          "end": 111,
-          "start": 108
-        },
-        "structural": {
-          "scopeKind": "chapter"
-        }
+        "unitId": "GEN 2:0"
       },
-      {
-        "id": "GEN-20",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 2
-        },
-        "sid": "GEN 2:0",
-        "source": "2",
-        "span": {
-          "end": 112,
-          "start": 111
-        }
-      },
-      {
-        "id": "GEN-21",
-        "kind": "newline",
-        "sid": "GEN 2:0",
-        "source": "\n",
-        "span": {
-          "end": 113,
-          "start": 112
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 2:0::GEN-19",
-      "endExclusive": 22,
-      "prevBlockId": "GEN 1:3::GEN-15",
-      "semanticSid": "GEN 2:0",
-      "start": 19,
-      "textFull": "\\c 2\n"
+      "role": "shared",
+      "unitId": "GEN 2:1"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 2:1",
+        "unitId": "GEN 2:1"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      }
-    ],
-    "originalText": "\\c 2\n",
-    "originalTextOnly": "2",
-    "originalTokens": [
-      {
-        "id": "GEN-19",
-        "kind": "marker",
-        "marker": "c",
-        "markerMetadata": {
-          "canonical": "c",
-          "kind": "chapter"
+      "role": "currentOnly",
+      "unitId": "GEN 2:99"
+    }
+  ],
+  "units": [
+    {
+      "baselineSid": "GEN 0:0",
+      "baselineTokens": [
+        {
+          "id": "GEN-0",
+          "kind": "marker",
+          "marker": "id",
+          "markerMetadata": {
+            "canonical": "id",
+            "kind": "header"
+          },
+          "nested": false,
+          "source": "\\id ",
+          "span": {
+            "end": 4,
+            "start": 0
+          },
+          "structural": {
+            "scopeKind": "header"
+          }
         },
-        "nested": false,
-        "sid": "GEN 2:0",
-        "source": "\\c ",
-        "span": {
-          "end": 111,
-          "start": 108
+        {
+          "bookCode": "GEN",
+          "bookCodeValid": true,
+          "id": "GEN-1",
+          "kind": "bookCode",
+          "sid": "GEN 0:0",
+          "source": "GEN",
+          "span": {
+            "end": 7,
+            "start": 4
+          }
         },
-        "structural": {
-          "scopeKind": "chapter"
+        {
+          "id": "GEN-2",
+          "kind": "newline",
+          "sid": "GEN 0:0",
+          "source": "\n",
+          "span": {
+            "end": 8,
+            "start": 7
+          }
         }
-      },
-      {
-        "id": "GEN-20",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 2
+      ],
+      "currentSid": "GEN 0:0",
+      "currentTokens": [
+        {
+          "id": "GEN-0",
+          "kind": "marker",
+          "marker": "id",
+          "markerMetadata": {
+            "canonical": "id",
+            "kind": "header"
+          },
+          "nested": false,
+          "source": "\\id ",
+          "span": {
+            "end": 4,
+            "start": 0
+          },
+          "structural": {
+            "scopeKind": "header"
+          }
         },
-        "sid": "GEN 2:0",
-        "source": "2",
-        "span": {
-          "end": 112,
-          "start": 111
+        {
+          "bookCode": "GEN",
+          "bookCodeValid": true,
+          "id": "GEN-1",
+          "kind": "bookCode",
+          "sid": "GEN 0:0",
+          "source": "GEN",
+          "span": {
+            "end": 7,
+            "start": 4
+          }
+        },
+        {
+          "id": "GEN-2",
+          "kind": "newline",
+          "sid": "GEN 0:0",
+          "source": "\n",
+          "span": {
+            "end": 8,
+            "start": 7
+          }
         }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-21",
-        "kind": "newline",
-        "sid": "GEN 2:0",
-        "source": "\n",
-        "span": {
-          "end": 113,
-          "start": 112
-        }
-      }
-    ],
-    "semanticSid": "GEN 2:0",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 2:1::GEN-22",
-    "current": {
-      "blockId": "GEN 2:1::GEN-22",
-      "endExclusive": 28,
-      "prevBlockId": "GEN 2:0::GEN-19",
-      "semanticSid": "GEN 2:1",
-      "start": 22,
-      "textFull": "\\v 1 chapter two starts here\n\\p\n"
+      "id": "GEN 0:0",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      },
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      }
-    ],
-    "currentText": "\\v 1 chapter two starts here\n\\p\n",
-    "currentTextOnly": "1 chapter two starts here",
-    "currentTokens": [
-      {
-        "id": "GEN-22",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineSid": "GEN 1:0",
+      "baselineTokens": [
+        {
+          "id": "GEN-3",
+          "kind": "marker",
+          "marker": "c",
+          "markerMetadata": {
+            "canonical": "c",
+            "kind": "chapter"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\c ",
+          "span": {
+            "end": 11,
+            "start": 8
+          },
+          "structural": {
+            "scopeKind": "chapter"
+          }
         },
-        "nested": false,
-        "sid": "GEN 2:1",
-        "source": "\\v ",
-        "span": {
-          "end": 116,
-          "start": 113
+        {
+          "id": "GEN-4",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:0",
+          "source": "1",
+          "span": {
+            "end": 12,
+            "start": 11
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-23",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
+        {
+          "id": "GEN-5",
+          "kind": "newline",
+          "sid": "GEN 1:0",
+          "source": "\n",
+          "span": {
+            "end": 13,
+            "start": 12
+          }
         },
-        "sid": "GEN 2:1",
-        "source": "1 ",
-        "span": {
-          "end": 118,
-          "start": 116
+        {
+          "id": "GEN-6",
+          "kind": "marker",
+          "marker": "p",
+          "markerMetadata": {
+            "canonical": "p",
+            "kind": "paragraph"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\p",
+          "span": {
+            "end": 15,
+            "start": 13
+          },
+          "structural": {
+            "inlineContext": "para",
+            "scopeKind": "block"
+          }
         }
-      },
-      {
-        "id": "GEN-24",
-        "kind": "text",
-        "sid": "GEN 2:1",
-        "source": "chapter two starts here",
-        "span": {
-          "end": 141,
-          "start": 118
-        }
-      },
-      {
-        "id": "GEN-25",
-        "kind": "newline",
-        "sid": "GEN 2:1",
-        "source": "\n",
-        "span": {
-          "end": 142,
-          "start": 141
-        }
-      },
-      {
-        "id": "GEN-26",
-        "kind": "marker",
-        "marker": "p",
-        "markerMetadata": {
-          "canonical": "p",
-          "kind": "paragraph"
+      ],
+      "currentSid": "GEN 1:0",
+      "currentTokens": [
+        {
+          "id": "GEN-3",
+          "kind": "marker",
+          "marker": "c",
+          "markerMetadata": {
+            "canonical": "c",
+            "kind": "chapter"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\c ",
+          "span": {
+            "end": 11,
+            "start": 8
+          },
+          "structural": {
+            "scopeKind": "chapter"
+          }
         },
-        "nested": false,
-        "sid": "GEN 2:1",
-        "source": "\\p",
-        "span": {
-          "end": 144,
-          "start": 142
+        {
+          "id": "GEN-4",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:0",
+          "source": "1",
+          "span": {
+            "end": 12,
+            "start": 11
+          }
         },
-        "structural": {
-          "inlineContext": "para",
-          "scopeKind": "block"
+        {
+          "id": "GEN-5",
+          "kind": "newline",
+          "sid": "GEN 1:0",
+          "source": "\n",
+          "span": {
+            "end": 13,
+            "start": 12
+          }
+        },
+        {
+          "id": "GEN-6",
+          "kind": "marker",
+          "marker": "p",
+          "markerMetadata": {
+            "canonical": "p",
+            "kind": "paragraph"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\p",
+          "span": {
+            "end": 15,
+            "start": 13
+          },
+          "structural": {
+            "inlineContext": "para",
+            "scopeKind": "block"
+          }
         }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-27",
-        "kind": "newline",
-        "sid": "GEN 2:1",
-        "source": "\n",
-        "span": {
-          "end": 145,
-          "start": 144
-        }
-      }
-    ],
-    "isUsfmStructureChange": true,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 2:1::GEN-22",
-      "endExclusive": 26,
-      "prevBlockId": "GEN 2:0::GEN-19",
-      "semanticSid": "GEN 2:1",
-      "start": 22,
-      "textFull": "\\v 1 chapter two starts here\n"
+      "id": "GEN 1:0",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\v 1 chapter two starts here\n",
-    "originalTextOnly": "1 chapter two starts here",
-    "originalTokens": [
-      {
-        "id": "GEN-22",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineSid": "GEN 1:1",
+      "baselineTokens": [
+        {
+          "id": "GEN-7",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:1",
+          "source": "\\v ",
+          "span": {
+            "end": 18,
+            "start": 15
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
         },
-        "nested": false,
-        "sid": "GEN 2:1",
-        "source": "\\v ",
-        "span": {
-          "end": 116,
-          "start": 113
+        {
+          "id": "GEN-8",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:1",
+          "source": "1 ",
+          "span": {
+            "end": 20,
+            "start": 18
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-23",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
+        {
+          "id": "GEN-9",
+          "kind": "text",
+          "sid": "GEN 1:1",
+          "source": "word with no space after marker",
+          "span": {
+            "end": 51,
+            "start": 20
+          }
         },
-        "sid": "GEN 2:1",
-        "source": "1 ",
-        "span": {
-          "end": 118,
-          "start": 116
+        {
+          "id": "GEN-10",
+          "kind": "newline",
+          "sid": "GEN 1:1",
+          "source": "\n",
+          "span": {
+            "end": 52,
+            "start": 51
+          }
         }
+      ],
+      "currentSid": "GEN 1:1",
+      "currentTokens": [
+        {
+          "id": "GEN-7",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:1",
+          "source": "\\v ",
+          "span": {
+            "end": 18,
+            "start": 15
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-8",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:1",
+          "source": "1 ",
+          "span": {
+            "end": 20,
+            "start": 18
+          }
+        },
+        {
+          "id": "GEN-9",
+          "kind": "text",
+          "sid": "GEN 1:1",
+          "source": "word with no space after marker",
+          "span": {
+            "end": 51,
+            "start": 20
+          }
+        },
+        {
+          "id": "GEN-10",
+          "kind": "newline",
+          "sid": "GEN 1:1",
+          "source": "\n",
+          "span": {
+            "end": 52,
+            "start": 51
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-24",
-        "kind": "text",
-        "sid": "GEN 2:1",
-        "source": "chapter two starts here",
-        "span": {
-          "end": 141,
-          "start": 118
-        }
-      },
-      {
-        "id": "GEN-25",
-        "kind": "newline",
-        "sid": "GEN 2:1",
-        "source": "\n",
-        "span": {
-          "end": 142,
-          "start": 141
-        }
-      }
-    ],
-    "semanticSid": "GEN 2:1",
-    "status": "modified",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 2:99::GEN-28",
-    "current": {
-      "blockId": "GEN 2:99::GEN-28",
-      "endExclusive": 32,
-      "prevBlockId": "GEN 2:1::GEN-22",
-      "semanticSid": "GEN 2:99",
-      "start": 28,
-      "textFull": "\\v 99 trailing addition\n"
+      "id": "GEN 1:1",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
     },
-    "currentAlignment": [
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      }
-    ],
-    "currentText": "\\v 99 trailing addition\n",
-    "currentTextOnly": "99 trailing addition",
-    "currentTokens": [
-      {
-        "id": "GEN-28",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineSid": "GEN 1:2",
+      "baselineTokens": [
+        {
+          "id": "GEN-11",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:2",
+          "source": "\\v ",
+          "span": {
+            "end": 55,
+            "start": 52
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
         },
-        "nested": false,
-        "sid": "GEN 2:99",
-        "source": "\\v ",
-        "span": {
-          "end": 148,
-          "start": 145
+        {
+          "id": "GEN-12",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 2
+          },
+          "sid": "GEN 1:2",
+          "source": "2 ",
+          "span": {
+            "end": 57,
+            "start": 55
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-29",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 99
+        {
+          "id": "GEN-13",
+          "kind": "text",
+          "sid": "GEN 1:2",
+          "source": "verse with    excess   whitespace",
+          "span": {
+            "end": 90,
+            "start": 57
+          }
         },
-        "sid": "GEN 2:99",
-        "source": "99 ",
-        "span": {
-          "end": 151,
-          "start": 148
+        {
+          "id": "GEN-14",
+          "kind": "newline",
+          "sid": "GEN 1:2",
+          "source": "\n",
+          "span": {
+            "end": 91,
+            "start": 90
+          }
         }
+      ],
+      "currentSid": "GEN 1:2",
+      "currentTokens": [
+        {
+          "id": "GEN-11",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:2",
+          "source": "\\v ",
+          "span": {
+            "end": 55,
+            "start": 52
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-12",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 2
+          },
+          "sid": "GEN 1:2",
+          "source": "2 ",
+          "span": {
+            "end": 57,
+            "start": 55
+          }
+        },
+        {
+          "id": "GEN-13",
+          "kind": "text",
+          "sid": "GEN 1:2",
+          "source": "verse with    excess   whitespace",
+          "span": {
+            "end": 90,
+            "start": 57
+          }
+        },
+        {
+          "id": "GEN-14",
+          "kind": "newline",
+          "sid": "GEN 1:2",
+          "source": "\n",
+          "span": {
+            "end": 91,
+            "start": 90
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-30",
-        "kind": "text",
-        "sid": "GEN 2:99",
-        "source": "trailing addition",
-        "span": {
-          "end": 168,
-          "start": 151
+      "id": "GEN 1:2",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
+    },
+    {
+      "baselineSid": "GEN 1:3",
+      "baselineTokens": [
+        {
+          "id": "GEN-15",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:3",
+          "source": "\\v ",
+          "span": {
+            "end": 94,
+            "start": 91
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-16",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 3
+          },
+          "sid": "GEN 1:3",
+          "source": "3 ",
+          "span": {
+            "end": 96,
+            "start": 94
+          }
+        },
+        {
+          "id": "GEN-17",
+          "kind": "text",
+          "sid": "GEN 1:3",
+          "source": "verse three",
+          "span": {
+            "end": 107,
+            "start": 96
+          }
+        },
+        {
+          "id": "GEN-18",
+          "kind": "newline",
+          "sid": "GEN 1:3",
+          "source": "\n",
+          "span": {
+            "end": 108,
+            "start": 107
+          }
         }
+      ],
+      "currentSid": "GEN 1:3",
+      "currentTokens": [
+        {
+          "id": "GEN-15",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:3",
+          "source": "\\v ",
+          "span": {
+            "end": 94,
+            "start": 91
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-16",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 3
+          },
+          "sid": "GEN 1:3",
+          "source": "3 ",
+          "span": {
+            "end": 96,
+            "start": 94
+          }
+        },
+        {
+          "id": "GEN-17",
+          "kind": "text",
+          "sid": "GEN 1:3",
+          "source": "verse three",
+          "span": {
+            "end": 107,
+            "start": 96
+          }
+        },
+        {
+          "id": "GEN-18",
+          "kind": "newline",
+          "sid": "GEN 1:3",
+          "source": "\n",
+          "span": {
+            "end": 108,
+            "start": 107
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-31",
-        "kind": "newline",
-        "sid": "GEN 2:99",
-        "source": "\n",
-        "span": {
-          "end": 169,
-          "start": 168
+      "id": "GEN 1:3",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
+    },
+    {
+      "baselineSid": "GEN 2:0",
+      "baselineTokens": [
+        {
+          "id": "GEN-19",
+          "kind": "marker",
+          "marker": "c",
+          "markerMetadata": {
+            "canonical": "c",
+            "kind": "chapter"
+          },
+          "nested": false,
+          "sid": "GEN 2:0",
+          "source": "\\c ",
+          "span": {
+            "end": 111,
+            "start": 108
+          },
+          "structural": {
+            "scopeKind": "chapter"
+          }
+        },
+        {
+          "id": "GEN-20",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 2
+          },
+          "sid": "GEN 2:0",
+          "source": "2",
+          "span": {
+            "end": 112,
+            "start": 111
+          }
+        },
+        {
+          "id": "GEN-21",
+          "kind": "newline",
+          "sid": "GEN 2:0",
+          "source": "\n",
+          "span": {
+            "end": 113,
+            "start": 112
+          }
         }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "originalAlignment": [],
-    "originalText": "",
-    "originalTextOnly": "",
-    "originalTokens": [],
-    "semanticSid": "GEN 2:99",
-    "status": "added",
-    "undoSide": "current"
-  }
-]
+      ],
+      "currentSid": "GEN 2:0",
+      "currentTokens": [
+        {
+          "id": "GEN-19",
+          "kind": "marker",
+          "marker": "c",
+          "markerMetadata": {
+            "canonical": "c",
+            "kind": "chapter"
+          },
+          "nested": false,
+          "sid": "GEN 2:0",
+          "source": "\\c ",
+          "span": {
+            "end": 111,
+            "start": 108
+          },
+          "structural": {
+            "scopeKind": "chapter"
+          }
+        },
+        {
+          "id": "GEN-20",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 2
+          },
+          "sid": "GEN 2:0",
+          "source": "2",
+          "span": {
+            "end": 112,
+            "start": 111
+          }
+        },
+        {
+          "id": "GEN-21",
+          "kind": "newline",
+          "sid": "GEN 2:0",
+          "source": "\n",
+          "span": {
+            "end": 113,
+            "start": 112
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
+      },
+      "id": "GEN 2:0",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
+    },
+    {
+      "baselineSid": "GEN 2:1",
+      "baselineTokens": [
+        {
+          "id": "GEN-22",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 2:1",
+          "source": "\\v ",
+          "span": {
+            "end": 116,
+            "start": 113
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-23",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 2:1",
+          "source": "1 ",
+          "span": {
+            "end": 118,
+            "start": 116
+          }
+        },
+        {
+          "id": "GEN-24",
+          "kind": "text",
+          "sid": "GEN 2:1",
+          "source": "chapter two starts here",
+          "span": {
+            "end": 141,
+            "start": 118
+          }
+        },
+        {
+          "id": "GEN-25",
+          "kind": "newline",
+          "sid": "GEN 2:1",
+          "source": "\n",
+          "span": {
+            "end": 142,
+            "start": 141
+          }
+        }
+      ],
+      "currentSid": "GEN 2:1",
+      "currentTokens": [
+        {
+          "id": "GEN-22",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 2:1",
+          "source": "\\v ",
+          "span": {
+            "end": 116,
+            "start": 113
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-23",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 2:1",
+          "source": "1 ",
+          "span": {
+            "end": 118,
+            "start": 116
+          }
+        },
+        {
+          "id": "GEN-24",
+          "kind": "text",
+          "sid": "GEN 2:1",
+          "source": "chapter two starts here",
+          "span": {
+            "end": 141,
+            "start": 118
+          }
+        },
+        {
+          "id": "GEN-25",
+          "kind": "newline",
+          "sid": "GEN 2:1",
+          "source": "\n",
+          "span": {
+            "end": 142,
+            "start": 141
+          }
+        },
+        {
+          "id": "GEN-26",
+          "kind": "marker",
+          "marker": "p",
+          "markerMetadata": {
+            "canonical": "p",
+            "kind": "paragraph"
+          },
+          "nested": false,
+          "sid": "GEN 2:1",
+          "source": "\\p",
+          "span": {
+            "end": 144,
+            "start": 142
+          },
+          "structural": {
+            "inlineContext": "para",
+            "scopeKind": "block"
+          }
+        },
+        {
+          "id": "GEN-27",
+          "kind": "newline",
+          "sid": "GEN 2:1",
+          "source": "\n",
+          "span": {
+            "end": 145,
+            "start": 144
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
+      },
+      "id": "GEN 2:1",
+      "isUsfmStructureChange": true,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "modified"
+    },
+    {
+      "baselineTokens": [],
+      "currentSid": "GEN 2:99",
+      "currentTokens": [
+        {
+          "id": "GEN-28",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 2:99",
+          "source": "\\v ",
+          "span": {
+            "end": 148,
+            "start": 145
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-29",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 99
+          },
+          "sid": "GEN 2:99",
+          "source": "99 ",
+          "span": {
+            "end": 151,
+            "start": 148
+          }
+        },
+        {
+          "id": "GEN-30",
+          "kind": "text",
+          "sid": "GEN 2:99",
+          "source": "trailing addition",
+          "span": {
+            "end": 168,
+            "start": 151
+          }
+        },
+        {
+          "id": "GEN-31",
+          "kind": "newline",
+          "sid": "GEN 2:99",
+          "source": "\n",
+          "span": {
+            "end": 169,
+            "start": 168
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 0,
+        "currentCount": 1
+      },
+      "id": "GEN 2:99",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "added",
+      "relabeled": false,
+      "status": "added"
+    }
+  ]
+}

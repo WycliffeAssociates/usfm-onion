@@ -546,7 +546,7 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         let sid = token
             .sid
             .as_ref()
-            .map(|s| format!("{} {}:{}", s.book, s.chapter, s.verse));
+            .map(|s| format!("{} {}:{}", s.book, s.chapter, s.verse_locator()));
         let token_id = token_id_str(&token.id);
         self.current_verse = (!number.is_empty()).then_some(number.clone());
         self.note_count_in_verse = 0;

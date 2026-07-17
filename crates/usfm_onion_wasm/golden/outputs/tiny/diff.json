@@ -1,873 +1,656 @@
-[
-  {
-    "blockId": "::GEN-0",
-    "current": {
-      "blockId": "::GEN-0",
-      "endExclusive": 1,
-      "semanticSid": "",
-      "start": 0,
-      "textFull": "\\id "
+{
+  "slots": [
+    {
+      "role": "shared",
+      "unitId": "GEN 0:0"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      }
-    ],
-    "currentText": "\\id ",
-    "currentTextOnly": "",
-    "currentTokens": [
-      {
-        "id": "GEN-0",
-        "kind": "marker",
-        "marker": "id",
-        "markerMetadata": {
-          "canonical": "id",
-          "kind": "header"
-        },
-        "nested": false,
-        "source": "\\id ",
-        "span": {
-          "end": 4,
-          "start": 0
-        },
-        "structural": {
-          "scopeKind": "header"
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "::GEN-0",
-      "endExclusive": 1,
-      "semanticSid": "",
-      "start": 0,
-      "textFull": "\\id "
-    },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      }
-    ],
-    "originalText": "\\id ",
-    "originalTextOnly": "",
-    "originalTokens": [
-      {
-        "id": "GEN-0",
-        "kind": "marker",
-        "marker": "id",
-        "markerMetadata": {
-          "canonical": "id",
-          "kind": "header"
-        },
-        "nested": false,
-        "source": "\\id ",
-        "span": {
-          "end": 4,
-          "start": 0
-        },
-        "structural": {
-          "scopeKind": "header"
-        }
-      }
-    ],
-    "semanticSid": "",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 0:0::GEN-1",
-    "current": {
-      "blockId": "GEN 0:0::GEN-1",
-      "endExclusive": 3,
-      "prevBlockId": "::GEN-0",
-      "semanticSid": "GEN 0:0",
-      "start": 1,
-      "textFull": "GEN\n"
-    },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      }
-    ],
-    "currentText": "GEN\n",
-    "currentTextOnly": "GEN",
-    "currentTokens": [
-      {
-        "bookCode": "GEN",
-        "bookCodeValid": true,
-        "id": "GEN-1",
-        "kind": "bookCode",
+    {
+      "after": {
         "sid": "GEN 0:0",
-        "source": "GEN",
-        "span": {
-          "end": 7,
-          "start": 4
-        }
+        "unitId": "GEN 0:0"
       },
-      {
-        "id": "GEN-2",
-        "kind": "newline",
-        "sid": "GEN 0:0",
-        "source": "\n",
-        "span": {
-          "end": 8,
-          "start": 7
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 0:0::GEN-1",
-      "endExclusive": 3,
-      "prevBlockId": "::GEN-0",
-      "semanticSid": "GEN 0:0",
-      "start": 1,
-      "textFull": "GEN\n"
+      "role": "shared",
+      "unitId": "GEN 1:0"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 1:0",
+        "unitId": "GEN 1:0"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      }
-    ],
-    "originalText": "GEN\n",
-    "originalTextOnly": "GEN",
-    "originalTokens": [
-      {
-        "bookCode": "GEN",
-        "bookCodeValid": true,
-        "id": "GEN-1",
-        "kind": "bookCode",
-        "sid": "GEN 0:0",
-        "source": "GEN",
-        "span": {
-          "end": 7,
-          "start": 4
-        }
-      },
-      {
-        "id": "GEN-2",
-        "kind": "newline",
-        "sid": "GEN 0:0",
-        "source": "\n",
-        "span": {
-          "end": 8,
-          "start": 7
-        }
-      }
-    ],
-    "semanticSid": "GEN 0:0",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:0::GEN-3",
-    "current": {
-      "blockId": "GEN 1:0::GEN-3",
-      "endExclusive": 8,
-      "prevBlockId": "GEN 0:0::GEN-1",
-      "semanticSid": "GEN 1:0",
-      "start": 3,
-      "textFull": "\\c 1\n\\p\n"
+      "role": "shared",
+      "unitId": "GEN 1:1"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 1:1",
+        "unitId": "GEN 1:1"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 4
-      }
-    ],
-    "currentText": "\\c 1\n\\p\n",
-    "currentTextOnly": "1",
-    "currentTokens": [
-      {
-        "id": "GEN-3",
-        "kind": "marker",
-        "marker": "c",
-        "markerMetadata": {
-          "canonical": "c",
-          "kind": "chapter"
-        },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\c ",
-        "span": {
-          "end": 11,
-          "start": 8
-        },
-        "structural": {
-          "scopeKind": "chapter"
-        }
-      },
-      {
-        "id": "GEN-4",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
-        },
-        "sid": "GEN 1:0",
-        "source": "1",
-        "span": {
-          "end": 12,
-          "start": 11
-        }
-      },
-      {
-        "id": "GEN-5",
-        "kind": "newline",
-        "sid": "GEN 1:0",
-        "source": "\n",
-        "span": {
-          "end": 13,
-          "start": 12
-        }
-      },
-      {
-        "id": "GEN-6",
-        "kind": "marker",
-        "marker": "p",
-        "markerMetadata": {
-          "canonical": "p",
-          "kind": "paragraph"
-        },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\p",
-        "span": {
-          "end": 15,
-          "start": 13
-        },
-        "structural": {
-          "inlineContext": "para",
-          "scopeKind": "block"
-        }
-      },
-      {
-        "id": "GEN-7",
-        "kind": "newline",
-        "sid": "GEN 1:0",
-        "source": "\n",
-        "span": {
-          "end": 16,
-          "start": 15
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:0::GEN-3",
-      "endExclusive": 8,
-      "prevBlockId": "GEN 0:0::GEN-1",
-      "semanticSid": "GEN 1:0",
-      "start": 3,
-      "textFull": "\\c 1\n\\p\n"
+      "role": "shared",
+      "unitId": "GEN 1:2"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
+    {
+      "after": {
+        "sid": "GEN 1:2",
+        "unitId": "GEN 1:2"
       },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 4
-      }
-    ],
-    "originalText": "\\c 1\n\\p\n",
-    "originalTextOnly": "1",
-    "originalTokens": [
-      {
-        "id": "GEN-3",
-        "kind": "marker",
-        "marker": "c",
-        "markerMetadata": {
-          "canonical": "c",
-          "kind": "chapter"
+      "role": "currentOnly",
+      "unitId": "GEN 1:99"
+    }
+  ],
+  "units": [
+    {
+      "baselineSid": "GEN 0:0",
+      "baselineTokens": [
+        {
+          "id": "GEN-0",
+          "kind": "marker",
+          "marker": "id",
+          "markerMetadata": {
+            "canonical": "id",
+            "kind": "header"
+          },
+          "nested": false,
+          "source": "\\id ",
+          "span": {
+            "end": 4,
+            "start": 0
+          },
+          "structural": {
+            "scopeKind": "header"
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\c ",
-        "span": {
-          "end": 11,
-          "start": 8
+        {
+          "bookCode": "GEN",
+          "bookCodeValid": true,
+          "id": "GEN-1",
+          "kind": "bookCode",
+          "sid": "GEN 0:0",
+          "source": "GEN",
+          "span": {
+            "end": 7,
+            "start": 4
+          }
         },
-        "structural": {
-          "scopeKind": "chapter"
+        {
+          "id": "GEN-2",
+          "kind": "newline",
+          "sid": "GEN 0:0",
+          "source": "\n",
+          "span": {
+            "end": 8,
+            "start": 7
+          }
         }
-      },
-      {
-        "id": "GEN-4",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
+      ],
+      "currentSid": "GEN 0:0",
+      "currentTokens": [
+        {
+          "id": "GEN-0",
+          "kind": "marker",
+          "marker": "id",
+          "markerMetadata": {
+            "canonical": "id",
+            "kind": "header"
+          },
+          "nested": false,
+          "source": "\\id ",
+          "span": {
+            "end": 4,
+            "start": 0
+          },
+          "structural": {
+            "scopeKind": "header"
+          }
         },
-        "sid": "GEN 1:0",
-        "source": "1",
-        "span": {
-          "end": 12,
-          "start": 11
-        }
-      },
-      {
-        "id": "GEN-5",
-        "kind": "newline",
-        "sid": "GEN 1:0",
-        "source": "\n",
-        "span": {
-          "end": 13,
-          "start": 12
-        }
-      },
-      {
-        "id": "GEN-6",
-        "kind": "marker",
-        "marker": "p",
-        "markerMetadata": {
-          "canonical": "p",
-          "kind": "paragraph"
+        {
+          "bookCode": "GEN",
+          "bookCodeValid": true,
+          "id": "GEN-1",
+          "kind": "bookCode",
+          "sid": "GEN 0:0",
+          "source": "GEN",
+          "span": {
+            "end": 7,
+            "start": 4
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:0",
-        "source": "\\p",
-        "span": {
-          "end": 15,
-          "start": 13
-        },
-        "structural": {
-          "inlineContext": "para",
-          "scopeKind": "block"
+        {
+          "id": "GEN-2",
+          "kind": "newline",
+          "sid": "GEN 0:0",
+          "source": "\n",
+          "span": {
+            "end": 8,
+            "start": 7
+          }
         }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-7",
-        "kind": "newline",
-        "sid": "GEN 1:0",
-        "source": "\n",
-        "span": {
-          "end": 16,
-          "start": 15
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:0",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:1::GEN-8",
-    "current": {
-      "blockId": "GEN 1:1::GEN-8",
-      "endExclusive": 12,
-      "prevBlockId": "GEN 1:0::GEN-3",
-      "semanticSid": "GEN 1:1",
-      "start": 8,
-      "textFull": "\\v 1 In the beginning God created the heavens and the earth.\n"
+      "id": "GEN 0:0",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "currentText": "\\v 1 In the beginning God created the heavens and the earth.\n",
-    "currentTextOnly": "1 In the beginning God created the heavens and the earth.",
-    "currentTokens": [
-      {
-        "id": "GEN-8",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineSid": "GEN 1:0",
+      "baselineTokens": [
+        {
+          "id": "GEN-3",
+          "kind": "marker",
+          "marker": "c",
+          "markerMetadata": {
+            "canonical": "c",
+            "kind": "chapter"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\c ",
+          "span": {
+            "end": 11,
+            "start": 8
+          },
+          "structural": {
+            "scopeKind": "chapter"
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:1",
-        "source": "\\v ",
-        "span": {
-          "end": 19,
-          "start": 16
+        {
+          "id": "GEN-4",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:0",
+          "source": "1",
+          "span": {
+            "end": 12,
+            "start": 11
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-9",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
+        {
+          "id": "GEN-5",
+          "kind": "newline",
+          "sid": "GEN 1:0",
+          "source": "\n",
+          "span": {
+            "end": 13,
+            "start": 12
+          }
         },
-        "sid": "GEN 1:1",
-        "source": "1 ",
-        "span": {
-          "end": 21,
-          "start": 19
+        {
+          "id": "GEN-6",
+          "kind": "marker",
+          "marker": "p",
+          "markerMetadata": {
+            "canonical": "p",
+            "kind": "paragraph"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\p",
+          "span": {
+            "end": 15,
+            "start": 13
+          },
+          "structural": {
+            "inlineContext": "para",
+            "scopeKind": "block"
+          }
+        },
+        {
+          "id": "GEN-7",
+          "kind": "newline",
+          "sid": "GEN 1:0",
+          "source": "\n",
+          "span": {
+            "end": 16,
+            "start": 15
+          }
         }
+      ],
+      "currentSid": "GEN 1:0",
+      "currentTokens": [
+        {
+          "id": "GEN-3",
+          "kind": "marker",
+          "marker": "c",
+          "markerMetadata": {
+            "canonical": "c",
+            "kind": "chapter"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\c ",
+          "span": {
+            "end": 11,
+            "start": 8
+          },
+          "structural": {
+            "scopeKind": "chapter"
+          }
+        },
+        {
+          "id": "GEN-4",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:0",
+          "source": "1",
+          "span": {
+            "end": 12,
+            "start": 11
+          }
+        },
+        {
+          "id": "GEN-5",
+          "kind": "newline",
+          "sid": "GEN 1:0",
+          "source": "\n",
+          "span": {
+            "end": 13,
+            "start": 12
+          }
+        },
+        {
+          "id": "GEN-6",
+          "kind": "marker",
+          "marker": "p",
+          "markerMetadata": {
+            "canonical": "p",
+            "kind": "paragraph"
+          },
+          "nested": false,
+          "sid": "GEN 1:0",
+          "source": "\\p",
+          "span": {
+            "end": 15,
+            "start": 13
+          },
+          "structural": {
+            "inlineContext": "para",
+            "scopeKind": "block"
+          }
+        },
+        {
+          "id": "GEN-7",
+          "kind": "newline",
+          "sid": "GEN 1:0",
+          "source": "\n",
+          "span": {
+            "end": 16,
+            "start": 15
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-10",
-        "kind": "text",
-        "sid": "GEN 1:1",
-        "source": "In the beginning God created the heavens and the earth.",
-        "span": {
-          "end": 76,
-          "start": 21
-        }
-      },
-      {
-        "id": "GEN-11",
-        "kind": "newline",
-        "sid": "GEN 1:1",
-        "source": "\n",
-        "span": {
-          "end": 77,
-          "start": 76
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:1::GEN-8",
-      "endExclusive": 12,
-      "prevBlockId": "GEN 1:0::GEN-3",
-      "semanticSid": "GEN 1:1",
-      "start": 8,
-      "textFull": "\\v 1 In the beginning God created the heavens and the earth.\n"
+      "id": "GEN 1:0",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\v 1 In the beginning God created the heavens and the earth.\n",
-    "originalTextOnly": "1 In the beginning God created the heavens and the earth.",
-    "originalTokens": [
-      {
-        "id": "GEN-8",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineSid": "GEN 1:1",
+      "baselineTokens": [
+        {
+          "id": "GEN-8",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:1",
+          "source": "\\v ",
+          "span": {
+            "end": 19,
+            "start": 16
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:1",
-        "source": "\\v ",
-        "span": {
-          "end": 19,
-          "start": 16
+        {
+          "id": "GEN-9",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:1",
+          "source": "1 ",
+          "span": {
+            "end": 21,
+            "start": 19
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-9",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 1
+        {
+          "id": "GEN-10",
+          "kind": "text",
+          "sid": "GEN 1:1",
+          "source": "In the beginning God created the heavens and the earth.",
+          "span": {
+            "end": 76,
+            "start": 21
+          }
         },
-        "sid": "GEN 1:1",
-        "source": "1 ",
-        "span": {
-          "end": 21,
-          "start": 19
+        {
+          "id": "GEN-11",
+          "kind": "newline",
+          "sid": "GEN 1:1",
+          "source": "\n",
+          "span": {
+            "end": 77,
+            "start": 76
+          }
         }
+      ],
+      "currentSid": "GEN 1:1",
+      "currentTokens": [
+        {
+          "id": "GEN-8",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:1",
+          "source": "\\v ",
+          "span": {
+            "end": 19,
+            "start": 16
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
+        },
+        {
+          "id": "GEN-9",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 1
+          },
+          "sid": "GEN 1:1",
+          "source": "1 ",
+          "span": {
+            "end": 21,
+            "start": 19
+          }
+        },
+        {
+          "id": "GEN-10",
+          "kind": "text",
+          "sid": "GEN 1:1",
+          "source": "In the beginning God created the heavens and the earth.",
+          "span": {
+            "end": 76,
+            "start": 21
+          }
+        },
+        {
+          "id": "GEN-11",
+          "kind": "newline",
+          "sid": "GEN 1:1",
+          "source": "\n",
+          "span": {
+            "end": 77,
+            "start": 76
+          }
+        }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-10",
-        "kind": "text",
-        "sid": "GEN 1:1",
-        "source": "In the beginning God created the heavens and the earth.",
-        "span": {
-          "end": 76,
-          "start": 21
-        }
-      },
-      {
-        "id": "GEN-11",
-        "kind": "newline",
-        "sid": "GEN 1:1",
-        "source": "\n",
-        "span": {
-          "end": 77,
-          "start": 76
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:1",
-    "status": "unchanged",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:2::GEN-12",
-    "current": {
-      "blockId": "GEN 1:2::GEN-12",
-      "endExclusive": 18,
-      "prevBlockId": "GEN 1:1::GEN-8",
-      "semanticSid": "GEN 1:2",
-      "start": 12,
-      "textFull": "\\v 2 The earth was without form and void.\n\\p\n"
+      "id": "GEN 1:1",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "unchanged"
     },
-    "currentAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      },
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      }
-    ],
-    "currentText": "\\v 2 The earth was without form and void.\n\\p\n",
-    "currentTextOnly": "2 The earth was without form and void.",
-    "currentTokens": [
-      {
-        "id": "GEN-12",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineSid": "GEN 1:2",
+      "baselineTokens": [
+        {
+          "id": "GEN-12",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:2",
+          "source": "\\v ",
+          "span": {
+            "end": 80,
+            "start": 77
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:2",
-        "source": "\\v ",
-        "span": {
-          "end": 80,
-          "start": 77
+        {
+          "id": "GEN-13",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 2
+          },
+          "sid": "GEN 1:2",
+          "source": "2 ",
+          "span": {
+            "end": 82,
+            "start": 80
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-13",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 2
+        {
+          "id": "GEN-14",
+          "kind": "text",
+          "sid": "GEN 1:2",
+          "source": "The earth was without form and void.",
+          "span": {
+            "end": 118,
+            "start": 82
+          }
         },
-        "sid": "GEN 1:2",
-        "source": "2 ",
-        "span": {
-          "end": 82,
-          "start": 80
+        {
+          "id": "GEN-15",
+          "kind": "newline",
+          "sid": "GEN 1:2",
+          "source": "\n",
+          "span": {
+            "end": 119,
+            "start": 118
+          }
         }
-      },
-      {
-        "id": "GEN-14",
-        "kind": "text",
-        "sid": "GEN 1:2",
-        "source": "The earth was without form and void.",
-        "span": {
-          "end": 118,
-          "start": 82
-        }
-      },
-      {
-        "id": "GEN-15",
-        "kind": "newline",
-        "sid": "GEN 1:2",
-        "source": "\n",
-        "span": {
-          "end": 119,
-          "start": 118
-        }
-      },
-      {
-        "id": "GEN-16",
-        "kind": "marker",
-        "marker": "p",
-        "markerMetadata": {
-          "canonical": "p",
-          "kind": "paragraph"
+      ],
+      "currentSid": "GEN 1:2",
+      "currentTokens": [
+        {
+          "id": "GEN-12",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:2",
+          "source": "\\v ",
+          "span": {
+            "end": 80,
+            "start": 77
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:2",
-        "source": "\\p",
-        "span": {
-          "end": 121,
-          "start": 119
+        {
+          "id": "GEN-13",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 2
+          },
+          "sid": "GEN 1:2",
+          "source": "2 ",
+          "span": {
+            "end": 82,
+            "start": 80
+          }
         },
-        "structural": {
-          "inlineContext": "para",
-          "scopeKind": "block"
+        {
+          "id": "GEN-14",
+          "kind": "text",
+          "sid": "GEN 1:2",
+          "source": "The earth was without form and void.",
+          "span": {
+            "end": 118,
+            "start": 82
+          }
+        },
+        {
+          "id": "GEN-15",
+          "kind": "newline",
+          "sid": "GEN 1:2",
+          "source": "\n",
+          "span": {
+            "end": 119,
+            "start": 118
+          }
+        },
+        {
+          "id": "GEN-16",
+          "kind": "marker",
+          "marker": "p",
+          "markerMetadata": {
+            "canonical": "p",
+            "kind": "paragraph"
+          },
+          "nested": false,
+          "sid": "GEN 1:2",
+          "source": "\\p",
+          "span": {
+            "end": 121,
+            "start": 119
+          },
+          "structural": {
+            "inlineContext": "para",
+            "scopeKind": "block"
+          }
+        },
+        {
+          "id": "GEN-17",
+          "kind": "newline",
+          "sid": "GEN 1:2",
+          "source": "\n",
+          "span": {
+            "end": 122,
+            "start": 121
+          }
         }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 1,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-17",
-        "kind": "newline",
-        "sid": "GEN 1:2",
-        "source": "\n",
-        "span": {
-          "end": 122,
-          "start": 121
-        }
-      }
-    ],
-    "isUsfmStructureChange": true,
-    "isWhitespaceChange": false,
-    "original": {
-      "blockId": "GEN 1:2::GEN-12",
-      "endExclusive": 16,
-      "prevBlockId": "GEN 1:1::GEN-8",
-      "semanticSid": "GEN 1:2",
-      "start": 12,
-      "textFull": "\\v 2 The earth was without form and void.\n"
+      "id": "GEN 1:2",
+      "isUsfmStructureChange": true,
+      "isWhitespaceChange": false,
+      "kind": "shared",
+      "relabeled": false,
+      "status": "modified"
     },
-    "originalAlignment": [
-      {
-        "change": "unchanged",
-        "counterpartIndex": 0
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 1
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 2
-      },
-      {
-        "change": "unchanged",
-        "counterpartIndex": 3
-      }
-    ],
-    "originalText": "\\v 2 The earth was without form and void.\n",
-    "originalTextOnly": "2 The earth was without form and void.",
-    "originalTokens": [
-      {
-        "id": "GEN-12",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
+    {
+      "baselineTokens": [],
+      "currentSid": "GEN 1:99",
+      "currentTokens": [
+        {
+          "id": "GEN-18",
+          "kind": "marker",
+          "marker": "v",
+          "markerMetadata": {
+            "canonical": "v",
+            "kind": "verse"
+          },
+          "nested": false,
+          "sid": "GEN 1:99",
+          "source": "\\v ",
+          "span": {
+            "end": 125,
+            "start": 122
+          },
+          "structural": {
+            "scopeKind": "verse"
+          }
         },
-        "nested": false,
-        "sid": "GEN 1:2",
-        "source": "\\v ",
-        "span": {
-          "end": 80,
-          "start": 77
+        {
+          "id": "GEN-19",
+          "kind": "number",
+          "numberInfo": {
+            "kind": "single",
+            "start": 99
+          },
+          "sid": "GEN 1:99",
+          "source": "99 ",
+          "span": {
+            "end": 128,
+            "start": 125
+          }
         },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-13",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 2
+        {
+          "id": "GEN-20",
+          "kind": "text",
+          "sid": "GEN 1:99",
+          "source": "trailing addition",
+          "span": {
+            "end": 145,
+            "start": 128
+          }
         },
-        "sid": "GEN 1:2",
-        "source": "2 ",
-        "span": {
-          "end": 82,
-          "start": 80
+        {
+          "id": "GEN-21",
+          "kind": "newline",
+          "sid": "GEN 1:99",
+          "source": "\n",
+          "span": {
+            "end": 146,
+            "start": 145
+          }
         }
+      ],
+      "displaced": false,
+      "dupContext": {
+        "baselineCount": 0,
+        "currentCount": 1
       },
-      {
-        "id": "GEN-14",
-        "kind": "text",
-        "sid": "GEN 1:2",
-        "source": "The earth was without form and void.",
-        "span": {
-          "end": 118,
-          "start": 82
-        }
-      },
-      {
-        "id": "GEN-15",
-        "kind": "newline",
-        "sid": "GEN 1:2",
-        "source": "\n",
-        "span": {
-          "end": 119,
-          "start": 118
-        }
-      }
-    ],
-    "semanticSid": "GEN 1:2",
-    "status": "modified",
-    "undoSide": "current"
-  },
-  {
-    "blockId": "GEN 1:99::GEN-18",
-    "current": {
-      "blockId": "GEN 1:99::GEN-18",
-      "endExclusive": 22,
-      "prevBlockId": "GEN 1:2::GEN-12",
-      "semanticSid": "GEN 1:99",
-      "start": 18,
-      "textFull": "\\v 99 trailing addition\n"
-    },
-    "currentAlignment": [
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      },
-      {
-        "change": "added"
-      }
-    ],
-    "currentText": "\\v 99 trailing addition\n",
-    "currentTextOnly": "99 trailing addition",
-    "currentTokens": [
-      {
-        "id": "GEN-18",
-        "kind": "marker",
-        "marker": "v",
-        "markerMetadata": {
-          "canonical": "v",
-          "kind": "verse"
-        },
-        "nested": false,
-        "sid": "GEN 1:99",
-        "source": "\\v ",
-        "span": {
-          "end": 125,
-          "start": 122
-        },
-        "structural": {
-          "scopeKind": "verse"
-        }
-      },
-      {
-        "id": "GEN-19",
-        "kind": "number",
-        "numberInfo": {
-          "kind": "single",
-          "start": 99
-        },
-        "sid": "GEN 1:99",
-        "source": "99 ",
-        "span": {
-          "end": 128,
-          "start": 125
-        }
-      },
-      {
-        "id": "GEN-20",
-        "kind": "text",
-        "sid": "GEN 1:99",
-        "source": "trailing addition",
-        "span": {
-          "end": 145,
-          "start": 128
-        }
-      },
-      {
-        "id": "GEN-21",
-        "kind": "newline",
-        "sid": "GEN 1:99",
-        "source": "\n",
-        "span": {
-          "end": 146,
-          "start": 145
-        }
-      }
-    ],
-    "isUsfmStructureChange": false,
-    "isWhitespaceChange": false,
-    "originalAlignment": [],
-    "originalText": "",
-    "originalTextOnly": "",
-    "originalTokens": [],
-    "semanticSid": "GEN 1:99",
-    "status": "added",
-    "undoSide": "current"
-  }
-]
+      "id": "GEN 1:99",
+      "isUsfmStructureChange": false,
+      "isWhitespaceChange": false,
+      "kind": "added",
+      "relabeled": false,
+      "status": "added"
+    }
+  ]
+}

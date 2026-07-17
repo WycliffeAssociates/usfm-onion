@@ -106,16 +106,20 @@ Machine-readable formatter rule ids are exposed through `FormatRule`.
 
 ### `diff`
 
-Diff is token-first and SID-block based.
+Diff is projection-based: a `DiffSkeleton` interleaves baseline/current sid
+blocks, with a coalesced move occupying two linked slots bound to one
+decision. See `diff::skeleton` for the full model (`Slot`, `Anchor`,
+`DecisionUnit`, `DecisionStatus`, `DecisionUnitKind`).
 
 Main entrypoints:
 
 ```rust
 use usfm_onion::diff::{
-    diff_chapter_token_streams,
-    diff_usfm_sources,
-    diff_usfm_sources_by_chapter,
-    BuildSidBlocksOptions,
+    diff_skeleton,           // a skeleton over two token slices
+    diff_skeleton_canonical, // native Token convention: never trusts a carried sid
+    diff_skeleton_by_chapter, // one skeleton per book/chapter, from raw USFM source
+    merge_diff_blocks,       // pure projection merge from staged decisions
+    revert_diff_block,       // revert a single unit; errors on an unknown id
 };
 ```
 

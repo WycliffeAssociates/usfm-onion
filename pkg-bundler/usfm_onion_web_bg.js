@@ -42,31 +42,20 @@ export class ParsedUsfm {
     }
     /**
      * @param {ParsedUsfm} other
-     * @param {BuildSidBlocksOptions | null} [options]
-     * @returns {ChapterTokenDiff[]}
+     * @returns {DiffSkeleton}
      */
-    diff(other, options) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            _assertClass(other, ParsedUsfm);
-            wasm.parsedusfm_diff(retptr, this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+    diff(other) {
+        _assertClass(other, ParsedUsfm);
+        const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr);
+        return takeObject(ret);
     }
     /**
      * @param {ParsedUsfm} other
-     * @param {BuildSidBlocksOptions | null} [options]
      * @returns {DiffsByChapterMap}
      */
-    diffByChapter(other, options) {
+    diffByChapter(other) {
         _assertClass(other, ParsedUsfm);
-        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
+        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr);
         return takeObject(ret);
     }
     /**
@@ -100,18 +89,22 @@ export class ParsedUsfm {
     /**
      * @param {ParsedUsfm} current
      * @param {string} block_id
-     * @param {BuildSidBlocksOptions | null} [options]
      * @returns {Token[]}
      */
-    revertDiffBlock(current, block_id, options) {
+    revertDiffBlock(current, block_id) {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             _assertClass(current, ParsedUsfm);
             const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
             const len0 = WASM_VECTOR_LEN;
-            wasm.parsedusfm_revertDiffBlock(retptr, this.__wbg_ptr, current.__wbg_ptr, ptr0, len0, isLikeNone(options) ? 0 : addHeapObject(options));
+            wasm.parsedusfm_revertDiffBlock(retptr, this.__wbg_ptr, current.__wbg_ptr, ptr0, len0);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
             var v2 = getArrayJsValueFromWasm0(r0, r1).slice();
             wasm.__wbindgen_export4(r0, r1 * 4, 4);
             return v2;
@@ -318,63 +311,42 @@ export function applyTokenFix(tokens, fix) {
 /**
  * @param {Token[]} left
  * @param {Token[]} right
- * @param {BuildSidBlocksOptions | null} [options]
- * @returns {ChapterTokenDiff[]}
+ * @returns {DiffSkeleton}
  */
-export function diffTokens(left, right, options) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(left, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayJsValueToWasm0(right, wasm.__wbindgen_export);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.diffTokens(retptr, ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v3 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v3;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+export function diffTokens(left, right) {
+    const ptr0 = passArrayJsValueToWasm0(left, wasm.__wbindgen_export);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(right, wasm.__wbindgen_export);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.diffTokens(ptr0, len0, ptr1, len1);
+    return takeObject(ret);
 }
 
 /**
  * @param {string} left
  * @param {string} right
- * @param {BuildSidBlocksOptions | null} [options]
- * @returns {ChapterTokenDiff[]}
+ * @returns {DiffSkeleton}
  */
-export function diffUsfm(left, right, options) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.diffUsfm(retptr, ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v3 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v3;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * @param {string} left
- * @param {string} right
- * @param {BuildSidBlocksOptions | null} [options]
- * @returns {DiffsByChapterMap}
- */
-export function diffUsfmByChapter(left, right, options) {
+export function diffUsfm(left, right) {
     const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
+    const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1);
+    return takeObject(ret);
+}
+
+/**
+ * @param {string} left
+ * @param {string} right
+ * @returns {DiffsByChapterMap}
+ */
+export function diffUsfmByChapter(left, right) {
+    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1);
     return takeObject(ret);
 }
 
@@ -558,6 +530,58 @@ export function markerInfo(marker) {
 }
 
 /**
+ * @param {Token[]} baseline
+ * @param {Token[]} current
+ * @param {MergeRequest} request
+ * @returns {Token[]}
+ */
+export function mergeDiffBlocks(baseline, current, request) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.mergeDiffBlocks(retptr, ptr0, len0, ptr1, len1, addHeapObject(request));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        if (r3) {
+            throw takeObject(r2);
+        }
+        var v3 = getArrayJsValueFromWasm0(r0, r1).slice();
+        wasm.__wbindgen_export4(r0, r1 * 4, 4);
+        return v3;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * @param {Token[]} tokens
+ * @param {string} book_code
+ * @returns {Token[]}
+ */
+export function normalizeTokenSids(tokens, book_code) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(book_code, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.normalizeTokenSids(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var v3 = getArrayJsValueFromWasm0(r0, r1).slice();
+        wasm.__wbindgen_export4(r0, r1 * 4, 4);
+        return v3;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * @param {string} source
  * @returns {ParsedUsfm}
  */
@@ -572,10 +596,9 @@ export function parse(source) {
  * @param {Token[]} baseline
  * @param {Token[]} current
  * @param {string} block_id
- * @param {BuildSidBlocksOptions | null} [options]
  * @returns {Token[]}
  */
-export function revertDiffBlock(baseline, current, block_id, options) {
+export function revertDiffBlock(baseline, current, block_id) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_export);
@@ -584,36 +607,14 @@ export function revertDiffBlock(baseline, current, block_id, options) {
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(block_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len2 = WASM_VECTOR_LEN;
-        wasm.revertDiffBlock(retptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(options) ? 0 : addHeapObject(options));
+        wasm.revertDiffBlock(retptr, ptr0, len0, ptr1, len1, ptr2, len2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v4 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v4;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * @param {Token[]} baseline
- * @param {Token[]} current
- * @param {string[]} block_ids
- * @param {BuildSidBlocksOptions | null} [options]
- * @returns {Token[]}
- */
-export function revertDiffBlocks(baseline, current, block_ids, options) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_export);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passArrayJsValueToWasm0(block_ids, wasm.__wbindgen_export);
-        const len2 = WASM_VECTOR_LEN;
-        wasm.revertDiffBlocks(retptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(options) ? 0 : addHeapObject(options));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        if (r3) {
+            throw takeObject(r2);
+        }
         var v4 = getArrayJsValueFromWasm0(r0, r1).slice();
         wasm.__wbindgen_export4(r0, r1 * 4, 4);
         return v4;

@@ -15,7 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use usfm_onion::{BuildSidBlocksOptions, FormatOptions, HtmlOptions, LintOptions, LintScope};
+use usfm_onion::{FormatOptions, HtmlOptions, LintOptions, LintScope};
 
 // ---- default fixtures ----------------------------------------------------
 
@@ -156,25 +156,20 @@ fn run_diff(baseline_path: &str, current_path: &str, iters: usize) {
     let current = read_source(Path::new(current_path));
     let bytes = baseline.len() + current.len();
 
+    let baseline_doc = usfm_onion::Usfm::from_str(&baseline);
+    let current_doc = usfm_onion::Usfm::from_str(&current);
+
     let started = Instant::now();
     for _ in 0..iters {
-        let diffs = usfm_onion::diff::diff_usfm_sources(
-            &baseline,
-            &current,
-            &BuildSidBlocksOptions::default(),
-        );
-        std::hint::black_box(diffs);
+        let skeleton = baseline_doc.diff(&current_doc).run();
+        std::hint::black_box(skeleton);
     }
     let elapsed = started.elapsed();
     print_timing("diff", iters, bytes * iters, elapsed);
 
     if iters == 1 {
-        let diffs = usfm_onion::diff::diff_usfm_sources(
-            &baseline,
-            &current,
-            &BuildSidBlocksOptions::default(),
-        );
-        write_json("playgroundOut.json", &diffs);
+        let skeleton = baseline_doc.diff(&current_doc).run();
+        write_json("playgroundOut.json", &skeleton);
         eprintln!("wrote playgroundOut.json (diff of {baseline_path} vs {current_path})");
     }
 }

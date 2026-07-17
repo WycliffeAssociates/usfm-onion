@@ -64,11 +64,15 @@ assert.equal(typeof formatted, "string");
 
 const editedParsed = pkg.parse(edited);
 
-const diffs = parsed.diff(editedParsed);
-assert.ok(Array.isArray(diffs), "diff() returns an array");
+const skeleton = parsed.diff(editedParsed);
+assert.ok(Array.isArray(skeleton.slots), "diff().slots is an array");
+assert.ok(Array.isArray(skeleton.units), "diff().units is an array");
+assert.ok(skeleton.units.length > 0, "diff() finds at least one unit");
 
 const diffsByChapter = parsed.diffByChapter(editedParsed);
 assert.equal(typeof diffsByChapter, "object", "diffByChapter() returns object");
+const genChapters = diffsByChapter["GEN"];
+assert.ok(genChapters && Array.isArray(genChapters["1"].units), "diffByChapter() nests a skeleton per chapter");
 
 // --- standalone source-in functions ------------------------------------
 
@@ -82,11 +86,11 @@ assert.deepEqual(
 const formattedFromSource = pkg.formatUsfm(source);
 assert.equal(formattedFromSource, formatted, "formatUsfm() matches parsed.format()");
 
-const diffsFromSource = pkg.diffUsfm(source, edited);
+const skeletonFromSource = pkg.diffUsfm(source, edited);
 assert.equal(
-  diffsFromSource.length,
-  diffs.length,
-  "diffUsfm() and parsed.diff() agree on block count",
+  skeletonFromSource.units.length,
+  skeleton.units.length,
+  "diffUsfm() and parsed.diff() agree on unit count",
 );
 
 // --- token-in functions ------------------------------------------------
@@ -108,8 +112,8 @@ const formattedTokensMut = pkg.formatTokensMut(tokens);
 assert.ok(Array.isArray(formattedTokensMut), "formatTokensMut() returns array");
 
 const editedTokens = editedParsed.tokens();
-const tokenDiffs = pkg.diffTokens(tokens, editedTokens);
-assert.ok(Array.isArray(tokenDiffs), "diffTokens() returns an array");
+const tokenSkeleton = pkg.diffTokens(tokens, editedTokens);
+assert.ok(Array.isArray(tokenSkeleton.units), "diffTokens() returns a skeleton");
 
 // --- token fix flow ----------------------------------------------------
 
@@ -126,26 +130,73 @@ const standaloneFixed = pkg.applyTokenFix(
 );
 assert.ok(Array.isArray(standaloneFixed), "standalone applyTokenFix() returns tokens");
 
-// --- revert diff block -------------------------------------------------
+// --- merge: P2 identities, mixed decisions, revert equivalence ---------
 
-if (diffs.length > 0) {
-  const reverted = parsed.revertDiffBlock(editedParsed, diffs[0].blockId);
-  assert.ok(Array.isArray(reverted), "revertDiffBlock() returns tokens");
+const allBaseline = pkg.mergeDiffBlocks(tokens, editedTokens, { decisions: {}, defaultSide: "baseline" });
+assert.equal(pkg.tokensToUsfm(allBaseline), source, "merge all-baseline reproduces source byte-exact (P2)");
 
-  const standaloneReverted = pkg.revertDiffBlock(
-    tokens,
-    editedTokens,
-    diffs[0].blockId,
-  );
-  assert.ok(Array.isArray(standaloneReverted));
+const allCurrent = pkg.mergeDiffBlocks(tokens, editedTokens, { decisions: {}, defaultSide: "current" });
+assert.equal(pkg.tokensToUsfm(allCurrent), edited, "merge all-current reproduces edited byte-exact (P2)");
 
-  const standaloneRevertedMany = pkg.revertDiffBlocks(
-    tokens,
-    editedTokens,
-    [diffs[0].blockId],
-  );
-  assert.ok(Array.isArray(standaloneRevertedMany));
+const changedUnit = tokenSkeleton.units.find((u) => u.status === "modified");
+assert.ok(changedUnit, "fixture produces a modified unit to test mixed decisions against");
+
+const revertedViaMerge = pkg.mergeDiffBlocks(tokens, editedTokens, {
+  decisions: { [changedUnit.id]: "baseline" },
+  defaultSide: "current",
+});
+assert.equal(
+  pkg.tokensToUsfm(revertedViaMerge),
+  source,
+  "mixed decision (single unit -> baseline, default current) reverts exactly like source",
+);
+
+const reverted = parsed.revertDiffBlock(editedParsed, changedUnit.id);
+assert.ok(Array.isArray(reverted), "revertDiffBlock() returns tokens");
+assert.equal(
+  pkg.tokensToUsfm(reverted),
+  pkg.tokensToUsfm(revertedViaMerge),
+  "revertDiffBlock() equals a one-decision merge({id: baseline}, current)",
+);
+
+const standaloneReverted = pkg.revertDiffBlock(tokens, editedTokens, changedUnit.id);
+assert.ok(Array.isArray(standaloneReverted));
+
+// --- move: two-slot identity --------------------------------------------
+
+const moveBaseline = "\\id GEN\n\\c 1\n\\v 1 First verse.\n\\v 2 Second verse.\n";
+const moveCurrent = "\\id GEN\n\\c 1\n\\v 2 Second verse.\n\\v 1 First verse.\n";
+const moveSkeleton = pkg.diffUsfm(moveBaseline, moveCurrent);
+const movedUnit = moveSkeleton.units.find((u) => u.kind === "coalesced");
+assert.ok(movedUnit, "a pure swap must surface as one coalesced (moved) unit");
+assert.equal(movedUnit.status, "moved", "a byte-identical displaced pair is Moved, not Modified");
+const movedSlots = moveSkeleton.slots.filter((s) => s.unitId === movedUnit.id);
+assert.equal(movedSlots.length, 2, "a moved unit spans exactly two linked slots (one decision, two ghosts)");
+assert.deepEqual(
+  movedSlots.map((s) => s.role).sort(),
+  ["pairBaseline", "pairCurrent"],
+  "the two slots are the pair's baseline and current sides",
+);
+
+// --- unknown id: strict throw, not a fuzzy fallback ---------------------
+
+function assertThrows(fn, description) {
+  try {
+    fn();
+    assert.fail(`expected ${description} to throw`);
+  } catch (error) {
+    assert.ok(error instanceof Error, `${description} throws a real Error`);
+  }
 }
+
+assertThrows(
+  () => pkg.mergeDiffBlocks(tokens, editedTokens, { decisions: { "__no_such_unit__": "baseline" }, defaultSide: "current" }),
+  "mergeDiffBlocks() on an unknown decision unit id",
+);
+assertThrows(
+  () => pkg.revertDiffBlock(tokens, editedTokens, "__no_such_unit__"),
+  "revertDiffBlock() on an unknown block id",
+);
 
 // --- marker catalog ----------------------------------------------------
 

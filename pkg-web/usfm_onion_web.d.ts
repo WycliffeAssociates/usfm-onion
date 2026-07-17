@@ -56,7 +56,7 @@ export type MarkerPayload = "bookCode" | "numberRange";
 /**
  * Diff result grouped by book and chapter: `{ \"GEN\": { 1: [...], 2: [...] } }`.
  */
-export type DiffsByChapterMap = Record<string, Record<number, ChapterTokenDiff[]>>;
+export type DiffsByChapterMap = Record<string, Record<number, DiffSkeleton>>;
 
 /**
  * Lossless plain-text projection of one verse plus its segment map back to
@@ -76,6 +76,15 @@ export interface Segment {
     tokenId: string;
     sourceSpan: Span;
     textSpan: Utf16Span;
+}
+
+/**
+ * Staged decisions for [`wasm_merge_diff_blocks`]: `Record<string,
+ * MergeSide>` plus the default applied to any unit not present in the map.
+ */
+export interface MergeRequest {
+    decisions: Record<string, MergeSide>;
+    defaultSide: MergeSide;
 }
 
 /**
@@ -106,6 +115,11 @@ export type LintScope = "front" | { chapter: number } | "book";
  */
 export type VrefIndex = Record<string, VerseProjection>;
 
+export interface Anchor {
+    unitId: string;
+    sid: string;
+}
+
 export interface AttributeItem {
     span: Span;
     text: string;
@@ -114,27 +128,10 @@ export interface AttributeItem {
     isDefault?: boolean;
 }
 
-export interface BuildSidBlocksOptions {
-    allowEmptySid?: boolean | null;
-}
-
-export interface ChapterTokenDiff {
-    blockId: string;
-    semanticSid: string;
-    status: DiffStatus;
-    original?: SidBlock;
-    current?: SidBlock;
-    originalText: string;
-    currentText: string;
-    originalTextOnly: string;
-    currentTextOnly: string;
-    isWhitespaceChange: boolean;
-    isUsfmStructureChange: boolean;
-    originalTokens: Token[];
-    currentTokens: Token[];
-    originalAlignment: TokenAlignment[];
-    currentAlignment: TokenAlignment[];
-    undoSide: DiffUndoSide;
+export interface CoveredBy {
+    unitId: string;
+    sid: string;
+    side: CoveredSide;
 }
 
 export interface CstDocument {
@@ -145,6 +142,32 @@ export interface CstDocument {
 export interface CstNode {
     tokenIndex: number;
     children: CstNode[];
+}
+
+export interface DecisionUnit {
+    id: string;
+    kind: DecisionUnitKind;
+    status: DecisionStatus;
+    baselineSid?: string;
+    currentSid?: string;
+    baselineTokens: Token[];
+    currentTokens: Token[];
+    displaced: boolean;
+    relabeled: boolean;
+    dupContext: DupContext;
+    coveredBy?: CoveredBy;
+    isWhitespaceChange: boolean;
+    isUsfmStructureChange: boolean;
+}
+
+export interface DiffSkeleton {
+    slots: Slot[];
+    units: DecisionUnit[];
+}
+
+export interface DupContext {
+    baselineCount: number;
+    currentCount: number;
 }
 
 export interface FormatOptions {
@@ -270,13 +293,10 @@ export interface NumberInfo {
     kind: NumberRangeKind;
 }
 
-export interface SidBlock {
-    blockId: string;
-    semanticSid: string;
-    start: number;
-    endExclusive: number;
-    prevBlockId?: string;
-    textFull: string;
+export interface Slot {
+    unitId: string;
+    role: SlotRole;
+    after?: Anchor;
 }
 
 export interface Span {
@@ -306,11 +326,6 @@ export interface Token {
     attributes?: AttributeItem[];
 }
 
-export interface TokenAlignment {
-    change: DiffTokenChange;
-    counterpartIndex?: number;
-}
-
 export interface TokenTemplate {
     kind: TokenKind;
     text: string;
@@ -326,11 +341,11 @@ export type BlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "s
 
 export type ClosingBehavior = "none" | "requiredExplicit" | "optionalExplicitUntilNoteEnd" | "selfClosingMilestone";
 
-export type DiffStatus = "added" | "deleted" | "modified" | "unchanged";
+export type CoveredSide = "baseline" | "current";
 
-export type DiffTokenChange = "unchanged" | "added" | "deleted" | "modified";
+export type DecisionStatus = "unchanged" | "modified" | "added" | "deleted" | "moved";
 
-export type DiffUndoSide = "original" | "current";
+export type DecisionUnitKind = "shared" | "added" | "deleted" | "coalesced";
 
 export type HtmlCallerScope = "documentSequential" | "verseSequential";
 
@@ -358,6 +373,8 @@ export type MarkerFamilyRole = "canonical" | "numberedVariant" | "nestedVariant"
 
 export type MarkerKind = "paragraph" | "note" | "character" | "header" | "chapter" | "verse" | "milestoneStart" | "milestoneEnd" | "sidebarStart" | "sidebarEnd" | "figure" | "meta" | "periph" | "tableRow" | "tableCell" | "unknown";
 
+export type MergeSide = "baseline" | "current";
+
 export type NoteFamily = "footnote" | "crossReference";
 
 export type NoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
@@ -365,6 +382,8 @@ export type NoteSubkind = "structural" | "structuralKeepsNestedCharsOpen";
 export type NumberRangeKind = "single" | "range" | "sequence" | "sequenceWithRange";
 
 export type ParagraphCategory = "identification" | "introduction" | "title" | "section" | "body" | "poetry" | "list" | "table" | "peripheral" | "other";
+
+export type SlotRole = "shared" | "baselineOnly" | "currentOnly" | "pairBaseline" | "pairCurrent";
 
 export type SpecContext = "scripture" | "bookIdentification" | "bookHeaders" | "bookTitles" | "bookIntroduction" | "bookIntroductionEndTitles" | "bookChapterLabel" | "chapterContent" | "peripheral" | "peripheralContent" | "peripheralDivision" | "chapter" | "verse" | "section" | "para" | "list" | "table" | "sidebar" | "footnote" | "crossReference";
 
@@ -381,11 +400,11 @@ export class ParsedUsfm {
     [Symbol.dispose](): void;
     applyTokenFix(fix: TokenFix): Token[];
     cst(): CstDocument;
-    diff(other: ParsedUsfm, options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
-    diffByChapter(other: ParsedUsfm, options?: BuildSidBlocksOptions | null): DiffsByChapterMap;
+    diff(other: ParsedUsfm): DiffSkeleton;
+    diffByChapter(other: ParsedUsfm): DiffsByChapterMap;
     format(options?: FormatOptions | null): string;
     lint(options: LintOptions): LintResult;
-    revertDiffBlock(current: ParsedUsfm, block_id: string, options?: BuildSidBlocksOptions | null): Token[];
+    revertDiffBlock(current: ParsedUsfm, block_id: string): Token[];
     toHtml(options?: HtmlOptions | null): string;
     toUsfm(): string;
     toUsj(): any;
@@ -406,11 +425,11 @@ export class UsfmMarkerCatalog {
 
 export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
 
-export function diffTokens(left: Token[], right: Token[], options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
+export function diffTokens(left: Token[], right: Token[]): DiffSkeleton;
 
-export function diffUsfm(left: string, right: string, options?: BuildSidBlocksOptions | null): ChapterTokenDiff[];
+export function diffUsfm(left: string, right: string): DiffSkeleton;
 
-export function diffUsfmByChapter(left: string, right: string, options?: BuildSidBlocksOptions | null): DiffsByChapterMap;
+export function diffUsfmByChapter(left: string, right: string): DiffsByChapterMap;
 
 export function formatRuleMeta(): FormatRuleMeta[];
 
@@ -436,11 +455,13 @@ export function markerCatalog(): UsfmMarkerCatalog;
 
 export function markerInfo(marker: string): MarkerInfo;
 
+export function mergeDiffBlocks(baseline: Token[], current: Token[], request: MergeRequest): Token[];
+
+export function normalizeTokenSids(tokens: Token[], book_code: string): Token[];
+
 export function parse(source: string): ParsedUsfm;
 
-export function revertDiffBlock(baseline: Token[], current: Token[], block_id: string, options?: BuildSidBlocksOptions | null): Token[];
-
-export function revertDiffBlocks(baseline: Token[], current: Token[], block_ids: string[], options?: BuildSidBlocksOptions | null): Token[];
+export function revertDiffBlock(baseline: Token[], current: Token[], block_id: string): Token[];
 
 export function tokensToHtml(tokens: Token[], options?: HtmlOptions | null): string;
 
@@ -462,9 +483,9 @@ export interface InitOutput {
     readonly __wbg_parsedusfm_free: (a: number, b: number) => void;
     readonly __wbg_usfmmarkercatalog_free: (a: number, b: number) => void;
     readonly applyTokenFix: (a: number, b: number, c: number, d: number) => void;
-    readonly diffTokens: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-    readonly diffUsfm: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-    readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly diffTokens: (a: number, b: number, c: number, d: number) => number;
+    readonly diffUsfm: (a: number, b: number, c: number, d: number) => number;
+    readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number) => number;
     readonly formatRuleMeta: (a: number) => void;
     readonly formatRules: (a: number) => void;
     readonly formatTokens: (a: number, b: number, c: number) => number;
@@ -475,16 +496,17 @@ export interface InitOutput {
     readonly lintCodes: (a: number) => void;
     readonly lintTokens: (a: number, b: number, c: number) => number;
     readonly lintUsfm: (a: number, b: number, c: number) => number;
-    readonly markerCatalog: () => number;
     readonly markerInfo: (a: number, b: number) => number;
+    readonly mergeDiffBlocks: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly normalizeTokenSids: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly parse: (a: number, b: number) => number;
     readonly parsedusfm_applyTokenFix: (a: number, b: number, c: number) => void;
     readonly parsedusfm_cst: (a: number) => number;
-    readonly parsedusfm_diff: (a: number, b: number, c: number, d: number) => void;
-    readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => number;
+    readonly parsedusfm_diff: (a: number, b: number) => number;
+    readonly parsedusfm_diffByChapter: (a: number, b: number) => number;
     readonly parsedusfm_format: (a: number, b: number, c: number) => void;
     readonly parsedusfm_lint: (a: number, b: number) => number;
-    readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly parsedusfm_toHtml: (a: number, b: number, c: number) => void;
     readonly parsedusfm_toUsfm: (a: number, b: number) => void;
     readonly parsedusfm_toUsj: (a: number, b: number) => void;
@@ -492,8 +514,7 @@ export interface InitOutput {
     readonly parsedusfm_toVref: (a: number, b: number) => number;
     readonly parsedusfm_tokens: (a: number, b: number) => void;
     readonly parsedusfm_vrefIndex: (a: number) => number;
-    readonly revertDiffBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
-    readonly revertDiffBlocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly revertDiffBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly tokensToHtml: (a: number, b: number, c: number, d: number) => void;
     readonly tokensToUsfm: (a: number, b: number, c: number) => void;
     readonly usfmmarkercatalog_all: (a: number, b: number) => void;
@@ -501,6 +522,7 @@ export interface InitOutput {
     readonly usfmmarkercatalog_get: (a: number, b: number, c: number) => number;
     readonly vrefIndexTokens: (a: number, b: number) => number;
     readonly vrefIndexUsfm: (a: number, b: number) => number;
+    readonly markerCatalog: () => number;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

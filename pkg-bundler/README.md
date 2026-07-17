@@ -461,28 +461,29 @@ HTML is part of `convert` because it is an output representation, not a parser/l
 
 ## Diffing
 
-Common diff entrypoints:
+Diff is projection-based: a `DiffSkeleton` interleaves baseline/current sid blocks, with a
+coalesced move occupying two linked slots bound to one decision. See `diff::skeleton` for the
+full model (`Slot`, `Anchor`, `DecisionUnit`, `DecisionStatus`, `DecisionUnitKind`).
 
-- `diff::diff_content`
-- `diff::diff_tokens`
-- `diff::diff_usfm_by_chapter`
+Common entrypoints:
+
+- `diff::diff_skeleton` / `diff::diff_skeleton_canonical` — a skeleton over two token slices
+- `diff::diff_skeleton_by_chapter` — a skeleton per book/chapter, from raw USFM source
+- `diff::merge_diff_blocks` / `diff::merge_skeleton` — pure projection merge from staged decisions
+- `diff::revert_diff_block` — revert a single unit (one-decision merge); errors on an unknown id
 
 Example:
 
 ```rust
-use usfm_onion::{DocumentFormat, diff};
-use usfm_onion::model::TokenViewOptions;
-use usfm_onion::diff::BuildSidBlocksOptions;
+use usfm_onion::Usfm;
 
-let changes = diff::diff_content(
-    baseline,
-    DocumentFormat::Usfm,
-    current,
-    DocumentFormat::Usfm,
-    &TokenViewOptions::default(),
-    &BuildSidBlocksOptions::default(),
-)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+let baseline = Usfm::from_str(baseline_source);
+let current = Usfm::from_str(current_source);
+let skeleton = baseline.diff(&current).run();
+
+for unit in &skeleton.units {
+    println!("{:?} {:?}", unit.id, unit.status);
+}
 ```
 
 ## Batch APIs and Parallelism

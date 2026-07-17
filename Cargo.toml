@@ -15,7 +15,7 @@ members = [".", "crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 
@@ -34,21 +34,11 @@ default = []
 logos = "0.16.1"
 quick-xml = "0.37"
 regex = "1.11"
+rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 similar = "2"
 
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = "symbols"
-
-# `cargo bench` would otherwise inherit `[profile.release]`, which is tuned
-# for wasm-pack output (size, single codegen unit). That hurts native bench
-# numbers — especially HTML rendering and other branch-heavy paths. Override
-# for speed instead.
 [profile.bench]
 opt-level = 3
 lto = "thin"
@@ -57,6 +47,7 @@ debug = false
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
 rayon = "1.10"
 
 [[bench]]
@@ -67,9 +58,41 @@ harness = false
 name = "parallelism"
 harness = false
 
+# `release` is now plain Cargo defaults (opt-level 3, no lto) — this profile
+# just adds debug info on top for symbolicated `samply` runs. A little slower
+# to build than release itself (debug info generation), but codegen matches
+# release; its own reported timings are for finding hot spots, not for
+# quoting as real numbers — use `release` (or the bench harness) for those.
 [profile.profiling]
 inherits = "release"
 debug = 2
-strip = "none"
-lto = false
+
+# Reference point only, not wired into any build script: the old
+# size-squeezed wasm build (reproduces the pre-2026-07 shipped binary
+# byte-for-byte). `lto`/`panic` can't be package-scoped under a shared
+# `release` profile (Cargo rejects both there), which is why wasm gets its
+# own profile name instead of a per-package override of `release`.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+# The shipping wasm profile (`build:wasm:bundler`/`build:wasm:web`):
+# ~45% bigger than `wasm-release` for ~1.3-2x faster parse/diff/format/html
+# ops — worth it for an editor-scale web app where Tauri desktop builds
+# native Rust anyway and never touches this profile. `wasm-pack build
+# --profile <name>` doesn't read `[package.metadata.wasm-pack.profile.*]`
+# (that's only wired to wasm-pack's own --release/--dev/--profiling flags),
+# so the build scripts pass `--no-opt` and run `wasm-opt` explicitly —
+# requires `wasm-opt` on PATH (`brew install binaryen` / `apt install
+# binaryen`).
+[profile.wasm-release-fast]
+inherits = "release"
 opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

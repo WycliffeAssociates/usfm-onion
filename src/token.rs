@@ -463,13 +463,15 @@ impl Serialize for BookId {
 
 /// Canonical scripture reference: book + chapter + verse. 8 bytes, `Copy`,
 /// no lifetime. `verse == 0` means "no verse yet" (chapter-scope sid). Bridge
-/// verses (`\v 1-2`) are not encoded in `Sid`; the bridge lexeme is preserved
-/// in the verse-token's source span.
+/// verses (`\v 1-2`) store their range end as `verse_end_delta`, a `u8` offset
+/// from `verse` — the longest chapter in the Bible has 176 verses, so a
+/// bridge cannot in-domain span more than 255 verses past its start.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize)]
 pub struct Sid {
     pub book: BookId,
     pub chapter: u16,
     pub verse: u16,
+    verse_end_delta: u8,
 }
 
 impl Sid {
@@ -478,6 +480,37 @@ impl Sid {
             book,
             chapter,
             verse,
+            verse_end_delta: 0,
+        }
+    }
+
+    /// A verse sid spanning a range (bridge), e.g. `\v 1-2`. `verse_end`
+    /// saturates at `verse + 255`: the ceiling is a stated contract (see the
+    /// struct docs), not a silent truncation — callers needing the resolved
+    /// end always go through [`Sid::verse_end`].
+    pub fn with_range(book: BookId, chapter: u16, verse: u16, verse_end: u16) -> Self {
+        let delta = verse_end.saturating_sub(verse).min(u8::MAX as u16) as u8;
+        Self {
+            book,
+            chapter,
+            verse,
+            verse_end_delta: delta,
+        }
+    }
+
+    /// The resolved range end (saturating). Equal to `verse` for a single verse.
+    /// This is the only public accessor for the range end; the raw delta never
+    /// leaks to a serialized/DTO surface.
+    pub fn verse_end(&self) -> u16 {
+        self.verse.saturating_add(self.verse_end_delta as u16)
+    }
+
+    /// The verse-locator fragment: `"1"` for a single verse, `"1-2"` for a range.
+    pub fn verse_locator(&self) -> String {
+        if self.verse_end_delta == 0 {
+            self.verse.to_string()
+        } else {
+            format!("{}-{}", self.verse, self.verse_end())
         }
     }
 }
@@ -487,7 +520,7 @@ impl std::fmt::Display for Sid {
         if self.verse == 0 {
             write!(f, "{} {}", self.book, self.chapter)
         } else {
-            write!(f, "{} {}:{}", self.book, self.chapter, self.verse)
+            write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())
         }
     }
 }
@@ -538,5 +571,31 @@ mod sid_size_guard {
             size_of::<Sid>()
         );
         assert_eq!(size_of::<BookId>(), 3);
+    }
+
+    #[test]
+    fn verse_end_saturates_past_255_span() {
+        // No versification can produce a bridge wider than 255 verses (the
+        // longest chapter in the Bible has 176 verses), so this is a stated
+        // ceiling, not a silent truncation. `\v 1-999` pins the behavior.
+        let book = BookId::from_str("GEN").unwrap();
+        let sid = Sid::with_range(book, 1, 1, 999);
+        assert_eq!(sid.verse_end(), 1 + 255);
+        assert_eq!(sid.verse_locator(), "1-256");
+    }
+
+    #[test]
+    fn verse_locator_is_bare_for_a_single_verse() {
+        let book = BookId::from_str("GEN").unwrap();
+        let sid = Sid::new(book, 1, 1);
+        assert_eq!(sid.verse_locator(), "1");
+        assert_eq!(sid.to_string(), "GEN 1:1");
+    }
+
+    #[test]
+    fn display_adds_range_end_when_present() {
+        let book = BookId::from_str("GEN").unwrap();
+        let sid = Sid::with_range(book, 1, 1, 2);
+        assert_eq!(sid.to_string(), "GEN 1:1-2");
     }
 }

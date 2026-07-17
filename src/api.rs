@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
+
 use crate::cst::{CstDocument, parse_cst};
 use crate::diff::{
-    BuildSidBlocksOptions, ChapterTokenDiff, DiffableToken, DiffsByChapterMap,
-    diff_chapter_token_streams, diff_usfm_sources, diff_usfm_sources_by_chapter,
+    DiffSkeleton, DiffableToken, MergeError, diff_skeleton, diff_skeleton_by_chapter,
+    diff_skeleton_by_chapter_from_tokens, diff_skeleton_canonical, revert_diff_block,
 };
 use crate::format::{FormatOptions, FormatToken, FormattableToken, format, format_mut};
 use crate::html::{HtmlOptions, tokens_to_html, usfm_to_html};
@@ -121,7 +123,6 @@ impl Usfm {
         UsfmDiffBuilder {
             left: self,
             right: other,
-            options: BuildSidBlocksOptions::default(),
         }
     }
 
@@ -129,7 +130,6 @@ impl Usfm {
         UsfmDiffByChapterBuilder {
             left: self,
             right: other,
-            options: BuildSidBlocksOptions::default(),
         }
     }
 }
@@ -204,7 +204,6 @@ impl ParsedUsfm {
         ParsedUsfmDiffBuilder {
             left: self,
             right: other,
-            options: BuildSidBlocksOptions::default(),
         }
     }
 
@@ -215,7 +214,6 @@ impl ParsedUsfm {
         ParsedUsfmDiffByChapterBuilder {
             left: self,
             right: other,
-            options: BuildSidBlocksOptions::default(),
         }
     }
 
@@ -223,28 +221,8 @@ impl ParsedUsfm {
         &self,
         current: &ParsedUsfm,
         diff_block_id: &str,
-        options: BuildSidBlocksOptions,
-    ) -> Vec<FormatToken> {
-        crate::diff::apply_revert_by_block_id(
-            diff_block_id,
-            &self.tokens,
-            &current.tokens,
-            &options,
-        )
-    }
-
-    pub fn revert_diff_blocks(
-        &self,
-        current: &ParsedUsfm,
-        diff_block_ids: &[String],
-        options: BuildSidBlocksOptions,
-    ) -> Vec<FormatToken> {
-        crate::diff::apply_reverts_by_block_id(
-            diff_block_ids,
-            &self.tokens,
-            &current.tokens,
-            &options,
-        )
+    ) -> Result<Vec<FormatToken>, MergeError> {
+        revert_diff_block(diff_block_id, &self.tokens, &current.tokens)
     }
 }
 
@@ -350,7 +328,6 @@ impl<T: DiffableToken> TokenStream<T> {
         TokenDiffBuilder {
             left: self,
             right: other,
-            options: BuildSidBlocksOptions::default(),
         }
     }
 
@@ -358,28 +335,8 @@ impl<T: DiffableToken> TokenStream<T> {
         &self,
         current: &TokenStream<T>,
         diff_block_id: &str,
-        options: BuildSidBlocksOptions,
-    ) -> Vec<T> {
-        crate::diff::apply_revert_by_block_id(
-            diff_block_id,
-            &self.tokens,
-            &current.tokens,
-            &options,
-        )
-    }
-
-    pub fn revert_diff_blocks(
-        &self,
-        current: &TokenStream<T>,
-        diff_block_ids: &[String],
-        options: BuildSidBlocksOptions,
-    ) -> Vec<T> {
-        crate::diff::apply_reverts_by_block_id(
-            diff_block_ids,
-            &self.tokens,
-            &current.tokens,
-            &options,
-        )
+    ) -> Result<Vec<T>, MergeError> {
+        revert_diff_block(diff_block_id, &self.tokens, &current.tokens)
     }
 }
 
@@ -407,89 +364,59 @@ impl<'a> TokenStream<Token<'a>> {
 pub struct UsfmDiffBuilder<'a> {
     left: &'a Usfm,
     right: &'a Usfm,
-    options: BuildSidBlocksOptions,
 }
 
 impl<'a> UsfmDiffBuilder<'a> {
-    pub fn with_options(mut self, options: BuildSidBlocksOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn run(self) -> Vec<ChapterTokenDiff<Token<'a>>> {
-        diff_usfm_sources(&self.left.source, &self.right.source, &self.options)
+    pub fn run(self) -> DiffSkeleton<Token<'a>> {
+        let baseline = parse(&self.left.source);
+        let current = parse(&self.right.source);
+        let baseline_book = baseline.analysis.book_code.unwrap_or("unknown");
+        let current_book = current.analysis.book_code.unwrap_or("unknown");
+        diff_skeleton_canonical(&baseline.tokens, baseline_book, &current.tokens, current_book)
     }
 }
 
 pub struct UsfmDiffByChapterBuilder<'a> {
     left: &'a Usfm,
     right: &'a Usfm,
-    options: BuildSidBlocksOptions,
 }
 
 impl<'a> UsfmDiffByChapterBuilder<'a> {
-    pub fn with_options(mut self, options: BuildSidBlocksOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn run(self) -> DiffsByChapterMap<ChapterTokenDiff<Token<'a>>> {
-        diff_usfm_sources_by_chapter(&self.left.source, &self.right.source, &self.options)
+    pub fn run(self) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<Token<'a>>>> {
+        diff_skeleton_by_chapter(&self.left.source, &self.right.source)
     }
 }
 
 pub struct ParsedUsfmDiffBuilder<'a> {
     left: &'a ParsedUsfm,
     right: &'a ParsedUsfm,
-    options: BuildSidBlocksOptions,
 }
 
 impl<'a> ParsedUsfmDiffBuilder<'a> {
-    pub fn with_options(mut self, options: BuildSidBlocksOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn run(self) -> Vec<ChapterTokenDiff<FormatToken>> {
-        diff_chapter_token_streams(&self.left.tokens, &self.right.tokens, &self.options)
+    pub fn run(self) -> DiffSkeleton<FormatToken> {
+        diff_skeleton(&self.left.tokens, &self.right.tokens)
     }
 }
 
 pub struct ParsedUsfmDiffByChapterBuilder<'a> {
     left: &'a ParsedUsfm,
     right: &'a ParsedUsfm,
-    options: BuildSidBlocksOptions,
 }
 
 impl<'a> ParsedUsfmDiffByChapterBuilder<'a> {
-    pub fn with_options(mut self, options: BuildSidBlocksOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn run(self) -> DiffsByChapterMap<ChapterTokenDiff<FormatToken>> {
-        group_chapter_diffs(diff_chapter_token_streams(
-            &self.left.tokens,
-            &self.right.tokens,
-            &self.options,
-        ))
+    pub fn run(self) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<FormatToken>>> {
+        diff_skeleton_by_chapter_from_tokens(&self.left.tokens, &self.right.tokens)
     }
 }
 
 pub struct TokenDiffBuilder<'a, T> {
     left: &'a TokenStream<T>,
     right: &'a TokenStream<T>,
-    options: BuildSidBlocksOptions,
 }
 
 impl<'a, T: DiffableToken> TokenDiffBuilder<'a, T> {
-    pub fn with_options(mut self, options: BuildSidBlocksOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn run(self) -> Vec<ChapterTokenDiff<T>> {
-        diff_chapter_token_streams(&self.left.tokens, &self.right.tokens, &self.options)
+    pub fn run(self) -> DiffSkeleton<T> {
+        diff_skeleton(&self.left.tokens, &self.right.tokens)
     }
 }
 
@@ -510,42 +437,11 @@ fn format_token_with_identity(token: &Token<'_>) -> FormatToken {
 }
 
 fn format_sid(sid: Sid) -> String {
-    if sid.verse == 0 {
-        format!("{} {}:0", sid.book, sid.chapter)
-    } else {
-        format!("{} {}:{}", sid.book, sid.chapter, sid.verse)
-    }
+    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
 }
 
 fn format_token_id(id: TokenId<'_>) -> String {
     format!("{}-{}", id.book_code, id.index)
-}
-
-fn group_chapter_diffs(
-    diffs: Vec<ChapterTokenDiff<FormatToken>>,
-) -> DiffsByChapterMap<ChapterTokenDiff<FormatToken>> {
-    let mut by_chapter = DiffsByChapterMap::default();
-    for diff in diffs {
-        let (chapter_sid, chapter_num) = chapter_key_from_semantic_sid(&diff.semantic_sid);
-        by_chapter
-            .entry(chapter_sid)
-            .or_default()
-            .entry(chapter_num)
-            .or_default()
-            .push(diff);
-    }
-    by_chapter
-}
-
-fn chapter_key_from_semantic_sid(semantic_sid: &str) -> (String, u32) {
-    let mut parts = semantic_sid.split_whitespace();
-    let book = parts.next().unwrap_or("").to_string();
-    let chapter = parts
-        .next()
-        .and_then(|part| part.split(':').next())
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(0);
-    (book, chapter)
 }
 
 #[cfg(test)]
@@ -669,18 +565,18 @@ mod tests {
 
         let baseline_parsed = baseline.parse_owned();
         let changed_parsed = changed.parse_owned();
-        let diffs = baseline_parsed.diff(&changed_parsed).run();
-        let verse_diff = diffs
+        let skeleton = baseline_parsed.diff(&changed_parsed).run();
+        let verse_unit = skeleton
+            .units
             .iter()
-            .find(|diff| {
-                diff.status == crate::DiffStatus::Modified && diff.semantic_sid.ends_with("1:1")
+            .find(|unit| {
+                unit.status == crate::DecisionStatus::Modified
+                    && unit.baseline_sid.as_deref().is_some_and(|sid| sid.ends_with("1:1"))
             })
-            .expect("expected modified verse diff");
-        let reverted = baseline_parsed.revert_diff_block(
-            &changed_parsed,
-            &verse_diff.block_id,
-            BuildSidBlocksOptions::default(),
-        );
+            .expect("expected modified verse unit");
+        let reverted = baseline_parsed
+            .revert_diff_block(&changed_parsed, verse_unit.id.as_str())
+            .expect("known block id reverts");
         assert_eq!(reverted, baseline_parsed.tokens().to_vec());
     }
 }
