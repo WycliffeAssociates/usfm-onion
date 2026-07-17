@@ -177,6 +177,19 @@ The exposed surface is string-in only at construction; token-in entry points exi
 - top-level `lintTokens`, `formatTokens`, `formatTokensMut`, `diffTokens` for the token-in fast path
 - typed exports: `LintCode`, `FormatRule`, `MarkerInfo`, `UsfmMarkerCatalog`
 
+Applications that own complete structural token streams can normalize their SIDs without
+loading wasm:
+
+```ts
+import { normalizeTokenSids } from "usfm-onion-web/token-sids";
+
+const normalized = normalizeTokenSids(tokens, "GEN");
+```
+
+This explicit utility derives from chapter/verse marker structure and leaves its input
+untouched. Token diff, merge, and revert APIs continue to trust the SIDs supplied by their
+caller, which keeps granular and synthetic token streams usable.
+
 Build it with the root npm scripts:
 
 ```bash

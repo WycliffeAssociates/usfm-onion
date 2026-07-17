@@ -9,6 +9,7 @@
     "./pkg-web/usfm_onion_web.js"
   ],
   "files": [
+    "js",
     "pkg-bundler",
     "pkg-web",
     "README.md",
@@ -22,6 +23,10 @@
     "./web": {
       "types": "./pkg-web/usfm_onion_web.d.ts",
       "default": "./pkg-web/usfm_onion_web.js"
+    },
+    "./token-sids": {
+      "types": "./js/token-sids.d.ts",
+      "default": "./js/token-sids.js"
     }
   },
   "types": "./pkg-bundler/usfm_onion_web.d.ts",
@@ -33,8 +38,9 @@
     "build:wasm:web": "node scripts/build-wasm.mjs web",
     "build:wasm:web:dev": "node scripts/build-wasm.mjs web --dev",
     "check:wasm:web": "cargo check --manifest-path crates/usfm_onion_wasm/Cargo.toml --target wasm32-unknown-unknown",
-    "test:wasm:bundler": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-web-package.mjs bundler",
-    "test:wasm:web": "npm run build:wasm:web:dev && node scripts/test-web-package.mjs web",
+    "test:token-sids:import": "node --input-type=module --eval \"import { normalizeTokenSids } from 'usfm-onion-web/token-sids'; if (typeof normalizeTokenSids !== 'function') process.exit(1)\"",
+    "test:wasm:bundler": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-web-package.mjs bundler && node --experimental-wasm-modules scripts/test-token-sids.mjs bundler",
+    "test:wasm:web": "npm run build:wasm:web:dev && node scripts/test-web-package.mjs web && node scripts/test-token-sids.mjs web",
     "test:wasm": "npm run test:wasm:bundler && npm run test:wasm:web",
     "golden:wasm": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
     "golden:wasm:update": "npm run build:wasm:bundler:dev && UPDATE_GOLDEN=1 node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
