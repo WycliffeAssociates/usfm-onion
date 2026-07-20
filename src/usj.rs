@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::cst::CstDocument;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::export_tree::build_export_segment;
 use crate::export_tree::{
     ExportContainerKind, ExportContainerNode, ExportDocument, ExportNode, build_export_document,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use crate::export_tree::build_export_segment;
 use crate::marker_defs::{
     MarkerDefKind, NoteSubkind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
 };

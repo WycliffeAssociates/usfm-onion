@@ -894,9 +894,7 @@ mod tests {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod partition_tests {
-    use super::{
-        VrefOptions, VrefVisitor, vref_map_partitioned, vref_map_to_json_string,
-    };
+    use super::{VrefOptions, VrefVisitor, vref_map_partitioned, vref_map_to_json_string};
     use crate::parse::parse;
     use crate::token::Token;
     use crate::walker::walk_tokens;
@@ -968,11 +966,7 @@ mod partition_tests {
             let want = serial(&parsed.tokens, options);
             // Force the partitioned merge even on small fixtures below the threshold.
             let got = vref_map_partitioned(&parsed.tokens, options);
-            assert_eq!(
-                got, want,
-                "map differs for {label} (trim={})",
-                options.trim
-            );
+            assert_eq!(got, want, "map differs for {label} (trim={})", options.trim);
             assert_eq!(
                 vref_map_to_json_string(&got),
                 vref_map_to_json_string(&want),
@@ -995,5 +989,4 @@ mod partition_tests {
             }
         }
     }
-
 }

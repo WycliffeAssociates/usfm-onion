@@ -145,7 +145,12 @@ fn html_partitioned(tokens: &[Token<'_>], options: HtmlOptions) -> String {
     // Phase 1: count each segment's note-counter increments, cheaply (no strings).
     let counts = crate::par::map_ordered(&segments, |segment| {
         let mut visitor = HtmlVisitor::new_counting(options);
-        crate::walker::walk_range(tokens, segment.range.clone(), segment.boundary, &mut visitor);
+        crate::walker::walk_range(
+            tokens,
+            segment.range.clone(),
+            segment.boundary,
+            &mut visitor,
+        );
         visitor.into_counts()
     });
 
