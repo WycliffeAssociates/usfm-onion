@@ -556,8 +556,8 @@ fn token_with_current_ws<'a>(
     data: TokenData<'a>,
     sid: Option<Sid>,
 ) -> Token<'a> {
-    let is_cv_argument_number = state.cv_number == CvNumber::ExpectingNumber
-        && matches!(data, TokenData::Number { .. });
+    let is_cv_argument_number =
+        state.cv_number == CvNumber::ExpectingNumber && matches!(data, TokenData::Number { .. });
     state.cv_number = if is_cv_argument_number {
         CvNumber::JustEmitted
     } else {
@@ -758,10 +758,7 @@ mod tests {
             .iter()
             .find(|token| matches!(token.data, TokenData::Marker { name: "v", .. }))
             .expect("verse marker token");
-        assert_eq!(
-            verse_marker.sid,
-            Some(Sid::with_range(gen_book, 1, 1, 2))
-        );
+        assert_eq!(verse_marker.sid, Some(Sid::with_range(gen_book, 1, 1, 2)));
         assert_eq!(verse_marker.sid.unwrap().to_string(), "GEN 1:1-2");
 
         // Every following token keeps the full-range sid until the next
@@ -771,7 +768,10 @@ mod tests {
             .iter()
             .find(|token| matches!(token.data, TokenData::Text) && token.source.trim() == "text")
             .expect("text token inside the bridge verse");
-        assert_eq!(text_after_bridge.sid, Some(Sid::with_range(gen_book, 1, 1, 2)));
+        assert_eq!(
+            text_after_bridge.sid,
+            Some(Sid::with_range(gen_book, 1, 1, 2))
+        );
     }
 
     #[test]

@@ -10,15 +10,17 @@ use std::collections::BTreeMap;
 
 use proptest::prelude::*;
 
+use crate::diff::DiffableToken;
 use crate::diff::skeleton::{
     DecisionStatus, DecisionUnit, DecisionUnitKind, DiffSkeleton, MergeError, MergeSide, SlotRole,
     UnitId, diff_skeleton_canonical, merge_skeleton,
 };
-use crate::diff::DiffableToken;
 use crate::parse::parse;
 use crate::token::Token;
 
-const WORDS: &[&str] = &["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"];
+const WORDS: &[&str] = &[
+    "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+];
 const HEADINGS: &[&str] = &["Section One", "Section Two", "Section Three"];
 const BOOK: &str = "GEN";
 
@@ -115,7 +117,11 @@ fn build_verses(shapes: Vec<VerseShape>) -> Vec<Verse> {
     let mut next = 1u32;
     for (bridge_width, word_indices, wrapped, extra_spaces) in shapes {
         let start = next;
-        let end = if bridge_width > 0 { Some(start + bridge_width) } else { None };
+        let end = if bridge_width > 0 {
+            Some(start + bridge_width)
+        } else {
+            None
+        };
         next = end.unwrap_or(start) + 1;
         verses.push(Verse {
             number: start,
@@ -128,8 +134,7 @@ fn build_verses(shapes: Vec<VerseShape>) -> Vec<Verse> {
     verses
 }
 
-fn chapter_shape_strategy(
-) -> impl Strategy<Value = (bool, Option<usize>, Vec<VerseShape>)> {
+fn chapter_shape_strategy() -> impl Strategy<Value = (bool, Option<usize>, Vec<VerseShape>)> {
     (
         prop::bool::ANY,
         prop::option::of(0usize..HEADINGS.len()),
@@ -141,8 +146,11 @@ fn chapter_shape_strategy(
 /// 1-2 chapters, verse singles/ranges, text atoms, balanced `\add` wraps,
 /// paragraph/heading variation, whitespace, and LF/CRLF.
 fn doc_strategy() -> impl Strategy<Value = Doc> {
-    (eol_strategy(), prop::collection::vec(chapter_shape_strategy(), 1..=2)).prop_map(
-        |(eol, chapter_shapes)| {
+    (
+        eol_strategy(),
+        prop::collection::vec(chapter_shape_strategy(), 1..=2),
+    )
+        .prop_map(|(eol, chapter_shapes)| {
             let chapters = chapter_shapes
                 .into_iter()
                 .enumerate()
@@ -154,34 +162,66 @@ fn doc_strategy() -> impl Strategy<Value = Doc> {
                 })
                 .collect();
             Doc { eol, chapters }
-        },
-    )
+        })
 }
 
 #[derive(Debug, Clone)]
 enum Edit {
-    AppendLetter { chapter: usize, verse: usize },
-    InsertVerse { chapter: usize, at: usize, word: String },
-    DeleteVerse { chapter: usize, at: usize },
-    Reorder { chapter: usize, from: usize, to: usize },
-    BoundaryMigration { chapter: usize, verse: usize },
-    ParagraphChange { chapter: usize },
-    WhitespaceOnly { chapter: usize, verse: usize },
-    MarkerWrapToggle { chapter: usize, verse: usize },
+    AppendLetter {
+        chapter: usize,
+        verse: usize,
+    },
+    InsertVerse {
+        chapter: usize,
+        at: usize,
+        word: String,
+    },
+    DeleteVerse {
+        chapter: usize,
+        at: usize,
+    },
+    Reorder {
+        chapter: usize,
+        from: usize,
+        to: usize,
+    },
+    BoundaryMigration {
+        chapter: usize,
+        verse: usize,
+    },
+    ParagraphChange {
+        chapter: usize,
+    },
+    WhitespaceOnly {
+        chapter: usize,
+        verse: usize,
+    },
+    MarkerWrapToggle {
+        chapter: usize,
+        verse: usize,
+    },
 }
 
 fn edit_strategy() -> impl Strategy<Value = Edit> {
     prop_oneof![
         (0usize..2, 0usize..5).prop_map(|(chapter, verse)| Edit::AppendLetter { chapter, verse }),
-        (0usize..2, 0usize..5, word_strategy())
-            .prop_map(|(chapter, at, word)| Edit::InsertVerse { chapter, at, word }),
+        (0usize..2, 0usize..5, word_strategy()).prop_map(|(chapter, at, word)| Edit::InsertVerse {
+            chapter,
+            at,
+            word
+        }),
         (0usize..2, 0usize..5).prop_map(|(chapter, at)| Edit::DeleteVerse { chapter, at }),
-        (0usize..2, 0usize..5, 0usize..5)
-            .prop_map(|(chapter, from, to)| Edit::Reorder { chapter, from, to }),
-        (0usize..2, 0usize..5).prop_map(|(chapter, verse)| Edit::BoundaryMigration { chapter, verse }),
+        (0usize..2, 0usize..5, 0usize..5).prop_map(|(chapter, from, to)| Edit::Reorder {
+            chapter,
+            from,
+            to
+        }),
+        (0usize..2, 0usize..5)
+            .prop_map(|(chapter, verse)| Edit::BoundaryMigration { chapter, verse }),
         (0usize..2).prop_map(|chapter| Edit::ParagraphChange { chapter }),
         (0usize..2, 0usize..5).prop_map(|(chapter, verse)| Edit::WhitespaceOnly { chapter, verse }),
-        (0usize..2, 0usize..5).prop_map(|(chapter, verse)| Edit::MarkerWrapToggle { chapter, verse }),
+        (0usize..2, 0usize..5)
+            .prop_map(|(chapter, verse)| Edit::MarkerWrapToggle { chapter, verse }),
     ]
 }
 
@@ -201,7 +241,10 @@ fn apply_edit(doc: &mut Doc, edit: &Edit) {
                 let number = if at == 0 {
                     1
                 } else {
-                    chapter.verses[at - 1].end.unwrap_or(chapter.verses[at - 1].number) + 1
+                    chapter.verses[at - 1]
+                        .end
+                        .unwrap_or(chapter.verses[at - 1].number)
+                        + 1
                 };
                 chapter.verses.insert(
                     at,
@@ -289,13 +332,17 @@ fn renumber_from(chapter: &mut Chapter, start_index: usize) {
 }
 
 fn edited_doc_strategy() -> impl Strategy<Value = (Doc, Doc)> {
-    (doc_strategy(), prop::collection::vec(edit_strategy(), 0..=3)).prop_map(|(baseline, edits)| {
-        let mut current = baseline.clone();
-        for edit in &edits {
-            apply_edit(&mut current, edit);
-        }
-        (baseline, current)
-    })
+    (
+        doc_strategy(),
+        prop::collection::vec(edit_strategy(), 0..=3),
+    )
+        .prop_map(|(baseline, edits)| {
+            let mut current = baseline.clone();
+            for edit in &edits {
+                apply_edit(&mut current, edit);
+            }
+            (baseline, current)
+        })
 }
 
 fn skeleton_of<'a>(baseline: &'a str, current: &'a str) -> DiffSkeleton<Token<'a>> {
@@ -310,14 +357,22 @@ fn block_text<T: DiffableToken>(tokens: &[T]) -> String {
 
 /// P1: side-specific block/slot reconstruction is exact and no block
 /// contributes twice.
-fn assert_p1_partition<T: DiffableToken>(skeleton: &DiffSkeleton<T>, baseline_src: &str, current_src: &str) {
+fn assert_p1_partition<T: DiffableToken>(
+    skeleton: &DiffSkeleton<T>,
+    baseline_src: &str,
+    current_src: &str,
+) {
     let mut baseline_out = String::new();
     let mut current_out = String::new();
     let mut seen_baseline = std::collections::HashSet::new();
     let mut seen_current = std::collections::HashSet::new();
 
     for slot in &skeleton.slots {
-        let unit = skeleton.units.iter().find(|u| u.id == slot.unit_id).unwrap();
+        let unit = skeleton
+            .units
+            .iter()
+            .find(|u| u.id == slot.unit_id)
+            .unwrap();
         match slot.role {
             SlotRole::Shared => {
                 assert!(seen_baseline.insert(slot.unit_id.clone()));
@@ -341,7 +396,11 @@ fn assert_p1_partition<T: DiffableToken>(skeleton: &DiffSkeleton<T>, baseline_sr
 }
 
 /// P2: all-Baseline == baseline and all-Current == current, byte-for-byte.
-fn assert_p2_identities<T: DiffableToken>(skeleton: &DiffSkeleton<T>, baseline_src: &str, current_src: &str) {
+fn assert_p2_identities<T: DiffableToken>(
+    skeleton: &DiffSkeleton<T>,
+    baseline_src: &str,
+    current_src: &str,
+) {
     let all_baseline = merge_skeleton(skeleton, &BTreeMap::new(), MergeSide::Baseline).unwrap();
     let all_current = merge_skeleton(skeleton, &BTreeMap::new(), MergeSide::Current).unwrap();
     assert_eq!(block_text(&all_baseline), baseline_src);
@@ -363,7 +422,10 @@ fn expected_merge_text<T: DiffableToken>(
     let mut out = String::new();
     for slot in &skeleton.slots {
         let unit = units_by_id[&slot.unit_id];
-        let side = decisions.get(&slot.unit_id).copied().unwrap_or(default_side);
+        let side = decisions
+            .get(&slot.unit_id)
+            .copied()
+            .unwrap_or(default_side);
         match slot.role {
             SlotRole::Shared => {
                 let tokens = if side == MergeSide::Baseline {
@@ -408,7 +470,9 @@ fn assert_merge_output_matches_expected<T: DiffableToken>(
     );
 }
 
-fn decisions_strategy(unit_ids: Vec<UnitId>) -> impl Strategy<Value = (BTreeMap<UnitId, MergeSide>, MergeSide)> {
+fn decisions_strategy(
+    unit_ids: Vec<UnitId>,
+) -> impl Strategy<Value = (BTreeMap<UnitId, MergeSide>, MergeSide)> {
     let per_unit = prop::collection::vec(0u8..3, unit_ids.len());
     (per_unit, prop::bool::ANY).prop_map(move |(choices, default_is_baseline)| {
         let mut decisions = BTreeMap::new();
@@ -423,7 +487,11 @@ fn decisions_strategy(unit_ids: Vec<UnitId>) -> impl Strategy<Value = (BTreeMap<
                 _ => {}
             }
         }
-        let default_side = if default_is_baseline { MergeSide::Baseline } else { MergeSide::Current };
+        let default_side = if default_is_baseline {
+            MergeSide::Baseline
+        } else {
+            MergeSide::Current
+        };
         (decisions, default_side)
     })
 }
@@ -529,7 +597,10 @@ fn wrap_id(body: String) -> String {
     format!("\\id {BOOK}\n{body}")
 }
 
-fn assert_directed_shape(baseline_body: String, current_body: String) -> DiffSkeleton<Token<'static>> {
+fn assert_directed_shape(
+    baseline_body: String,
+    current_body: String,
+) -> DiffSkeleton<Token<'static>> {
     let baseline_src: &'static str = Box::leak(wrap_id(baseline_body).into_boxed_str());
     let current_src: &'static str = Box::leak(wrap_id(current_body).into_boxed_str());
     let skeleton = skeleton_of(baseline_src, current_src);
@@ -552,7 +623,11 @@ fn assert_directed_shape(baseline_body: String, current_body: String) -> DiffSke
                 _ => {}
             }
         }
-        let default_side = if trial % 2 == 0 { MergeSide::Baseline } else { MergeSide::Current };
+        let default_side = if trial % 2 == 0 {
+            MergeSide::Baseline
+        } else {
+            MergeSide::Current
+        };
         let first = merge_skeleton(&skeleton, &decisions, default_side).unwrap();
         let second = merge_skeleton(&skeleton, &decisions, default_side).unwrap();
         assert_eq!(block_text(&first), block_text(&second), "not idempotent");

@@ -48,7 +48,9 @@ fn main() {
 
     let mut positional = positional.into_iter();
     let op = positional.next().unwrap_or_else(|| {
-        eprintln!("usage: profile_ops <op> [iterations] [--book ulb|bsb]  (or: profile_ops --list)");
+        eprintln!(
+            "usage: profile_ops <op> [iterations] [--book ulb|bsb]  (or: profile_ops --list)"
+        );
         std::process::exit(1);
     });
 
@@ -67,7 +69,10 @@ fn main() {
         std::process::exit(1);
     }
 
-    let iterations: usize = positional.next().and_then(|s| s.parse().ok()).unwrap_or(500);
+    let iterations: usize = positional
+        .next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(500);
 
     let book = match book_name.as_str() {
         "ulb" => common::load_luke(),
@@ -79,7 +84,10 @@ fn main() {
     };
     let fx = common::build_fixture(&book);
 
-    println!("=== {op} ({book_name}): {} bytes, {iterations} iterations ===", book.bytes);
+    println!(
+        "=== {op} ({book_name}): {} bytes, {iterations} iterations ===",
+        book.bytes
+    );
     let started = Instant::now();
     for _ in 0..iterations {
         common::run_named_op(&op, &fx);

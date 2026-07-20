@@ -10,7 +10,8 @@ use usfm_onion::diff::{
     DecisionUnitKind as NativeDecisionUnitKind, DiffSkeleton as NativeDiffSkeleton, DiffableToken,
     MergeSide as NativeMergeSide, Slot as NativeSlot, SlotRole as NativeSlotRole,
     UnitId as NativeUnitId, derive_canonical_sids as native_derive_canonical_sids,
-    diff_skeleton as native_diff_skeleton, diff_skeleton_by_chapter as native_diff_skeleton_by_chapter,
+    diff_skeleton as native_diff_skeleton,
+    diff_skeleton_by_chapter as native_diff_skeleton_by_chapter,
     diff_skeleton_canonical as native_diff_skeleton_canonical,
     merge_diff_blocks as native_merge_diff_blocks, revert_diff_block as native_revert_diff_block,
 };
@@ -1212,7 +1213,11 @@ impl ParsedUsfm {
     }
 
     #[wasm_bindgen(js_name = revertDiffBlock)]
-    pub fn revert_diff_block(&self, current: &ParsedUsfm, block_id: &str) -> Result<Vec<Token>, JsError> {
+    pub fn revert_diff_block(
+        &self,
+        current: &ParsedUsfm,
+        block_id: &str,
+    ) -> Result<Vec<Token>, JsError> {
         let baseline = native_parse(&self.source);
         let current = native_parse(&current.source);
         let baseline = baseline
@@ -1385,12 +1390,20 @@ pub fn wasm_tokens_to_html(tokens: Vec<Token>, options: Option<HtmlOptions>) -> 
     usfm_to_html(&usfm, html_options_into_native(options))
 }
 
-fn native_diff_usfm<'a>(baseline_usfm: &'a str, current_usfm: &'a str) -> NativeDiffSkeleton<NativeToken<'a>> {
+fn native_diff_usfm<'a>(
+    baseline_usfm: &'a str,
+    current_usfm: &'a str,
+) -> NativeDiffSkeleton<NativeToken<'a>> {
     let baseline = native_parse(baseline_usfm);
     let current = native_parse(current_usfm);
     let baseline_book = baseline.analysis.book_code.unwrap_or("unknown");
     let current_book = current.analysis.book_code.unwrap_or("unknown");
-    native_diff_skeleton_canonical(&baseline.tokens, baseline_book, &current.tokens, current_book)
+    native_diff_skeleton_canonical(
+        &baseline.tokens,
+        baseline_book,
+        &current.tokens,
+        current_book,
+    )
 }
 
 #[wasm_bindgen(js_name = diffUsfm)]
@@ -1432,8 +1445,9 @@ pub fn wasm_merge_diff_blocks(
         .into_iter()
         .map(|(id, side)| (NativeUnitId::new(id), side.into()))
         .collect();
-    let merged = native_merge_diff_blocks(&baseline, &current, &decisions, request.default_side.into())
-        .map_err(js_error)?;
+    let merged =
+        native_merge_diff_blocks(&baseline, &current, &decisions, request.default_side.into())
+            .map_err(js_error)?;
     Ok(merged.iter().map(map_format_token).collect())
 }
 
@@ -1457,8 +1471,11 @@ pub fn wasm_revert_diff_block(
 
 #[wasm_bindgen(js_name = normalizeTokenSids)]
 pub fn wasm_normalize_token_sids(tokens: Vec<Token>, book_code: &str) -> Vec<Token> {
-    let native_tokens: Vec<NativeFormatToken> =
-        tokens.iter().cloned().map(token_value_to_format_token).collect();
+    let native_tokens: Vec<NativeFormatToken> = tokens
+        .iter()
+        .cloned()
+        .map(token_value_to_format_token)
+        .collect();
     let canonical = native_derive_canonical_sids(&native_tokens, book_code);
     tokens
         .into_iter()
@@ -1675,9 +1692,7 @@ fn token_value_to_format_token(value: Token) -> NativeFormatToken {
 
 fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
     let mut owned = NativeFormatToken::from(token);
-    owned.sid = token
-        .sid
-        .map(format_sid);
+    owned.sid = token.sid.map(format_sid);
     owned.id = Some(format!("{}-{}", token.id.book_code, token.id.index));
     owned
 }
@@ -1755,9 +1770,7 @@ fn map_token(token: &NativeToken<'_>) -> Token {
         kind: token.kind().into(),
         source: token.source.to_string(),
         span: Some(map_span(token.span)),
-        sid: token
-            .sid
-            .map(format_sid),
+        sid: token.sid.map(format_sid),
         marker: token.marker_name().map(ToOwned::to_owned),
         nested: None,
         marker_metadata: None,
@@ -2067,7 +2080,11 @@ fn map_native_skeleton<T>(
 ) -> DiffSkeleton {
     DiffSkeleton {
         slots: skeleton.slots.iter().map(map_native_slot).collect(),
-        units: skeleton.units.iter().map(|unit| map_native_decision_unit(unit, &map_token)).collect(),
+        units: skeleton
+            .units
+            .iter()
+            .map(|unit| map_native_decision_unit(unit, &map_token))
+            .collect(),
     }
 }
 
@@ -2086,7 +2103,10 @@ fn map_native_anchor(anchor: &NativeAnchor) -> Anchor {
     }
 }
 
-fn map_native_decision_unit<T>(unit: &NativeDecisionUnit<T>, map_token: &impl Fn(&T) -> Token) -> DecisionUnit {
+fn map_native_decision_unit<T>(
+    unit: &NativeDecisionUnit<T>,
+    map_token: &impl Fn(&T) -> Token,
+) -> DecisionUnit {
     DecisionUnit {
         id: unit.id.to_string(),
         kind: unit.kind.into(),
@@ -2138,7 +2158,10 @@ fn map_walk_token(token: &WalkToken) -> Token {
 }
 
 fn map_diffs_by_chapter<T>(
-    by_chapter: &std::collections::BTreeMap<String, std::collections::BTreeMap<u32, NativeDiffSkeleton<T>>>,
+    by_chapter: &std::collections::BTreeMap<
+        String,
+        std::collections::BTreeMap<u32, NativeDiffSkeleton<T>>,
+    >,
     map_token: impl Fn(&T) -> Token,
 ) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>> {
     by_chapter
@@ -2148,7 +2171,9 @@ fn map_diffs_by_chapter<T>(
                 book.clone(),
                 chapters
                     .iter()
-                    .map(|(chapter, skeleton)| (*chapter, map_native_skeleton(skeleton, &map_token)))
+                    .map(|(chapter, skeleton)| {
+                        (*chapter, map_native_skeleton(skeleton, &map_token))
+                    })
                     .collect(),
             )
         })
@@ -2462,11 +2487,19 @@ mod tests {
         let tokens = map_tokens(&native_parse(source).tokens);
         let normalized = wasm_normalize_token_sids(tokens.clone(), "GEN");
 
-        assert_eq!(tokens.len(), normalized.len(), "normalizeTokenSids must preserve length/order");
+        assert_eq!(
+            tokens.len(),
+            normalized.len(),
+            "normalizeTokenSids must preserve length/order"
+        );
         for (before, after) in tokens.iter().zip(&normalized) {
             assert_eq!(before.id, after.id, "id must be untouched");
             assert_eq!(before.source, after.source, "source/text must be untouched");
-            assert_eq!(format!("{:?}", before.kind), format!("{:?}", after.kind), "kind must be untouched");
+            assert_eq!(
+                format!("{:?}", before.kind),
+                format!("{:?}", after.kind),
+                "kind must be untouched"
+            );
         }
 
         let sid_of = |text: &str| -> String {

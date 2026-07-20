@@ -14,7 +14,9 @@
 
 #![allow(dead_code)]
 
-use crate::marker_defs::{MarkerDefKind, MarkerSpec, MarkerWhitespace, ParagraphCategory, SpecContext};
+use crate::marker_defs::{
+    MarkerDefKind, MarkerSpec, MarkerWhitespace, ParagraphCategory, SpecContext,
+};
 use crate::whitespace::{
     FormatWhitespacePreference, StructuralWhitespaceRequirement as Req, WhitespaceFormatCategory,
 };

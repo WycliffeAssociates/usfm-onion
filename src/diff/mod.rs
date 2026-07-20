@@ -183,7 +183,10 @@ pub struct SidBlock {
 /// first contiguous occurrence, then `#1`, `#2`, ... for a later
 /// non-contiguous reuse of the exact same sid. Block id never depends on a
 /// token's own id — id drift across baseline/current is a supported input.
-fn partition_by_sid<T: DiffableToken>(tokens: &[T], sid_at: impl Fn(usize) -> String) -> Vec<SidBlock> {
+fn partition_by_sid<T: DiffableToken>(
+    tokens: &[T],
+    sid_at: impl Fn(usize) -> String,
+) -> Vec<SidBlock> {
     let mut blocks = Vec::new();
     let mut occurrence_by_sid = FxHashMap::<String, usize>::default();
     let mut prev_block_id: Option<String> = None;
@@ -236,7 +239,10 @@ pub fn build_sid_blocks<T: DiffableToken>(tokens: &[T]) -> Vec<SidBlock> {
 
 /// Partition using [`derive_canonical_sids`] — the native calling convention
 /// for parsed `Token` streams, which never trusts a carried sid.
-pub fn build_sid_blocks_canonical<T: DiffableToken>(tokens: &[T], book_code: &str) -> Vec<SidBlock> {
+pub fn build_sid_blocks_canonical<T: DiffableToken>(
+    tokens: &[T],
+    book_code: &str,
+) -> Vec<SidBlock> {
     let canonical = derive_canonical_sids(tokens, book_code);
     partition_by_sid(tokens, |index| canonical[index].clone())
 }
@@ -255,7 +261,6 @@ fn token_kind_key(kind: TokenKind) -> &'static str {
     }
 }
 
-
 /// Classify how `baseline` and `current` differ: as pure whitespace churn
 /// (`ws`), or — if not — as pure USFM markup churn with the same
 /// reader-visible text (`usfm`). `usfm` is only computed when `ws` is
@@ -265,16 +270,15 @@ fn token_kind_key(kind: TokenKind) -> &'static str {
 /// circuiting pass per side with no allocation at all.
 fn classify_text_diff(baseline: &str, current: &str) -> (bool, bool) {
     let ws = whitespace_stripped_eq(baseline, current);
-    let usfm = !ws
-        && whitespace_stripped_eq(
-            &strip_usfm_markers(baseline),
-            &strip_usfm_markers(current),
-        );
+    let usfm =
+        !ws && whitespace_stripped_eq(&strip_usfm_markers(baseline), &strip_usfm_markers(current));
     (ws, usfm)
 }
 
 fn whitespace_stripped_eq(a: &str, b: &str) -> bool {
-    a.chars().filter(|ch| !ch.is_whitespace()).eq(b.chars().filter(|ch| !ch.is_whitespace()))
+    a.chars()
+        .filter(|ch| !ch.is_whitespace())
+        .eq(b.chars().filter(|ch| !ch.is_whitespace()))
 }
 
 /// Strip USFM markers, leaving reader-visible text. Whitespace is left
@@ -401,8 +405,16 @@ mod canonical_sid_tests {
     fn duplicate_verse_gets_a_per_chapter_positional_dup_suffix() {
         let parsed = parse("\\id GEN\n\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c\n");
         let sids = derive_canonical_sids(&parsed.tokens, "GEN");
-        let a_index = parsed.tokens.iter().position(|t| t.source.trim() == "a").unwrap();
-        let c_index = parsed.tokens.iter().position(|t| t.source.trim() == "c").unwrap();
+        let a_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "a")
+            .unwrap();
+        let c_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "c")
+            .unwrap();
         assert_eq!(sids[a_index], "GEN 1:1");
         assert_eq!(sids[c_index], "GEN 1:1_dup_1");
     }
@@ -413,9 +425,21 @@ mod canonical_sid_tests {
         // `_dup_1` without disturbing the plain \v 1 occurrence count.
         let parsed = parse("\\id GEN\n\\c 1\n\\v 1 a\n\\v 1-2 b\n\\v 1-2 c\n");
         let sids = derive_canonical_sids(&parsed.tokens, "GEN");
-        let a_index = parsed.tokens.iter().position(|t| t.source.trim() == "a").unwrap();
-        let b_index = parsed.tokens.iter().position(|t| t.source.trim() == "b").unwrap();
-        let c_index = parsed.tokens.iter().position(|t| t.source.trim() == "c").unwrap();
+        let a_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "a")
+            .unwrap();
+        let b_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "b")
+            .unwrap();
+        let c_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "c")
+            .unwrap();
         assert_eq!(sids[a_index], "GEN 1:1");
         assert_eq!(sids[b_index], "GEN 1:1-2");
         assert_eq!(sids[c_index], "GEN 1:1-2_dup_1");

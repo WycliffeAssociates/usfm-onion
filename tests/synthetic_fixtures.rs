@@ -71,7 +71,11 @@ fn common_errors_triggers_expected_lint_codes() {
         LintCode::VerseInSectionOrOtherParagraph,
     ];
 
-    let missing: Vec<LintCode> = expected.iter().copied().filter(|c| !observed.contains(c)).collect();
+    let missing: Vec<LintCode> = expected
+        .iter()
+        .copied()
+        .filter(|c| !observed.contains(c))
+        .collect();
     assert!(
         missing.is_empty(),
         "common-errors.usfm failed to trigger: {missing:?}\nObserved: {observed:?}"

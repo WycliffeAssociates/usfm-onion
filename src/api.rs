@@ -372,7 +372,12 @@ impl<'a> UsfmDiffBuilder<'a> {
         let current = parse(&self.right.source);
         let baseline_book = baseline.analysis.book_code.unwrap_or("unknown");
         let current_book = current.analysis.book_code.unwrap_or("unknown");
-        diff_skeleton_canonical(&baseline.tokens, baseline_book, &current.tokens, current_book)
+        diff_skeleton_canonical(
+            &baseline.tokens,
+            baseline_book,
+            &current.tokens,
+            current_book,
+        )
     }
 }
 
@@ -571,7 +576,10 @@ mod tests {
             .iter()
             .find(|unit| {
                 unit.status == crate::DecisionStatus::Modified
-                    && unit.baseline_sid.as_deref().is_some_and(|sid| sid.ends_with("1:1"))
+                    && unit
+                        .baseline_sid
+                        .as_deref()
+                        .is_some_and(|sid| sid.ends_with("1:1"))
             })
             .expect("expected modified verse unit");
         let reverted = baseline_parsed

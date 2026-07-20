@@ -26,8 +26,14 @@ struct BenchmarkMeta {
 #[serde(untagged)]
 #[allow(dead_code)]
 enum Throughput {
-    Bytes { #[serde(rename = "Bytes")] bytes: u64 },
-    Elements { #[serde(rename = "Elements")] elements: u64 },
+    Bytes {
+        #[serde(rename = "Bytes")]
+        bytes: u64,
+    },
+    Elements {
+        #[serde(rename = "Elements")]
+        elements: u64,
+    },
 }
 
 #[derive(Debug, Deserialize)]

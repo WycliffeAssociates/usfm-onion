@@ -98,7 +98,10 @@ fn run_diff_merge_loop(label: &str, baseline: &str, current: &str, iterations: u
         let _ = diff_and_merge_once(baseline, current);
     }
     let elapsed = started.elapsed();
-    println!("  {iterations} iteration(s) in {elapsed:.2?} ({:.2?}/iteration)", elapsed / iterations as u32);
+    println!(
+        "  {iterations} iteration(s) in {elapsed:.2?} ({:.2?}/iteration)",
+        elapsed / iterations as u32
+    );
 }
 
 /// One realistic diff+merge round-trip: build the skeleton, then merge it
@@ -108,12 +111,8 @@ fn run_diff_merge_loop(label: &str, baseline: &str, current: &str, iterations: u
 fn diff_and_merge_once(baseline: &str, current: &str) -> usize {
     let baseline_tokens = parse(baseline);
     let current_tokens = parse(current);
-    let skeleton = diff_skeleton_canonical(
-        &baseline_tokens.tokens,
-        BOOK,
-        &current_tokens.tokens,
-        BOOK,
-    );
+    let skeleton =
+        diff_skeleton_canonical(&baseline_tokens.tokens, BOOK, &current_tokens.tokens, BOOK);
 
     let empty = BTreeMap::new();
     let accept_incoming = merge_skeleton(&skeleton, &empty, MergeSide::Current).unwrap();
@@ -179,7 +178,9 @@ fn load_corpus(relative_root: &str) -> Vec<String> {
     paths.sort();
     paths
         .into_iter()
-        .map(|path| fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display())))
+        .map(|path| {
+            fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
+        })
         .collect()
 }
 

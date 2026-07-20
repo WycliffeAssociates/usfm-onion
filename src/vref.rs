@@ -619,10 +619,7 @@ mod tests {
         let map = usfm_to_vref_map(src);
         assert_eq!(map.get("GEN 1:1").map(String::as_str), Some(" padded "));
 
-        let trimmed = usfm_to_vref_map_with_options(
-            src,
-            VrefOptions { trim: true },
-        );
+        let trimmed = usfm_to_vref_map_with_options(src, VrefOptions { trim: true });
         assert_eq!(trimmed.get("GEN 1:1").map(String::as_str), Some("padded"));
     }
 

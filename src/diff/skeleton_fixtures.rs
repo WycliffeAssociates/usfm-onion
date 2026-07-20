@@ -9,8 +9,8 @@
 #[cfg(test)]
 mod tests {
     use crate::diff::skeleton::{
-        CoveredSide, DecisionStatus, DecisionUnitKind, DiffSkeleton, MergeError, MergeSide,
-        UnitId, diff_skeleton, diff_skeleton_canonical, merge_diff_blocks, merge_skeleton,
+        CoveredSide, DecisionStatus, DecisionUnitKind, DiffSkeleton, MergeError, MergeSide, UnitId,
+        diff_skeleton, diff_skeleton_canonical, merge_diff_blocks, merge_skeleton,
         revert_diff_block,
     };
     use crate::diff::{DiffableToken, derive_canonical_sids};
@@ -36,29 +36,121 @@ mod tests {
     }
 
     const CASES: &[Case] = &[
-        Case { n: 1, baseline: "\\c 1\n\\v 1 In the beginning God created the heaven and the earth.\n", current: "\\c 1\n\\v 1 In the beginning God created the heavens and the earth.\n" },
-        Case { n: 2, baseline: "\\c 1\n\\v 1 one\n\\v 3 three\n", current: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n" },
-        Case { n: 3, baseline: "\\c 1\n\\v 2 two\n\\v 3 three\n", current: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n" },
-        Case { n: 4, baseline: "\\c 1\n\\v 1 one\n\\v 2 two\n", current: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n" },
-        Case { n: 5, baseline: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n", current: "\\c 1\n\\v 1 one\n\\v 3 three\n" },
-        Case { n: 6, baseline: "\\c 1\n\\v 1 The old rendering of this verse.\n", current: "\\c 1\n\\v 1 A completely different rendering here.\n" },
-        Case { n: 7, baseline: "\\c 1\n\\v 1 one\n", current: "\\c 1\n\\v 1 one  \n" },
-        Case { n: 9, baseline: "\\c 1\n\\v 1 Alpha beta gamma.\n\\v 2 Delta epsilon.\n", current: "\\c 1\n\\v 1 Alpha beta.\n\\v 2 Gamma delta epsilon.\n" },
-        Case { n: 10, baseline: "\\c 1\n\\v 1 First verse.\n\\v 2 Second verse.\n", current: "\\c 1\n\\v 2 Second verse.\n\\v 1 First verse.\n" },
-        Case { n: 11, baseline: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n", current: "\\c 1\n\\v 1 one\n\\v 3 three\n\\v 2 two\n" },
-        Case { n: 12, baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c\n", current: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c edited\n" },
-        Case { n: 13, baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c\n", current: "\\c 1\n\\v 2 b\n\\v 1 c\n" },
-        Case { n: 14, baseline: "\\c 1\n\\v 1 a\n\\v 1-2 b\n", current: "\\c 1\n\\v 1 a\n\\v 1-2 b edited\n" },
-        Case { n: 15, baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n", current: "\\c 1\n\\v 1-2 a b\n" },
-        Case { n: 16, baseline: "\\c 1\n\\v 1-3 a\n", current: "\\c 1\n\\v 1-2 a\n\\v 3 b\n" },
-        Case { n: 17, baseline: "\\c 1\n\\v 1-2 a\n\\v 2 b\n", current: "\\c 1\n\\v 1-2 a\n\\v 2 b changed\n" },
-        Case { n: 8, baseline: "\\c 1\n\\p\n\\v 1 one\n\\s Section\n\\v 2 two\n", current: "\\c 1\n\\m\n\\v 1 one\n\\v 2 two\n" },
-        Case { n: 18, baseline: "\\c 1\n\\v 1 Text\\f + \\ft a note\\f* more.\n", current: "\\c 1\n\\v 1 Text\\f + \\ft an edited note\\f* more.\n" },
-        Case { n: 19, baseline: "\\id GEN\n\\h Genesis\n\\c 1\n\\v 1 one\n", current: "\\id GEN\n\\h The Book of Genesis\n\\c 1\n\\v 1 one\n" },
-        Case { n: 20, baseline: "\\c 1\r\n\\v 1 one\r\n\\v 2 two\r\n", current: "\\c 1\n\\v 1 one\n\\v 2 two\n" },
-        Case { n: 21, baseline: "\\c 5\n\\v 10 Something entirely.\n\\v 11 Unrelated content here.\n", current: "\\c 9\n\\v 1 Totally different text.\n\\v 2 Nothing shared at all.\n" },
-        Case { n: 22, baseline: "\\c 1\n\\v 1 Alpha beta gamma.\n\\v 2 To be deleted.\n\\v 3 Delta epsilon.\n", current: "\\c 1\n\\v 1 Alpha beta.\n\\v 3 Gamma delta epsilon.\n" },
-        Case { n: 23, baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 10 j\n\\v 11 k\n", current: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 10 j\n\\v 1 k\n" },
+        Case {
+            n: 1,
+            baseline: "\\c 1\n\\v 1 In the beginning God created the heaven and the earth.\n",
+            current: "\\c 1\n\\v 1 In the beginning God created the heavens and the earth.\n",
+        },
+        Case {
+            n: 2,
+            baseline: "\\c 1\n\\v 1 one\n\\v 3 three\n",
+            current: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n",
+        },
+        Case {
+            n: 3,
+            baseline: "\\c 1\n\\v 2 two\n\\v 3 three\n",
+            current: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n",
+        },
+        Case {
+            n: 4,
+            baseline: "\\c 1\n\\v 1 one\n\\v 2 two\n",
+            current: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n",
+        },
+        Case {
+            n: 5,
+            baseline: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n",
+            current: "\\c 1\n\\v 1 one\n\\v 3 three\n",
+        },
+        Case {
+            n: 6,
+            baseline: "\\c 1\n\\v 1 The old rendering of this verse.\n",
+            current: "\\c 1\n\\v 1 A completely different rendering here.\n",
+        },
+        Case {
+            n: 7,
+            baseline: "\\c 1\n\\v 1 one\n",
+            current: "\\c 1\n\\v 1 one  \n",
+        },
+        Case {
+            n: 9,
+            baseline: "\\c 1\n\\v 1 Alpha beta gamma.\n\\v 2 Delta epsilon.\n",
+            current: "\\c 1\n\\v 1 Alpha beta.\n\\v 2 Gamma delta epsilon.\n",
+        },
+        Case {
+            n: 10,
+            baseline: "\\c 1\n\\v 1 First verse.\n\\v 2 Second verse.\n",
+            current: "\\c 1\n\\v 2 Second verse.\n\\v 1 First verse.\n",
+        },
+        Case {
+            n: 11,
+            baseline: "\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n",
+            current: "\\c 1\n\\v 1 one\n\\v 3 three\n\\v 2 two\n",
+        },
+        Case {
+            n: 12,
+            baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c\n",
+            current: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c edited\n",
+        },
+        Case {
+            n: 13,
+            baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c\n",
+            current: "\\c 1\n\\v 2 b\n\\v 1 c\n",
+        },
+        Case {
+            n: 14,
+            baseline: "\\c 1\n\\v 1 a\n\\v 1-2 b\n",
+            current: "\\c 1\n\\v 1 a\n\\v 1-2 b edited\n",
+        },
+        Case {
+            n: 15,
+            baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n",
+            current: "\\c 1\n\\v 1-2 a b\n",
+        },
+        Case {
+            n: 16,
+            baseline: "\\c 1\n\\v 1-3 a\n",
+            current: "\\c 1\n\\v 1-2 a\n\\v 3 b\n",
+        },
+        Case {
+            n: 17,
+            baseline: "\\c 1\n\\v 1-2 a\n\\v 2 b\n",
+            current: "\\c 1\n\\v 1-2 a\n\\v 2 b changed\n",
+        },
+        Case {
+            n: 8,
+            baseline: "\\c 1\n\\p\n\\v 1 one\n\\s Section\n\\v 2 two\n",
+            current: "\\c 1\n\\m\n\\v 1 one\n\\v 2 two\n",
+        },
+        Case {
+            n: 18,
+            baseline: "\\c 1\n\\v 1 Text\\f + \\ft a note\\f* more.\n",
+            current: "\\c 1\n\\v 1 Text\\f + \\ft an edited note\\f* more.\n",
+        },
+        Case {
+            n: 19,
+            baseline: "\\id GEN\n\\h Genesis\n\\c 1\n\\v 1 one\n",
+            current: "\\id GEN\n\\h The Book of Genesis\n\\c 1\n\\v 1 one\n",
+        },
+        Case {
+            n: 20,
+            baseline: "\\c 1\r\n\\v 1 one\r\n\\v 2 two\r\n",
+            current: "\\c 1\n\\v 1 one\n\\v 2 two\n",
+        },
+        Case {
+            n: 21,
+            baseline: "\\c 5\n\\v 10 Something entirely.\n\\v 11 Unrelated content here.\n",
+            current: "\\c 9\n\\v 1 Totally different text.\n\\v 2 Nothing shared at all.\n",
+        },
+        Case {
+            n: 22,
+            baseline: "\\c 1\n\\v 1 Alpha beta gamma.\n\\v 2 To be deleted.\n\\v 3 Delta epsilon.\n",
+            current: "\\c 1\n\\v 1 Alpha beta.\n\\v 3 Gamma delta epsilon.\n",
+        },
+        Case {
+            n: 23,
+            baseline: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 10 j\n\\v 11 k\n",
+            current: "\\c 1\n\\v 1 a\n\\v 2 b\n\\v 10 j\n\\v 1 k\n",
+        },
     ];
 
     fn block_text<T: DiffableToken>(tokens: &[T]) -> String {
@@ -124,8 +216,7 @@ mod tests {
             let current_src = wrap(case.n, case.current);
             let baseline = parse(&baseline_src);
             let current = parse(&current_src);
-            let skeleton =
-                diff_skeleton_canonical(&baseline.tokens, BOOK, &current.tokens, BOOK);
+            let skeleton = diff_skeleton_canonical(&baseline.tokens, BOOK, &current.tokens, BOOK);
             assert_partition_reproduces_source(&skeleton, &baseline_src, &current_src);
         }
     }
@@ -156,8 +247,11 @@ mod tests {
             let current_src = wrap(case.n, case.current);
             let baseline = parse(&baseline_src);
             let current = parse(&current_src);
-            let baseline_tokens =
-                to_format_tokens_with_normalized_sids_and_drifted_ids(&baseline.tokens, BOOK, "orig");
+            let baseline_tokens = to_format_tokens_with_normalized_sids_and_drifted_ids(
+                &baseline.tokens,
+                BOOK,
+                "orig",
+            );
             let current_tokens =
                 to_format_tokens_with_normalized_sids_and_drifted_ids(&current.tokens, BOOK, "new");
             let skeleton = diff_skeleton(&baseline_tokens, &current_tokens);
@@ -228,12 +322,23 @@ mod tests {
             .iter()
             .filter(|s| matches!(s.role, SlotRole::Shared | SlotRole::PairBaseline))
             .map(|s| {
-                skeleton.units.iter().find(|u| u.id == s.unit_id).unwrap().baseline_sid.as_deref()
+                skeleton
+                    .units
+                    .iter()
+                    .find(|u| u.id == s.unit_id)
+                    .unwrap()
+                    .baseline_sid
+                    .as_deref()
             })
             .collect();
         assert_eq!(
             baseline_order,
-            vec![Some("GEN 0:0"), Some("GEN 1:0"), Some("GEN 1:1"), Some("GEN 1:2")]
+            vec![
+                Some("GEN 0:0"),
+                Some("GEN 1:0"),
+                Some("GEN 1:1"),
+                Some("GEN 1:2")
+            ]
         );
 
         let current_order: Vec<Option<&str>> = skeleton
@@ -241,17 +346,31 @@ mod tests {
             .iter()
             .filter(|s| matches!(s.role, SlotRole::Shared | SlotRole::PairCurrent))
             .map(|s| {
-                skeleton.units.iter().find(|u| u.id == s.unit_id).unwrap().current_sid.as_deref()
+                skeleton
+                    .units
+                    .iter()
+                    .find(|u| u.id == s.unit_id)
+                    .unwrap()
+                    .current_sid
+                    .as_deref()
             })
             .collect();
         assert_eq!(
             current_order,
-            vec![Some("GEN 0:0"), Some("GEN 1:0"), Some("GEN 1:2"), Some("GEN 1:1")]
+            vec![
+                Some("GEN 0:0"),
+                Some("GEN 1:0"),
+                Some("GEN 1:2"),
+                Some("GEN 1:1")
+            ]
         );
 
         // The moved unit spans exactly two slots (one decision, two ghosts).
-        let moved_slot_count =
-            skeleton.slots.iter().filter(|s| s.unit_id == moved.id).count();
+        let moved_slot_count = skeleton
+            .slots
+            .iter()
+            .filter(|s| s.unit_id == moved.id)
+            .count();
         assert_eq!(moved_slot_count, 2);
     }
 
@@ -283,8 +402,15 @@ mod tests {
         assert_eq!(deleted.dup_context.current_count, 1);
 
         // 13.3: deleted 'a' anchored after GEN 1:0 (between chapter open and v2).
-        let deleted_slot = skeleton.slots.iter().find(|s| s.unit_id == deleted.id).unwrap();
-        let anchor = deleted_slot.after.as_ref().expect("deleted unit has an anchor");
+        let deleted_slot = skeleton
+            .slots
+            .iter()
+            .find(|s| s.unit_id == deleted.id)
+            .unwrap();
+        let anchor = deleted_slot
+            .after
+            .as_ref()
+            .expect("deleted unit has an anchor");
         assert_eq!(anchor.sid, "GEN 1:0");
 
         // 13.4: no two hunks fight over one anchor — among units a downstream
@@ -298,7 +424,11 @@ mod tests {
             if !seen_units.insert(slot.unit_id.clone()) {
                 continue;
             }
-            let unit = skeleton.units.iter().find(|u| u.id == slot.unit_id).unwrap();
+            let unit = skeleton
+                .units
+                .iter()
+                .find(|u| u.id == slot.unit_id)
+                .unwrap();
             let needs_anchor = matches!(unit.status, DecisionStatus::Deleted)
                 || (matches!(unit.kind, DecisionUnitKind::Coalesced) && unit.displaced);
             if needs_anchor && let Some(anchor) = &slot.after {
@@ -306,7 +436,11 @@ mod tests {
             }
         }
         let unique_count: std::collections::HashSet<_> = anchored_sids.iter().collect();
-        assert_eq!(unique_count.len(), anchored_sids.len(), "two anchored hunks share one anchor");
+        assert_eq!(
+            unique_count.len(),
+            anchored_sids.len(),
+            "two anchored hunks share one anchor"
+        );
     }
 
     #[test]
@@ -332,8 +466,11 @@ mod tests {
         // 15.2 + 15.3: deleted v2 anchored after the pair's baseline-side sid
         // GEN 1:1 (not GEN 1:0 — the shared chapter open) — the pair's
         // baseline slot precedes the deletion in slot order.
-        let deleted_slot_index =
-            skeleton.slots.iter().position(|s| s.unit_id == deleted_v2.id).unwrap();
+        let deleted_slot_index = skeleton
+            .slots
+            .iter()
+            .position(|s| s.unit_id == deleted_v2.id)
+            .unwrap();
         let anchor = skeleton.slots[deleted_slot_index]
             .after
             .as_ref()
@@ -353,7 +490,10 @@ mod tests {
         );
 
         // 15.4 (pin 20): deleted GEN 1:2 is coveredBy the pair's current 1-2 bridge.
-        let covered = deleted_v2.covered_by.as_ref().expect("deleted v2 is covered");
+        let covered = deleted_v2
+            .covered_by
+            .as_ref()
+            .expect("deleted v2 is covered");
         assert_eq!(covered.unit_id, pair.id);
         assert_eq!(covered.side, CoveredSide::Current);
         assert_eq!(covered.sid, "GEN 1:1-2");
@@ -434,8 +574,11 @@ mod tests {
             .iter()
             .filter(|u| matches!(u.kind, DecisionUnitKind::Added))
             .collect();
-        let coalesced_count =
-            skeleton.units.iter().filter(|u| matches!(u.kind, DecisionUnitKind::Coalesced)).count();
+        let coalesced_count = skeleton
+            .units
+            .iter()
+            .filter(|u| matches!(u.kind, DecisionUnitKind::Coalesced))
+            .count();
 
         // exactly one deleted unit: GEN 1:11 with the 'k' body.
         assert_eq!(deleted.len(), 1);
@@ -462,8 +605,7 @@ mod tests {
             let current_src = wrap(case.n, case.current);
             let baseline = parse(&baseline_src);
             let current = parse(&current_src);
-            let skeleton =
-                diff_skeleton_canonical(&baseline.tokens, BOOK, &current.tokens, BOOK);
+            let skeleton = diff_skeleton_canonical(&baseline.tokens, BOOK, &current.tokens, BOOK);
 
             let all_baseline =
                 merge_skeleton(&skeleton, &BTreeMap::new(), MergeSide::Baseline).unwrap();
@@ -499,8 +641,7 @@ mod tests {
             let current_src = wrap(case.n, case.current);
             let baseline = parse(&baseline_src);
             let current = parse(&current_src);
-            let skeleton =
-                diff_skeleton_canonical(&baseline.tokens, BOOK, &current.tokens, BOOK);
+            let skeleton = diff_skeleton_canonical(&baseline.tokens, BOOK, &current.tokens, BOOK);
 
             let mut seed = 0x9e3779b9u32 ^ case.n.wrapping_mul(2_654_435_761);
 
@@ -524,7 +665,12 @@ mod tests {
                 // Purity: same inputs/vector twice return the same bytes.
                 let first = merge_skeleton(&skeleton, &decisions, default_side).unwrap();
                 let second = merge_skeleton(&skeleton, &decisions, default_side).unwrap();
-                assert_eq!(block_text(&first), block_text(&second), "case {}: not idempotent", case.n);
+                assert_eq!(
+                    block_text(&first),
+                    block_text(&second),
+                    "case {}: not idempotent",
+                    case.n
+                );
 
                 // Chosen-side/no-leakage witness: compare the REAL merged
                 // output against text independently assembled per slot role
@@ -553,12 +699,17 @@ mod tests {
     ) -> String {
         use crate::diff::skeleton::SlotRole;
 
-        let units_by_id: std::collections::HashMap<&UnitId, &crate::diff::skeleton::DecisionUnit<T>> =
-            skeleton.units.iter().map(|unit| (&unit.id, unit)).collect();
+        let units_by_id: std::collections::HashMap<
+            &UnitId,
+            &crate::diff::skeleton::DecisionUnit<T>,
+        > = skeleton.units.iter().map(|unit| (&unit.id, unit)).collect();
         let mut out = String::new();
         for slot in &skeleton.slots {
             let unit = units_by_id[&slot.unit_id];
-            let side = decisions.get(&slot.unit_id).copied().unwrap_or(default_side);
+            let side = decisions
+                .get(&slot.unit_id)
+                .copied()
+                .unwrap_or(default_side);
             match slot.role {
                 SlotRole::Shared => {
                     let tokens = if side == MergeSide::Baseline {
@@ -610,7 +761,12 @@ mod tests {
 
         let mut decisions = BTreeMap::new();
         decisions.insert(UnitId::new("__no_such_unit__"), MergeSide::Baseline);
-        let result = merge_diff_blocks(&baseline_tokens, &current_tokens, &decisions, MergeSide::Current);
+        let result = merge_diff_blocks(
+            &baseline_tokens,
+            &current_tokens,
+            &decisions,
+            MergeSide::Current,
+        );
         assert!(matches!(result, Err(MergeError::UnknownUnitId(_))));
     }
 
@@ -635,7 +791,11 @@ mod tests {
                 to_format_tokens_with_normalized_sids_and_drifted_ids(&current.tokens, BOOK, "new");
             let skeleton = diff_skeleton(&baseline_tokens, &current_tokens);
 
-            for unit in skeleton.units.iter().filter(|u| u.status != DecisionStatus::Unchanged) {
+            for unit in skeleton
+                .units
+                .iter()
+                .filter(|u| u.status != DecisionStatus::Unchanged)
+            {
                 let reverted =
                     revert_diff_block(unit.id.as_str(), &baseline_tokens, &current_tokens).unwrap();
 

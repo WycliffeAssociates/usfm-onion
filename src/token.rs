@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::marker_defs::{
-    MarkerFamily, MarkerDefKind, StructuralMarkerInfo, lookup_marker_metadata,
+    MarkerDefKind, MarkerFamily, StructuralMarkerInfo, lookup_marker_metadata,
 };
 
 pub type BytePos = u32;

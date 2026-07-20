@@ -304,10 +304,7 @@ mod tests {
     #[test]
     fn note_container_and_note_submarker_are_distinct() {
         assert!(is_known_marker("f"));
-        assert_eq!(
-            marker_info("f").note_family,
-            Some(NoteFamily::Footnote)
-        );
+        assert_eq!(marker_info("f").note_family, Some(NoteFamily::Footnote));
         assert_eq!(marker_info("ft").category, MarkerCategory::NoteSubmarker);
         assert_eq!(marker_info("nd").category, MarkerCategory::Character);
     }

@@ -1415,11 +1415,15 @@ mod tests {
             header.required_after_open_name,
             StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
         );
-        assert_eq!(header.category_for_profiles, WhitespaceFormatCategory::Block);
+        assert_eq!(
+            header.category_for_profiles,
+            WhitespaceFormatCategory::Block
+        );
 
         // `\mt1` is Paragraph kind / Title category — takes a title
         // string after the marker name (HS required).
-        let title = lookup_marker_whitespace("mt1").expect("mt1 should resolve via numbered variant");
+        let title =
+            lookup_marker_whitespace("mt1").expect("mt1 should resolve via numbered variant");
         assert_eq!(
             title.required_after_open_name,
             StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace

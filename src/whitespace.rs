@@ -137,7 +137,9 @@ pub fn starts_with_at_least_one_newline(s: &str) -> bool {
 /// Returns true if `s` ends with at least one horizontal whitespace character.
 #[inline]
 pub fn ends_with_at_least_one_horizontal_whitespace(s: &str) -> bool {
-    s.chars().next_back().is_some_and(is_horizontal_whitespace_char)
+    s.chars()
+        .next_back()
+        .is_some_and(is_horizontal_whitespace_char)
 }
 
 /// Returns true if `s` ends with at least one newline character.

@@ -223,9 +223,12 @@ impl<'tokens> HtmlVisitor<'tokens> {
     /// where the recursive `render_fragment` call rendered notes with
     /// `in_note_body = true`.
     fn in_note_body(&self) -> bool {
-        self.stack
-            .iter()
-            .any(|item| matches!(item.emission, Emission::InlineNote(_) | Emission::ExtractedNote(_)))
+        self.stack.iter().any(|item| {
+            matches!(
+                item.emission,
+                Emission::InlineNote(_) | Emission::ExtractedNote(_)
+            )
+        })
     }
 
     fn push_html(&mut self, html: &str) {
@@ -402,7 +405,9 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         _frame: &ScopeFrame<'tokens>,
         _reason: LeaveReason,
     ) {
-        let Some(item) = self.stack.pop() else { return; };
+        let Some(item) = self.stack.pop() else {
+            return;
+        };
         match item.emission {
             Emission::ExtractedNote(ref state) => {
                 let call_id = state.call_id.as_deref().unwrap_or_default();
@@ -519,8 +524,7 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         // Per the prior implementation, `\c` resets verse-scoped note
         // numbering. `on_enter_scope(Chapter)` already did that; the
         // number itself just emits the span.
-        let html =
-            empty_marker_span("chapter", marker, &number, sid.as_deref(), &token_id);
+        let html = empty_marker_span("chapter", marker, &number, sid.as_deref(), &token_id);
         self.push_html(&html);
     }
 
@@ -537,9 +541,7 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
             .stack
             .iter()
             .rev()
-            .find_map(|item| {
-                (item.scope_kind == StructuralScopeKind::Verse).then_some(item.marker)
-            })
+            .find_map(|item| (item.scope_kind == StructuralScopeKind::Verse).then_some(item.marker))
             .flatten()
             .unwrap_or("v");
         let number = number_text(token);
@@ -550,8 +552,7 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         let token_id = token_id_str(&token.id);
         self.current_verse = (!number.is_empty()).then_some(number.clone());
         self.note_count_in_verse = 0;
-        let html =
-            empty_marker_span("verse", marker, &number, sid.as_deref(), &token_id);
+        let html = empty_marker_span("verse", marker, &number, sid.as_deref(), &token_id);
         self.push_html(&html);
     }
 
@@ -697,12 +698,8 @@ impl<'tokens> HtmlVisitor<'tokens> {
                 }
             };
             let pair = match kind {
-                NoteKind::Footnote => {
-                    (format!("fnref-{id_index}"), format!("fn-{id_index}"))
-                }
-                NoteKind::Crossref => {
-                    (format!("xrref-{id_index}"), format!("xr-{id_index}"))
-                }
+                NoteKind::Footnote => (format!("fnref-{id_index}"), format!("fn-{id_index}")),
+                NoteKind::Crossref => (format!("xrref-{id_index}"), format!("xr-{id_index}")),
             };
             (Some(pair.0), Some(pair.1))
         } else {
@@ -771,14 +768,8 @@ impl<'tokens> HtmlVisitor<'tokens> {
                 "data-usfm-source-caller".to_string(),
                 source_caller_for_caller.clone(),
             ));
-            attrs.push((
-                "data-usfm-note-kind".to_string(),
-                kind.as_str().to_string(),
-            ));
-            self.stack
-                .last_mut()
-                .expect("note frame present")
-                .attrs = attrs;
+            attrs.push(("data-usfm-note-kind".to_string(), kind.as_str().to_string()));
+            self.stack.last_mut().expect("note frame present").attrs = attrs;
         }
     }
 }
@@ -927,11 +918,7 @@ fn tag_and_type_for_marker(
     }
 }
 
-fn close_for_new_block(
-    output: &mut String,
-    stack: &mut Vec<OpenElement<'_>>,
-    keep_book: bool,
-) {
+fn close_for_new_block(output: &mut String, stack: &mut Vec<OpenElement<'_>>, keep_book: bool) {
     // Used only by `on_book_code` for the rare BookCode-without-`\id`
     // path. Closes inline/table/block scopes down to the book wrapper.
     while matches!(
@@ -957,8 +944,7 @@ fn close_for_new_block(
                     | StructuralScopeKind::Periph
                     | StructuralScopeKind::Meta
             )
-            || (matches!(top.scope_kind, StructuralScopeKind::Header)
-                && top.marker != Some("id"));
+            || (matches!(top.scope_kind, StructuralScopeKind::Header) && top.marker != Some("id"));
         if !should_pop {
             break;
         }

@@ -307,7 +307,10 @@ pub fn merge_skeleton<T: Clone>(
     let mut out = Vec::new();
     for slot in &skeleton.slots {
         let unit = units_by_id[&slot.unit_id];
-        let side = decisions.get(&slot.unit_id).copied().unwrap_or(default_side);
+        let side = decisions
+            .get(&slot.unit_id)
+            .copied()
+            .unwrap_or(default_side);
         match slot.role {
             SlotRole::Shared => {
                 let tokens = if side == MergeSide::Baseline {
@@ -356,7 +359,12 @@ pub fn revert_diff_block<T: DiffableToken>(
 ) -> Result<Vec<T>, MergeError> {
     let mut decisions = BTreeMap::new();
     decisions.insert(UnitId::new(diff_block_id), MergeSide::Baseline);
-    merge_diff_blocks(baseline_tokens, current_tokens, &decisions, MergeSide::Current)
+    merge_diff_blocks(
+        baseline_tokens,
+        current_tokens,
+        &decisions,
+        MergeSide::Current,
+    )
 }
 
 /// Pairing key ("pair-loose"): book + chapter + verse-range-start, packed
@@ -418,7 +426,9 @@ fn myers_pairs(baseline_ids: &[String], current_ids: &[String]) -> Vec<(usize, u
         return Vec::new();
     }
     if baseline_ids == current_ids {
-        return (0..baseline_ids.len()).map(|index| (index, index)).collect();
+        return (0..baseline_ids.len())
+            .map(|index| (index, index))
+            .collect();
     }
 
     let diff = capture_diff_slices(Algorithm::Myers, baseline_ids, current_ids);
@@ -489,10 +499,14 @@ fn build_skeleton<T: DiffableToken>(
     let current_blocks: Vec<SidBlock> =
         partition_by_sid(current_tokens, |index| current_sids[index].clone());
 
-    let baseline_block_ids: Vec<String> =
-        baseline_blocks.iter().map(|block| block.block_id.clone()).collect();
-    let current_block_ids: Vec<String> =
-        current_blocks.iter().map(|block| block.block_id.clone()).collect();
+    let baseline_block_ids: Vec<String> = baseline_blocks
+        .iter()
+        .map(|block| block.block_id.clone())
+        .collect();
+    let current_block_ids: Vec<String> = current_blocks
+        .iter()
+        .map(|block| block.block_id.clone())
+        .collect();
 
     let pairs = myers_pairs(&baseline_block_ids, &current_block_ids);
     let shared_baseline: HashSet<usize> = pairs.iter().map(|&(b, _)| b).collect();
@@ -525,17 +539,23 @@ fn build_skeleton<T: DiffableToken>(
         ci += 1;
     }
 
-    let baseline_only: Vec<usize> =
-        (0..baseline_blocks.len()).filter(|index| !shared_baseline.contains(index)).collect();
-    let current_only: Vec<usize> =
-        (0..current_blocks.len()).filter(|index| !shared_current.contains(index)).collect();
+    let baseline_only: Vec<usize> = (0..baseline_blocks.len())
+        .filter(|index| !shared_baseline.contains(index))
+        .collect();
+    let current_only: Vec<usize> = (0..current_blocks.len())
+        .filter(|index| !shared_current.contains(index))
+        .collect();
 
     // Parsed once per block (not re-parsed at every call site below) into
     // the same 8-byte `Copy` `Sid` the walker uses — see `pairing_key`.
-    let baseline_keys: Vec<Sid> =
-        baseline_blocks.iter().map(|block| pairing_key(&block.semantic_sid)).collect();
-    let current_keys: Vec<Sid> =
-        current_blocks.iter().map(|block| pairing_key(&block.semantic_sid)).collect();
+    let baseline_keys: Vec<Sid> = baseline_blocks
+        .iter()
+        .map(|block| pairing_key(&block.semantic_sid))
+        .collect();
+    let current_keys: Vec<Sid> = current_blocks
+        .iter()
+        .map(|block| pairing_key(&block.semantic_sid))
+        .collect();
 
     // Pair-loose coalesce: off-Myers blocks sharing a pairing key. Tier 1
     // (exact-text-first, stream order among ties), then tier 2 (positional
@@ -581,8 +601,11 @@ fn build_skeleton<T: DiffableToken>(
             }
         }
 
-        let current_left: Vec<usize> =
-            cis.iter().copied().filter(|ci| !current_used.contains(ci)).collect();
+        let current_left: Vec<usize> = cis
+            .iter()
+            .copied()
+            .filter(|ci| !current_used.contains(ci))
+            .collect();
         for (offset, &bi) in baseline_left.iter().enumerate() {
             if let Some(&ci) = current_left.get(offset) {
                 pair_for_baseline.insert(bi, ci);
@@ -722,9 +745,8 @@ fn build_skeleton<T: DiffableToken>(
                 }
             };
             let byte_equal = build.baseline_text == build.current_text;
-            let differ = build.baseline_text.is_some()
-                && build.current_text.is_some()
-                && !byte_equal;
+            let differ =
+                build.baseline_text.is_some() && build.current_text.is_some() && !byte_equal;
             let (is_whitespace_change, is_usfm_structure_change) = if differ {
                 classify_text_diff(
                     build.baseline_text.as_deref().unwrap_or(""),
@@ -802,7 +824,11 @@ fn build_skeleton<T: DiffableToken>(
 /// One-sided Added/Deleted slots between the pair do not count. Finalizes
 /// `Unchanged`/`Moved` for exact (byte-equal) coalesced pairs once slot
 /// positions are known.
-fn finalize_displacement_and_status<T>(units: &mut [DecisionUnit<T>], unit_ids: &[UnitId], slots: &[Slot]) {
+fn finalize_displacement_and_status<T>(
+    units: &mut [DecisionUnit<T>],
+    unit_ids: &[UnitId],
+    slots: &[Slot],
+) {
     let mut baseline_slot_index: FxHashMap<&UnitId, usize> = FxHashMap::default();
     let mut current_slot_index: FxHashMap<&UnitId, usize> = FxHashMap::default();
     for (index, slot) in slots.iter().enumerate() {
@@ -874,7 +900,10 @@ fn finalize_covered_by<T>(units: &mut [DecisionUnit<T>], unit_ids: &[UnitId]) {
         .collect();
 
     for unit in units.iter_mut() {
-        if !matches!(unit.kind, DecisionUnitKind::Deleted | DecisionUnitKind::Added) {
+        if !matches!(
+            unit.kind,
+            DecisionUnitKind::Deleted | DecisionUnitKind::Added
+        ) {
             continue;
         }
         let own_sid = if matches!(unit.kind, DecisionUnitKind::Deleted) {
@@ -907,7 +936,8 @@ fn finalize_covered_by<T>(units: &mut [DecisionUnit<T>], unit_ids: &[UnitId]) {
                 baseline_sid.as_deref()
             };
             let Some(cover_sid) = cover_sid else { continue };
-            let Some((cover_book, cover_chapter, cover_start, cover_end)) = sid_range(cover_sid) else {
+            let Some((cover_book, cover_chapter, cover_start, cover_end)) = sid_range(cover_sid)
+            else {
                 continue;
             };
             if cover_end <= cover_start || cover_book != own_book || cover_chapter != own_chapter {
@@ -971,7 +1001,12 @@ mod tests {
     fn skeleton_for<'a>(baseline: &'a str, current: &'a str) -> DiffSkeleton<Token<'a>> {
         let baseline_parsed = parse(baseline);
         let current_parsed = parse(current);
-        diff_skeleton_canonical(&baseline_parsed.tokens, "GEN", &current_parsed.tokens, "GEN")
+        diff_skeleton_canonical(
+            &baseline_parsed.tokens,
+            "GEN",
+            &current_parsed.tokens,
+            "GEN",
+        )
     }
 
     fn wrapped(body: &str) -> String {
@@ -979,11 +1014,17 @@ mod tests {
     }
 
     fn baseline_bearing(slot: &Slot) -> bool {
-        matches!(slot.role, SlotRole::Shared | SlotRole::BaselineOnly | SlotRole::PairBaseline)
+        matches!(
+            slot.role,
+            SlotRole::Shared | SlotRole::BaselineOnly | SlotRole::PairBaseline
+        )
     }
 
     fn current_bearing(slot: &Slot) -> bool {
-        matches!(slot.role, SlotRole::Shared | SlotRole::CurrentOnly | SlotRole::PairCurrent)
+        matches!(
+            slot.role,
+            SlotRole::Shared | SlotRole::CurrentOnly | SlotRole::PairCurrent
+        )
     }
 
     #[test]
@@ -1000,11 +1041,19 @@ mod tests {
             super::super::build_sid_blocks_canonical(&current_parsed.tokens, "GEN").len();
 
         assert_eq!(
-            skeleton.slots.iter().filter(|slot| baseline_bearing(slot)).count(),
+            skeleton
+                .slots
+                .iter()
+                .filter(|slot| baseline_bearing(slot))
+                .count(),
             expected_baseline_blocks
         );
         assert_eq!(
-            skeleton.slots.iter().filter(|slot| current_bearing(slot)).count(),
+            skeleton
+                .slots
+                .iter()
+                .filter(|slot| current_bearing(slot))
+                .count(),
             expected_current_blocks
         );
     }
@@ -1023,7 +1072,11 @@ mod tests {
             .filter(|unit| matches!(unit.kind, DecisionUnitKind::Coalesced))
             .map(|unit| &unit.id)
             .collect();
-        assert_eq!(coalesced_ids.len(), 1, "expected exactly one coalesced unit for a pure swap");
+        assert_eq!(
+            coalesced_ids.len(),
+            1,
+            "expected exactly one coalesced unit for a pure swap"
+        );
 
         for id in coalesced_ids {
             let pair_base_count = skeleton
@@ -1054,7 +1107,11 @@ mod tests {
             .iter()
             .filter(|unit| matches!(unit.kind, DecisionUnitKind::Coalesced))
             .collect();
-        assert_eq!(coalesced.len(), 1, "expected exactly one coalesced pair (the 'c' survivor)");
+        assert_eq!(
+            coalesced.len(),
+            1,
+            "expected exactly one coalesced pair (the 'c' survivor)"
+        );
         let block_text = |tokens: &[Token<'_>]| tokens.iter().map(|t| t.text()).collect::<String>();
         assert!(block_text(&coalesced[0].baseline_tokens).ends_with("c\n"));
         assert!(block_text(&coalesced[0].current_tokens).ends_with("c\n"));
@@ -1064,7 +1121,11 @@ mod tests {
             .iter()
             .filter(|unit| matches!(unit.kind, DecisionUnitKind::Deleted))
             .collect();
-        assert_eq!(deleted.len(), 1, "expected exactly one deleted unit (the 'a' content)");
+        assert_eq!(
+            deleted.len(),
+            1,
+            "expected exactly one deleted unit (the 'a' content)"
+        );
         assert!(block_text(&deleted[0].baseline_tokens).ends_with("a\n"));
     }
 
@@ -1081,7 +1142,10 @@ mod tests {
             .iter()
             .filter(|unit| matches!(unit.kind, DecisionUnitKind::Coalesced))
             .count();
-        assert_eq!(coalesced_count, 0, "renumbered content must never coalesce across keys");
+        assert_eq!(
+            coalesced_count, 0,
+            "renumbered content must never coalesce across keys"
+        );
 
         let deleted: Vec<_> = skeleton
             .units
@@ -1111,7 +1175,10 @@ mod tests {
             .iter()
             .filter(|unit| matches!(unit.kind, DecisionUnitKind::Coalesced))
             .count();
-        assert_eq!(coalesced_count, 1, "LCS keeps two verses; only the odd one out coalesces");
+        assert_eq!(
+            coalesced_count, 1,
+            "LCS keeps two verses; only the odd one out coalesces"
+        );
     }
 
     #[test]
@@ -1123,7 +1190,11 @@ mod tests {
         let second = skeleton_for(&baseline, &current);
 
         let ids = |skeleton: &DiffSkeleton<Token<'_>>| {
-            skeleton.units.iter().map(|unit| unit.id.clone()).collect::<Vec<_>>()
+            skeleton
+                .units
+                .iter()
+                .map(|unit| unit.id.clone())
+                .collect::<Vec<_>>()
         };
         assert_eq!(ids(&first), ids(&second));
 

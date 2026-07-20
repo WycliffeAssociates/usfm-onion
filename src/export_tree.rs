@@ -8,9 +8,7 @@ use std::collections::HashSet;
 use crate::marker_defs::{BlockBehavior, StructuralScopeKind, marker_block_behavior};
 use crate::markers::lookup_marker;
 use crate::token::{Token, TokenData};
-use crate::walker::{
-    LeaveReason, ScopeFrame, Visitor, WalkContext, walk_tokens,
-};
+use crate::walker::{LeaveReason, ScopeFrame, Visitor, WalkContext, walk_tokens};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExportDocument<'a> {
@@ -328,8 +326,7 @@ impl<'a> Visitor<'a, Token<'a>> for ExportTreeBuilder {
                 // frame to be skipped when its `on_leave_scope`
                 // eventually fires.
                 if self.in_note_context()
-                    && let Some(prev_idx) =
-                        self.find_close_target_for_note_character(marker, token)
+                    && let Some(prev_idx) = self.find_close_target_for_note_character(marker, token)
                 {
                     self.finalise_skipped(prev_idx);
                 }
@@ -388,7 +385,9 @@ impl<'a> Visitor<'a, Token<'a>> for ExportTreeBuilder {
                 if self.skip_leaves.remove(&walker_token_index) {
                     return;
                 }
-                let Some(open) = self.stack.pop() else { return; };
+                let Some(open) = self.stack.pop() else {
+                    return;
+                };
                 if reason == LeaveReason::Explicit {
                     // Defer finalization so the following on_end_marker
                     // can set close_index.
@@ -449,22 +448,12 @@ impl<'a> Visitor<'a, Token<'a>> for ExportTreeBuilder {
         }
     }
 
-    fn on_text(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_text(&mut self, _ctx: &WalkContext<'a, '_>, _token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         self.append_to_parent(ExportNode::Leaf { token_index });
     }
 
-    fn on_chapter(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_chapter(&mut self, _ctx: &WalkContext<'a, '_>, _token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         if let Some(marker_index) = self.pending_chapter.take() {
             self.append_to_parent(ExportNode::Chapter {
@@ -479,12 +468,7 @@ impl<'a> Visitor<'a, Token<'a>> for ExportTreeBuilder {
         }
     }
 
-    fn on_verse(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_verse(&mut self, _ctx: &WalkContext<'a, '_>, _token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         if let Some(marker_index) = self.pending_verse.take() {
             self.append_to_parent(ExportNode::Verse {
@@ -496,42 +480,22 @@ impl<'a> Visitor<'a, Token<'a>> for ExportTreeBuilder {
         }
     }
 
-    fn on_book_code(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_book_code(&mut self, _ctx: &WalkContext<'a, '_>, _token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         self.append_to_parent(ExportNode::Leaf { token_index });
     }
 
-    fn on_opt_break(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_opt_break(&mut self, _ctx: &WalkContext<'a, '_>, _token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         self.append_to_parent(ExportNode::Leaf { token_index });
     }
 
-    fn on_newline(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        _token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_newline(&mut self, _ctx: &WalkContext<'a, '_>, _token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         self.append_to_parent(ExportNode::Leaf { token_index });
     }
 
-    fn on_other(
-        &mut self,
-        _ctx: &WalkContext<'a, '_>,
-        token: &Token<'a>,
-        token_index: usize,
-    ) {
+    fn on_other(&mut self, _ctx: &WalkContext<'a, '_>, token: &Token<'a>, token_index: usize) {
         self.commit_pending_close();
         // Distinguish chapter/verse markers without a following number
         // (the walker classifies these as on_other rather than opening
@@ -600,7 +564,10 @@ fn container_kind_from_scope(
     // ExportContainerKind matches.
     if matches!(scope_kind, StructuralScopeKind::Character) {
         if let TokenData::Marker { metadata, .. } = &token.data
-            && matches!(metadata.kind, Some(crate::marker_defs::MarkerDefKind::Figure))
+            && matches!(
+                metadata.kind,
+                Some(crate::marker_defs::MarkerDefKind::Figure)
+            )
         {
             return ExportContainerKind::Figure;
         }
