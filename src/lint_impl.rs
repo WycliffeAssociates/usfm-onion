@@ -745,6 +745,15 @@ impl DocumentLintState {
         self.note_stack.last().copied()
     }
 
+    /// Pop the note context a matching note-close (`\f*`, `\x*`, …) ends. Notes
+    /// don't nest in USFM, so one pop per close mirrors the one push per note
+    /// container in `apply_marker`. Without this, `current_note_context` stayed
+    /// stale after a note closed and validated following markers as if still
+    /// inside the note.
+    fn close_note(&mut self) {
+        self.note_stack.pop();
+    }
+
     fn current_validation_context_for_kind(&self, kind: MarkerKind) -> SpecContext {
         let root_context = self.current_root_context();
         let effective = self
@@ -1314,6 +1323,7 @@ fn lint_structure_rules<T: LintableToken>(
                         break;
                     }
                 }
+                document_state.close_note();
             }
             saw_content = true;
         } else if token_kind == TokenKind::Text {
