@@ -293,7 +293,7 @@ impl<T> TokenStream<T> {
     }
 }
 
-impl<T: LintableToken> TokenStream<T> {
+impl<T: LintableToken + Sync> TokenStream<T> {
     pub fn lint(&self, options: LintOptions) -> LintResult {
         lint_tokens(&self.tokens, options)
     }

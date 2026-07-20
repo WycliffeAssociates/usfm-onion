@@ -14,6 +14,8 @@ use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
 use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind};
 use crate::walker::{LeaveReason, ScopeFrame, Visitor, WalkContext, WalkableToken, walk};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::walker::{WalkBoundary, walk_range};
 
 /// Public token-shape contract for `lint_tokens` and friends.
 ///
@@ -896,70 +898,36 @@ pub fn lint_usfm(source: &str, options: LintOptions) -> LintResult {
     lint_tokens(&parsed.tokens, options)
 }
 
-pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> LintResult {
+pub fn lint_tokens<T: LintableToken + Sync>(tokens: &[T], options: LintOptions) -> LintResult {
     let enabled = EnabledCodes::new(&options);
-    let mut issues = Vec::new();
 
-    if enabled.has(LintCode::EmptyParagraph) {
-        lint_empty_paragraphs(tokens, &mut issues);
-    }
-    if enabled.has_any(&[
-        LintCode::UnknownToken,
-        LintCode::VerseIsEmpty,
-        LintCode::MissingChapterNumber,
-        LintCode::MissingVerseNumber,
-    ]) {
-        lint_expectation_and_unknown_token_rules(tokens, &enabled, &mut issues);
-    }
-    if enabled.has_any(&[
-        LintCode::MissingIdMarker,
-        LintCode::ContentBeforeFirstChapter,
-        LintCode::NoteSubmarkerOutsideNote,
-        LintCode::DuplicateIdMarker,
-        LintCode::IdMarkerNotAtFileStart,
-        LintCode::MetadataOutsideTarget,
-        LintCode::MarkerNotValidInContext,
-        LintCode::VerseOutsideExplicitParagraph,
-    ]) {
-        lint_structure_rules(tokens, &options, &enabled, &mut issues);
-    }
-    if enabled.has(LintCode::UnknownMarker) {
-        lint_unknown_markers(tokens, &mut issues);
-    }
-    if enabled.has(LintCode::UnknownCloseMarker) {
-        lint_unknown_close_markers(tokens, &mut issues);
-    }
-    if enabled.has(LintCode::DuplicateChapterNumber) {
-        lint_chapter_rules(tokens, &enabled, &mut issues);
-    }
-    if enabled.has_any(&[
-        LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
-        LintCode::InvalidNumberRange,
-        LintCode::DuplicateVerseNumber,
-        LintCode::VerseIsEmpty,
-    ]) {
-        lint_number_and_verse_rules(tokens, &enabled, &mut issues);
-    }
-    if enabled.has_any(&[
-        LintCode::StrayCloseMarker,
-        LintCode::MisnestedCloseMarker,
-        LintCode::MissingMilestoneSelfClose,
-        LintCode::UnclosedMarker,
-        LintCode::ImplicitlyClosedMarker,
-        LintCode::VerseInSectionOrOtherParagraph,
-    ]) {
-        lint_marker_balance_rules(tokens, &enabled, &mut issues);
-    }
-    if enabled.has_any(&[
-        LintCode::MissingWhitespaceBeforeMarker,
-        LintCode::MissingHorizontalWhitespaceAfterMarkerName,
-        LintCode::MissingTagEndDelimiterAfterMarker,
-        LintCode::MissingContentSpaceAfterCloseMarker,
-        LintCode::ContentAfterBlankMarker,
-    ]) {
-        lint_whitespace_rules(tokens, &enabled, &mut issues);
-    }
+    // A whole book decomposes at `\c` into independent chapter segments: the
+    // range-local rules (empty-paragraph, expectations, unknown/whitespace) and
+    // the walker-driven marker-balance rules run per segment, while the rules
+    // that thread document state or reconcile across chapters (structure,
+    // duplicate-chapter, number/verse) run once over the whole stream. Combining
+    // and canonically sorting the findings reproduces the serial result exactly,
+    // so this is byte-identical regardless of thread count or target — only
+    // wall-clock changes. Small books, non-book scopes, and wasm stay serial:
+    // below the segment count/size where the fan-out pays for itself, or with no
+    // thread pool to recover it, the decomposition is pure overhead.
+    #[cfg(not(target_arch = "wasm32"))]
+    let issues = if matches!(options.scope, LintScope::Book) && tokens.len() >= PARALLEL_MIN_TOKENS
+    {
+        collect_issues_partitioned(tokens, &options, &enabled)
+    } else {
+        collect_issues_serial(tokens, &options, &enabled)
+    };
+    #[cfg(target_arch = "wasm32")]
+    let issues = collect_issues_serial(tokens, &options, &enabled);
 
+    finalize_issues(issues, &options)
+}
+
+/// Shared tail: dedupe, suppress, canonically sort, and summarize. Runs once
+/// after collection, so the serial and chapter-parallel collectors converge on
+/// byte-identical output here.
+fn finalize_issues(issues: Vec<LintIssue>, options: &LintOptions) -> LintResult {
     let unique = dedupe_issues(issues);
     let (mut issues, suppressed_count) = apply_suppressions(unique, &options.suppressed);
     canonical_sort(&mut issues);
@@ -967,6 +935,198 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
 
     LintResult { issues, summary }
 }
+
+/// Token count at or above which a `LintScope::Book` lint fans out across chapter
+/// segments. Below it the fixed decomposition cost (segment scan, per-segment
+/// allocation, the serial combine) outweighs the parallel gain, so linting stays
+/// serial. A conservative proxy — heavy books clear it comfortably and a book
+/// left below it lints in well under a millisecond either way.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const PARALLEL_MIN_TOKENS: usize = 4096;
+
+/// The whole-book serial linter: every rule over the full stream, in the fixed
+/// order that pins the oracle. Used for small books, non-book scopes, and wasm.
+fn collect_issues_serial<T: LintableToken>(
+    tokens: &[T],
+    options: &LintOptions,
+    enabled: &EnabledCodes,
+) -> Vec<LintIssue> {
+    let full = 0..tokens.len();
+    let mut issues = Vec::new();
+
+    if enabled.has(LintCode::EmptyParagraph) {
+        lint_empty_paragraphs(tokens, full.clone(), &mut issues);
+    }
+    if enabled.has_any(&[
+        LintCode::UnknownToken,
+        LintCode::VerseIsEmpty,
+        LintCode::MissingChapterNumber,
+        LintCode::MissingVerseNumber,
+    ]) {
+        lint_expectation_and_unknown_token_rules(tokens, full.clone(), enabled, &mut issues);
+    }
+    if enabled.has_any(STRUCTURE_CODES) {
+        lint_structure_rules(tokens, options, enabled, &mut issues);
+    }
+    if enabled.has(LintCode::UnknownMarker) {
+        lint_unknown_markers(tokens, full.clone(), &mut issues);
+    }
+    if enabled.has(LintCode::UnknownCloseMarker) {
+        lint_unknown_close_markers(tokens, full.clone(), &mut issues);
+    }
+    if enabled.has(LintCode::DuplicateChapterNumber) {
+        lint_chapter_rules(tokens, enabled, &mut issues);
+    }
+    if enabled.has_any(NUMBER_VERSE_CODES) {
+        lint_number_and_verse_rules(tokens, enabled, &mut issues);
+    }
+    if enabled.has_any(MARKER_BALANCE_CODES) {
+        lint_marker_balance_rules(tokens, enabled, &mut issues);
+    }
+    if enabled.has_any(WHITESPACE_CODES) {
+        lint_whitespace_rules(tokens, full.clone(), enabled, &mut issues);
+    }
+
+    issues
+}
+
+/// Chapter-parallel collection for `LintScope::Book`. Range-local and
+/// walker-driven rules run per chapter segment through the order-preserving
+/// [`crate::par::map_ordered`] seam; the document/cross-chapter rules run once
+/// over the whole stream. The combined findings are byte-identical to
+/// [`collect_issues_serial`] after the shared dedupe/sort tail (proven by
+/// `partitioned_matches_serial_over_corpora` below and the lint oracle).
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_issues_partitioned<T: LintableToken + Sync>(
+    tokens: &[T],
+    options: &LintOptions,
+    enabled: &EnabledCodes,
+) -> Vec<LintIssue> {
+    let segments = crate::walker::chapter_segments(tokens);
+
+    // One work list fed through the order-preserving fan-out: each chapter
+    // segment's range-local + walker rules, plus each whole-stream rule family
+    // (structure, duplicate-chapter, number/verse) as its own unit. Those three
+    // families each still see the entire stream — chapter parallelism doesn't
+    // touch their logic — they just run concurrently with each other and the
+    // segments instead of in a serial tail, so `structure_rules` (the heaviest
+    // single unit) sets the floor rather than their sum. Combined-result order is
+    // irrelevant: the finalize tail canonically sorts.
+    let mut work = Vec::with_capacity(segments.len() + 3);
+    if enabled.has_any(STRUCTURE_CODES) {
+        work.push(BookWork::Structure);
+    }
+    if enabled.has(LintCode::DuplicateChapterNumber) {
+        work.push(BookWork::DuplicateChapter);
+    }
+    if enabled.has_any(NUMBER_VERSE_CODES) {
+        work.push(BookWork::NumberVerse);
+    }
+    work.extend(segments.iter().map(BookWork::Segment));
+
+    let parts = crate::par::map_ordered(&work, |unit| {
+        let mut issues = Vec::new();
+        match unit {
+            BookWork::Structure => lint_structure_rules(tokens, options, enabled, &mut issues),
+            BookWork::DuplicateChapter => lint_chapter_rules(tokens, enabled, &mut issues),
+            BookWork::NumberVerse => lint_number_and_verse_rules(tokens, enabled, &mut issues),
+            BookWork::Segment(segment) => {
+                collect_range_local(tokens, segment.range.clone(), enabled, &mut issues);
+                collect_marker_balance(
+                    tokens,
+                    segment.range.clone(),
+                    segment.boundary,
+                    enabled,
+                    &mut issues,
+                );
+            }
+        }
+        issues
+    });
+
+    let mut issues = Vec::new();
+    for part in parts {
+        issues.extend(part);
+    }
+    issues
+}
+
+/// One unit of chapter-parallel lint work: a single whole-stream rule family, or
+/// one chapter segment's range-local + walker rules.
+#[cfg(not(target_arch = "wasm32"))]
+enum BookWork<'a> {
+    Structure,
+    DuplicateChapter,
+    NumberVerse,
+    Segment(&'a crate::walker::ChapterSegment),
+}
+
+/// The range-local rules: each iterates the absolute `range` while reading the
+/// full token slice for predecessor/lookahead, so a segment produces exactly the
+/// findings the whole-book pass would for tokens in that range.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_range_local<T: LintableToken>(
+    tokens: &[T],
+    range: std::ops::Range<usize>,
+    enabled: &EnabledCodes,
+    issues: &mut Vec<LintIssue>,
+) {
+    if enabled.has(LintCode::EmptyParagraph) {
+        lint_empty_paragraphs(tokens, range.clone(), issues);
+    }
+    if enabled.has_any(&[
+        LintCode::UnknownToken,
+        LintCode::VerseIsEmpty,
+        LintCode::MissingChapterNumber,
+        LintCode::MissingVerseNumber,
+    ]) {
+        lint_expectation_and_unknown_token_rules(tokens, range.clone(), enabled, issues);
+    }
+    if enabled.has(LintCode::UnknownMarker) {
+        lint_unknown_markers(tokens, range.clone(), issues);
+    }
+    if enabled.has(LintCode::UnknownCloseMarker) {
+        lint_unknown_close_markers(tokens, range.clone(), issues);
+    }
+    if enabled.has_any(WHITESPACE_CODES) {
+        lint_whitespace_rules(tokens, range, enabled, issues);
+    }
+}
+
+const STRUCTURE_CODES: &[LintCode] = &[
+    LintCode::MissingIdMarker,
+    LintCode::ContentBeforeFirstChapter,
+    LintCode::NoteSubmarkerOutsideNote,
+    LintCode::DuplicateIdMarker,
+    LintCode::IdMarkerNotAtFileStart,
+    LintCode::MetadataOutsideTarget,
+    LintCode::MarkerNotValidInContext,
+    LintCode::VerseOutsideExplicitParagraph,
+];
+
+const NUMBER_VERSE_CODES: &[LintCode] = &[
+    LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
+    LintCode::InvalidNumberRange,
+    LintCode::DuplicateVerseNumber,
+    LintCode::VerseIsEmpty,
+];
+
+const MARKER_BALANCE_CODES: &[LintCode] = &[
+    LintCode::StrayCloseMarker,
+    LintCode::MisnestedCloseMarker,
+    LintCode::MissingMilestoneSelfClose,
+    LintCode::UnclosedMarker,
+    LintCode::ImplicitlyClosedMarker,
+    LintCode::VerseInSectionOrOtherParagraph,
+];
+
+const WHITESPACE_CODES: &[LintCode] = &[
+    LintCode::MissingWhitespaceBeforeMarker,
+    LintCode::MissingHorizontalWhitespaceAfterMarkerName,
+    LintCode::MissingTagEndDelimiterAfterMarker,
+    LintCode::MissingContentSpaceAfterCloseMarker,
+    LintCode::ContentAfterBlankMarker,
+];
 
 pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec<T> {
     let Some(index) = tokens
@@ -1053,8 +1213,12 @@ fn build_replacement_tokens<T: FormattableToken>(
     built
 }
 
-fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
-    for index in 0..tokens.len() {
+fn lint_empty_paragraphs<T: LintableToken>(
+    tokens: &[T],
+    range: std::ops::Range<usize>,
+    issues: &mut Vec<LintIssue>,
+) {
+    for index in range {
         let token = &tokens[index];
         if token.kind() != TokenKind::Marker {
             continue;
@@ -1079,10 +1243,11 @@ fn lint_empty_paragraphs<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIs
 
 fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
     tokens: &[T],
+    range: std::ops::Range<usize>,
     enabled: &EnabledCodes,
     issues: &mut Vec<LintIssue>,
 ) {
-    for index in 0..tokens.len() {
+    for index in range {
         let token = &tokens[index];
 
         if enabled.has(LintCode::UnknownToken)
@@ -1358,8 +1523,12 @@ fn lint_structure_rules<T: LintableToken>(
     }
 }
 
-fn lint_unknown_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
-    for token in tokens {
+fn lint_unknown_markers<T: LintableToken>(
+    tokens: &[T],
+    range: std::ops::Range<usize>,
+    issues: &mut Vec<LintIssue>,
+) {
+    for token in &tokens[range] {
         if token.kind() != TokenKind::Marker {
             continue;
         }
@@ -1377,8 +1546,12 @@ fn lint_unknown_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIss
     }
 }
 
-fn lint_unknown_close_markers<T: LintableToken>(tokens: &[T], issues: &mut Vec<LintIssue>) {
-    for token in tokens {
+fn lint_unknown_close_markers<T: LintableToken>(
+    tokens: &[T],
+    range: std::ops::Range<usize>,
+    issues: &mut Vec<LintIssue>,
+) {
+    for token in &tokens[range] {
         if token.kind() != TokenKind::EndMarker {
             continue;
         }
@@ -1553,6 +1726,31 @@ fn lint_marker_balance_rules<T: LintableToken>(
 ) {
     let mut visitor = MarkerBalanceVisitor::new(tokens, enabled);
     walk(tokens, &mut visitor);
+    visitor.finish(issues);
+}
+
+/// Marker-balance rules over one chapter segment — `range` of the *full* `tokens`
+/// slice, terminated at `boundary`. The visitor holds the full slice (so absolute
+/// indices and the end-anchor resolve to the real tokens), and a `BeforeChapter`
+/// segment flushes any implicitly-popped frames as boundary-`UnclosedMarker`s just
+/// as an incoming `\c`'s `on_enter_scope` would in a whole-book walk. The final
+/// (`EndOfInput`) segment leaves them undrained, matching the whole-book EOF.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_marker_balance<T: LintableToken>(
+    tokens: &[T],
+    range: std::ops::Range<usize>,
+    boundary: WalkBoundary,
+    enabled: &EnabledCodes,
+    issues: &mut Vec<LintIssue>,
+) {
+    if !enabled.has_any(MARKER_BALANCE_CODES) {
+        return;
+    }
+    let mut visitor = MarkerBalanceVisitor::new(tokens, enabled);
+    walk_range(tokens, range, boundary, &mut visitor);
+    if boundary == WalkBoundary::BeforeChapter {
+        visitor.drain_pending_as_boundary_unclosed();
+    }
     visitor.finish(issues);
 }
 
@@ -1932,6 +2130,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
 ///   with no separating whitespace.
 fn lint_whitespace_rules<T: LintableToken>(
     tokens: &[T],
+    range: std::ops::Range<usize>,
     enabled: &EnabledCodes,
     issues: &mut Vec<LintIssue>,
 ) {
@@ -1947,7 +2146,7 @@ fn lint_whitespace_rules<T: LintableToken>(
         || enabled.has(LintCode::MissingHorizontalWhitespaceAfterMarkerName)
         || enabled.has(LintCode::MissingTagEndDelimiterAfterMarker);
 
-    for index in 0..tokens.len() {
+    for index in range.clone() {
         let token = &tokens[index];
         let token_kind = token.kind();
 
@@ -2115,9 +2314,12 @@ fn lint_whitespace_rules<T: LintableToken>(
 
     // Rule 6: closing character marker immediately followed by
     // alphabetic text. Pure pairwise check; doesn't consult the spec
-    // table (the pattern is content-style, not structural).
+    // table (the pattern is content-style, not structural). Reads the
+    // following token from the full slice so a close marker at the end of
+    // a segment still sees its neighbour; the final token (no next) is
+    // skipped, matching the whole-book `0..len-1` bound.
     if enabled.has(LintCode::MissingContentSpaceAfterCloseMarker) {
-        for index in 0..tokens.len().saturating_sub(1) {
+        for index in range {
             let token = &tokens[index];
             if token.kind() != TokenKind::EndMarker {
                 continue;
@@ -2125,7 +2327,9 @@ fn lint_whitespace_rules<T: LintableToken>(
             let Some(marker) = token.marker() else {
                 continue;
             };
-            let next = &tokens[index + 1];
+            let Some(next) = tokens.get(index + 1) else {
+                continue;
+            };
             if next.kind() != TokenKind::Text {
                 continue;
             }
@@ -3587,5 +3791,60 @@ mod tests {
                 .by_severity
                 .contains_key(&LintSeverity::Error)
         );
+    }
+
+    /// The chapter-parallel book collector must be byte-identical to the serial
+    /// collector for every corpus fixture, at any thread count — this is the
+    /// decomposition proof independent of the `PARALLEL_MIN_TOKENS` routing (it
+    /// forces the partitioned path even on inputs `lint_tokens` would run
+    /// serially). The lint oracle pins the *whole* pipeline over `testData`; this
+    /// isolates the collector split over `testData` + `example-corpora`.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn partitioned_matches_serial_over_corpora() {
+        use crate::parse::parse;
+        use std::path::{Path, PathBuf};
+
+        fn collect_usfm(dir: &Path, out: &mut Vec<PathBuf>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_usfm(&path, out);
+                } else if path.extension().and_then(|e| e.to_str()) == Some("usfm") {
+                    out.push(path);
+                }
+            }
+        }
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut paths = Vec::new();
+        collect_usfm(&root.join("testData"), &mut paths);
+        collect_usfm(&root.join("example-corpora"), &mut paths);
+        paths.sort();
+        assert!(!paths.is_empty(), "expected corpus fixtures");
+
+        let options = LintOptions::scoped(LintScope::Book);
+        let enabled = EnabledCodes::new(&options);
+        for path in paths {
+            let source = std::fs::read_to_string(&path).expect("read fixture");
+            let parsed = parse(&source);
+            let serial = finalize_issues(
+                collect_issues_serial(&parsed.tokens, &options, &enabled),
+                &options,
+            );
+            let partitioned = finalize_issues(
+                collect_issues_partitioned(&parsed.tokens, &options, &enabled),
+                &options,
+            );
+            assert_eq!(
+                partitioned,
+                serial,
+                "partitioned lint differs from serial for {}",
+                path.display()
+            );
+        }
     }
 }
