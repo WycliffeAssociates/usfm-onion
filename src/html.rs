@@ -73,16 +73,138 @@ impl Default for HtmlOptions {
     }
 }
 
+/// Token count at or above which rendering fans out chapter-parallel. Below it the
+/// fixed decomposition cost (partitioning, the note-count prepass, and the ordered
+/// merge) outweighs the parallel gain, so the walk stays serial. Large books clear
+/// it comfortably; a book below it renders in well under a millisecond either way.
+#[cfg(not(target_arch = "wasm32"))]
+const PARALLEL_MIN_TOKENS: usize = 20_000;
+
 pub fn tokens_to_html(tokens: &[Token<'_>], options: HtmlOptions) -> String {
+    #[cfg(not(target_arch = "wasm32"))]
+    if tokens.len() >= PARALLEL_MIN_TOKENS {
+        return html_partitioned(tokens, options);
+    }
     let mut visitor = HtmlVisitor::new(options);
     walk_tokens(tokens, &mut visitor);
-    let body = visitor.finalize();
+    wrap_document(visitor.finalize(), options)
+}
 
+/// Apply the optional root wrapper once, around the fully assembled body (note
+/// sections included). Shared by the serial and partitioned paths so both wrap
+/// identically.
+fn wrap_document(body: String, options: HtmlOptions) -> String {
     if options.wrap_root {
         format!(r#"<div data-usfm-root="true">{body}</div>"#)
     } else {
         body
     }
+}
+
+/// Append the extracted-note sections to `out` exactly as [`HtmlVisitor::finalize`]
+/// does. Shared so the serial finalize and the partitioned merge emit byte-identical
+/// section markup.
+fn append_note_sections(out: &mut String, footnotes: &[String], crossrefs: &[String]) {
+    if !footnotes.is_empty() {
+        out.push_str(r#"<section id="linkedFootnotes" data-usfm-notes="footnotes">"#);
+        for note in footnotes {
+            out.push_str(note);
+        }
+        out.push_str("</section>");
+    }
+    if !crossrefs.is_empty() {
+        out.push_str(r#"<section id="linkedCrossrefs" data-usfm-notes="crossrefs">"#);
+        for note in crossrefs {
+            out.push_str(note);
+        }
+        out.push_str("</section>");
+    }
+}
+
+/// Partition the stream at `\c` and render each segment through the ordered-map
+/// seam, then concatenate bodies and append the extracted-note sections once.
+/// Byte-identical to the serial walk regardless of thread count.
+///
+/// A `\c` closes every open scope, so no element and no note body spans a segment
+/// boundary — each segment's body, footnote asides, and crossref asides are
+/// self-contained and concatenate in order. The only whole-document state a serial
+/// walk threads across `\c` is three monotonic note counters: the extracted-note
+/// anchor ids (`fn-N`/`xr-N`, live in every mode with extracted notes, including the
+/// default) and the document-sequential caller number (live under
+/// `DocumentSequential`, and for pre-verse notes under `VerseSequential`). None can
+/// be repaired after the fact — they are baked into the rendered bytes — so a first
+/// cheap pass counts each segment's counter increments (walking with string emission
+/// suppressed), a serial fold turns those into exclusive-prefix starting values, and
+/// the render pass seeds each segment with its starting counters. Verse-scoped
+/// caller numbering resets at every `\c`, so it needs no seed. The corpus test below
+/// calls this directly to force the merge on small fixtures across the option matrix.
+#[cfg(not(target_arch = "wasm32"))]
+fn html_partitioned(tokens: &[Token<'_>], options: HtmlOptions) -> String {
+    let segments = crate::walker::chapter_segments(tokens);
+
+    // Phase 1: count each segment's note-counter increments, cheaply (no strings).
+    let counts = crate::par::map_ordered(&segments, |segment| {
+        let mut visitor = HtmlVisitor::new_counting(options);
+        crate::walker::walk_range(tokens, segment.range.clone(), segment.boundary, &mut visitor);
+        visitor.into_counts()
+    });
+
+    // Serial: exclusive-prefix offsets — a segment starts each counter at the sum of
+    // all earlier segments' increments, exactly where the serial walk would be.
+    let mut seeds = Vec::with_capacity(segments.len());
+    let mut acc = HtmlSeed::default();
+    for count in &counts {
+        seeds.push(acc);
+        acc.footnote_id += count.footnote_id;
+        acc.crossref_id += count.crossref_id;
+        acc.document_note_count += count.document_note_count;
+    }
+
+    // Phase 2: render each segment seeded with its starting counters.
+    let units: Vec<_> = segments
+        .iter()
+        .zip(seeds)
+        .map(|(segment, seed)| (segment.range.clone(), segment.boundary, seed))
+        .collect();
+    let fragments = crate::par::map_ordered(&units, |(range, boundary, seed)| {
+        let mut visitor = HtmlVisitor::new_seeded(options, *seed);
+        crate::walker::walk_range(tokens, range.clone(), *boundary, &mut visitor);
+        visitor.into_fragment()
+    });
+
+    // Merge: concatenate bodies in order, then append each note section once.
+    let body_len: usize = fragments.iter().map(|f| f.body.len()).sum();
+    let mut out = String::with_capacity(body_len);
+    let mut footnotes = Vec::new();
+    let mut crossrefs = Vec::new();
+    for mut fragment in fragments {
+        out.push_str(&fragment.body);
+        footnotes.append(&mut fragment.footnotes);
+        crossrefs.append(&mut fragment.crossrefs);
+    }
+    append_note_sections(&mut out, &footnotes, &crossrefs);
+    wrap_document(out, options)
+}
+
+/// A segment's starting note counters (in the render pass) or its counter increments
+/// (as reported by the count pass) — the same three-integer shape serves both, since
+/// a prefix fold turns increments into starting values. See [`html_partitioned`].
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, Copy, Default)]
+struct HtmlSeed {
+    footnote_id: usize,
+    crossref_id: usize,
+    document_note_count: usize,
+}
+
+/// One rendered segment: its body plus the extracted-note asides it produced, kept
+/// separate so the merge can append all footnote and crossref sections once, after
+/// every body.
+#[cfg(not(target_arch = "wasm32"))]
+struct HtmlFragment {
+    body: String,
+    footnotes: Vec<String>,
+    crossrefs: Vec<String>,
 }
 
 pub fn usfm_to_html(source: &str, options: HtmlOptions) -> String {
@@ -172,6 +294,11 @@ struct HtmlVisitor<'tokens> {
     /// Monotonic ids for extracted-note anchors.
     footnote_id: usize,
     crossref_id: usize,
+    /// Count-only mode for the partitioned path's first pass: the walk runs and all
+    /// counter/scope state advances exactly as in a render, but string emission is
+    /// suppressed so the pass is cheap. Always `false` on the serial and render
+    /// paths. See [`html_partitioned`].
+    counting: bool,
 }
 
 impl<'tokens> HtmlVisitor<'tokens> {
@@ -187,6 +314,54 @@ impl<'tokens> HtmlVisitor<'tokens> {
             document_note_count: 0,
             footnote_id: 0,
             crossref_id: 0,
+            counting: false,
+        }
+    }
+
+    /// A count-pass visitor: same options, string emission suppressed.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn new_counting(options: HtmlOptions) -> Self {
+        Self {
+            counting: true,
+            ..Self::new(options)
+        }
+    }
+
+    /// A render-pass visitor whose whole-document note counters start at `seed`.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn new_seeded(options: HtmlOptions, seed: HtmlSeed) -> Self {
+        Self {
+            footnote_id: seed.footnote_id,
+            crossref_id: seed.crossref_id,
+            document_note_count: seed.document_note_count,
+            ..Self::new(options)
+        }
+    }
+
+    /// The count pass's product: how far each whole-document counter advanced over
+    /// this segment (the visitor started at zero). Byte spans and verse-scoped
+    /// numbering are segment-local and need no reporting.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn into_counts(self) -> HtmlSeed {
+        HtmlSeed {
+            footnote_id: self.footnote_id,
+            crossref_id: self.crossref_id,
+            document_note_count: self.document_note_count,
+        }
+    }
+
+    /// The render pass's product: the segment body plus its extracted-note asides,
+    /// unwrapped (no note sections, no root wrapper — the merge applies those once).
+    /// Mirrors [`Self::finalize`]'s belt-and-suspenders stack drain.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn into_fragment(mut self) -> HtmlFragment {
+        while let Some(item) = self.stack.pop() {
+            emit_close(&mut self.output, &mut self.stack, item);
+        }
+        HtmlFragment {
+            body: self.output,
+            footnotes: self.footnotes,
+            crossrefs: self.crossrefs,
         }
     }
 
@@ -200,20 +375,7 @@ impl<'tokens> HtmlVisitor<'tokens> {
         }
 
         let mut out = std::mem::take(&mut self.output);
-        if !self.footnotes.is_empty() {
-            out.push_str(r#"<section id="linkedFootnotes" data-usfm-notes="footnotes">"#);
-            for note in &self.footnotes {
-                out.push_str(note);
-            }
-            out.push_str("</section>");
-        }
-        if !self.crossrefs.is_empty() {
-            out.push_str(r#"<section id="linkedCrossrefs" data-usfm-notes="crossrefs">"#);
-            for note in &self.crossrefs {
-                out.push_str(note);
-            }
-            out.push_str("</section>");
-        }
+        append_note_sections(&mut out, &self.footnotes, &self.crossrefs);
         out
     }
 
@@ -362,6 +524,23 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
             _ => {}
         }
 
+        // Count pass: only the frame's scope kind matters (for note/table nesting);
+        // the tag and attribute strings are emission we skip, so don't build them.
+        if self.counting {
+            self.stack.push(OpenElement {
+                emission: Emission::Element,
+                marker: Some(marker),
+                tag: "",
+                attrs: Vec::new(),
+                buffer: String::new(),
+                scope_kind,
+                note_subkind: None,
+                note_family: None,
+                synthetic: false,
+            });
+            return;
+        }
+
         // Standard element. Compute tag/attrs and push.
         let (tag, data_type) = tag_and_type_for_marker(
             marker,
@@ -408,6 +587,12 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         let Some(item) = self.stack.pop() else {
             return;
         };
+        // Count pass: the pop above keeps scope nesting correct (note detection
+        // depends on it); the aside/element bytes are what we skip. Extracted-note
+        // frames were already counted when their caller was consumed.
+        if self.counting {
+            return;
+        }
         match item.emission {
             Emission::ExtractedNote(ref state) => {
                 let call_id = state.call_id.as_deref().unwrap_or_default();
@@ -487,6 +672,10 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
             return;
         }
 
+        // Count pass: body text carries no counter — skip escaping and emission.
+        if self.counting {
+            return;
+        }
         push_fragment(
             &mut self.output,
             &mut self.stack,
@@ -501,6 +690,11 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         _token_index: usize,
     ) {
         if self.in_note_body() {
+            return;
+        }
+        // Count pass: the chapter span carries no counter (verse-scoped numbering
+        // reset lives in `on_enter_scope(Chapter)`, which always runs).
+        if self.counting {
             return;
         }
         // Find the chapter marker just below us on the stack. The
@@ -537,6 +731,14 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         if self.in_note_body() {
             return;
         }
+        let number = number_text(token);
+        // Verse-scoped caller numbering resets here and gates note labels — it must
+        // advance in the count pass too, so set it before the count-pass short-circuit.
+        self.current_verse = (!number.is_empty()).then_some(number.clone());
+        self.note_count_in_verse = 0;
+        if self.counting {
+            return;
+        }
         let marker = self
             .stack
             .iter()
@@ -544,14 +746,11 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
             .find_map(|item| (item.scope_kind == StructuralScopeKind::Verse).then_some(item.marker))
             .flatten()
             .unwrap_or("v");
-        let number = number_text(token);
         let sid = token
             .sid
             .as_ref()
             .map(|s| format!("{} {}:{}", s.book, s.chapter, s.verse_locator()));
         let token_id = token_id_str(&token.id);
-        self.current_verse = (!number.is_empty()).then_some(number.clone());
-        self.note_count_in_verse = 0;
         let html = empty_marker_span("verse", marker, &number, sid.as_deref(), &token_id);
         self.push_html(&html);
     }
@@ -565,6 +764,11 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         let TokenData::BookCode { code, .. } = &token.data else {
             return;
         };
+        // Count pass: book scope opens no note and touches no counter (its element
+        // emission is all that happens here), so it need not run.
+        if self.counting {
+            return;
+        }
         // If the current stack already has a book-Header element open
         // (e.g. from `\id GEN`), do nothing — the existing element
         // covers the book scope.
@@ -594,6 +798,9 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
         _token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
+        if self.counting {
+            return;
+        }
         self.push_html("<wbr>");
     }
 
@@ -731,6 +938,13 @@ impl<'tokens> HtmlVisitor<'tokens> {
                 _ => unreachable!("checked above"),
             }
             marker_for_inline = top.marker.unwrap_or("");
+        }
+
+        // Count pass: the counters (footnote/crossref ids, document note count) and
+        // the frame's caller state are all set above — the caller/label markup we
+        // skip is what the seed later reproduces.
+        if self.counting {
+            return;
         }
 
         if is_extracted {
@@ -1362,5 +1576,133 @@ mod tests {
             !aside.contains(r#"data-usfm-sid="GEN 2""#),
             "chapter-2 marker leaked into note body: {aside}"
         );
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod partition_tests {
+    use super::{
+        HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, HtmlOptions, HtmlVisitor, html_partitioned,
+        wrap_document,
+    };
+    use crate::parse::parse;
+    use crate::token::Token;
+    use crate::walker::walk_tokens;
+    use std::path::{Path, PathBuf};
+
+    /// Guaranteed-serial render, independent of the token-count threshold, so it
+    /// stays a fixed baseline even as the routing in `tokens_to_html` changes.
+    fn serial(tokens: &[Token<'_>], options: HtmlOptions) -> String {
+        let mut visitor = HtmlVisitor::new(options);
+        walk_tokens(tokens, &mut visitor);
+        wrap_document(visitor.finalize(), options)
+    }
+
+    /// The counter-sensitive option matrix the oracle can't reach (it pins html at
+    /// defaults only). `caller_scope` and `caller_style` drive the document-sequential
+    /// caller number and its skip; `note_mode` decides whether notes extract (touching
+    /// the anchor-id counters, the cross-chapter state the default also has) or render
+    /// inline; `wrap_root` exercises the single root wrap. `prefer_native_elements` is
+    /// orthogonal to the merge, so it stays default.
+    fn option_matrix() -> Vec<HtmlOptions> {
+        let mut matrix = Vec::new();
+        for caller_scope in [
+            HtmlCallerScope::VerseSequential,
+            HtmlCallerScope::DocumentSequential,
+        ] {
+            for note_mode in [HtmlNoteMode::Extracted, HtmlNoteMode::Inline] {
+                for wrap_root in [false, true] {
+                    for caller_style in [HtmlCallerStyle::Numeric, HtmlCallerStyle::Source] {
+                        matrix.push(HtmlOptions {
+                            wrap_root,
+                            prefer_native_elements: true,
+                            note_mode,
+                            caller_style,
+                            caller_scope,
+                        });
+                    }
+                }
+            }
+        }
+        matrix
+    }
+
+    #[test]
+    fn partitioned_matches_serial_over_test_data() {
+        assert_identical_over("testData");
+    }
+
+    #[test]
+    fn partitioned_matches_serial_over_example_corpora() {
+        assert_identical_over("example-corpora");
+    }
+
+    #[test]
+    fn partitioned_matches_serial_on_boundary_shapes() {
+        // Shapes the corpora may under-exercise, all counter-sensitive at a `\c`:
+        let cases = [
+            // no `\c` at all (single front segment);
+            "\\id GEN\n\\p\n\\v 1 text\\f + \\ft a note\\f*\n",
+            // a pre-verse note before the first chapter (document-sequential fallback
+            // under VerseSequential) plus one inside a verse;
+            "\\id GEN\n\\s1 Heading\\f + \\ft pre\\f*\n\\c 1\n\\p\n\\v 1 a\\f + \\ft b\\f*\n",
+            // an unclosed note open before `\c` — the walker closes it at the boundary,
+            // and the next chapter's callers must continue the anchor-id run;
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 t\\f + \\ft open\n\\c 2\n\\p\n\\v 1 u\\f + \\ft second\\f*\n",
+            // footnotes and crossrefs interleaved across chapters (separate id runs);
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 t\\x - \\xt r\\x*\\f + \\ft fn\\f*\n\\c 2\n\\p\n\\v 1 u\\f + \\ft fn2\\f*\\x - \\xt r2\\x*\n",
+            // a note outside any verse in a later chapter (pre-verse in ch2);
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a\n\\c 2\n\\p pre\\f + \\ft n\\f*\n\\v 1 b\n",
+            // multiple notes per verse across chapters (verse-scoped numbering resets);
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a\\f + \\ft x\\f* b\\f + \\ft y\\f*\n\\c 2\n\\p\n\\v 1 c\\f + \\ft z\\f*\n",
+            // a caller-less extracted note before a real one: the anchor-id counter
+            // must advance only for the note whose caller is consumed;
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a\\f\\f* b\\f + \\ft real\\f*\n\\c 2\n\\p\n\\v 1 c\\f + \\ft r2\\f*\n",
+            // an empty stream.
+            "",
+        ];
+        for (index, source) in cases.iter().enumerate() {
+            assert_identical(source, &format!("boundary case #{index}"));
+        }
+    }
+
+    fn assert_identical_over(dir: &str) {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(dir);
+        let mut paths = Vec::new();
+        collect_usfm(&root, &mut paths);
+        paths.sort();
+        assert!(!paths.is_empty(), "expected {dir}/**/*.usfm fixtures");
+        for path in paths {
+            let source = std::fs::read_to_string(&path).expect("read fixture");
+            assert_identical(&source, &path.to_string_lossy());
+        }
+    }
+
+    fn assert_identical(source: &str, label: &str) {
+        let parsed = parse(source);
+        for options in option_matrix() {
+            let want = serial(&parsed.tokens, options);
+            // Force the partitioned merge even on small fixtures below the threshold.
+            let got = html_partitioned(&parsed.tokens, options);
+            assert_eq!(
+                got, want,
+                "html differs for {label} (scope={:?}, note_mode={:?}, wrap_root={}, style={:?})",
+                options.caller_scope, options.note_mode, options.wrap_root, options.caller_style
+            );
+        }
+    }
+
+    fn collect_usfm(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_usfm(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("usfm") {
+                out.push(path);
+            }
+        }
     }
 }
