@@ -220,6 +220,22 @@ the forbidden "silent broad serial fallback." Do not build per-rule prefix-state
 merge machinery for it until benchmarks show this serial pass materially caps the
 speedup.
 
+**Update (lint landed): the benchmark now confirms it caps the speedup.** With the
+three whole-book families run as concurrent work units, lint tops out ~2x on Psalms;
+`structure_rules` (~0.56ms) is the Amdahl floor. So the next optimization is worth
+pursuing: **eliminate the whole-book pass — derive its findings as a property observed
+after the fact from what the parallel per-segment steps already did**, not a second
+full scan. Shape: each segment emits ordered observations (its chapter number; its
+`(chapter, verse-range, token)` occurrences; a boundary document-state summary + its
+id/context events), and a cheap serial reduce concludes the cross-segment findings
+(duplicate-chapter, duplicate-verse, and the structure/context rules) by stitching
+those summaries — the "explicit ordered summary/merge contract." Duplicate-chapter and
+duplicate-verse are the easy wins (numbers/ranges reduce trivially); `structure_rules`
+is the hard one (a document state machine — needs a composable boundary summary so
+segment N's end-state seeds segment N+1's validation). This is a FUTURE task, after the
+remaining exports; it lifts lint past the ~2x floor toward the ~3.3x all-per-chapter
+ceiling.
+
 Two range mistakes to avoid (they masqueraded as statefulness in the first
 attempt): running the walker over a *sliced* token array throws away the
 `BeforeChapter` boundary Stage 1 added — use `walk_range(full, range, boundary)`;
