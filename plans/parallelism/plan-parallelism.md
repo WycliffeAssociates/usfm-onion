@@ -6,17 +6,45 @@ Status: proposed, revised after design review (2026-07-20). Supersedes the
 
 ## Goal
 
-Make a single native library call use available cores for parse, lint, USJ, USX, VREF,
-and HTML. Preserve behavior after one intentional finding-order migration, keep wasm
-serial and portable, and let a native caller cap Rayon concurrency without parallel and
-serial API twins.
+Given a book, a single native library call fans **every** heavy operation — lex, parse,
+lint, USJ, USX, VREF, HTML — into a shared chapter-partitioned parallel shape across
+available cores. Preserve behavior (byte-identical, after one intentional finding-order
+migration), keep wasm serial and portable, and let a native caller cap Rayon concurrency
+without parallel/serial API twins. The existing per-chapter entry (`lint_tokens` with
+`LintScope::Chapter`) is retained as a public seam.
 
-Lint is the first sufficient delivery and proving ground. Every later stage remains in
-scope, but ships only after its own correctness and performance gates pass.
+## Post-spike revision (2026-07-20) — WIDENED SCOPE, read first
+
+The original per-operation staging (lint first, lex excluded) was superseded by four
+throwaway spikes (worktree `usfm_onion-spike`, existing API, Psalms, 10 cores). Measured
+chapter-parallel speedups: **lex 4.2x, parse 3.75x, lint 3.3x, html 4.36x, vref 2.95x,
+cst 1.78x** — negligible decomposition overhead everywhere (full matrix in
+`progress-parallelism.md`).
+
+Consequences that revise this plan:
+
+1. **`lex` is now IN SCOPE** (was a non-goal). A cheap byte pre-scan (~0.19ms) for `\c`
+   line-starts gives clean token boundaries; lex is content-agnostic (needs no `\id`), so
+   source chunks lex independently. This removes the serial-lex floor that otherwise caps
+   parse at ~1.6x, lifting full parse to 3.75x.
+2. **The architecture is a shared source-level `\c` partition**, not per-operation token
+   splitting: one pre-scan → source chunks → parallel `lex+parse+lint+exports` per chunk →
+   cheap linear merges (span rebasing `+chunk_offset`, token-id reindex, bookcode seed for
+   sids, doc-sequential HTML caller renumber, dup-chapter/verse reconcile).
+3. **HTML is the highest-value first delivery**, not lint: heaviest op (8ms vs lint 2.3ms)
+   AND best speedup (4.36x). Lint remains a good correctness proving ground (its oracle
+   exists), but HTML is where the wall-clock payoff is.
+4. **My first Stage-2 lint attempt regressed (+47%) purely as an impl/measurement artifact**
+   (elaborate collect/finalize split + noisy criterion), NOT a real limit — the pristine
+   spike parallelizes the same lint cleanly. The retry must start from the spike's simple
+   shape and be measured with a tight loop, not criterion-under-contention.
+
+Retry sequence (per owner): fix the `note_stack` bug + repin the oracle, then rebuild from
+the lex stage with this widened scope. The stages below are kept for their per-operation
+merge detail but are reframed by the above.
 
 ## Non-goals
 
-- Parallelizing `lex`; it remains the whole-source serial byte pass.
 - Parallelizing diff before the pattern is proven elsewhere.
 - Threaded wasm (`wasm-bindgen-rayon`, shared memory, COOP/COEP, `build-std`).
 - Moving file IO into the library.
