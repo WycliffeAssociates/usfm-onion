@@ -1,3 +1,6 @@
+#[cfg(not(target_arch = "wasm32"))]
+mod parallel;
+
 use crate::lexer::lex;
 use crate::marker_defs::{lookup_marker_whitespace, structural_marker_info};
 use crate::token::{
@@ -7,13 +10,39 @@ use crate::token::{
 use crate::whitespace::StructuralWhitespaceRequirement as WhitespaceReq;
 
 pub fn parse(source: &str) -> ParseResult<'_> {
+    // Large books parse chapter-parallel; the result is byte-identical to the
+    // serial path (proven by the corpus test in `parallel`), so callers get the
+    // speedup transparently with no API change. Small books and wasm stay serial —
+    // below the threshold the partition's fixed cost outweighs the gain, and wasm
+    // has no thread pool to recover it.
+    #[cfg(not(target_arch = "wasm32"))]
+    if source.len() >= parallel::PARALLEL_MIN_BYTES {
+        return parallel::parse_partitioned(source);
+    }
     let lexed = lex(source);
     parse_lexemes(source, &lexed.tokens)
 }
 
 pub fn parse_lexemes<'a>(source: &'a str, lexemes: &[Lexeme<'a>]) -> ParseResult<'a> {
+    parse_lexemes_seeded(source, lexemes, None)
+}
+
+/// Like [`parse_lexemes`], but primes the initial book so a chapter slice lexed
+/// in isolation (with no preceding `\id`) still resolves `(book, chapter, verse)`
+/// sids. The seed touches only book state; it never sets `analysis.book_code`,
+/// which stays owned by the actual `\id`/book-code tokens present in the slice.
+pub(crate) fn parse_lexemes_seeded<'a>(
+    source: &'a str,
+    lexemes: &[Lexeme<'a>],
+    seed_book: Option<&'a str>,
+) -> ParseResult<'a> {
     let mut analysis = ParseAnalysis::default();
     let mut state = ParseState::default();
+    if let Some(code) = seed_book {
+        state.current_book_code = Some(code);
+        state.current_book = BookId::from_str(code);
+        state.current_sid = state.current_book.map(|book| Sid::new(book, 0, 0));
+    }
     let mut tokens = Vec::new();
     let mut cursor = 0usize;
 
