@@ -212,3 +212,33 @@ the Amdahl floor (~0.56ms) so lint tops out ~2x, not the 3.3x all-per-chapter ce
 Remaining ops: USJ, USX, VREF, HTML (HTML is the heaviest / top perf target at 4.36x spike).
 Each is a walker-driven export needing its own per-chapter split + merge (concat content /
 serialize once / merge maps / concat bodies + doc-sequential caller renumber).
+
+## 2026-07-20 - COMPLETE: all six ops chapter-parallel (delegated + parent-verified)
+
+Every heavy op now parallelizes transparently for large native books, byte-identical, wasm
+serial, size-guarded, no public API change (except lint's `T: Sync`). All delegated to
+fresh Opus subagents with mistake-guardrails; parent independently re-verified oracle (1 +
+full threads), corpus/option-matrix tests, and warmed-up benches before committing each.
+
+| op | commit | speedup (large book, full vs 1-thread, verified) | notes |
+| --- | --- | --- | --- |
+| parse | 5bc8700 | ~2x Psalms / ~3.2x 5MB | source `\c` byte-split; only serial `lex` floor |
+| lint | 27b3e05 | ~2x Psalms | structure_rules whole-book = Amdahl floor |
+| usj/usx | 320c119 | ~1.95x usj (usx serialize serial) | concat-clean |
+| vref | 72e1a01 | ~1.9x | ordered-summary contract for `current_block_supports_verse` |
+| html | 3460c5a | ~4.6x both caller scopes | two-phase seed over 3 doc-monotonic counters; DocSeq fully parallel |
+
+Shared infra (Stage 1): `crate::par::map_ordered`, walker `chapter_segments`/`walk_range`/
+`WalkBoundary`. Correctness gate throughout: `tests/lint_oracle.rs` (token/cst/usj/usx/vref/
+html digests + lint findings) byte-identical at `RAYON_NUM_THREADS=1` AND full pool, plus a
+per-op in-crate corpus test forcing the partitioned path == serial over all fixtures.
+
+Follow-ups (not blocking):
+- **dup-chapter/dup-verse reduction** (sketch in the plan) — removes 2 of 3 whole-book lint
+  units, lifting lint past its ~2x floor. Then the harder `lint_structure_rules` boundary-
+  summary.
+- **Slow test**: `html::partition_tests::partitioned_matches_serial_over_example_corpora`
+  runs ~2 min (16-combo option matrix x 226 files x serial+partitioned). Consider trimming
+  the matrix over the big corpus or `#[ignore]` + a CI-only run; the boundary + testData
+  coverage is fast and catches the merge logic.
+- Diff parallelization (was deferred); the `\c`-partition + `map_ordered` pattern transfers.
