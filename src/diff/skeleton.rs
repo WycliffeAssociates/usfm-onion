@@ -186,40 +186,11 @@ pub fn diff_skeleton_by_chapter<'a>(
         current.analysis.book_code.unwrap_or("unknown"),
     );
 
-    let mut all_books = BTreeSet::<String>::new();
-    all_books.extend(baseline_groups.keys().cloned());
-    all_books.extend(current_groups.keys().cloned());
-
-    let mut out = BTreeMap::new();
-    for book in all_books {
-        let mut all_chapters = BTreeSet::<u32>::new();
-        if let Some(chapters) = baseline_groups.get(&book) {
-            all_chapters.extend(chapters.keys().copied());
-        }
-        if let Some(chapters) = current_groups.get(&book) {
-            all_chapters.extend(chapters.keys().copied());
-        }
-
-        let mut book_map = BTreeMap::new();
-        for chapter in all_chapters {
-            let baseline_slice = baseline_groups
-                .get(&book)
-                .and_then(|chapters| chapters.get(&chapter))
-                .cloned()
-                .unwrap_or_default();
-            let current_slice = current_groups
-                .get(&book)
-                .and_then(|chapters| chapters.get(&chapter))
-                .cloned()
-                .unwrap_or_default();
-            book_map.insert(
-                chapter,
-                diff_skeleton_canonical(&baseline_slice, &book, &current_slice, &book),
-            );
-        }
-        out.insert(book, book_map);
-    }
-    out
+    diff_grouped_by_chapter(
+        baseline_groups,
+        current_groups,
+        |book, baseline, current| diff_skeleton_canonical(baseline, book, current, book),
+    )
 }
 
 /// External/app-shaped by-chapter diff (carried-sid convention — see
@@ -227,18 +198,64 @@ pub fn diff_skeleton_by_chapter<'a>(
 /// chapter independently. This is the same batching shape as
 /// [`diff_skeleton_by_chapter`] for the other calling convention — one
 /// grouping algorithm, not a second one for app tokens.
-pub fn diff_skeleton_by_chapter_from_tokens<T: DiffableToken>(
+pub fn diff_skeleton_by_chapter_from_tokens<T: DiffableToken + Sync>(
     baseline_tokens: &[T],
     current_tokens: &[T],
-) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<T>>> {
+) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<T>>>
+where
+    DiffSkeleton<T>: Send,
+{
     let baseline_groups = group_tokens_by_book_and_chapter(baseline_tokens, "unknown");
     let current_groups = group_tokens_by_book_and_chapter(current_tokens, "unknown");
 
+    diff_grouped_by_chapter(
+        baseline_groups,
+        current_groups,
+        |_book, baseline, current| diff_skeleton(baseline, current),
+    )
+}
+
+/// Total token count (baseline + current, across every cell) at or above which
+/// the per-chapter diffs run through the ordered-map seam. Below it the fixed
+/// decomposition cost (building the work list and the ordered collect)
+/// outweighs the parallel gain, so the cells diff serially. A real multi-
+/// chapter book clears it comfortably; a small input diffs in well under a
+/// millisecond either way.
+const PARALLEL_MIN_TOKENS: usize = 20_000;
+
+/// One per-chapter diff work unit: its book/chapter coordinates and the two
+/// slices to diff. Slices are the same per-book/chapter clones the serial path
+/// produced; nothing is shared between cells.
+struct DiffCell<T> {
+    book: String,
+    chapter: u32,
+    baseline: Vec<T>,
+    current: Vec<T>,
+}
+
+/// Group-and-diff shared by both by-chapter entry points. Flattens the
+/// per-(book, chapter) cells into a work list, diffs each cell independently
+/// through the ordered-map seam (a Rayon pool natively, serial on wasm), and
+/// rebuilds the nested map. Each cell's slices come only from its own
+/// book/chapter, so the result is identical to diffing the cells one at a time
+/// regardless of thread count or target. The two callers differ only in
+/// `diff_cell`: the canonical path threads the book code through, the
+/// carried-sid path ignores it.
+fn diff_grouped_by_chapter<T, F>(
+    baseline_groups: BTreeMap<String, BTreeMap<u32, Vec<T>>>,
+    current_groups: BTreeMap<String, BTreeMap<u32, Vec<T>>>,
+    diff_cell: F,
+) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<T>>>
+where
+    T: DiffableToken + Sync,
+    DiffSkeleton<T>: Send,
+    F: Fn(&str, &[T], &[T]) -> DiffSkeleton<T> + Sync + Send,
+{
     let mut all_books = BTreeSet::<String>::new();
     all_books.extend(baseline_groups.keys().cloned());
     all_books.extend(current_groups.keys().cloned());
 
-    let mut out = BTreeMap::new();
+    let mut cells: Vec<DiffCell<T>> = Vec::new();
     for book in all_books {
         let mut all_chapters = BTreeSet::<u32>::new();
         if let Some(chapters) = baseline_groups.get(&book) {
@@ -247,22 +264,44 @@ pub fn diff_skeleton_by_chapter_from_tokens<T: DiffableToken>(
         if let Some(chapters) = current_groups.get(&book) {
             all_chapters.extend(chapters.keys().copied());
         }
-
-        let mut book_map = BTreeMap::new();
         for chapter in all_chapters {
-            let baseline_slice = baseline_groups
+            let baseline = baseline_groups
                 .get(&book)
                 .and_then(|chapters| chapters.get(&chapter))
                 .cloned()
                 .unwrap_or_default();
-            let current_slice = current_groups
+            let current = current_groups
                 .get(&book)
                 .and_then(|chapters| chapters.get(&chapter))
                 .cloned()
                 .unwrap_or_default();
-            book_map.insert(chapter, diff_skeleton(&baseline_slice, &current_slice));
+            cells.push(DiffCell {
+                book: book.clone(),
+                chapter,
+                baseline,
+                current,
+            });
         }
-        out.insert(book, book_map);
+    }
+
+    let total: usize = cells
+        .iter()
+        .map(|cell| cell.baseline.len() + cell.current.len())
+        .sum();
+    let diffs: Vec<DiffSkeleton<T>> = if total >= PARALLEL_MIN_TOKENS {
+        crate::par::map_ordered(&cells, |cell| {
+            diff_cell(&cell.book, &cell.baseline, &cell.current)
+        })
+    } else {
+        cells
+            .iter()
+            .map(|cell| diff_cell(&cell.book, &cell.baseline, &cell.current))
+            .collect()
+    };
+
+    let mut out: BTreeMap<String, BTreeMap<u32, DiffSkeleton<T>>> = BTreeMap::new();
+    for (cell, diff) in cells.into_iter().zip(diffs) {
+        out.entry(cell.book).or_default().insert(cell.chapter, diff);
     }
     out
 }
@@ -1206,5 +1245,307 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(slot_shape(&first), slot_shape(&second));
+    }
+}
+
+/// The parallelized by-chapter diffs must produce a map byte-identical to the
+/// serial reference below over diverse, real diff pairs. A per-chapter diff has
+/// no independent oracle, so this equality *is* the correctness gate for the
+/// parallelization: the reference reproduces the pre-parallel nested-loop
+/// exactly, and every cell must match it. Native-only — on wasm the seam is
+/// already serial, so there is nothing to compare against.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod parallel_tests {
+    use super::*;
+    use crate::parse::parse;
+    use crate::token::Token;
+    use std::path::{Path, PathBuf};
+
+    /// Serial reference for [`diff_skeleton_by_chapter`]: the original
+    /// nested-loop grouping, kept as a fixed baseline independent of the
+    /// parallel seam.
+    fn serial_by_chapter_canonical<'a>(
+        baseline_usfm: &'a str,
+        current_usfm: &'a str,
+    ) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<Token<'a>>>> {
+        let baseline = parse(baseline_usfm);
+        let current = parse(current_usfm);
+        let baseline_groups = group_tokens_by_book_and_chapter(
+            &baseline.tokens,
+            baseline.analysis.book_code.unwrap_or("unknown"),
+        );
+        let current_groups = group_tokens_by_book_and_chapter(
+            &current.tokens,
+            current.analysis.book_code.unwrap_or("unknown"),
+        );
+        serial_grouped(baseline_groups, current_groups, |book, b, c| {
+            diff_skeleton_canonical(b, book, c, book)
+        })
+    }
+
+    /// Serial reference for [`diff_skeleton_by_chapter_from_tokens`].
+    fn serial_by_chapter_from_tokens<'a>(
+        baseline_tokens: &[Token<'a>],
+        current_tokens: &[Token<'a>],
+    ) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<Token<'a>>>> {
+        let baseline_groups = group_tokens_by_book_and_chapter(baseline_tokens, "unknown");
+        let current_groups = group_tokens_by_book_and_chapter(current_tokens, "unknown");
+        serial_grouped(baseline_groups, current_groups, |_book, b, c| {
+            diff_skeleton(b, c)
+        })
+    }
+
+    /// The pre-parallel grouping loop, verbatim: build each book's chapter map
+    /// serially and insert it. Deliberately does not call `diff_grouped_by_chapter`
+    /// so it stays an independent oracle for the flatten/rebuild refactor.
+    fn serial_grouped<T, F>(
+        baseline_groups: BTreeMap<String, BTreeMap<u32, Vec<T>>>,
+        current_groups: BTreeMap<String, BTreeMap<u32, Vec<T>>>,
+        diff_cell: F,
+    ) -> BTreeMap<String, BTreeMap<u32, DiffSkeleton<T>>>
+    where
+        T: DiffableToken,
+        F: Fn(&str, &[T], &[T]) -> DiffSkeleton<T>,
+    {
+        let mut all_books = BTreeSet::<String>::new();
+        all_books.extend(baseline_groups.keys().cloned());
+        all_books.extend(current_groups.keys().cloned());
+
+        let mut out = BTreeMap::new();
+        for book in all_books {
+            let mut all_chapters = BTreeSet::<u32>::new();
+            if let Some(chapters) = baseline_groups.get(&book) {
+                all_chapters.extend(chapters.keys().copied());
+            }
+            if let Some(chapters) = current_groups.get(&book) {
+                all_chapters.extend(chapters.keys().copied());
+            }
+            let mut book_map = BTreeMap::new();
+            for chapter in all_chapters {
+                let baseline_slice = baseline_groups
+                    .get(&book)
+                    .and_then(|chapters| chapters.get(&chapter))
+                    .cloned()
+                    .unwrap_or_default();
+                let current_slice = current_groups
+                    .get(&book)
+                    .and_then(|chapters| chapters.get(&chapter))
+                    .cloned()
+                    .unwrap_or_default();
+                book_map.insert(chapter, diff_cell(&book, &baseline_slice, &current_slice));
+            }
+            out.insert(book, book_map);
+        }
+        out
+    }
+
+    /// Assert two by-chapter maps are structurally equal, naming the exact cell
+    /// that diverges rather than dumping a whole skeleton on failure.
+    fn assert_maps_equal(
+        got: &BTreeMap<String, BTreeMap<u32, DiffSkeleton<Token<'_>>>>,
+        want: &BTreeMap<String, BTreeMap<u32, DiffSkeleton<Token<'_>>>>,
+        label: &str,
+    ) {
+        let got_books: Vec<&String> = got.keys().collect();
+        let want_books: Vec<&String> = want.keys().collect();
+        assert_eq!(got_books, want_books, "book set differs for {label}");
+        for (book, got_chapters) in got {
+            let want_chapters = &want[book];
+            let got_ch: Vec<&u32> = got_chapters.keys().collect();
+            let want_ch: Vec<&u32> = want_chapters.keys().collect();
+            assert_eq!(
+                got_ch, want_ch,
+                "chapter set differs for {label} book {book}"
+            );
+            for (chapter, got_skeleton) in got_chapters {
+                let want_skeleton = &want_chapters[chapter];
+                assert!(
+                    got_skeleton == want_skeleton,
+                    "diff skeleton differs for {label} at {book} {chapter}"
+                );
+            }
+        }
+    }
+
+    /// Every pair is asserted twice: the string entry point (canonical sids,
+    /// parses internally) and the token entry point (carried sids, generic `T`).
+    fn assert_pair_matches(baseline: &str, current: &str, label: &str) {
+        assert_maps_equal(
+            &diff_skeleton_by_chapter(baseline, current),
+            &serial_by_chapter_canonical(baseline, current),
+            &format!("{label} (canonical)"),
+        );
+
+        let baseline_parsed = parse(baseline);
+        let current_parsed = parse(current);
+        assert_maps_equal(
+            &diff_skeleton_by_chapter_from_tokens(&baseline_parsed.tokens, &current_parsed.tokens),
+            &serial_by_chapter_from_tokens(&baseline_parsed.tokens, &current_parsed.tokens),
+            &format!("{label} (from_tokens)"),
+        );
+    }
+
+    // Line-based mutators. They need not produce meaningful edits — the gate is
+    // parallel == serial over whatever diff they induce — only a realistically
+    // varied one: an edited verse, an inserted/deleted verse, and an
+    // inserted/deleted whole chapter.
+
+    fn edit_a_verse(src: &str) -> String {
+        let mut out = String::with_capacity(src.len() + 16);
+        let mut done = false;
+        for line in src.split_inclusive('\n') {
+            if !done && line.trim_start().starts_with("\\v ") {
+                out.push_str(line.trim_end_matches('\n'));
+                out.push_str(" edited-content");
+                if line.ends_with('\n') {
+                    out.push('\n');
+                }
+                done = true;
+            } else {
+                out.push_str(line);
+            }
+        }
+        out
+    }
+
+    fn insert_a_verse(src: &str) -> String {
+        let mut out = String::with_capacity(src.len() + 32);
+        let mut done = false;
+        for line in src.split_inclusive('\n') {
+            if !done && line.trim_start().starts_with("\\v ") {
+                out.push_str("\\v 249 inserted verse text\n");
+                done = true;
+            }
+            out.push_str(line);
+        }
+        out
+    }
+
+    fn delete_a_verse(src: &str) -> String {
+        let mut out = String::with_capacity(src.len());
+        let mut done = false;
+        for line in src.split_inclusive('\n') {
+            if !done && line.trim_start().starts_with("\\v ") {
+                done = true;
+                continue;
+            }
+            out.push_str(line);
+        }
+        out
+    }
+
+    fn insert_a_chapter(src: &str) -> String {
+        format!("{src}\n\\c 250\n\\p\n\\v 1 inserted chapter verse one\n\\v 2 and two\n")
+    }
+
+    /// Drop a whole chapter: the run from the second `\c ` line up to (not
+    /// including) the third, or the first-to-second when there are only two.
+    fn delete_a_chapter(src: &str) -> String {
+        let chapter_line_indices: Vec<usize> = src
+            .split_inclusive('\n')
+            .enumerate()
+            .filter(|(_, line)| line.trim_start().starts_with("\\c "))
+            .map(|(index, _)| index)
+            .collect();
+        if chapter_line_indices.len() < 2 {
+            return src.to_string();
+        }
+        let (drop_from, drop_to) = if chapter_line_indices.len() >= 3 {
+            (chapter_line_indices[1], chapter_line_indices[2])
+        } else {
+            (chapter_line_indices[0], chapter_line_indices[1])
+        };
+        src.split_inclusive('\n')
+            .enumerate()
+            .filter(|(index, _)| *index < drop_from || *index >= drop_to)
+            .map(|(_, line)| line)
+            .collect()
+    }
+
+    fn collect_usfm(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_usfm(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("usfm") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// A spread across both corpora plus the large GEN book (263k tokens, well
+    /// over `PARALLEL_MIN_TOKENS`), so the parallel branch is exercised, not
+    /// just the small-input serial fallback.
+    fn sample_sources() -> Vec<(String, String)> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut paths = Vec::new();
+        collect_usfm(&root.join("testData"), &mut paths);
+        collect_usfm(&root.join("example-corpora"), &mut paths);
+        paths.sort();
+        assert!(!paths.is_empty(), "expected corpus fixtures");
+
+        // Stride to keep the run bounded, then force-include the large GEN book.
+        let stride = (paths.len() / 20).max(1);
+        let mut selected: Vec<PathBuf> = paths.iter().step_by(stride).cloned().collect();
+        let gen_book = root.join("example-corpora/en_ult/01-GEN.usfm");
+        if gen_book.exists() && !selected.contains(&gen_book) {
+            selected.push(gen_book);
+        }
+
+        selected
+            .iter()
+            .filter_map(|path| {
+                std::fs::read_to_string(path)
+                    .ok()
+                    .map(|source| (path.to_string_lossy().into_owned(), source))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn parallel_by_chapter_matches_serial_over_diverse_pairs() {
+        let sources = sample_sources();
+        assert!(sources.len() >= 2, "need at least two fixtures to pair");
+
+        for (label, source) in &sources {
+            // Identity (all-equal) plus one mutation of every shape.
+            assert_pair_matches(source, source, &format!("{label} self"));
+            assert_pair_matches(
+                source,
+                &edit_a_verse(source),
+                &format!("{label} edit-verse"),
+            );
+            assert_pair_matches(
+                source,
+                &insert_a_verse(source),
+                &format!("{label} insert-verse"),
+            );
+            assert_pair_matches(
+                source,
+                &delete_a_verse(source),
+                &format!("{label} delete-verse"),
+            );
+            assert_pair_matches(
+                source,
+                &insert_a_chapter(source),
+                &format!("{label} insert-chapter"),
+            );
+            assert_pair_matches(
+                source,
+                &delete_a_chapter(source),
+                &format!("{label} delete-chapter"),
+            );
+        }
+
+        // Cross-book pairs (a file vs a different book): all-added/all-deleted
+        // across two book keys.
+        for window in sources.windows(2) {
+            let (left_label, left) = &window[0];
+            let (right_label, right) = &window[1];
+            assert_pair_matches(left, right, &format!("{left_label} vs {right_label}"));
+        }
     }
 }
