@@ -105,5 +105,52 @@ Verification: 188 lib + all integration tests green; **oracle unchanged** (no pr
 change); `cargo fmt --check` clean; clippy clean on new files (`par.rs`, `walker/mod.rs`);
 `wasm32-unknown-unknown` builds the main lib without rayon.
 
-## Next: Stage 2 — lint proving ground (decompose Book lint into segment-local + book
-reconciliation; serial ordered map first, then `map_ordered`; oracle identity at 1 and full workers)
+## 2026-07-20 - Stage 2 attempt: correct decomposition, but a perf regression (not shipped)
+
+Implemented the minimal split (range-local rules parallel per chapter segment via
+`collect_range_local` + `walk_range`; `lint_structure_rules`, duplicate-chapter, and
+number/verse as an explicit whole-book serial pass via `collect_book_serial`;
+`collect_issues` split into collect + `finalize_issues`).
+
+- **Correctness: achieved and proven.** Oracle byte-identical at `RAYON_NUM_THREADS=1`
+  AND full pool; 188 lib tests green; walker equivalence green. The decomposition is
+  behavior-preserving.
+- **Performance: regressed hard.** Psalms lint 2.35ms -> 3.46ms full pool (+47%),
+  13ms at 1 thread (+456%); en_ulb corpus lint +7% (serial lane) / +17% (rayon lane).
+  Fails the acceptance gate (max 5% regression on small input).
+- **Cause (samply, lint/tokens on Luke, full pool):** no lint hot path. ~88% of samples
+  in `libsystem_kernel` (thread park/wake) with `libsystem_malloc` prominent; lint code
+  frames spread thin. Per-chapter granularity (~151 tiny tasks, each allocating a Vec)
+  makes thread-sync + allocation overhead dominate the tiny per-chapter compute.
+  Isolation: book-serial pass alone = 0.83ms; the per-segment range-local pass is the
+  blowup, spread across rules (not one culprit).
+**Then the spike overturned that conclusion.** A throwaway spike in a worktree off the
+pre-work commit (`examples/spike_chapter_lint.rs`, existing `LintScope::Chapter` API,
+`rayon::par_iter` over chapter slices) measured, on 10 cores:
+
+| book | whole-book serial | chapter serial | chapter parallel |
+| --- | --- | --- | --- |
+| Psalms (30k tok, 151 ch) | 2.30 ms | 2.57 ms (0.89x) | **0.70 ms (3.3x)** |
+| Luke (7k tok, 25 ch) | 0.67 ms | 0.67 ms (1.00x) | **0.32 ms (2.1x)** |
+
+So chapter-grain lint **is** worth it — a 2-3.3x win with **negligible** decomposition
+overhead (serial split 0.89-1.00x). My +47% production regression was therefore an
+**implementation defect in the elaborate `collect_range_local`/`collect_book_serial`
+split**, NOT a fundamental limit. The spike's simple shape (par_iter chapters, whole
+per-chapter lint) is both faster and simpler than what I built; a correct production impl
+should approach ~1ms on Psalms (serial book pass 0.83ms + small parallel range-local).
+
+**Process lesson (see memory [[feedback-spike-perf-hypotheses-first]]):** this spike should
+have come FIRST. It cost an hour and would have prevented the whole invasive-refactor +
+revert cycle AND my wrong "not worth it" conclusion.
+
+**State:** Stage 1 committed. Stage 2 production decomposition is uncommitted in the working
+tree — correct (oracle byte-identical at 1 and full workers) but ~3x slower than the spike
+ceiling; keep it to debug the inefficiency, don't ship as-is. Spike lives in the
+`usfm_onion-spike` worktree.
+
+Next session: (a) find why the production split is ~3x slower than the spike (compare
+against `examples/spike_chapter_lint.rs`) OR rewrite production to the simpler spike shape
+(par_iter chapters + serial book reconcile for document/cross-chapter rules); (b) re-bench
+against the 15-20% gate. Separately: fix the `DocumentLintState.note_stack` never-popped bug
+and intentionally rebaseline the oracle.

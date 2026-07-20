@@ -173,17 +173,69 @@ Verification: no production entrypoint uses parallelism yet; oracle unchanged;
 
 ### Stage 2 - lint proving ground
 
-1. Refactor Book-scope lint into segment-local findings/summaries plus explicit
-   book-level events. Preserve every current document rule; do not implement it as naïve
-   calls to `LintScope::Chapter`, which disables document-category rules.
-2. Reconcile duplicate chapters, duplicate/misplaced IDs, and other book state in source
-   order.
-3. First run the decomposed path with serial ordered map and require oracle identity.
-4. Switch only the executor to cfg-selected `map_ordered`.
-5. Dedupe, suppress, canonical-sort, and summarize once after reconciliation.
+**Classify rules by computational shape, not by lint category.** Category
+(`Document`/`Structure`/`Context`/`Numbering`) is a taxonomy of *meaning*, not
+execution locality; a first attempt that split on category failed the oracle
+(the split dropped `duplicate-verse-number`, `marker-not-valid-in-context`,
+`unclosed-marker`, whitespace). The correct classification is by how a rule
+computes its findings:
 
-Verification: oracle identical at one and full worker counts; targeted document-rule and
-boundary fixtures pass; Criterion clears the acceptance threshold.
+| Shape | Rules | Execution |
+| --- | --- | --- |
+| Range-local (iterate an absolute range; keep full-slice access for predecessor/lookahead) | empty-paragraph, expectation/unknown-token, invalid-range, number-predecessor, unknown-marker(s), whitespace | parallel, per segment |
+| Walker-driven | marker-balance (stray/misnest/unclosed/implicit/milestone-self-close/verse-in-section) | parallel, per segment via `walk_range(full, range, boundary)` — NOT a sliced token array |
+| Ordered-occurrence + serial reconcile | duplicate-verse-number | per segment emit ordered `(chapter, verse-range, token)` events; reconcile serially with the existing book-wide `seen` logic (duplicate `\c` segments sharing a semantic chapter fall out naturally) |
+| Whole-book serial pass | `lint_structure_rules` (document identity, content ordering, paragraph/note context, book invariants), `duplicate-chapter-number` | serial, over the full stream |
+
+The whole-book structure pass is an **explicit, named rule-family contract**, not
+the forbidden "silent broad serial fallback." Do not build per-rule prefix-state/
+merge machinery for it until benchmarks show this serial pass materially caps the
+speedup.
+
+Two range mistakes to avoid (they masqueraded as statefulness in the first
+attempt): running the walker over a *sliced* token array throws away the
+`BeforeChapter` boundary Stage 1 added — use `walk_range(full, range, boundary)`;
+and whitespace/lookahead rules must iterate an absolute range while still holding
+the complete token slice for predecessor/next-token access.
+
+Execution shape:
+
+```
+parallel chapter segments
+  -> range-local findings
+  -> walker findings via walk_range(full, range, boundary)
+  -> ordered duplicate-verse occurrence events
+serial book reconciliation
+  -> duplicate verse / duplicate chapter findings
+  -> lint_structure_rules over the full stream
+combine once
+  -> deduplicate -> suppress -> canonical sort -> summarize
+```
+
+Steps:
+
+1. Split `collect_issues` into a per-segment collector (range-local + walker +
+   occurrence events) and a serial book pass (structure rules + numbering
+   reconcile). Range-local rules take `(tokens, range)`, not a sub-slice.
+2. Reconcile duplicate chapters and duplicate verses from ordered events in source
+   order.
+3. Run the decomposed path with a serial ordered map and require oracle identity
+   FIRST (equivalently: oracle at `RAYON_NUM_THREADS=1`).
+4. Switch the executor to `map_ordered`; confirm oracle identity at the full pool too.
+5. Dedupe, suppress, canonical-sort, summarize once after reconciliation.
+
+Verification: oracle identical at one and full worker counts; full lib test suite
+(covers `Front`/`Chapter` scopes) green; Criterion clears the acceptance threshold.
+
+**Separate, pre-existing bug to resolve intentionally (NOT parallelism):**
+`DocumentLintState.note_stack` (`src/lint_impl.rs`) is pushed on note-open in
+`apply_marker` but never popped on note-close — the `EndMarker` branch of
+`lint_structure_rules` pops only the *local* `note_stack`. So `current_note_context()`
+stays stale after a footnote closes, and post-note markers are validated as if
+still inside the note. Some whole-book `marker-not-valid-in-context` findings are
+likely spurious because of this. The oracle pins current (buggy) behavior; keeping
+the structure pass whole-book preserves it, so Stage 2 stays green. Fix the stack
+separately and rebaseline the oracle intentionally.
 
 ### Stage 3 - USJ and USX
 
