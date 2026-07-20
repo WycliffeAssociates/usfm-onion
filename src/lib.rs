@@ -14,6 +14,7 @@ pub mod marker_defs;
 mod marker_defs_data;
 #[path = "markers.rs"]
 pub mod markers;
+pub mod par;
 pub mod parse;
 pub mod token;
 pub mod usj;
@@ -43,12 +44,9 @@ pub use lint_impl::{
 pub use marker_defs::{
     InlineContext, MarkerWhitespace, NoteFamily, NoteSubkind, lookup_marker_whitespace,
 };
-pub use whitespace::{
-    FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
-};
 pub use markers::{
-    MarkerCategory, MarkerKind, UsfmMarkerCatalog, UsfmMarkerInfo, is_known_marker,
-    marker_catalog, marker_info,
+    MarkerCategory, MarkerKind, UsfmMarkerCatalog, UsfmMarkerInfo, is_known_marker, marker_catalog,
+    marker_info,
 };
 pub use token::{
     AttributeEntryToken, AttributeItem, BookCodeToken, LexResult, Lexeme, LexemeKind,
@@ -60,4 +58,7 @@ pub use usx::UsxError;
 pub use vref::{
     Segment, Utf16Span, VerseProjection, VrefIndex, VrefMap, tokens_to_vref_index,
     usfm_to_vref_index,
+};
+pub use whitespace::{
+    FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
 };

@@ -153,6 +153,26 @@ pub enum LeaveReason {
     ImplicitByOpen,
 }
 
+/// How a [`walk_range`] over one segment of the stream terminates.
+///
+/// A chapter-parallel consumer walks each segment (front matter, then each
+/// `\c`..next-`\c` span) in isolation, but the resulting event stream must be
+/// identical to a whole-book walk. The hazard is the terminal: draining an
+/// isolated slice as end-of-input would emit `EndOfInput` closes, whereas the
+/// whole-book walk closes those same scopes when the *next* `\c` arrives
+/// (`ImplicitByOpen`/`RecoveryClosure`). `BeforeChapter` reproduces the incoming
+/// chapter's close reasons so segment-then-concatenate == whole-book, exactly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkBoundary {
+    /// This segment ends right before a `\c`. Close open scopes as an incoming
+    /// chapter would, not as end-of-input. Use for the front segment and every
+    /// non-final chapter segment.
+    BeforeChapter,
+    /// This segment is the last one (or the whole stream). Open scopes close as
+    /// `EndOfInput`.
+    EndOfInput,
+}
+
 /// Read-only view of the walker's state, handed to every visitor
 /// callback.
 ///
@@ -271,13 +291,7 @@ pub trait Visitor<'tokens, T: WalkableToken> {
     ) {
     }
 
-    fn on_text(
-        &mut self,
-        ctx: &WalkContext<'tokens, '_>,
-        token: &'tokens T,
-        token_index: usize,
-    ) {
-    }
+    fn on_text(&mut self, ctx: &WalkContext<'tokens, '_>, token: &'tokens T, token_index: usize) {}
 
     fn on_chapter(
         &mut self,
@@ -287,13 +301,7 @@ pub trait Visitor<'tokens, T: WalkableToken> {
     ) {
     }
 
-    fn on_verse(
-        &mut self,
-        ctx: &WalkContext<'tokens, '_>,
-        token: &'tokens T,
-        token_index: usize,
-    ) {
-    }
+    fn on_verse(&mut self, ctx: &WalkContext<'tokens, '_>, token: &'tokens T, token_index: usize) {}
 
     fn on_book_code(
         &mut self,
@@ -322,13 +330,7 @@ pub trait Visitor<'tokens, T: WalkableToken> {
     /// Catch-all for any token the walker couldn't classify
     /// structurally (unknown markers, numbers outside chapter/verse,
     /// etc.). Visitors that want full token coverage append here.
-    fn on_other(
-        &mut self,
-        ctx: &WalkContext<'tokens, '_>,
-        token: &'tokens T,
-        token_index: usize,
-    ) {
-    }
+    fn on_other(&mut self, ctx: &WalkContext<'tokens, '_>, token: &'tokens T, token_index: usize) {}
 }
 
 /// Convenience entry point for walking a slice of native `Token<'a>`s.
@@ -372,6 +374,91 @@ where
     state.drain_to_eof(visitor);
 }
 
+/// Walk one segment — `range` of the *full* `tokens` slice — with a fresh scope
+/// stack, terminating at `boundary`. Emitted `token_index`es and frame indices
+/// stay absolute (into `tokens`), and lookahead reads the real following token,
+/// so concatenating `walk_range` over the front segment + each chapter segment
+/// (each `BeforeChapter` except the last, which is `EndOfInput`) reproduces a
+/// whole-stream `walk` byte-for-byte. Passing `0..tokens.len()` with
+/// `EndOfInput` is exactly `walk`.
+pub fn walk_range<'tokens, T, V>(
+    tokens: &'tokens [T],
+    range: std::ops::Range<usize>,
+    boundary: WalkBoundary,
+    visitor: &mut V,
+) where
+    T: WalkableToken,
+    V: Visitor<'tokens, T>,
+{
+    let mut state = WalkerState::new();
+    for index in range {
+        let next_is_number = match tokens.get(index + 1) {
+            Some(next) => next.kind() == TokenKind::Number,
+            None => tokens[index].next_is_number(),
+        };
+        state.step(index, &tokens[index], next_is_number, visitor);
+    }
+    state.drain_to_boundary(boundary, visitor);
+}
+
+/// One chapter-parallel work unit: a range of the token slice plus the terminal
+/// its walk must use. Ranges tile `0..tokens.len()` with no gaps or overlaps and
+/// in order, so mapping each through [`walk_range`] and concatenating the results
+/// reconstructs the whole-stream walk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChapterSegment {
+    /// True for the pre-first-`\c` front matter; false for a chapter span.
+    pub is_front: bool,
+    /// Range into the full token slice this segment covers.
+    pub range: std::ops::Range<usize>,
+    /// Terminal for [`walk_range`]: `BeforeChapter` for every segment followed by
+    /// another, `EndOfInput` for the last.
+    pub boundary: WalkBoundary,
+}
+
+/// Partition a token stream into front matter + one segment per `\c` chapter, at
+/// the exact boundaries the walker treats a chapter as opening: a `c` marker
+/// immediately followed by a `Number` token. A numberless `\c` is a leaf (it
+/// opens no scope), so it never starts a segment — matching the walker. A stream
+/// with no chapter opens yields a single front segment covering everything.
+pub fn chapter_segments<T: WalkableToken>(tokens: &[T]) -> Vec<ChapterSegment> {
+    let is_chapter_open = |index: usize| {
+        tokens[index].kind() == TokenKind::Marker
+            && tokens[index].marker() == Some("c")
+            && matches!(
+                tokens.get(index + 1).map(|next| next.kind()),
+                Some(TokenKind::Number)
+            )
+    };
+
+    // Start indices of each chapter segment.
+    let starts: Vec<usize> = (0..tokens.len()).filter(|&i| is_chapter_open(i)).collect();
+
+    let mut segments = Vec::new();
+    let first_chapter = starts.first().copied().unwrap_or(tokens.len());
+    if first_chapter > 0 {
+        segments.push(ChapterSegment {
+            is_front: true,
+            range: 0..first_chapter,
+            boundary: WalkBoundary::BeforeChapter,
+        });
+    }
+    for (i, &start) in starts.iter().enumerate() {
+        let end = starts.get(i + 1).copied().unwrap_or(tokens.len());
+        segments.push(ChapterSegment {
+            is_front: false,
+            range: start..end,
+            boundary: WalkBoundary::BeforeChapter,
+        });
+    }
+    // The last segment (whichever it is) drains as end-of-input, not before a
+    // chapter that doesn't exist. Also covers the no-`\c` single-front case.
+    if let Some(last) = segments.last_mut() {
+        last.boundary = WalkBoundary::EndOfInput;
+    }
+    segments
+}
+
 struct WalkerState<'tokens> {
     stack: Vec<ScopeFrame<'tokens>>,
 }
@@ -387,13 +474,8 @@ impl<'tokens> WalkerState<'tokens> {
         }
     }
 
-    fn step<T, V>(
-        &mut self,
-        index: usize,
-        token: &'tokens T,
-        next_is_number: bool,
-        visitor: &mut V,
-    ) where
+    fn step<T, V>(&mut self, index: usize, token: &'tokens T, next_is_number: bool, visitor: &mut V)
+    where
         T: WalkableToken,
         V: Visitor<'tokens, T>,
     {
@@ -474,8 +556,7 @@ impl<'tokens> WalkerState<'tokens> {
         self.apply_open_precedence(info.scope_kind, marker, visitor);
 
         let paragraph_category = if matches!(info.scope_kind, StructuralScopeKind::Block) {
-            crate::marker_defs::lookup_spec_marker(marker)
-                .and_then(|spec| spec.paragraph_category)
+            crate::marker_defs::lookup_spec_marker(marker).and_then(|spec| spec.paragraph_category)
         } else {
             None
         };
@@ -837,10 +918,8 @@ impl<'tokens> WalkerState<'tokens> {
         let Some(context) = self.effective_context() else {
             return false;
         };
-        matches!(
-            context,
-            SpecContext::Footnote | SpecContext::CrossReference
-        ) && !marker_allows_effective_context(incoming_marker, context)
+        matches!(context, SpecContext::Footnote | SpecContext::CrossReference)
+            && !marker_allows_effective_context(incoming_marker, context)
     }
 
     /// Resolve the effective `SpecContext` from the scope stack —
@@ -887,10 +966,29 @@ impl<'tokens> WalkerState<'tokens> {
         T: WalkableToken,
         V: Visitor<'tokens, T>,
     {
+        self.drain_to_boundary(WalkBoundary::EndOfInput, visitor);
+    }
+
+    /// Close every still-open scope at a segment terminal. For `EndOfInput` this
+    /// is the whole-stream drain; for `BeforeChapter` it uses the exact reasons
+    /// an incoming `\c` produces (see the `Chapter` arm of `apply_open_precedence`)
+    /// so a segmented walk reproduces the whole-book event stream.
+    fn drain_to_boundary<T, V>(&mut self, boundary: WalkBoundary, visitor: &mut V)
+    where
+        T: WalkableToken,
+        V: Visitor<'tokens, T>,
+    {
         while let Some(frame) = self.stack.pop() {
             self.bookkeep_on_pop(&frame);
+            let reason = match boundary {
+                WalkBoundary::EndOfInput => LeaveReason::EndOfInput,
+                WalkBoundary::BeforeChapter if frame.scope_kind == StructuralScopeKind::Note => {
+                    LeaveReason::RecoveryClosure
+                }
+                WalkBoundary::BeforeChapter => LeaveReason::ImplicitByOpen,
+            };
             let ctx = self.make_ctx();
-            visitor.on_leave_scope(&ctx, &frame, LeaveReason::EndOfInput);
+            visitor.on_leave_scope(&ctx, &frame, reason);
         }
     }
 }
@@ -962,8 +1060,7 @@ mod tests {
             token: &'tokens T,
             _token_index: usize,
         ) {
-            self.events
-                .push(format!("verse[{}]", token.text().trim()));
+            self.events.push(format!("verse[{}]", token.text().trim()));
         }
 
         fn on_text(
