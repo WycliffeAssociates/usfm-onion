@@ -236,6 +236,34 @@ segment N's end-state seeds segment N+1's validation). This is a FUTURE task, af
 remaining exports; it lifts lint past the ~2x floor toward the ~3.3x all-per-chapter
 ceiling.
 
+### Sketch — dup-chapter / dup-verse as reductions
+
+Each chapter segment is already walked for its local rules; piggyback observations on
+that walk (a by-product, no extra scan), then one serial reduce in segment order.
+Source-ordered replay reproduces the whole-book scan exactly ⇒ byte-identical (oracle-proven).
+
+```rust
+struct SegmentObs {
+    chapter: Option<u32>,        // the segment's `\c N` (None for the front segment)
+    chapter_tok: Option<usize>,  // token index of that number (finding anchor)
+    verses: Vec<VerseObs>,       // source-ordered within the segment
+}
+struct VerseObs { start: u32, end: u32, tok: usize }
+```
+The per-segment closure returns `(range_local_findings, SegmentObs)`.
+
+- **dup-chapter**: `seen: HashSet<u32>` over `obs.chapter` in order; emit from `tokens[chapter_tok]`
+  at the second+ occurrence. O(#chapters).
+- **dup-verse** (keyed by chapter *number*, so duplicate `\c` share state — the whole point):
+  replay `obs.verses` in order into `HashMap<u32, HashSet<u32>>` keyed by `obs.chapter`
+  (front→0 then sid fallback, as today); emit from `tokens[v.tok]`. This IS today's
+  `verse_state_by_chapter` loop, fed from observations instead of a re-walk.
+
+Removes 2 of the 3 whole-book units: the local numbering rules (invalid-range,
+number-predecessor, verse-is-empty) are range-local and move to the per-segment pass, so
+`lint_chapter_rules` + `lint_number_and_verse_rules` dissolve. Only `lint_structure_rules`
+remains whole-book (the harder boundary-summary problem).
+
 Two range mistakes to avoid (they masqueraded as statefulness in the first
 attempt): running the walker over a *sliced* token array throws away the
 `BeforeChapter` boundary Stage 1 added — use `walk_range(full, range, boundary)`;
