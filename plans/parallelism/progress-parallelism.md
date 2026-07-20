@@ -154,3 +154,35 @@ against `examples/spike_chapter_lint.rs`) OR rewrite production to the simpler s
 (par_iter chapters + serial book reconcile for document/cross-chapter rules); (b) re-bench
 against the 15-20% gate. Separately: fix the `DocumentLintState.note_stack` never-popped bug
 and intentionally rebaseline the oracle.
+
+## 2026-07-20 - Full spike matrix (worktree `usfm_onion-spike` @ f70d4f0, 10 cores, Psalms)
+
+Every operation spiked via the existing public API (throwaway examples in the worktree:
+`spike_chapter_lint`, `spike_chapter_parse`, `spike_parallel_lex`, `spike_chapter_exports`).
+Chapter-parallel = split at `\c`, `par_iter`, existing per-slice API; timing/ceiling only.
+
+| op | whole | chapter-parallel | speedup | notes |
+| --- | --- | --- | --- | --- |
+| lex | 1.05 ms | 0.25 ms | 4.2x | source byte-split at `\c` (line starts = clean boundaries); lex needs no `\id` |
+| parse (lex+parse both split) | 2.17 ms | 0.58 ms | 3.75x | byte-split removes the serial-lex floor (parse-step-only was ~1.6x) |
+| lint | 2.30 ms | 0.70 ms | 3.3x | ~0 decomposition overhead |
+| **html** | **8.02 ms** | **1.84 ms** | **4.36x** | heaviest op AND best speedup — the top target |
+| vref | 1.25 ms | 0.42 ms | 2.95x | |
+| cst | 0.89 ms | 0.50 ms | 1.78x | light op, least benefit |
+
+Pre-scan `\c` byte offsets: 0.19 ms (negligible). Decomposition overhead is negligible-to-
+mild across the board (serial-split ratios 0.84-1.55x). Small books (Luke) are a wash — the
+win scales with book size.
+
+**Conclusions:**
+- Chapter parallelism is a real 2-4.4x win for every heavy op; my Stage 2 lint regression was
+  an impl/measurement artifact, NOT fundamental (proven by the clean spike).
+- **HTML is the highest-value target** (heaviest + best speedup: 8ms -> 1.8ms).
+- The strongest architecture is a **shared source-level chapter partition**: one cheap byte
+  pre-scan at `\c`, then parallel lex+parse+lint+exports per chunk, rather than per-operation
+  token-splitting. Merges are all cheap linear passes: span rebasing (+chunk offset), token-id
+  reindex, bookcode seed for sids, doc-sequential HTML caller renumber, dup-chapter/verse
+  reconcile.
+- Real-impl caveats: the `\c` pre-scan must reject false positives (in text/attributes/
+  comments) — validate against the lexed stream or a careful line-start scan; spans/ids need
+  rebasing; wasm stays serial.
