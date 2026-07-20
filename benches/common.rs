@@ -24,7 +24,9 @@ use std::path::{Path, PathBuf};
 
 use usfm_onion::cst::build_cst;
 use usfm_onion::diff::{diff_skeleton, diff_skeleton_canonical};
-use usfm_onion::format::{FormatOptions, FormatToken, format_tokens, format_usfm, into_format_tokens};
+use usfm_onion::format::{
+    FormatOptions, FormatToken, format_tokens, format_usfm, into_format_tokens,
+};
 use usfm_onion::html::{HtmlOptions, tokens_to_html, usfm_to_html};
 use usfm_onion::lexer::lex;
 use usfm_onion::lint::{LintOptions, LintScope, lint_tokens, lint_usfm};
@@ -50,6 +52,13 @@ pub struct Corpus {
 #[allow(dead_code)]
 pub fn load_luke() -> Book {
     load_book("example-corpora/en_ulb/43-LUK.usfm", "luke")
+}
+
+/// The corpus's largest book (150 chapters) — the straggler that caps book-grain
+/// parallelism and the single-call workload chapter-grain must improve.
+#[allow(dead_code)]
+pub fn load_psalms() -> Book {
+    load_book("example-corpora/en_ulb/19-PSA.usfm", "psalms")
 }
 
 /// Same book, different corpus: BSB's Luke has no `\s5` chunk markers (the
@@ -90,7 +99,10 @@ fn load_corpus(label: &str, relative_root: &str) -> Corpus {
         .into_iter()
         .map(|path| {
             fs::read_to_string(&path).unwrap_or_else(|err| {
-                panic!("benchmark corpus file {} should read: {err}", path.display())
+                panic!(
+                    "benchmark corpus file {} should read: {err}",
+                    path.display()
+                )
             })
         })
         .collect::<Vec<_>>();
@@ -105,10 +117,9 @@ fn load_corpus(label: &str, relative_root: &str) -> Corpus {
 }
 
 fn collect_usfm_paths(root: &Path, paths: &mut Vec<PathBuf>) {
-    for entry in
-        fs::read_dir(root).unwrap_or_else(|err| panic!("read {}: {err}", root.display()))
-    {
-        let entry = entry.unwrap_or_else(|err| panic!("read entry under {}: {err}", root.display()));
+    for entry in fs::read_dir(root).unwrap_or_else(|err| panic!("read {}: {err}", root.display())) {
+        let entry =
+            entry.unwrap_or_else(|err| panic!("read entry under {}: {err}", root.display()));
         let path = entry.path();
         if path.is_dir() {
             collect_usfm_paths(&path, paths);
@@ -211,7 +222,12 @@ pub fn run_named_op(name: &str, fx: &Fixture) {
         }
         "diff/string" => {
             let side = parse(&fx.book.source);
-            black_box(diff_skeleton_canonical(&side.tokens, "LUK", &side.tokens, "LUK"));
+            black_box(diff_skeleton_canonical(
+                &side.tokens,
+                "LUK",
+                &side.tokens,
+                "LUK",
+            ));
         }
         "diff/tokens" => {
             black_box(diff_skeleton(&fx.parsed.tokens, &fx.parsed.tokens));

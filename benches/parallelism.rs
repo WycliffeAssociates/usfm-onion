@@ -15,12 +15,12 @@
 
 mod common;
 
-use common::{Corpus, load_en_ulb};
+use common::{Corpus, load_en_ulb, load_psalms};
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use rayon::prelude::*;
 use usfm_onion::format::{FormatOptions, format_usfm};
 use usfm_onion::html::{HtmlOptions, usfm_to_html};
-use usfm_onion::lint::{LintOptions, LintScope, lint_usfm};
+use usfm_onion::lint::{LintOptions, LintScope, lint_tokens, lint_usfm};
 use usfm_onion::parse::parse;
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -58,6 +58,18 @@ fn benchmark_parallelism(c: &mut Criterion) {
     });
 
     group.finish();
+
+    // Single large book: the pre-refactor serial cost a future chapter-grain
+    // lint must beat. Book-grain Rayon can't help one book (one task), so this
+    // lane isolates the intra-book win that chapter parallelism targets.
+    let psalms = load_psalms();
+    let parsed = parse(&psalms.source);
+    let mut single = c.benchmark_group("chapter_grain/psalms");
+    single.throughput(Throughput::Bytes(psalms.source.len() as u64));
+    single.bench_function("lint/serial", |b| {
+        b.iter(|| black_box(lint_tokens(&parsed.tokens, lint_options.clone())));
+    });
+    single.finish();
 }
 
 /// Register a `serial` and `rayon` bench for the same per-book operation.

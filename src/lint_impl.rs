@@ -710,7 +710,6 @@ struct VerseState {
     seen: HashSet<u32>,
 }
 
-
 impl Default for DocumentLintState {
     fn default() -> Self {
         Self {
@@ -953,7 +952,8 @@ pub fn lint_tokens<T: LintableToken>(tokens: &[T], options: LintOptions) -> Lint
     }
 
     let unique = dedupe_issues(issues);
-    let (issues, suppressed_count) = apply_suppressions(unique, &options.suppressed);
+    let (mut issues, suppressed_count) = apply_suppressions(unique, &options.suppressed);
+    canonical_sort(&mut issues);
     let summary = summarize(&issues, suppressed_count);
 
     LintResult { issues, summary }
@@ -2700,6 +2700,32 @@ fn marker_params(marker: &str) -> MessageParams {
     message_params([("marker", marker.to_string())])
 }
 
+/// Canonical output order for findings. Independent of the order rule groups
+/// happen to run in, so callers see a stable sequence and a chapter-parallel
+/// linter (which produces findings out of segment order) can sort to the same
+/// result. Ordered by primary source position, then the stable lint-code
+/// identifier, then related span; spanless document findings sort last. `token_id`
+/// / `marker` / `message` are pure tie-breakers for determinism. Deliberately
+/// NOT ordered by SID — duplicate, malformed, or decreasing references are valid
+/// linter inputs and must not drive output order.
+fn canonical_sort(issues: &mut [LintIssue]) {
+    fn span_key(span: Option<Span>) -> (u8, u32, u32) {
+        match span {
+            Some(span) => (0, span.start, span.end),
+            None => (1, u32::MAX, u32::MAX),
+        }
+    }
+    issues.sort_by(|a, b| {
+        span_key(a.span)
+            .cmp(&span_key(b.span))
+            .then_with(|| a.code.code().cmp(b.code.code()))
+            .then_with(|| span_key(a.related_span).cmp(&span_key(b.related_span)))
+            .then_with(|| a.token_id.cmp(&b.token_id))
+            .then_with(|| a.marker.cmp(&b.marker))
+            .then_with(|| a.message.cmp(&b.message))
+    });
+}
+
 fn dedupe_issues(issues: Vec<LintIssue>) -> Vec<LintIssue> {
     let mut seen = FxHashSet::default();
     let mut deduped = Vec::new();
@@ -2997,7 +3023,10 @@ mod tests {
 
     #[test]
     fn verse_in_body_paragraph_is_not_flagged_as_section_violation() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n", LintOptions::scoped(LintScope::Book));
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 Text\n",
+            LintOptions::scoped(LintScope::Book),
+        );
         assert!(
             !result
                 .issues
@@ -3198,7 +3227,10 @@ mod tests {
 
     #[test]
     fn unknown_markers_do_not_also_report_context_errors() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\zzz bogus\n", LintOptions::scoped(LintScope::Book));
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\zzz bogus\n",
+            LintOptions::scoped(LintScope::Book),
+        );
         assert!(
             result
                 .issues
@@ -3228,7 +3260,10 @@ mod tests {
 
     #[test]
     fn missing_chapter_and_verse_numbers_are_reported() {
-        let result = lint_usfm("\\id GEN\n\\c\n\\v text", LintOptions::scoped(LintScope::Book));
+        let result = lint_usfm(
+            "\\id GEN\n\\c\n\\v text",
+            LintOptions::scoped(LintScope::Book),
+        );
         assert!(
             result
                 .issues
@@ -3259,7 +3294,10 @@ mod tests {
 
     #[test]
     fn chapter_and_verse_metadata_attachment_is_checked() {
-        let result = lint_usfm("\\id GEN\n\\c 1\n\\vp 2\n\\ca 3", LintOptions::scoped(LintScope::Book));
+        let result = lint_usfm(
+            "\\id GEN\n\\c 1\n\\vp 2\n\\ca 3",
+            LintOptions::scoped(LintScope::Book),
+        );
         let verse_issue = result
             .issues
             .iter()
@@ -3362,8 +3400,10 @@ mod tests {
 
         // Category-wide guarantee: no document-category finding survives a
         // Chapter-scoped lint, even on a slice that opens with its own \c.
-        let chapter =
-            lint_usfm("\\c 5\n\\p\n\\v 1 text\n", LintOptions::scoped(LintScope::Chapter(5)));
+        let chapter = lint_usfm(
+            "\\c 5\n\\p\n\\v 1 text\n",
+            LintOptions::scoped(LintScope::Chapter(5)),
+        );
         assert!(
             !chapter
                 .issues
@@ -3398,7 +3438,10 @@ mod tests {
             .iter()
             .any(|i| i.code == LintCode::UnclosedMarker);
 
-        assert!(book_flags_it, "book scope should flag the unclosed note in ch1");
+        assert!(
+            book_flags_it,
+            "book scope should flag the unclosed note in ch1"
+        );
         assert!(
             chapter_flags_it,
             "chapter scope should flag the same unclosed note"
@@ -3431,7 +3474,8 @@ mod tests {
                 marker_profile: None,
             },
         ];
-        let invalid_range_result = lint_tokens(&invalid_range_tokens, LintOptions::scoped(LintScope::Book));
+        let invalid_range_result =
+            lint_tokens(&invalid_range_tokens, LintOptions::scoped(LintScope::Book));
         let range_issue = invalid_range_result
             .issues
             .iter()
@@ -3516,7 +3560,10 @@ mod tests {
 
     #[test]
     fn summary_counts_by_category_and_severity() {
-        let result = lint_usfm("\\c 2\n\\v 1 text\n\\v 1 text", LintOptions::scoped(LintScope::Book));
+        let result = lint_usfm(
+            "\\c 2\n\\v 1 text\n\\v 1 text",
+            LintOptions::scoped(LintScope::Book),
+        );
         assert!(result.summary.total_count > 0);
         assert!(
             result
