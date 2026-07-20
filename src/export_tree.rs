@@ -9,6 +9,8 @@ use crate::marker_defs::{BlockBehavior, StructuralScopeKind, marker_block_behavi
 use crate::markers::lookup_marker;
 use crate::token::{Token, TokenData};
 use crate::walker::{LeaveReason, ScopeFrame, Visitor, WalkContext, walk_tokens};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::walker::{WalkBoundary, walk_range};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExportDocument<'a> {
@@ -68,6 +70,23 @@ pub(crate) fn build_export_document<'a>(tokens: &'a [Token<'a>]) -> ExportDocume
         tokens,
         children: builder.root_children,
     }
+}
+
+/// Build the top-level export nodes for one chapter segment — `range` of the
+/// *full* `tokens` slice, terminating its walk at `boundary`. Emitted token
+/// indices stay absolute, so concatenating the results of every segment (front +
+/// each chapter) reproduces `build_export_document(tokens).children` exactly: a
+/// `\c` closes every open scope, so no container spans a segment boundary.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn build_export_segment<'a>(
+    tokens: &'a [Token<'a>],
+    range: std::ops::Range<usize>,
+    boundary: WalkBoundary,
+) -> Vec<ExportNode> {
+    let mut builder = ExportTreeBuilder::new();
+    walk_range(tokens, range, boundary, &mut builder);
+    builder.finish();
+    builder.root_children
 }
 
 // =============================================================================

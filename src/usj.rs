@@ -8,6 +8,8 @@ use crate::cst::CstDocument;
 use crate::export_tree::{
     ExportContainerKind, ExportContainerNode, ExportDocument, ExportNode, build_export_document,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use crate::export_tree::build_export_segment;
 use crate::marker_defs::{
     MarkerDefKind, NoteSubkind, marker_default_attribute, marker_is_note_sub, marker_note_subkind,
 };
@@ -15,6 +17,14 @@ use crate::parse::parse;
 use crate::token::{NumberRangeKind, TokenData};
 
 const USJ_VERSION: &str = "3.1";
+
+/// Token count at or above which `tokens_to_usj` builds its top-level content
+/// chapter-parallel. Below it the fixed decomposition cost (per-segment walk and
+/// exporter allocation plus the concatenating merge) outweighs the parallel gain,
+/// so the build stays serial. Large books clear it comfortably; a book below it
+/// exports in well under a millisecond either way.
+#[cfg(not(target_arch = "wasm32"))]
+const PARALLEL_MIN_TOKENS: usize = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UsjDocument {
@@ -217,13 +227,53 @@ pub fn cst_to_usj(document: &CstDocument<'_>) -> UsjDocument {
     tokens_to_usj(&document.tokens)
 }
 
-fn tokens_to_usj(tokens: &[crate::token::Token<'_>]) -> UsjDocument {
-    let export = build_export_document(tokens);
+fn tokens_to_usj<'a>(tokens: &'a [crate::token::Token<'a>]) -> UsjDocument {
     UsjDocument {
         doc_type: "USJ".to_string(),
         version: USJ_VERSION.to_string(),
-        content: UsjExporter::new(&export).export_nodes(&export.children),
+        content: build_content(tokens),
     }
+}
+
+/// Build the document's top-level USJ content nodes. Large native books route to
+/// the chapter-partitioned build, which is byte-identical to the serial path
+/// (proven by the corpus test below), so callers get the speedup transparently.
+/// Small books and wasm stay serial — below the threshold the partition's fixed
+/// cost outweighs the gain, and wasm has no thread pool to recover it.
+fn build_content<'a>(tokens: &'a [crate::token::Token<'a>]) -> Vec<UsjNode> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if tokens.len() >= PARALLEL_MIN_TOKENS {
+        return content_partitioned(tokens);
+    }
+    let export = build_export_document(tokens);
+    UsjExporter::new(&export).export_nodes(&export.children)
+}
+
+/// Partition the stream at `\c` and export each segment's top-level content
+/// through the ordered-map seam, then concatenate in segment order under one
+/// document wrapper. Byte-identical to serial `build_content` regardless of thread
+/// count: each segment's export nodes carry absolute token indices, the exporter
+/// is a pure function of (full tokens, that segment's nodes), and a `\c` closes
+/// every open scope so no container — and no top-level table run — spans a
+/// boundary. The corpus test below also calls this directly to force the merge on
+/// small fixtures.
+#[cfg(not(target_arch = "wasm32"))]
+fn content_partitioned<'a>(tokens: &'a [crate::token::Token<'a>]) -> Vec<UsjNode> {
+    let segments = crate::walker::chapter_segments(tokens);
+    let per_segment = crate::par::map_ordered(&segments, |segment| {
+        let export = ExportDocument {
+            tokens,
+            children: build_export_segment(tokens, segment.range.clone(), segment.boundary),
+        };
+        UsjExporter::new(&export).export_nodes(&export.children)
+    });
+
+    let total: usize = per_segment.iter().map(Vec::len).sum();
+    let mut content = Vec::with_capacity(total);
+    for mut nodes in per_segment {
+        content.append(&mut nodes);
+    }
+    content
 }
 
 pub fn from_usj(document: &UsjDocument) -> Result<String, UsjError> {
@@ -1563,6 +1613,104 @@ fn collect_usj_fixture_pairs_into(root: &Path, pairs: &mut Vec<(PathBuf, PathBuf
 
     if let (Some(usfm), Some(usj)) = (usfm, usj) {
         pairs.push((usfm, usj));
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod partition_tests {
+    use super::*;
+    use crate::parse::parse;
+    use std::path::{Path, PathBuf};
+
+    /// Guaranteed-serial content build, independent of the token-count threshold,
+    /// so it stays a fixed baseline even as the routing in `build_content` changes.
+    fn serial_content<'a>(tokens: &'a [crate::token::Token<'a>]) -> Vec<UsjNode> {
+        let export = build_export_document(tokens);
+        UsjExporter::new(&export).export_nodes(&export.children)
+    }
+
+    #[test]
+    fn partitioned_matches_serial_over_test_data() {
+        assert_identical_over("testData");
+    }
+
+    #[test]
+    fn partitioned_matches_serial_over_example_corpora() {
+        assert_identical_over("example-corpora");
+    }
+
+    #[test]
+    fn partitioned_matches_serial_on_boundary_shapes() {
+        // Shapes the corpora may under-exercise: open paragraph/character/note
+        // right before `\c`, a self-closed and an unclosed milestone before `\c`,
+        // a logical `qt-s`/`qt-e` pair crossing `\c`, a stray `\*`, a duplicate
+        // `\id` after chapter one, no `\c` at all, and an empty document.
+        let cases = [
+            "",
+            "\\id GEN\n\\c 1\n\\v 1 no second chapter\n",
+            "\\id GEN\n\\p open para before chap\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\p \\w unclosed word before chap\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\p \\v 1 text \\f + \\ft open note\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\p \\qt-s|sid=\"a\"\\* quote \\qt-e|eid=\"a\"\\*\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\p \\qt-s|sid=\"a\"\\* crosses chapter\n\\c 2\n\\v 1 still \\qt-e|eid=\"a\"\\*\n",
+            "\\id GEN\n\\c 1\n\\p missing milestone close \\qt-s|sid=\"a\"\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\p stray close \\*\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\v 1 a\n\\id MAT\n\\c 2\n\\v 1 after dup id\n",
+            "no id at all\n\\c 1\n\\v 1 a\n\\c 2\n\\v 1 b\n",
+        ];
+        for (index, source) in cases.iter().enumerate() {
+            assert_identical(source, &format!("boundary case #{index}"));
+        }
+    }
+
+    fn assert_identical_over(dir: &str) {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(dir);
+        let mut paths = Vec::new();
+        collect_usfm(&root, &mut paths);
+        paths.sort();
+        assert!(!paths.is_empty(), "expected {dir}/**/*.usfm fixtures");
+        for path in paths {
+            let source = std::fs::read_to_string(&path).expect("read fixture");
+            assert_identical(&source, &path.to_string_lossy());
+        }
+    }
+
+    fn assert_identical(source: &str, label: &str) {
+        let parsed = parse(source);
+        let want = serial_content(&parsed.tokens);
+        // Force the partitioned merge even on small fixtures below the threshold.
+        let got = content_partitioned(&parsed.tokens);
+        assert_eq!(got, want, "content nodes differ for {label}");
+        // Byte-identical once serialized under the document wrapper.
+        let want_doc = UsjDocument {
+            doc_type: "USJ".to_string(),
+            version: USJ_VERSION.to_string(),
+            content: want,
+        };
+        let got_doc = UsjDocument {
+            doc_type: "USJ".to_string(),
+            version: USJ_VERSION.to_string(),
+            content: got,
+        };
+        assert_eq!(
+            serde_json::to_string(&got_doc).expect("serialize"),
+            serde_json::to_string(&want_doc).expect("serialize"),
+            "serialized USJ differs for {label}"
+        );
+    }
+
+    fn collect_usfm(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_usfm(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("usfm") {
+                out.push(path);
+            }
+        }
     }
 }
 
