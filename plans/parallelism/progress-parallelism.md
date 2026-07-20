@@ -186,3 +186,29 @@ win scales with book size.
 - Real-impl caveats: the `\c` pre-scan must reject false positives (in text/attributes/
   comments) — validate against the lexed stream or a careful line-start scan; spans/ids need
   rebasing; wasm stays serial.
+
+## 2026-07-20 - LANDED: parse + lint (delegated to Opus subagents, verified by parent)
+
+Retry worked. Two ops shipped as transparent, byte-identical, size-guarded, native-gated
+parallelism (wasm serial). Both delegated to fresh Opus subagents with the mistake-guardrails;
+parent independently re-verified oracle (1 + full threads) and re-benched before committing.
+
+- **parse** (`5bc8700`, `src/parse/parallel.rs`): `parse()` routes large native input to a
+  source-`\c` partition (byte pre-scan → per-chunk lex+parse via `map_ordered` → span rebase +
+  id reindex + bookcode seed + analysis reconstruction). Byte-identical over all 488 corpus
+  files + 12 boundary shapes at both thread counts. ~2x Psalms (verified), ~3.2x on a 5MB book.
+  No new public API; `parse_partitioned`/threshold are `pub(crate)`; corpus test is in-crate.
+- **lint** (`27b3e05`): `lint_tokens()` Book scope → range-local rules per chapter segment
+  (marker-balance via `walk_range(full,range,boundary)`) + the three whole-book families
+  (structure / dup-chapter / number-verse) as CONCURRENT work units in the same pool. Oracle
+  byte-identical at 1 + full threads; ~2x Psalms (verified 1.28ms full vs 2.90ms 1-thread).
+  Adds `T: Sync` to `lint_tokens`/`TokenStream::lint` (every concrete token type satisfies it).
+- The earlier `note_stack` fix (`c2d6ea7`) shipped separately; oracle baseline reflects it.
+
+Key correction to the record: my Stage-2 lint "regression" WAS noise/impl — the clean subagent
+build parallelizes lint ~2x, confirmed by an independent tight-loop check. structure_rules is
+the Amdahl floor (~0.56ms) so lint tops out ~2x, not the 3.3x all-per-chapter ceiling.
+
+Remaining ops: USJ, USX, VREF, HTML (HTML is the heaviest / top perf target at 4.36x spike).
+Each is a walker-driven export needing its own per-chapter split + merge (concat content /
+serialize once / merge maps / concat bodies + doc-sequential caller renumber).
