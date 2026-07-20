@@ -34,10 +34,91 @@ pub fn tokens_to_vref_map(tokens: &[Token<'_>]) -> VrefMap {
     tokens_to_vref_map_with_options(tokens, VrefOptions::default())
 }
 
+/// Token count at or above which the map is built chapter-parallel. Below it the
+/// fixed decomposition cost (partitioning, per-segment visitors, and the ordered
+/// merge) outweighs the parallel gain, so the walk stays serial. Large books
+/// clear it comfortably; a book below it projects in well under a millisecond
+/// either way.
+#[cfg(not(target_arch = "wasm32"))]
+const PARALLEL_MIN_TOKENS: usize = 20_000;
+
 pub fn tokens_to_vref_map_with_options(tokens: &[Token<'_>], options: VrefOptions) -> VrefMap {
+    #[cfg(not(target_arch = "wasm32"))]
+    if tokens.len() >= PARALLEL_MIN_TOKENS {
+        return vref_map_partitioned(tokens, options);
+    }
     let mut visitor = VrefVisitor::new(options);
     walk_tokens(tokens, &mut visitor);
     visitor.finish()
+}
+
+/// Partition the stream at `\c` and project each segment's verses through the
+/// ordered-map seam, then merge the per-segment maps in segment order. Byte-
+/// identical to the serial walk regardless of thread count: each segment walks
+/// its absolute range via `walk_range` (real lookahead, whole-book close reasons
+/// at the boundary), and the two pieces of state a whole-book walk carries across
+/// a `\c` are reconciled after the fact rather than reset. The merge inserts in
+/// segment order, so a reference repeated across chapters keeps the last-write
+/// value serial lands on. The block verse-support flag (which a whole-book walk
+/// carries across `\c`, never clearing it) is reconstructed from each segment's
+/// [`SegmentSummary`]: a segment collects its leading verse text assuming the
+/// flag is truthy, reports whether that assumption was load-bearing, and only the
+/// rare segment whose carried flag is actually `false` is re-walked — real books
+/// open a paragraph before any verse, so no re-walk happens. The corpus test
+/// below also calls this directly to force the merge on small fixtures.
+#[cfg(not(target_arch = "wasm32"))]
+fn vref_map_partitioned(tokens: &[Token<'_>], options: VrefOptions) -> VrefMap {
+    let segments = crate::walker::chapter_segments(tokens);
+    let units: Vec<_> = segments
+        .iter()
+        .map(|segment| (segment.range.clone(), segment.boundary))
+        .collect();
+
+    let per_segment = crate::par::map_ordered(&units, |(range, boundary)| {
+        let mut visitor = VrefVisitor::new(options);
+        crate::walker::walk_range(tokens, range.clone(), *boundary, &mut visitor);
+        visitor.finish_with_summary()
+    });
+
+    // Carry the block verse-support flag forward exactly as a whole-book walk
+    // would (set on every block open, never reset across `\c`). A segment that
+    // opened no block passes the flag through unchanged.
+    let mut map = VrefMap::new();
+    let mut carried: Option<bool> = None;
+    for ((range, boundary), (segment_map, summary)) in units.iter().zip(per_segment) {
+        let segment_map = if summary.seed_dependent && carried == Some(false) {
+            // The segment collected leading verse text on the assumption the
+            // carried flag was truthy, but it is actually `false`, so that text
+            // must be dropped. Re-walk the segment with the true carried value.
+            let mut visitor = VrefVisitor::new(options);
+            visitor.current_block_supports_verse = Some(false);
+            crate::walker::walk_range(tokens, range.clone(), *boundary, &mut visitor);
+            visitor.finish()
+        } else {
+            segment_map
+        };
+        if summary.saw_block {
+            carried = summary.last_block_supports_verse;
+        }
+        map.extend(segment_map);
+    }
+    map
+}
+
+/// What a chapter-parallel segment reports about the one visitor state a whole-
+/// book walk carries across `\c` — the block verse-support flag — so
+/// [`vref_map_partitioned`] can reconcile it without a second full scan.
+#[cfg(not(target_arch = "wasm32"))]
+struct SegmentSummary {
+    /// A block scope opened in this segment (so it defines the flag for whatever
+    /// follows it and for the next segment).
+    saw_block: bool,
+    /// The last block open's verse-support status; meaningful only when
+    /// `saw_block`.
+    last_block_supports_verse: Option<bool>,
+    /// This segment collected verse text before opening any block of its own, so
+    /// its output depends on the flag carried in from earlier chapters.
+    seed_dependent: bool,
 }
 
 pub fn vref_map_to_json_string(map: &VrefMap) -> String {
@@ -110,6 +191,14 @@ struct VrefVisitor {
     // seen, this reflects the latest Block's supports-verse status, even
     // after that Block closes. Matches the pre-walker behaviour.
     current_block_supports_verse: Option<bool>,
+    // Chapter-parallel bookkeeping for [`SegmentSummary`]; unused on the serial
+    // path. `saw_block` — any Block opened here. `seed_dependent` — verse text was
+    // collected before this segment's first Block, so the block flag carried in
+    // from earlier chapters was load-bearing.
+    #[cfg(not(target_arch = "wasm32"))]
+    saw_block: bool,
+    #[cfg(not(target_arch = "wasm32"))]
+    seed_dependent: bool,
 }
 
 impl VrefVisitor {
@@ -123,6 +212,17 @@ impl VrefVisitor {
     fn finish(mut self) -> VrefMap {
         self.flush_current_verse();
         self.map
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn finish_with_summary(mut self) -> (VrefMap, SegmentSummary) {
+        self.flush_current_verse();
+        let summary = SegmentSummary {
+            saw_block: self.saw_block,
+            last_block_supports_verse: self.current_block_supports_verse,
+            seed_dependent: self.seed_dependent,
+        };
+        (self.map, summary)
     }
 
     fn flush_current_verse(&mut self) {
@@ -176,6 +276,10 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
         if frame.scope_kind == StructuralScopeKind::Block {
             self.current_block_supports_verse = Some(marker_paragraph_supports_verse(frame.marker));
             self.pending_separator = true;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                self.saw_block = true;
+            }
         }
     }
 
@@ -207,6 +311,10 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
         _token_index: usize,
     ) {
         if self.can_collect_text(ctx) {
+            #[cfg(not(target_arch = "wasm32"))]
+            if !self.saw_block {
+                self.seed_dependent = true;
+            }
             self.push_collected_text(token.source);
         }
     }
@@ -782,4 +890,110 @@ mod tests {
             Some("Second verse."),
         );
     }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod partition_tests {
+    use super::{
+        VrefOptions, VrefVisitor, vref_map_partitioned, vref_map_to_json_string,
+    };
+    use crate::parse::parse;
+    use crate::token::Token;
+    use crate::walker::walk_tokens;
+    use std::path::{Path, PathBuf};
+
+    /// Guaranteed-serial projection, independent of the token-count threshold, so
+    /// it stays a fixed baseline even as the routing in
+    /// `tokens_to_vref_map_with_options` changes.
+    fn serial(tokens: &[Token<'_>], options: VrefOptions) -> super::VrefMap {
+        let mut visitor = VrefVisitor::new(options);
+        walk_tokens(tokens, &mut visitor);
+        visitor.finish()
+    }
+
+    /// Both trim settings — trim gates the flush, so it must survive segmentation.
+    const OPTION_MATRIX: [VrefOptions; 2] =
+        [VrefOptions { trim: false }, VrefOptions { trim: true }];
+
+    #[test]
+    fn partitioned_matches_serial_over_test_data() {
+        assert_identical_over("testData");
+    }
+
+    #[test]
+    fn partitioned_matches_serial_over_example_corpora() {
+        assert_identical_over("example-corpora");
+    }
+
+    #[test]
+    fn partitioned_matches_serial_on_boundary_shapes() {
+        // Shapes the corpora may under-exercise: no `\c`; a bare verse opening a
+        // chapter with no paragraph of its own, right after the previous chapter's
+        // last block was a non-verse-supporting heading (the one carried-state
+        // hazard the seed reproduces); a repeated reference across chapters and
+        // within one chapter (last write must win); an open note before `\c`; a
+        // trailing-whitespace verse (trim-sensitive); and a chapter opened with no
+        // book/id at all.
+        let cases = [
+            "",
+            "\\id GEN\n\\c 1\n\\v 1 no second chapter\n",
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 aaa\n\\s trailing heading\n\\c 2\n\\v 1 bbb\n",
+            "\\id GEN\n\\c 1\n\\s only a heading\n\\c 2\n\\v 1 bare verse after heading\n",
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 first\n\\c 1\n\\p\n\\v 1 second\n",
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 one\n\\v 1 two\n",
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 text \\f + \\ft open note\n\\c 2\n\\v 1 a\n",
+            "\\id GEN\n\\c 1\n\\p\n\\v 1  padded \n\\c 2\n\\p\n\\v 1 next\n",
+            "no id at all\n\\c 1\n\\p\n\\v 1 orphan chapter\n",
+        ];
+        for (index, source) in cases.iter().enumerate() {
+            assert_identical(source, &format!("boundary case #{index}"));
+        }
+    }
+
+    fn assert_identical_over(dir: &str) {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(dir);
+        let mut paths = Vec::new();
+        collect_usfm(&root, &mut paths);
+        paths.sort();
+        assert!(!paths.is_empty(), "expected {dir}/**/*.usfm fixtures");
+        for path in paths {
+            let source = std::fs::read_to_string(&path).expect("read fixture");
+            assert_identical(&source, &path.to_string_lossy());
+        }
+    }
+
+    fn assert_identical(source: &str, label: &str) {
+        let parsed = parse(source);
+        for options in OPTION_MATRIX {
+            let want = serial(&parsed.tokens, options);
+            // Force the partitioned merge even on small fixtures below the threshold.
+            let got = vref_map_partitioned(&parsed.tokens, options);
+            assert_eq!(
+                got, want,
+                "map differs for {label} (trim={})",
+                options.trim
+            );
+            assert_eq!(
+                vref_map_to_json_string(&got),
+                vref_map_to_json_string(&want),
+                "json differs for {label} (trim={})",
+                options.trim
+            );
+        }
+    }
+
+    fn collect_usfm(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_usfm(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("usfm") {
+                out.push(path);
+            }
+        }
+    }
+
 }
