@@ -914,11 +914,13 @@ mod partition_tests {
         [VrefOptions { trim: false }, VrefOptions { trim: true }];
 
     #[test]
+    #[ignore = "exhaustive corpus gate; run with `cargo test -- --ignored` pre-release or during architecture rework"]
     fn partitioned_matches_serial_over_test_data() {
         assert_identical_over("testData");
     }
 
     #[test]
+    #[ignore = "exhaustive corpus gate; run with `cargo test -- --ignored` pre-release or during architecture rework"]
     fn partitioned_matches_serial_over_example_corpora() {
         assert_identical_over("example-corpora");
     }

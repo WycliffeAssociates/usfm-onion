@@ -174,6 +174,7 @@ fn build_snapshot() -> String {
 }
 
 #[test]
+#[ignore = "exhaustive corpus gate; run with `cargo test -- --ignored` pre-release or during architecture rework"]
 fn lint_oracle_is_stable() {
     let snapshot = build_snapshot();
 

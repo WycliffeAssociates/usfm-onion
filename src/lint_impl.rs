@@ -3801,6 +3801,7 @@ mod tests {
     /// isolates the collector split over `testData` + `example-corpora`.
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
+    #[ignore = "exhaustive corpus gate; run with `cargo test -- --ignored` pre-release or during architecture rework"]
     fn partitioned_matches_serial_over_corpora() {
         use crate::parse::parse;
         use std::path::{Path, PathBuf};

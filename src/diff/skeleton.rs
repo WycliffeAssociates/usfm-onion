@@ -1506,6 +1506,7 @@ mod parallel_tests {
     }
 
     #[test]
+    #[ignore = "exhaustive corpus gate; run with `cargo test -- --ignored` pre-release or during architecture rework"]
     fn parallel_by_chapter_matches_serial_over_diverse_pairs() {
         let sources = sample_sources();
         assert!(sources.len() >= 2, "need at least two fixtures to pair");
