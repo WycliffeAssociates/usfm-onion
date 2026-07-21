@@ -222,3 +222,25 @@ their own MARKER_SPECS rows). Oracle baseline diff confirmed isolation: only
 Intentional BLESS (the one deliberate rebaseline). Behavior change: token
 `metadata.canonical` value for these three markers. See memory
 `project-marker-alias-collapse-unreviewed` (now RESOLVED).
+
+## 2026-07-21 — lint profile: fresh headroom (0.0.10/0.0.11 candidates)
+
+Profiled `lint/tokens` on Psalms (RAYON_NUM_THREADS=1 for clean attribution;
+`lint_tokens` is itself chapter-parallel — and chapter-split lint is ~2x even on
+one book: 1.39ms parallel vs 2.77ms serial). Parse is near its floor now, but
+lint still leaves ~30% on the table:
+
+- **`EnabledCodes::has` ~9%** — stores `BTreeSet<LintCode>` (allowed/disabled),
+  B-tree lookup per rule-per-token. LintCode is a fieldless enum → should be a
+  bitmask (u64/u128), `has()` = branchless bit test. Cheap, contained.
+- **Lint re-resolves markers by string (~20%)** — `lookup_spec_marker_indexed`,
+  `lookup_marker_whitespace`, and `marker_allows_effective_context`'s
+  `&[SpecContext]` slice scan — ignoring the `MarkerIndex` already on tokens
+  (WS2B). This is the parked "carry index to lint + context-validity u32
+  bitmask" workstream; the profile confirms it's worth it.
+- Rules (structure/whitespace/number-verse) + walker traversal are the
+  inherent remainder.
+
+Both are perf-only/byte-identical → oracle-gated (never bless). Delegated both to
+a fresh Opus agent (2026-07-21). Task 1 (EnabledCodes bitmask) is mechanical;
+Task 2 (index/context-mask into lint) only where byte-identical, else skip.
