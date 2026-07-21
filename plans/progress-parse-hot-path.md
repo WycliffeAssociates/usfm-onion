@@ -213,3 +213,12 @@ Quiet box, Item 1 vs the v0.0.9 pin (`c341de5`):
 Alias collapse (fe/ef->f, ex->x) preserved and flagged for separate review
 (fast path collapses; slow path does NOT — MARKER_SPECS has its own fe/ef/ex
 rows — so the two disagree; see memory `project-marker-alias-collapse-unreviewed`).
+
+## 2026-07-21 — fe/ef/ex canonical collapse fixed (`48215ef`)
+
+Dropped the fast-path collapse of `fe`/`ef`/`ex` → `f`/`x` canonical (they have
+their own MARKER_SPECS rows). Oracle baseline diff confirmed isolation: only
+`tokens` digests moved (6 files); cst/usj/usx/vref/html/lint byte-identical.
+Intentional BLESS (the one deliberate rebaseline). Behavior change: token
+`metadata.canonical` value for these three markers. See memory
+`project-marker-alias-collapse-unreviewed` (now RESOLVED).

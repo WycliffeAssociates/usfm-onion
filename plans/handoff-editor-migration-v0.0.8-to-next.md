@@ -108,3 +108,13 @@ threads — output does not move, only speed:
 `tokenSidNormalization.ts`, `DiffModal/` (chapterDiffViewModel, rowUsfmOverrides,
 CompareResultPreviewEditor), and any `diff_usfm_sources`/`ChapterTokenDiff`/
 `DiffStatus` references (all removed).
+
+## 0.0.10 additions (on top of the above)
+- **`fe`/`ef`/`ex` canonical fix** (`48215ef`): `token.metadata.canonical` for
+  `\fe` (endnote), `\ef` (extended footnote), `\ex` (extended cross-reference)
+  now returns `"fe"`/`"ef"`/`"ex"` instead of the old collapsed `"f"`/`"f"`/`"x"`.
+  Field *shape* is unchanged; only the value for these three markers differs.
+  usj/usx/html output is unchanged (they always used the raw marker name). Only
+  matters if the editor reads `metadata.canonical` to identify note type — and
+  the new value is the correct one.
+- **Index-fold** (`b5d03e9`) and any WS3: internal/non-breaking.
