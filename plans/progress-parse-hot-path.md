@@ -128,3 +128,46 @@ so summing self is a valid runtime allocation); do not sum inclusive/stack
 percentages.
 
 Next step: hand WS2A to the implementing agent against these pinned gates.
+
+## 2026-07-21 — WS2A+WS2B landed and passed the gate (`ec117c8`)
+
+WS2A (typed `ResolvedMarker` row, string-keyed) then WS2B (dense
+`MarkerIndex(u16)` → static `ROWS`, resolve-once-in-lexer, drop the hashmap)
+implemented by Sonnet agents, parent-verified, committed together as one
+marker-resolution rework.
+
+**Gate: PASSED.** Quiet Linux box (load ~0.05), release, WS2B vs the WS0 pin:
+
+| lane | change | pin-vs-pin noise floor* |
+|---|---|---|
+| `operations-psalms/parse/serial` (**gate metric**) | **−10.7%** (p=0.00) | +2.4% |
+| `operations/parse/serial` (Luke) | −10.2% | −0.2% |
+| `parallelism/en_ulb/parse/serial` (corpus) | −9.4% | +0.2% |
+| `parallelism/en_ulb/parse/rayon` (corpus) | −7.0% | +0.4% |
+
+*The bench script's first pass (`--save-baseline pin`) reports change vs the
+prior pin — i.e. identical code vs itself — so it doubles as a noise-floor
+gauge. It showed the whole-corpus serial benches swing wide on identical code:
+`format/string` ±14%, `chapter_grain/psalms/lint/serial` −10%, `lint/serial`
++9%, `lint/tokens` −8%. Read pass-2 changes against that floor.
+
+- **WS2A alone was ~2–3%** (capped: it *introduced* a string-hashmap probe,
+  `resolved_marker_for_canonical` ≈ 9.7% self-time). **WS2B removing that probe
+  is what unlocked ~10%.** Before/after samply confirmed the probe went
+  9.7% → 0.56% (array indexing).
+- Bonus: usj/usx/cst/format-from-string improved 3–12% (they re-parse).
+- **"Regressions" (`chapter_grain/psalms/lint/serial` +27%, `lint/tokens` +8%)
+  are noise:** same benches swung −10%/−8% on identical code (pass 1),
+  `lint_impl.rs` is untouched, `size_of::<Token>()` is unchanged (160 B — the
+  index fit MarkerMetadata's padding), and the stabler
+  `parallelism/en_ulb/lint/serial` was flat (+1.05%, p=0.45).
+- Correctness: oracle byte-identical at 1 and full threads; full workspace +
+  wasm green; `Token` 160 B unchanged. Semver: `MarkerMetadata` gained a
+  private `index` field (external literal-construction break; approved).
+
+Follow-ups queued (separate commits): (1) `FxHash` sweep — production code
+still mixes default-hasher `HashMap`/`HashSet` (lint_impl, export_tree, markers,
+diff/skeleton) with `FxHash*`; convert + add `clippy.toml`
+`disallowed-types` guard; oracle-gate it (hash iteration order can touch
+output). (2) WS3 — push delimiter-whitespace absorption into the lex phase,
+riding the row's `absorbs_delimiter_whitespace` bit.
