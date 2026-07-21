@@ -757,6 +757,7 @@ version = "0.2.0"
 dependencies = [
  "criterion",
  "logos",
+ "memchr",
  "proptest",
  "quick-xml",
  "rayon",

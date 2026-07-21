@@ -121,7 +121,7 @@ fn source_chunks(source: &str) -> Vec<Chunk<'_>> {
     chunks
 }
 
-/// One byte pass collecting both split points and book seeds:
+/// Collect split points and book seeds by inspecting line starts (via `memchr`):
 ///
 /// - Chapter offsets — a line-start `\c` whose name is exactly `c` (terminated by
 ///   horizontal whitespace) followed, on the same line, by a digit. This matches
@@ -137,56 +137,72 @@ fn source_chunks(source: &str) -> Vec<Chunk<'_>> {
 ///   alphanumeric prefix (the `consume_book_code` rule). A run opening with a
 ///   marker/pipe/slash carries no code.
 fn scan_boundaries(source: &str) -> (Vec<usize>, Vec<(usize, &str)>) {
-    let bytes = source.as_bytes();
-    let len = bytes.len();
     let mut offsets = Vec::new();
     let mut seeds = Vec::new();
-    let mut i = 0;
-    while i < len {
-        if bytes[i] != b'\\' {
-            i += 1;
-            continue;
-        }
-        match (bytes.get(i + 1), bytes.get(i + 2)) {
-            (Some(&b'c'), Some(b' ' | b'\t')) if i == 0 || bytes[i - 1] == b'\n' => {
-                let mut j = i + 2;
-                while j < len && matches!(bytes[j], b' ' | b'\t') {
-                    j += 1;
-                }
-                if bytes.get(j).is_some_and(u8::is_ascii_digit) {
-                    offsets.push(i);
-                }
-            }
-            (Some(&b'i'), Some(&b'd')) => {
-                let after = i + 3;
-                let extends_name = matches!(bytes.get(after), Some(&c) if c.is_ascii_lowercase() || c.is_ascii_digit());
-                let numbered_range = bytes.get(after) == Some(&b'-')
-                    && bytes.get(after + 1).is_some_and(u8::is_ascii_digit);
-                if !extends_name && !numbered_range {
-                    let mut j = after;
-                    while j < len && matches!(bytes[j], b' ' | b'\t' | b'\r' | b'\n') {
-                        j += 1;
-                    }
-                    if j < len && !matches!(bytes[j], b'\\' | b'|' | b'/') {
-                        let mut k = j;
-                        while k < len && !matches!(bytes[k], b'\\' | b'\r' | b'\n' | b'|' | b'/') {
-                            k += 1;
-                        }
-                        let run = &bytes[j..k];
-                        if run.len() >= 3
-                            && run.is_ascii()
-                            && run[..3].iter().all(u8::is_ascii_alphanumeric)
-                        {
-                            seeds.push((i, &source[j..j + 3]));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-        i += 1;
+    // `\c` and `\id` are line-start markers, so inspect only line starts — byte 0
+    // and each byte after a `\n` — instead of every byte. `memchr` skips between
+    // newlines with SIMD, which is where the win is on large/marker-dense books
+    // (a whole-byte scan stops at every `\w`/`\zaln` in aligned text). Offsets stay
+    // ascending because line starts are visited in order.
+    scan_line_start(source, 0, &mut offsets, &mut seeds);
+    for newline in memchr::memchr_iter(b'\n', source.as_bytes()) {
+        scan_line_start(source, newline + 1, &mut offsets, &mut seeds);
     }
     (offsets, seeds)
+}
+
+/// Inspect one line start for a chapter split point or an `\id` book seed. The
+/// `\c` and `\id` rules match the lexer exactly (see `scan_boundaries`); scanning
+/// only line starts is byte-identical to a whole-byte scan for real USFM, where
+/// both markers begin a line.
+fn scan_line_start<'a>(
+    source: &'a str,
+    start: usize,
+    offsets: &mut Vec<usize>,
+    seeds: &mut Vec<(usize, &'a str)>,
+) {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    if bytes.get(start) != Some(&b'\\') {
+        return;
+    }
+    match (bytes.get(start + 1), bytes.get(start + 2)) {
+        (Some(&b'c'), Some(b' ' | b'\t')) => {
+            let mut j = start + 2;
+            while j < len && matches!(bytes[j], b' ' | b'\t') {
+                j += 1;
+            }
+            if bytes.get(j).is_some_and(u8::is_ascii_digit) {
+                offsets.push(start);
+            }
+        }
+        (Some(&b'i'), Some(&b'd')) => {
+            let after = start + 3;
+            let extends_name = matches!(bytes.get(after), Some(&c) if c.is_ascii_lowercase() || c.is_ascii_digit());
+            let numbered_range = bytes.get(after) == Some(&b'-')
+                && bytes.get(after + 1).is_some_and(u8::is_ascii_digit);
+            if !extends_name && !numbered_range {
+                let mut j = after;
+                while j < len && matches!(bytes[j], b' ' | b'\t' | b'\r' | b'\n') {
+                    j += 1;
+                }
+                if j < len && !matches!(bytes[j], b'\\' | b'|' | b'/') {
+                    let mut k = j;
+                    while k < len && !matches!(bytes[k], b'\\' | b'\r' | b'\n' | b'|' | b'/') {
+                        k += 1;
+                    }
+                    let run = &bytes[j..k];
+                    if run.len() >= 3
+                        && run.is_ascii()
+                        && run[..3].iter().all(u8::is_ascii_alphanumeric)
+                    {
+                        seeds.push((start, &source[j..j + 3]));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Shift every byte span in a slice-local token to whole-source coordinates by

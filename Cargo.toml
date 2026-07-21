@@ -44,6 +44,7 @@ similar = "2"
 # tests/benches/examples.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1.10"
+memchr = "2"
 
 [profile.bench]
 opt-level = 3
