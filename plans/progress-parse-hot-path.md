@@ -171,3 +171,26 @@ diff/skeleton) with `FxHash*`; convert + add `clippy.toml`
 `disallowed-types` guard; oracle-gate it (hash iteration order can touch
 output). (2) WS3 — push delimiter-whitespace absorption into the lex phase,
 riding the row's `absorbs_delimiter_whitespace` bit.
+
+## 2026-07-21 — v0.0.9 final measure (released, quiet Linux box)
+
+Full release (WS2 + box-attrs + FxHash) vs the WS0 pin (`727d4a3`), release
+build, commit-based baseline (checkout pin → `--save-baseline pin` → checkout
+release → `--baseline pin`). Second-pass (release-vs-pin) figures:
+
+- **operations-psalms/parse/serial −16.6%** (headline; was −10.7% at WS2B — box
+  attrs stacked ~6 more points via the smaller Token).
+- operations-psalms/parse/string −20.3%; Luke parse/serial −13.5%, parse/string
+  −12.6%; parallelism/en_ulb parse/serial −13.9%, parse/rayon −22.2%.
+- Downstream lifted too (re-parse + denser tokens): cst −10%, lint/string
+  −10.5%, chapter_grain/psalms/lint/serial −14.3%, format/string −5.6%, html
+  −5.7%, diff/string −7.7%, usj/usx −5–6%, all parallelism ops −3 to −12%.
+
+**KNOWN REGRESSION (shipped in 0.0.9): standalone `lex/string` +5.9% (Luke) /
++10.9% (Psalms).** Real (p=0.00, both books). Cause: WS2B added a second
+lexer-side hash (`marker_index_by_canonical`) on top of `lookup_marker_metadata`
+— one added lexer hash to remove two parser hashes. Net lex+parse is a big win
+(hence parse/serial −16.6% despite this); only isolated lexing-without-parsing
+pays it. **0.0.10 fix:** fold the index into `lookup_marker_metadata` (one lexer
+lookup returning canonical + index), recovering lex while keeping the parse win.
+Pairs with WS3 (deferred delimiter-whitespace-into-lex).
