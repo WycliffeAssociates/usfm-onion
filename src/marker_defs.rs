@@ -584,24 +584,33 @@ fn whitespace_index() -> &'static FxHashMap<&'static str, &'static MarkerWhitesp
     })
 }
 
-fn exact_spec_index() -> &'static FxHashMap<&'static str, &'static MarkerSpec> {
-    static INDEX: OnceLock<FxHashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
+/// Canonical marker name -> `(MarkerIndex, &'static MarkerSpec)`. The index
+/// is each row's position in `MARKER_SPECS` — the same iteration
+/// `marker_index_by_canonical()`/`marker_rows()` use — captured here so
+/// `lookup_spec_marker_indexed` gets it from the same hash probe that finds
+/// the spec, instead of a second hash on the canonical name afterward.
+fn exact_spec_index() -> &'static FxHashMap<&'static str, (MarkerIndex, &'static MarkerSpec)> {
+    static INDEX: OnceLock<FxHashMap<&'static str, (MarkerIndex, &'static MarkerSpec)>> =
+        OnceLock::new();
     INDEX.get_or_init(|| {
         MARKER_SPECS
             .iter()
-            .map(|spec| (spec.marker, spec))
-            .collect::<FxHashMap<_, _>>()
+            .enumerate()
+            .filter_map(|(i, spec)| MarkerIndex::new(i).map(|idx| (spec.marker, (idx, spec))))
+            .collect()
     })
 }
 
-fn table_cell_spec_index() -> &'static FxHashMap<&'static str, &'static MarkerSpec> {
-    static INDEX: OnceLock<FxHashMap<&'static str, &'static MarkerSpec>> = OnceLock::new();
+fn table_cell_spec_index() -> &'static FxHashMap<&'static str, (MarkerIndex, &'static MarkerSpec)> {
+    static INDEX: OnceLock<FxHashMap<&'static str, (MarkerIndex, &'static MarkerSpec)>> =
+        OnceLock::new();
     INDEX.get_or_init(|| {
         MARKER_SPECS
             .iter()
-            .filter(|spec| spec.kind == MarkerDefKind::TableCell)
-            .map(|spec| (spec.marker, spec))
-            .collect::<FxHashMap<_, _>>()
+            .enumerate()
+            .filter(|(_, spec)| spec.kind == MarkerDefKind::TableCell)
+            .filter_map(|(i, spec)| MarkerIndex::new(i).map(|idx| (spec.marker, (idx, spec))))
+            .collect()
     })
 }
 
@@ -619,10 +628,20 @@ pub fn normalized_marker(marker: &str) -> Option<NormalizedMarkerRef<'_>> {
 }
 
 pub fn lookup_spec_marker(marker: &str) -> Option<&'static MarkerSpec> {
+    lookup_spec_marker_indexed(marker).map(|(_, spec)| spec)
+}
+
+/// Same resolution as [`lookup_spec_marker`], but also returns the
+/// [`MarkerIndex`] the same hash probe already found — the position this
+/// canonical row occupies in `MARKER_SPECS`/`marker_rows()`. Lets
+/// [`resolve_marker_metadata`]'s slow path get canonical/kind and the index
+/// from a single lookup, instead of hashing the canonical name a second time
+/// via `marker_index_by_canonical()`.
+fn lookup_spec_marker_indexed(marker: &str) -> Option<(MarkerIndex, &'static MarkerSpec)> {
     let normalized = marker.strip_prefix('+').unwrap_or(marker);
 
-    if let Some(spec) = exact_spec_index().get(normalized).copied() {
-        return Some(spec);
+    if let Some(found) = exact_spec_index().get(normalized).copied() {
+        return Some(found);
     }
 
     if let Some(base) = normalized
@@ -630,17 +649,17 @@ pub fn lookup_spec_marker(marker: &str) -> Option<&'static MarkerSpec> {
         .or_else(|| normalized.strip_suffix("-e"))
     {
         let milestone_base = base.trim_end_matches(|ch: char| ch.is_ascii_digit());
-        if let Some(spec) = exact_spec_index().get(milestone_base).copied()
-            && spec.kind == MarkerDefKind::Milestone
+        if let Some(found) = exact_spec_index().get(milestone_base).copied()
+            && found.1.kind == MarkerDefKind::Milestone
         {
-            return Some(spec);
+            return Some(found);
         }
     }
 
     if let Some(table_cell_base) = table_cell_base(normalized)
-        && let Some(spec) = table_cell_spec_index().get(table_cell_base).copied()
+        && let Some(found) = table_cell_spec_index().get(table_cell_base).copied()
     {
-        return Some(spec);
+        return Some(found);
     }
 
     if normalized == "esbe" {
@@ -686,7 +705,7 @@ pub fn lookup_marker_metadata(
     // derive `family` from `marker_family_for` so this path cannot disagree with
     // the catalog (`lookup_marker_def`), which is the single source for family.
     let (canonical, kind) = match fast_marker_metadata(marker) {
-        Some(metadata) => metadata,
+        Some((canonical, kind, _ordinal)) => (canonical, kind),
         None => {
             let normalized = normalized_marker(marker)?;
             let spec = lookup_spec_marker(normalized.canonical)?;
@@ -1033,10 +1052,14 @@ fn marker_rows() -> &'static [ResolvedMarker] {
     })
 }
 
-/// The one string-hashmap probe in this module: canonical marker name to its
-/// [`MarkerIndex`] (its position in [`marker_rows`]). Built once, in lockstep
-/// with `marker_rows()` (same `MARKER_SPECS` iteration), so the two can never
-/// drift apart.
+/// Canonical marker name to its [`MarkerIndex`] (its position in
+/// [`marker_rows`]). Built once, in lockstep with `marker_rows()` (same
+/// `MARKER_SPECS` iteration), so the two can never drift apart. Used to seed
+/// [`fast_marker_index_table`] (once, cold) and by the WS2A parity surface
+/// (`resolved_marker_for_canonical`) — not on `resolve_marker_metadata`'s
+/// hot path, which resolves its index from the same hash that already found
+/// canonical/kind (see `fast_marker_index_table` and
+/// `lookup_spec_marker_indexed`).
 fn marker_index_by_canonical() -> &'static FxHashMap<&'static str, MarkerIndex> {
     static INDEX: OnceLock<FxHashMap<&'static str, MarkerIndex>> = OnceLock::new();
     INDEX.get_or_init(|| {
@@ -1054,11 +1077,49 @@ pub(crate) fn resolved_marker_row(index: MarkerIndex) -> Option<&'static Resolve
     marker_rows().get(index.as_usize())
 }
 
-/// The lexer's single canonical-resolution pass, folding [`MarkerIndex`]
-/// resolution into the existing `lookup_marker_metadata` lookup so the lexer
-/// performs the one hash probe needed to resolve a raw marker spelling and
-/// the parser needs none. Returns `(canonical, kind, family, index)`; `index`
-/// is `MarkerIndex::UNKNOWN` whenever `lookup_marker_metadata` returns `None`.
+/// Canonical marker name per ordinal returned by [`fast_marker_metadata`] —
+/// index `i` here is the ordinal `i` a match arm returns. Only consulted
+/// once, to build [`fast_marker_index_table`]; never hashed at lex time.
+/// Kept in lockstep with `fast_marker_metadata`'s arms by
+/// `resolve_marker_metadata_index_matches_marker_index_by_canonical` (see
+/// tests below).
+const FAST_MARKER_CANONICALS: [&str; 48] = [
+    "id", "h", "c", "v", "p", "m", "b", "r", "mt", "mt1", "mt2", "mt3", "mt4", "s", "s1", "s2",
+    "s3", "s4", "q", "q1", "q2", "q3", "q4", "f", "x", "ft", "fr", "fq", "fqa", "fk", "fl", "fw",
+    "fp", "fv", "fdc", "fm", "xo", "xop", "xk", "xq", "xt", "xta", "xot", "xnt", "xdc", "w", "jmp",
+    "ref",
+];
+
+/// `fast_marker_metadata`'s ordinal -> [`MarkerIndex`], resolved once (one
+/// `marker_index_by_canonical()` hash per canonical, ever) so
+/// `resolve_marker_metadata`'s fast path turns the ordinal a match arm
+/// already returns into a `MarkerIndex` by array indexing — never a hash.
+fn fast_marker_index_table() -> &'static [MarkerIndex; 48] {
+    static TABLE: OnceLock<[MarkerIndex; 48]> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        std::array::from_fn(|i| {
+            marker_index_by_canonical()
+                .get(FAST_MARKER_CANONICALS[i])
+                .copied()
+                .unwrap_or(MarkerIndex::UNKNOWN)
+        })
+    })
+}
+
+/// The lexer's single canonical-resolution pass: one hash to resolve a raw
+/// marker spelling, from which `canonical`/`kind`/`family`/[`MarkerIndex`]
+/// all fall out without a second hash. Returns `(canonical, kind, family,
+/// index)`; `index` is `MarkerIndex::UNKNOWN` whenever the marker doesn't
+/// resolve.
+///
+/// - Fast path (`fast_marker_metadata`, the ~48 hottest markers, including
+///   the `fe`/`ef`→`f` and `x`/`ex`→`x` alias collapses): zero hashing.
+///   `fast_marker_metadata` already resolves canonical/kind via a plain
+///   `match`; its ordinal turns into a `MarkerIndex` via array indexing into
+///   [`fast_marker_index_table`].
+/// - Slow path: [`lookup_spec_marker_indexed`] resolves canonical/kind *and*
+///   `MarkerIndex` from the single hash probe that finds the spec, instead
+///   of a second hash on the canonical name afterward.
 pub(crate) fn resolve_marker_metadata(
     marker: &str,
 ) -> (
@@ -1067,14 +1128,24 @@ pub(crate) fn resolve_marker_metadata(
     Option<MarkerFamily>,
     MarkerIndex,
 ) {
-    match lookup_marker_metadata(marker) {
-        Some((canonical, kind, family)) => {
-            let index = marker_index_by_canonical()
-                .get(canonical)
-                .copied()
-                .unwrap_or(MarkerIndex::UNKNOWN);
-            (Some(canonical), Some(kind), family, index)
-        }
+    if let Some((canonical, kind, ordinal)) = fast_marker_metadata(marker) {
+        let index = fast_marker_index_table()[ordinal as usize];
+        return (
+            Some(canonical),
+            Some(kind),
+            marker_family_for(canonical, kind),
+            index,
+        );
+    }
+
+    let normalized = marker.strip_prefix('+').unwrap_or(marker);
+    match lookup_spec_marker_indexed(normalized) {
+        Some((index, spec)) => (
+            Some(spec.marker),
+            Some(spec.kind),
+            marker_family_for(spec.marker, spec.kind),
+            index,
+        ),
         None => (None, None, None, MarkerIndex::UNKNOWN),
     }
 }
@@ -1359,56 +1430,61 @@ fn marker_family_for(marker: &str, kind: MarkerDefKind) -> Option<MarkerFamily> 
 /// `family` has a single source (`marker_family_for`), which
 /// [`lookup_marker_metadata`] applies to this function's result. Returning a
 /// hardcoded family here previously let the two paths disagree (e.g. `r` / `s`).
-fn fast_marker_metadata(marker: &str) -> Option<(&'static str, MarkerDefKind)> {
+///
+/// The third tuple element is an ordinal into [`FAST_MARKER_CANONICALS`] /
+/// [`fast_marker_index_table`] (not a [`MarkerIndex`] itself) — a plain
+/// `match` result [`resolve_marker_metadata`] turns into a `MarkerIndex` via
+/// array indexing, with no hashing.
+fn fast_marker_metadata(marker: &str) -> Option<(&'static str, MarkerDefKind, u8)> {
     match marker {
-        "id" => Some(("id", MarkerDefKind::Header)),
-        "h" => Some(("h", MarkerDefKind::Paragraph)),
-        "c" => Some(("c", MarkerDefKind::Chapter)),
-        "v" => Some(("v", MarkerDefKind::Verse)),
-        "p" => Some(("p", MarkerDefKind::Paragraph)),
-        "m" => Some(("m", MarkerDefKind::Paragraph)),
-        "b" => Some(("b", MarkerDefKind::Paragraph)),
-        "r" => Some(("r", MarkerDefKind::Paragraph)),
-        "mt" => Some(("mt", MarkerDefKind::Paragraph)),
-        "mt1" => Some(("mt1", MarkerDefKind::Paragraph)),
-        "mt2" => Some(("mt2", MarkerDefKind::Paragraph)),
-        "mt3" => Some(("mt3", MarkerDefKind::Paragraph)),
-        "mt4" => Some(("mt4", MarkerDefKind::Paragraph)),
-        "s" => Some(("s", MarkerDefKind::Paragraph)),
-        "s1" => Some(("s1", MarkerDefKind::Paragraph)),
-        "s2" => Some(("s2", MarkerDefKind::Paragraph)),
-        "s3" => Some(("s3", MarkerDefKind::Paragraph)),
-        "s4" => Some(("s4", MarkerDefKind::Paragraph)),
-        "q" => Some(("q", MarkerDefKind::Paragraph)),
-        "q1" => Some(("q1", MarkerDefKind::Paragraph)),
-        "q2" => Some(("q2", MarkerDefKind::Paragraph)),
-        "q3" => Some(("q3", MarkerDefKind::Paragraph)),
-        "q4" => Some(("q4", MarkerDefKind::Paragraph)),
-        "f" | "fe" | "ef" => Some(("f", MarkerDefKind::Note)),
-        "x" | "ex" => Some(("x", MarkerDefKind::Note)),
-        "ft" => Some(("ft", MarkerDefKind::Character)),
-        "fr" => Some(("fr", MarkerDefKind::Character)),
-        "fq" => Some(("fq", MarkerDefKind::Character)),
-        "fqa" => Some(("fqa", MarkerDefKind::Character)),
-        "fk" => Some(("fk", MarkerDefKind::Character)),
-        "fl" => Some(("fl", MarkerDefKind::Character)),
-        "fw" => Some(("fw", MarkerDefKind::Character)),
-        "fp" => Some(("fp", MarkerDefKind::Character)),
-        "fv" => Some(("fv", MarkerDefKind::Character)),
-        "fdc" => Some(("fdc", MarkerDefKind::Character)),
-        "fm" => Some(("fm", MarkerDefKind::Character)),
-        "xo" => Some(("xo", MarkerDefKind::Character)),
-        "xop" => Some(("xop", MarkerDefKind::Character)),
-        "xk" => Some(("xk", MarkerDefKind::Character)),
-        "xq" => Some(("xq", MarkerDefKind::Character)),
-        "xt" => Some(("xt", MarkerDefKind::Character)),
-        "xta" => Some(("xta", MarkerDefKind::Character)),
-        "xot" => Some(("xot", MarkerDefKind::Character)),
-        "xnt" => Some(("xnt", MarkerDefKind::Character)),
-        "xdc" => Some(("xdc", MarkerDefKind::Character)),
-        "w" => Some(("w", MarkerDefKind::Character)),
-        "jmp" => Some(("jmp", MarkerDefKind::Character)),
-        "ref" => Some(("ref", MarkerDefKind::Character)),
+        "id" => Some(("id", MarkerDefKind::Header, 0)),
+        "h" => Some(("h", MarkerDefKind::Paragraph, 1)),
+        "c" => Some(("c", MarkerDefKind::Chapter, 2)),
+        "v" => Some(("v", MarkerDefKind::Verse, 3)),
+        "p" => Some(("p", MarkerDefKind::Paragraph, 4)),
+        "m" => Some(("m", MarkerDefKind::Paragraph, 5)),
+        "b" => Some(("b", MarkerDefKind::Paragraph, 6)),
+        "r" => Some(("r", MarkerDefKind::Paragraph, 7)),
+        "mt" => Some(("mt", MarkerDefKind::Paragraph, 8)),
+        "mt1" => Some(("mt1", MarkerDefKind::Paragraph, 9)),
+        "mt2" => Some(("mt2", MarkerDefKind::Paragraph, 10)),
+        "mt3" => Some(("mt3", MarkerDefKind::Paragraph, 11)),
+        "mt4" => Some(("mt4", MarkerDefKind::Paragraph, 12)),
+        "s" => Some(("s", MarkerDefKind::Paragraph, 13)),
+        "s1" => Some(("s1", MarkerDefKind::Paragraph, 14)),
+        "s2" => Some(("s2", MarkerDefKind::Paragraph, 15)),
+        "s3" => Some(("s3", MarkerDefKind::Paragraph, 16)),
+        "s4" => Some(("s4", MarkerDefKind::Paragraph, 17)),
+        "q" => Some(("q", MarkerDefKind::Paragraph, 18)),
+        "q1" => Some(("q1", MarkerDefKind::Paragraph, 19)),
+        "q2" => Some(("q2", MarkerDefKind::Paragraph, 20)),
+        "q3" => Some(("q3", MarkerDefKind::Paragraph, 21)),
+        "q4" => Some(("q4", MarkerDefKind::Paragraph, 22)),
+        "f" | "fe" | "ef" => Some(("f", MarkerDefKind::Note, 23)),
+        "x" | "ex" => Some(("x", MarkerDefKind::Note, 24)),
+        "ft" => Some(("ft", MarkerDefKind::Character, 25)),
+        "fr" => Some(("fr", MarkerDefKind::Character, 26)),
+        "fq" => Some(("fq", MarkerDefKind::Character, 27)),
+        "fqa" => Some(("fqa", MarkerDefKind::Character, 28)),
+        "fk" => Some(("fk", MarkerDefKind::Character, 29)),
+        "fl" => Some(("fl", MarkerDefKind::Character, 30)),
+        "fw" => Some(("fw", MarkerDefKind::Character, 31)),
+        "fp" => Some(("fp", MarkerDefKind::Character, 32)),
+        "fv" => Some(("fv", MarkerDefKind::Character, 33)),
+        "fdc" => Some(("fdc", MarkerDefKind::Character, 34)),
+        "fm" => Some(("fm", MarkerDefKind::Character, 35)),
+        "xo" => Some(("xo", MarkerDefKind::Character, 36)),
+        "xop" => Some(("xop", MarkerDefKind::Character, 37)),
+        "xk" => Some(("xk", MarkerDefKind::Character, 38)),
+        "xq" => Some(("xq", MarkerDefKind::Character, 39)),
+        "xt" => Some(("xt", MarkerDefKind::Character, 40)),
+        "xta" => Some(("xta", MarkerDefKind::Character, 41)),
+        "xot" => Some(("xot", MarkerDefKind::Character, 42)),
+        "xnt" => Some(("xnt", MarkerDefKind::Character, 43)),
+        "xdc" => Some(("xdc", MarkerDefKind::Character, 44)),
+        "w" => Some(("w", MarkerDefKind::Character, 45)),
+        "jmp" => Some(("jmp", MarkerDefKind::Character, 46)),
+        "ref" => Some(("ref", MarkerDefKind::Character, 47)),
         _ => None,
     }
 }
@@ -1588,10 +1664,12 @@ fn is_non_inline_paragraph_marker_name(marker: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        MARKER_SPECS, MarkerDefKind, SpecContext, absorbs_delimiter_whitespace_for_canonical,
-        lookup_marker_metadata, lookup_marker_whitespace, lookup_spec_marker,
-        marker_allows_context, marker_allows_effective_context, marker_payload,
-        resolved_marker_for_canonical, structural_info_for_canonical, structural_marker_info,
+        MARKER_SPECS, MarkerDefKind, MarkerIndex, SpecContext,
+        absorbs_delimiter_whitespace_for_canonical, lookup_marker_metadata,
+        lookup_marker_whitespace, lookup_spec_marker, marker_allows_context,
+        marker_allows_effective_context, marker_index_by_canonical, marker_payload, marker_rows,
+        resolve_marker_metadata, resolved_marker_for_canonical, resolved_marker_row,
+        structural_info_for_canonical, structural_marker_info,
     };
     use crate::whitespace::{
         FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
@@ -1908,6 +1986,106 @@ mod tests {
         );
         for name in &names {
             assert_resolution_parity(name);
+        }
+    }
+
+    // --- WS2C drift guard: single-hash MarkerIndex resolution --------------
+    //
+    // `resolve_marker_metadata` now resolves `MarkerIndex` alongside
+    // canonical/kind/family from the *same* hash probe, instead of hashing
+    // the canonical name a second time via `marker_index_by_canonical()`.
+    // The fast path (`fast_marker_metadata`'s ~48 hottest markers) gets its
+    // index from a hand-written ordinal array indexed into
+    // `fast_marker_index_table()` — zero hashing, but only correct if that
+    // ordinal table stays in lockstep with `fast_marker_metadata`'s match
+    // arms. This test is the guard: it walks every raw spelling
+    // `fast_marker_metadata` special-cases (including the `fe`/`ef`→`f` and
+    // `x`/`ex`→`x` alias collapses) and every literal `MARKER_SPECS` row,
+    // and asserts `resolve_marker_metadata`'s index always agrees with the
+    // canonical-keyed `marker_index_by_canonical()` hash — so a
+    // `MARKER_SPECS` reorder, or an ordinal typo, fails loudly here instead
+    // of silently mis-resolving a token's structural facts.
+
+    #[test]
+    fn resolve_marker_metadata_index_matches_marker_index_by_canonical() {
+        // Fast path: every raw spelling `fast_marker_metadata` special-cases
+        // must resolve to the same `MarkerIndex` its canonical would via the
+        // canonical-keyed hash — including the alias collapses, where the
+        // raw spelling (`fe`, `ef`, `ex`) differs from the canonical (`f`,
+        // `x`) whose index actually applies.
+        let fast_path_raw_markers = [
+            "id", "h", "c", "v", "p", "m", "b", "r", "mt", "mt1", "mt2", "mt3", "mt4", "s", "s1",
+            "s2", "s3", "s4", "q", "q1", "q2", "q3", "q4", "f", "fe", "ef", "x", "ex", "ft", "fr",
+            "fq", "fqa", "fk", "fl", "fw", "fp", "fv", "fdc", "fm", "xo", "xop", "xk", "xq", "xt",
+            "xta", "xot", "xnt", "xdc", "w", "jmp", "ref",
+        ];
+        for raw in fast_path_raw_markers {
+            let (canonical, _, _, index) = resolve_marker_metadata(raw);
+            let canonical =
+                canonical.unwrap_or_else(|| panic!("{raw:?} should resolve on the fast path"));
+            let expected = marker_index_by_canonical()
+                .get(canonical)
+                .copied()
+                .unwrap_or_else(|| {
+                    panic!("canonical {canonical:?} missing from marker_index_by_canonical")
+                });
+            assert_eq!(
+                index, expected,
+                "fast-path MarkerIndex drift for raw {raw:?} (canonical {canonical:?})"
+            );
+        }
+
+        // Slow (and fast-path-overlapping) coverage: every literal
+        // `MARKER_SPECS` row, resolved by its own spelling, must agree with
+        // `lookup_marker_metadata`'s canonical/kind/family (the existing
+        // single source of truth this refactor must not drift from) and
+        // with the canonical-keyed index.
+        for spec in MARKER_SPECS.iter() {
+            let (canonical, kind, family, index) = resolve_marker_metadata(spec.marker);
+            let expected_metadata = lookup_marker_metadata(spec.marker);
+            assert_eq!(
+                canonical,
+                expected_metadata.map(|(c, ..)| c),
+                "canonical drift for {:?}",
+                spec.marker
+            );
+            assert_eq!(
+                kind,
+                expected_metadata.map(|(_, k, _)| k),
+                "kind drift for {:?}",
+                spec.marker
+            );
+            assert_eq!(
+                family,
+                expected_metadata.and_then(|(_, _, f)| f),
+                "family drift for {:?}",
+                spec.marker
+            );
+            let expected_index = canonical
+                .and_then(|c| marker_index_by_canonical().get(c).copied())
+                .unwrap_or(MarkerIndex::UNKNOWN);
+            assert_eq!(index, expected_index, "index drift for {:?}", spec.marker);
+        }
+
+        // `marker_rows()` (ROWS) stays one-to-one with `MARKER_SPECS`: same
+        // length, same order, so a `MarkerIndex` from either resolution path
+        // always lands on the row describing that canonical marker.
+        assert_eq!(marker_rows().len(), MARKER_SPECS.len());
+        for spec in MARKER_SPECS.iter() {
+            let index = marker_index_by_canonical()
+                .get(spec.marker)
+                .copied()
+                .unwrap_or_else(|| {
+                    panic!("{:?} missing from marker_index_by_canonical", spec.marker)
+                });
+            let row = resolved_marker_row(index)
+                .unwrap_or_else(|| panic!("{:?} should have a row", spec.marker));
+            assert_eq!(
+                row.structural,
+                structural_marker_info(spec.marker, Some(spec.kind)),
+                "row for {:?} disagrees with structural_marker_info",
+                spec.marker
+            );
         }
     }
 
