@@ -64,7 +64,67 @@ Open decisions:
   are **not** `#[non_exhaustive]`, so a field add is a real source break (hence
   the explicit approval above).
 
-Next step:
+## 2026-07-21 — WS0 gate established (pinned baselines)
 
-- Add and record the WS0 Psalms Criterion baseline, type sizes, and clean
-  symbolicated profile before editing marker resolution.
+Everything below is pinned at the WS0 commit on `chapter-parallelism`. The
+Sonnet agent implementing WS2A compares against these; do not regenerate.
+
+**Oracle — green both thread configs (never `BLESS`):**
+
+```sh
+cargo test --test lint_oracle -- --ignored --exact lint_oracle_is_stable
+RAYON_NUM_THREADS=1 cargo test --test lint_oracle -- --ignored --exact lint_oracle_is_stable
+```
+
+Both pass at this SHA. The single ignored test is `lint_oracle_is_stable`.
+
+**Criterion baseline `ws2-pre`** (local artifact under `target/criterion/`;
+release builds). Added an `operations-psalms` group (ingest ops on the
+marker-dense profile target) alongside the existing Luke `operations` matrix.
+Compare after WS2A with `--baseline ws2-pre`:
+
+```sh
+cargo bench --bench operations   -- --baseline ws2-pre
+cargo bench --bench parallelism  -- --baseline ws2-pre
+```
+
+Release medians at pin:
+
+| lane | median |
+|---|---|
+| `operations-psalms/parse/serial` (WS2 target) | 1210 µs |
+| `operations-psalms/parse/string` (parallel) | 714 µs |
+| `operations-psalms/lex/string` | 550 µs |
+| `operations/parse/string` (Luke regression lane) | 300 µs |
+| `operations/parse/serial` (Luke) | 300 µs |
+| `parallelism/en_ulb/parse/serial` (corpus batch guard) | 10.2 ms |
+| `parallelism/en_ulb/parse/rayon` (corpus batch guard) | 2.3 ms |
+
+Retention gate targets the `operations-psalms/parse/serial` median (≥5% in all
+three comparisons); Luke lanes + `parallelism/en_ulb/parse/*` are the ≤3%
+regression guards.
+
+**Hot-type sizes at pin** (`size_of`/`align_of`, release):
+
+| type | size | align |
+|---|---|---|
+| `MarkerMetadata` | 24 | 8 |
+| `MarkerToken` | 64 | 8 |
+| `ScanToken` | 72 | 8 |
+| `TokenData` | 96 | 8 |
+| `Token` | 160 | 8 |
+
+`Token` is 160 B (it embeds `TokenData` 96, which embeds `MarkerMetadata` 24 +
+`StructuralMarkerInfo`). Context for WS2B/endgame: replacing the embedded
+metadata/structural with a `u16` handle is the large-`memmove` prize, but is out
+of WS2A scope. Do not add compile-time size asserts unless size becomes a
+supported contract.
+
+**Profile note:** the `parse/serial --book psalms` samply figures quoted earlier
+(1.35 ms/iter etc.) are the `profiling` build — attribution only. Every quoted
+speed number comes from the release Criterion medians above. Bucket percentages
+were summed from **self**-time samples (each sample has exactly one self frame,
+so summing self is a valid runtime allocation); do not sum inclusive/stack
+percentages.
+
+Next step: hand WS2A to the implementing agent against these pinned gates.
