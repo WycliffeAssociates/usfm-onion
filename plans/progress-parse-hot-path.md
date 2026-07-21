@@ -194,3 +194,22 @@ lexer-side hash (`marker_index_by_canonical`) on top of `lookup_marker_metadata`
 pays it. **0.0.10 fix:** fold the index into `lookup_marker_metadata` (one lexer
 lookup returning canonical + index), recovering lex while keeping the parse win.
 Pairs with WS3 (deferred delimiter-whitespace-into-lex).
+
+## 2026-07-21 — Item 1 (index fold) confirmed: lex regression recovered (`b5d03e9`)
+
+`resolve_marker_metadata` now yields the MarkerIndex from its one existing
+lookup per path (slow: index+spec from one probe via pointer-paired
+exact_spec_index; fast: per-arm ordinal into a once-built [MarkerIndex; 48]).
+Quiet box, Item 1 vs the v0.0.9 pin (`c341de5`):
+
+- **operations-psalms/lex/string −11.5%**, operations/lex/string (Luke) −7.7%
+  — erases the v0.0.9 standalone-lex regression (+10.9% / +5.9%).
+- Parse improved further: Luke parse/serial −5.2%, psalms parse/serial −7.4%
+  (lex is in the serial parse path). Combined with v0.0.9, psalms parse/serial
+  is ~−22% vs the original WS0 baseline.
+- Corpus parallel parse ~flat (already parallel-dominated); all non-marker ops
+  no change. Oracle byte-identical both configs.
+
+Alias collapse (fe/ef->f, ex->x) preserved and flagged for separate review
+(fast path collapses; slow path does NOT — MARKER_SPECS has its own fe/ef/ex
+rows — so the two disagree; see memory `project-marker-alias-collapse-unreviewed`).
