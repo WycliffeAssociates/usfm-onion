@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::marker_defs::{
-    MarkerDefKind, MarkerFamily, StructuralMarkerInfo, lookup_marker_metadata,
+    MarkerDefKind, MarkerFamily, MarkerIndex, StructuralMarkerInfo, resolve_marker_metadata,
 };
 
 pub type BytePos = u32;
@@ -51,6 +51,15 @@ pub struct MarkerMetadata {
     pub canonical: Option<&'static str>,
     pub kind: Option<MarkerDefKind>,
     pub family: Option<MarkerFamily>,
+    /// Dense marker-catalog handle resolved once by the lexer (WS2B), so the
+    /// parser's per-occurrence structural/delimiter-absorption lookups are
+    /// array indexing instead of a string-hashmap probe. Internal perf
+    /// handle only — never part of the serialized contract, hence the skip:
+    /// its numeric value is not stable across builds and downstream
+    /// consumers (lint, export) must keep reading `canonical`/`kind`/
+    /// `family`, not this field.
+    #[serde(skip)]
+    pub(crate) index: MarkerIndex,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -211,18 +220,12 @@ pub fn marker_text_name(kind: ScanTokenKind, lexeme: &str) -> &str {
 }
 
 pub fn marker_metadata(name: &str) -> MarkerMetadata {
-    if let Some((canonical, kind, family)) = lookup_marker_metadata(name) {
-        MarkerMetadata {
-            canonical: Some(canonical),
-            kind: Some(kind),
-            family,
-        }
-    } else {
-        MarkerMetadata {
-            canonical: None,
-            kind: None,
-            family: None,
-        }
+    let (canonical, kind, family, index) = resolve_marker_metadata(name);
+    MarkerMetadata {
+        canonical,
+        kind,
+        family,
+        index,
     }
 }
 

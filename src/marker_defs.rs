@@ -933,6 +933,229 @@ pub fn structural_marker_info(marker: &str, kind: Option<MarkerDefKind>) -> Stru
     }
 }
 
+/// One consolidated resolution of the marker facts the parser's hot path
+/// needs, built once per canonical marker from the existing spec-derivation
+/// functions (`structural_marker_info`, `marker_family_for`, `marker_payload`,
+/// `lookup_marker_whitespace`) rather than from `MARKER_SPECS` /
+/// `MARKER_WHITESPACE` directly — those helpers already carry the extra
+/// derivation logic (defaults, aliases, family) a raw two-table read would
+/// miss.
+///
+/// Canonical-row facts only: every field here is the same for every raw
+/// spelling that resolves to a given canonical marker. Occurrence facts that
+/// can differ between two raw spellings of the same canonical marker —
+/// nested (`+`) prefix, milestone start/end side, alias/numbered family role,
+/// and the raw spelling itself — are deliberately NOT stored here; callers
+/// read those straight off the raw lexeme. See WS2A in
+/// `plans/plan-parse-hot-path.md`.
+///
+/// Deliberately keyed by *canonical* name only, never re-derived from a raw
+/// occurrence spelling: the lexer already resolves canonical/kind/family via
+/// [`lookup_marker_metadata`] (unchanged — its `fast_marker_metadata` alias
+/// table is the ground truth for cases like `fe`/`ef` collapsing to `f`,
+/// which this row table must not second-guess). Re-normalizing raw text here
+/// too risked disagreeing with that alias table; keying strictly off the
+/// already-resolved canonical name avoids the whole class of bug.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResolvedMarker {
+    pub(crate) structural: StructuralMarkerInfo,
+    /// Kept for parity-testing against `marker_payload` and for future
+    /// callers; the lexer's own payload consumption intentionally does NOT
+    /// route through this row (see the note on `resolved_marker_metadata`
+    /// in `lexer.rs`).
+    #[allow(dead_code)]
+    pub(crate) payload: Option<MarkerPayload>,
+    /// Whether this marker's opening form absorbs the first whitespace byte
+    /// that follows its name as a tag-end delimiter — the same predicate
+    /// pre-WS2A `delimiter_absorption` (`parse/mod.rs`) computed per
+    /// occurrence via `lookup_marker_whitespace`, now precomputed once per
+    /// canonical row.
+    pub(crate) absorbs_delimiter_whitespace: bool,
+}
+
+/// Dense-table handle into [`marker_rows`]: the position of a canonical
+/// marker's row, resolved once in the lexer and stamped onto
+/// [`crate::token::MarkerMetadata`] so the parser's per-occurrence structural
+/// and delimiter-absorption lookups (`structural_info_for_index`,
+/// `absorbs_delimiter_whitespace_for_index`) become array indexing instead of
+/// a string-hashmap probe. WS2B; see `plans/plan-parse-hot-path.md`.
+///
+/// Distinct from the public, string-backed [`MarkerId`]: this is a private
+/// performance handle with no catalog/semantic meaning of its own. Its
+/// numeric value is not a supported contract (not serialized, not compared
+/// across builds) — only [`MarkerId`] and `canonical`/`kind`/`family` are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MarkerIndex(u16);
+
+impl MarkerIndex {
+    /// Sentinel for "no resolved canonical row" (unknown/unresolved marker).
+    /// `marker_rows()` never has anywhere near `u16::MAX` entries, so this
+    /// value can never collide with a real row position.
+    pub(crate) const UNKNOWN: MarkerIndex = MarkerIndex(u16::MAX);
+
+    /// Checked constructor: `None` if `i` would collide with the `UNKNOWN`
+    /// sentinel. `MARKER_SPECS` has on the order of 200 rows, far below the
+    /// u16 index space, so this never actually rejects a real row today.
+    fn new(i: usize) -> Option<Self> {
+        (i < u16::MAX as usize).then_some(MarkerIndex(i as u16))
+    }
+
+    fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Default for MarkerIndex {
+    fn default() -> Self {
+        Self::UNKNOWN
+    }
+}
+
+/// The dense, canonical-row table: one [`ResolvedMarker`] per `MARKER_SPECS`
+/// entry, in `MARKER_SPECS` order, so a [`MarkerIndex`] is just that entry's
+/// position. Built once from the same per-canonical derivation WS2A used.
+fn marker_rows() -> &'static [ResolvedMarker] {
+    static ROWS: OnceLock<Vec<ResolvedMarker>> = OnceLock::new();
+    ROWS.get_or_init(|| {
+        MARKER_SPECS
+            .iter()
+            .map(|spec| {
+                let structural = structural_marker_info(spec.marker, Some(spec.kind));
+                let payload = marker_payload(spec.marker);
+                let absorbs_delimiter_whitespace = absorbs_delimiter_whitespace(spec.marker);
+                ResolvedMarker {
+                    structural,
+                    payload,
+                    absorbs_delimiter_whitespace,
+                }
+            })
+            .collect()
+    })
+}
+
+/// The one string-hashmap probe in this module: canonical marker name to its
+/// [`MarkerIndex`] (its position in [`marker_rows`]). Built once, in lockstep
+/// with `marker_rows()` (same `MARKER_SPECS` iteration), so the two can never
+/// drift apart.
+fn marker_index_by_canonical() -> &'static FxHashMap<&'static str, MarkerIndex> {
+    static INDEX: OnceLock<FxHashMap<&'static str, MarkerIndex>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        MARKER_SPECS
+            .iter()
+            .enumerate()
+            .filter_map(|(i, spec)| MarkerIndex::new(i).map(|idx| (spec.marker, idx)))
+            .collect()
+    })
+}
+
+/// Array-index accessor for an already-resolved [`MarkerIndex`] — no
+/// hashing. `None` for `MarkerIndex::UNKNOWN` or any other out-of-range value.
+pub(crate) fn resolved_marker_row(index: MarkerIndex) -> Option<&'static ResolvedMarker> {
+    marker_rows().get(index.as_usize())
+}
+
+/// The lexer's single canonical-resolution pass, folding [`MarkerIndex`]
+/// resolution into the existing `lookup_marker_metadata` lookup so the lexer
+/// performs the one hash probe needed to resolve a raw marker spelling and
+/// the parser needs none. Returns `(canonical, kind, family, index)`; `index`
+/// is `MarkerIndex::UNKNOWN` whenever `lookup_marker_metadata` returns `None`.
+pub(crate) fn resolve_marker_metadata(
+    marker: &str,
+) -> (
+    Option<&'static str>,
+    Option<MarkerDefKind>,
+    Option<MarkerFamily>,
+    MarkerIndex,
+) {
+    match lookup_marker_metadata(marker) {
+        Some((canonical, kind, family)) => {
+            let index = marker_index_by_canonical()
+                .get(canonical)
+                .copied()
+                .unwrap_or(MarkerIndex::UNKNOWN);
+            (Some(canonical), Some(kind), family, index)
+        }
+        None => (None, None, None, MarkerIndex::UNKNOWN),
+    }
+}
+
+/// [`structural_marker_info`] equivalent for the parser, driven off an
+/// already-resolved [`MarkerIndex`] — array indexing, no hashing. Falls back
+/// to `Unknown` for an unresolved marker, exactly like `structural_marker_info`'s
+/// `None`-kind arm.
+pub(crate) fn structural_info_for_index(index: MarkerIndex) -> StructuralMarkerInfo {
+    resolved_marker_row(index)
+        .map(|row| row.structural)
+        .unwrap_or(StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Unknown,
+            inline_context: None,
+            note_context: None,
+        })
+}
+
+/// Delimiter-absorption predicate for the parser, equivalent to pre-WS2A
+/// `delimiter_absorption`'s `lookup_marker_whitespace(name).is_some_and(...)`
+/// check, but driven off an already-resolved [`MarkerIndex`] — array
+/// indexing, no hashing.
+pub(crate) fn absorbs_delimiter_whitespace_for_index(index: MarkerIndex) -> bool {
+    resolved_marker_row(index).is_some_and(|row| row.absorbs_delimiter_whitespace)
+}
+
+/// Resolve an already-canonical marker name (e.g. a lexer-resolved
+/// `MarkerMetadata.canonical`) directly, with no renormalization. Kept for the
+/// WS2A drift/parity tests, which assert behavior over the raw-spelling-keyed
+/// surface; the parser's hot path uses [`structural_info_for_index`] /
+/// [`absorbs_delimiter_whitespace_for_index`] instead (WS2B), which take the
+/// `MarkerIndex` already stamped on the token and never hash.
+pub(crate) fn resolved_marker_for_canonical(canonical: Option<&str>) -> Option<ResolvedMarker> {
+    let index = marker_index_by_canonical().get(canonical?).copied()?;
+    resolved_marker_row(index).copied()
+}
+
+/// [`structural_marker_info`] equivalent for the parser, driven off an
+/// already-resolved canonical name instead of re-normalizing the raw
+/// occurrence spelling and re-deriving structural info. Falls back to
+/// `Unknown` for an unresolved marker, exactly like `structural_marker_info`'s
+/// `None`-kind arm.
+///
+/// Kept for the WS2A parity tests (see `structural_info_for_index` above for
+/// the WS2B hot path this predates).
+pub(crate) fn structural_info_for_canonical(canonical: Option<&str>) -> StructuralMarkerInfo {
+    resolved_marker_for_canonical(canonical)
+        .map(|row| row.structural)
+        .unwrap_or(StructuralMarkerInfo {
+            scope_kind: StructuralScopeKind::Unknown,
+            inline_context: None,
+            note_context: None,
+        })
+}
+
+/// Delimiter-absorption predicate for the parser, equivalent to pre-WS2A
+/// `delimiter_absorption`'s `lookup_marker_whitespace(name).is_some_and(...)`
+/// check, but driven off an already-resolved canonical name instead of
+/// renormalizing the raw occurrence spelling.
+///
+/// Kept for the WS2A parity tests (see `absorbs_delimiter_whitespace_for_index`
+/// above for the WS2B hot path this predates).
+pub(crate) fn absorbs_delimiter_whitespace_for_canonical(canonical: Option<&str>) -> bool {
+    resolved_marker_for_canonical(canonical).is_some_and(|row| row.absorbs_delimiter_whitespace)
+}
+
+/// The same "does this marker's opening form absorb its trailing tag-end
+/// delimiter whitespace" predicate pre-WS2A `delimiter_absorption`
+/// (`parse/mod.rs`) computed inline via `lookup_marker_whitespace`, factored
+/// out so [`marker_row_index`] can precompute it once per canonical row.
+fn absorbs_delimiter_whitespace(marker: &str) -> bool {
+    lookup_marker_whitespace(marker).is_some_and(|whitespace| {
+        matches!(
+            whitespace.required_after_open_name,
+            StructuralWhitespaceRequirement::TagEndDelimiter
+                | StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
+                | StructuralWhitespaceRequirement::AtLeastOneWhitespace
+        )
+    })
+}
+
 fn fast_structural_marker_info(
     marker: &str,
     kind: Option<MarkerDefKind>,
@@ -1365,8 +1588,10 @@ fn is_non_inline_paragraph_marker_name(marker: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        MarkerDefKind, SpecContext, lookup_marker_whitespace, lookup_spec_marker,
-        marker_allows_context, marker_allows_effective_context,
+        MARKER_SPECS, MarkerDefKind, SpecContext, absorbs_delimiter_whitespace_for_canonical,
+        lookup_marker_metadata, lookup_marker_whitespace, lookup_spec_marker,
+        marker_allows_context, marker_allows_effective_context, marker_payload,
+        resolved_marker_for_canonical, structural_info_for_canonical, structural_marker_info,
     };
     use crate::whitespace::{
         FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
@@ -1523,5 +1748,200 @@ mod tests {
         assert!(marker_allows_context("pi1", SpecContext::ChapterContent));
         assert!(marker_allows_context("pi2", SpecContext::ChapterContent));
         assert!(marker_allows_context("pi3", SpecContext::ChapterContent));
+    }
+
+    // --- WS2A drift/parity tests -------------------------------------------
+    //
+    // WS2A leaves the lexer's canonical/kind/family resolution untouched
+    // (still `lookup_marker_metadata`, unchanged). The new consolidation is
+    // on the parser side: `structural_info_for_canonical` and
+    // `absorbs_delimiter_whitespace_for_canonical` replace
+    // `structural_marker_info(raw, kind)` and the
+    // `lookup_marker_whitespace(raw)`-driven absorption check, but read off
+    // the canonical name the lexer already resolved instead of
+    // renormalizing `raw`. These tests assert that substitution never
+    // disagrees with the pre-WS2A raw-spelling-driven originals — over every
+    // canonical spec row, explicit normalization-family cases, every
+    // distinct marker spelling seen in the corpora, and unknown/malformed
+    // input.
+
+    /// Re-derive what the pre-WS2A parser call sites would have produced for
+    /// `raw` (via `structural_marker_info`/`lookup_marker_whitespace`, called
+    /// with `raw` directly) and assert the canonical-keyed WS2A replacements
+    /// agree, using exactly the canonical name `lookup_marker_metadata`
+    /// resolves for `raw` — i.e. exactly what `marker.metadata.canonical`
+    /// would hold on the real token. `raw` is passed exactly as the lexer
+    /// would see it (may carry a `+` nesting prefix, milestone `-s`/`-e`
+    /// suffix, numbered/hyphenated table-cell suffix, or be
+    /// unknown/malformed).
+    fn assert_resolution_parity(raw: &str) {
+        let old_metadata = lookup_marker_metadata(raw);
+        let old_kind = old_metadata.map(|(_, kind, _)| kind);
+        let canonical = old_metadata.map(|(canonical, _, _)| canonical);
+
+        let old_structural = structural_marker_info(raw, old_kind);
+        assert_eq!(
+            structural_info_for_canonical(canonical),
+            old_structural,
+            "structural mismatch for {raw:?} (canonical {canonical:?})"
+        );
+
+        let old_absorbs = lookup_marker_whitespace(raw).is_some_and(|whitespace| {
+            matches!(
+                whitespace.required_after_open_name,
+                StructuralWhitespaceRequirement::TagEndDelimiter
+                    | StructuralWhitespaceRequirement::AtLeastOneHorizontalWhitespace
+                    | StructuralWhitespaceRequirement::AtLeastOneWhitespace
+            )
+        });
+        assert_eq!(
+            absorbs_delimiter_whitespace_for_canonical(canonical),
+            old_absorbs,
+            "absorption mismatch for {raw:?} (canonical {canonical:?})"
+        );
+    }
+
+    #[test]
+    fn resolved_marker_matches_every_canonical_spec_row() {
+        // Every literal `MARKER_SPECS` row, resolved by its own canonical
+        // spelling, must agree with the pre-WS2A structural/payload/
+        // whitespace predicates called with that same canonical spelling.
+        for spec in MARKER_SPECS.iter() {
+            assert_resolution_parity(spec.marker);
+
+            let row = resolved_marker_for_canonical(Some(spec.marker))
+                .unwrap_or_else(|| panic!("canonical marker {:?} should have a row", spec.marker));
+            assert_eq!(
+                row.payload,
+                marker_payload(spec.marker),
+                "payload mismatch for {:?}",
+                spec.marker
+            );
+        }
+    }
+
+    #[test]
+    fn structural_and_absorption_agree_with_old_lookup_for_normalization_families() {
+        // Nested `+`, numbered paragraph variants, numbered/hyphenated table
+        // cells, milestone `-s`/`-e`, and the `esbe` alias — occurrence-level
+        // normalizations that `lookup_marker_metadata` (unchanged by WS2A)
+        // still performs before the parser's canonical-keyed lookups run.
+        let cases = [
+            "+f", "+fq", "+xt", "+nd", // nested character/note markers
+            "q1", "q2", "q3", "q4", "s1", "s2", "s3", "s4", "li1", "li2", "li3", "li4", "lim1",
+            "lim4", "liv1", "liv5", // numbered paragraph/character variants
+            "tc2", "tc3", "tcr2", "tcc3", "th1", "thr2-3", // numbered/hyphenated table cells
+            "qt-s", "qt-e", "qt1-s", "qt2-e", "ts-s", "ts-e", "zaln-s",
+            "zaln-e", // milestone start/end
+            "esbe", "esb", // sidebar alias + its canonical
+            "fe", "ef", "ex", // metadata-fast-path aliases (collapse to "f"/"x")
+        ];
+        for raw in cases {
+            assert_resolution_parity(raw);
+        }
+
+        // `fe`/`ef` and `ex` are themselves literal `MARKER_SPECS` rows, but
+        // `lookup_marker_metadata`'s fast path deliberately collapses them to
+        // canonical `"f"`/`"x"`. The canonical-keyed parser lookups must
+        // follow that same collapse, not re-derive from `fe`/`ef`/`ex`'s own
+        // (unused) rows.
+        assert_eq!(lookup_marker_metadata("fe").map(|(c, ..)| c), Some("f"));
+        assert_eq!(lookup_marker_metadata("ef").map(|(c, ..)| c), Some("f"));
+        assert_eq!(lookup_marker_metadata("ex").map(|(c, ..)| c), Some("x"));
+    }
+
+    #[test]
+    fn parser_lookups_keep_unknown_and_malformed_markers_unknown() {
+        // Unknown/malformed marker names must not be silently promoted to
+        // "known" by the canonical-keyed parser lookups.
+        let cases = [
+            "zzzzz",
+            "s5",
+            "+bogus",
+            "q99",
+            "notareal-s",
+            "123abc",
+            "",
+            "+",
+            "-s",
+            "tcz",
+        ];
+        for raw in cases {
+            assert_resolution_parity(raw);
+            assert!(
+                lookup_marker_metadata(raw).is_none(),
+                "expected {raw:?} to stay unresolved"
+            );
+        }
+
+        // A malformed nested occurrence of a marker that only ever carries a
+        // contextual payload as a bare top-level marker (`\id`, `\c`, `\v`, …)
+        // still classifies as its canonical marker for metadata purposes
+        // (`lookup_marker_metadata` has always stripped a leading `+`,
+        // unchanged by WS2A) — but payload *consumption* in the lexer stays
+        // gated on the literal, unstripped spelling (`marker_payload` never
+        // matches a `+`-prefixed string), so a malformed `\+id` still must
+        // not start consuming a book code. This is a deliberate WS2A
+        // decision, not an oversight: see the note on `ResolvedMarker`.
+        assert_eq!(
+            lookup_marker_metadata("+id").map(|(canonical, ..)| canonical),
+            Some("id")
+        );
+        assert_eq!(marker_payload("+id"), None);
+    }
+
+    #[test]
+    fn parser_lookups_match_old_lookup_for_every_corpus_marker_spelling() {
+        use std::collections::BTreeSet;
+        use std::path::Path;
+
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        for root in ["testData", "example-corpora"] {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join(root);
+            collect_marker_spellings(&root, &mut names);
+        }
+        assert!(
+            names.len() > 50,
+            "expected the corpora to exercise a healthy number of distinct \
+             marker spellings, got {}",
+            names.len()
+        );
+        for name in &names {
+            assert_resolution_parity(name);
+        }
+    }
+
+    fn collect_marker_spellings(
+        dir: &std::path::Path,
+        out: &mut std::collections::BTreeSet<String>,
+    ) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_marker_spellings(&path, out);
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("usfm") {
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for token in crate::lexer::lex(&source).tokens {
+                match token {
+                    crate::token::ScanToken::Marker(m)
+                    | crate::token::ScanToken::NestedMarker(m)
+                    | crate::token::ScanToken::ClosingMarker(m)
+                    | crate::token::ScanToken::NestedClosingMarker(m)
+                    | crate::token::ScanToken::Milestone(m) => {
+                        out.insert(m.name.to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 }

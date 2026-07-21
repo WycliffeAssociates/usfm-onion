@@ -121,7 +121,7 @@ pub fn lex(source: &str) -> ScanResult<'_> {
                 | RawTokenKind::Milestone => {
                     in_attribute_run = false;
                     let marker_name = marker_text_name(raw_kind_to_scan_kind(kind), slice);
-                    let token = marker_token(kind, raw_span, slice);
+                    let token = marker_token(kind, raw_span, slice, marker_name);
                     pending = pending_payload_for(kind, marker_name);
                     tokens.push(token);
                 }
@@ -156,9 +156,12 @@ pub fn lex(source: &str) -> ScanResult<'_> {
     ScanResult { tokens }
 }
 
-fn marker_token<'a>(kind: RawTokenKind, span: Span, lexeme: &'a str) -> ScanToken<'a> {
-    let token_kind = raw_kind_to_scan_kind(kind);
-    let name = marker_text_name(token_kind, lexeme);
+fn marker_token<'a>(
+    kind: RawTokenKind,
+    span: Span,
+    lexeme: &'a str,
+    name: &'a str,
+) -> ScanToken<'a> {
     let token = MarkerToken {
         span,
         lexeme,

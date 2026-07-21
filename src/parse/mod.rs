@@ -2,12 +2,11 @@
 mod parallel;
 
 use crate::lexer::lex;
-use crate::marker_defs::{lookup_marker_whitespace, structural_marker_info};
+use crate::marker_defs::{absorbs_delimiter_whitespace_for_index, structural_info_for_index};
 use crate::token::{
     AttributeItem, BookId, Lexeme, NumberRangeToken, ParseAnalysis, ParseResult, ScanToken, Sid,
     Span, Token, TokenData, TokenId, TokenKind, tokens_to_usfm,
 };
-use crate::whitespace::StructuralWhitespaceRequirement as WhitespaceReq;
 
 pub fn parse(source: &str) -> ParseResult<'_> {
     // Large books parse chapter-parallel; the result is byte-identical to the
@@ -115,7 +114,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                         TokenData::Marker {
                             name: marker.name,
                             metadata: marker.metadata,
-                            structural: structural_marker_info(marker.name, marker.metadata.kind),
+                            structural: structural_info_for_index(marker.metadata.index),
                             nested: false,
                             attributes: Vec::new(),
                             attribute_source: None,
@@ -154,7 +153,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                         TokenData::Marker {
                             name: marker.name,
                             metadata: marker.metadata,
-                            structural: structural_marker_info(marker.name, marker.metadata.kind),
+                            structural: structural_info_for_index(marker.metadata.index),
                             nested: false,
                             attributes: Vec::new(),
                             attribute_source: None,
@@ -189,7 +188,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                     TokenData::Marker {
                         name: marker.name,
                         metadata: marker.metadata,
-                        structural: structural_marker_info(marker.name, marker.metadata.kind),
+                        structural: structural_info_for_index(marker.metadata.index),
                         nested: false,
                         attributes: Vec::new(),
                         attribute_source: None,
@@ -206,7 +205,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                     TokenData::Marker {
                         name: marker.name,
                         metadata: marker.metadata,
-                        structural: structural_marker_info(marker.name, marker.metadata.kind),
+                        structural: structural_info_for_index(marker.metadata.index),
                         nested: true,
                         attributes: Vec::new(),
                         attribute_source: None,
@@ -223,7 +222,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                     TokenData::EndMarker {
                         name: marker.name,
                         metadata: marker.metadata,
-                        structural: structural_marker_info(marker.name, marker.metadata.kind),
+                        structural: structural_info_for_index(marker.metadata.index),
                         nested: false,
                     },
                 );
@@ -238,7 +237,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                     TokenData::EndMarker {
                         name: marker.name,
                         metadata: marker.metadata,
-                        structural: structural_marker_info(marker.name, marker.metadata.kind),
+                        structural: structural_info_for_index(marker.metadata.index),
                         nested: true,
                     },
                 );
@@ -253,7 +252,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                     TokenData::Milestone {
                         name: marker.name,
                         metadata: marker.metadata,
-                        structural: structural_marker_info(marker.name, marker.metadata.kind),
+                        structural: structural_info_for_index(marker.metadata.index),
                         attributes: Vec::new(),
                         attribute_source: None,
                     },
@@ -661,14 +660,9 @@ fn park_ws<'a>(source: &'a str, state: &mut ParseState<'a>, tokens: &mut Vec<Tok
 /// terminates), never as an in-content number.
 fn delimiter_absorption(token: &Token<'_>, state: &ParseState<'_>) -> bool {
     match &token.data {
-        TokenData::Marker { name, .. } => lookup_marker_whitespace(name).is_some_and(|spec| {
-            matches!(
-                spec.required_after_open_name,
-                WhitespaceReq::TagEndDelimiter
-                    | WhitespaceReq::AtLeastOneHorizontalWhitespace
-                    | WhitespaceReq::AtLeastOneWhitespace
-            )
-        }),
+        TokenData::Marker { metadata, .. } => {
+            absorbs_delimiter_whitespace_for_index(metadata.index)
+        }
         TokenData::Number { .. } => state.cv_number == CvNumber::JustEmitted,
         TokenData::BookCode { .. } => true,
         _ => false,
