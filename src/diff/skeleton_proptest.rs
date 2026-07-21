@@ -364,8 +364,8 @@ fn assert_p1_partition<T: DiffableToken>(
 ) {
     let mut baseline_out = String::new();
     let mut current_out = String::new();
-    let mut seen_baseline = std::collections::HashSet::new();
-    let mut seen_current = std::collections::HashSet::new();
+    let mut seen_baseline = rustc_hash::FxHashSet::default();
+    let mut seen_current = rustc_hash::FxHashSet::default();
 
     for slot in &skeleton.slots {
         let unit = skeleton
@@ -417,7 +417,7 @@ fn expected_merge_text<T: DiffableToken>(
     decisions: &BTreeMap<UnitId, MergeSide>,
     default_side: MergeSide,
 ) -> String {
-    let units_by_id: std::collections::HashMap<&UnitId, &DecisionUnit<T>> =
+    let units_by_id: rustc_hash::FxHashMap<&UnitId, &DecisionUnit<T>> =
         skeleton.units.iter().map(|unit| (&unit.id, unit)).collect();
     let mut out = String::new();
     for slot in &skeleton.slots {

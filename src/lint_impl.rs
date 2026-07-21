@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::format::FormatToken;
@@ -709,7 +709,7 @@ struct EnabledCodes {
 
 #[derive(Default)]
 struct VerseState {
-    seen: HashSet<u32>,
+    seen: FxHashSet<u32>,
 }
 
 impl Default for DocumentLintState {
@@ -1574,7 +1574,7 @@ fn lint_chapter_rules<T: LintableToken>(
     enabled: &EnabledCodes,
     issues: &mut Vec<LintIssue>,
 ) {
-    let mut seen_chapters = HashSet::new();
+    let mut seen_chapters = FxHashSet::default();
     let mut index = 0usize;
     while index < tokens.len() {
         let token = &tokens[index];
@@ -1608,7 +1608,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
     issues: &mut Vec<LintIssue>,
 ) {
     let mut current_chapter = 0u32;
-    let mut verse_state_by_chapter: HashMap<u32, VerseState> = HashMap::new();
+    let mut verse_state_by_chapter: FxHashMap<u32, VerseState> = FxHashMap::default();
 
     for index in 0..tokens.len() {
         let token = &tokens[index];
@@ -2964,7 +2964,7 @@ fn apply_suppressions(
     let suppression_keys = suppressions
         .iter()
         .map(|suppression| (suppression.code, suppression.sid.as_str()))
-        .collect::<HashSet<_>>();
+        .collect::<FxHashSet<_>>();
     let mut kept = Vec::new();
     let mut suppressed_count = 0;
     for issue in issues {

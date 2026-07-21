@@ -18,7 +18,7 @@
 //! [`crate::marker_defs`]. The static data table they query lives in
 //! [`crate::marker_defs_data`] and is hand-curated.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -156,7 +156,7 @@ pub struct UsfmMarkerInfo {
 #[derive(Debug)]
 pub struct UsfmMarkerCatalog {
     entries: Vec<UsfmMarkerInfo>,
-    exact_index: HashMap<String, usize>,
+    exact_index: FxHashMap<String, usize>,
 }
 
 impl UsfmMarkerCatalog {
@@ -188,7 +188,7 @@ pub fn marker_catalog() -> &'static UsfmMarkerCatalog {
             .iter()
             .enumerate()
             .map(|(index, info)| (info.marker.clone(), index))
-            .collect::<HashMap<_, _>>();
+            .collect::<FxHashMap<_, _>>();
         UsfmMarkerCatalog {
             entries,
             exact_index,

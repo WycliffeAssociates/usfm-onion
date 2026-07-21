@@ -3,7 +3,7 @@
 //! The `ExportNode` shape is the contract for UsjExporter and
 //! UsxExporter — keep that stable across walker tweaks.
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 
 use crate::marker_defs::{BlockBehavior, StructuralScopeKind, marker_block_behavior};
 use crate::markers::lookup_marker;
@@ -124,7 +124,7 @@ struct ExportTreeBuilder {
     /// note-character close rule). When the walker eventually fires
     /// `on_leave_scope` for those frames, we skip them — the visitor
     /// has already closed and appended them.
-    skip_leaves: HashSet<usize>,
+    skip_leaves: FxHashSet<usize>,
 }
 
 impl ExportTreeBuilder {
@@ -136,7 +136,7 @@ impl ExportTreeBuilder {
             pending_verse: None,
             pending_milestone: None,
             pending_close: None,
-            skip_leaves: HashSet::new(),
+            skip_leaves: FxHashSet::default(),
         }
     }
 

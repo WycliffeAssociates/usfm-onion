@@ -170,8 +170,8 @@ mod tests {
 
         let mut baseline_out = String::new();
         let mut current_out = String::new();
-        let mut seen_baseline_units = std::collections::HashSet::new();
-        let mut seen_current_units = std::collections::HashSet::new();
+        let mut seen_baseline_units = rustc_hash::FxHashSet::default();
+        let mut seen_current_units = rustc_hash::FxHashSet::default();
 
         for slot in &skeleton.slots {
             let unit = skeleton
@@ -418,7 +418,7 @@ mod tests {
         // Coalesced pair — mirroring the prototype's `needsAnchor`), taken at
         // each unit's first slot (mirroring `slot.emit`), no two distinct
         // units share the same anchor sid.
-        let mut seen_units = std::collections::HashSet::new();
+        let mut seen_units = rustc_hash::FxHashSet::default();
         let mut anchored_sids = Vec::new();
         for slot in &skeleton.slots {
             if !seen_units.insert(slot.unit_id.clone()) {
@@ -435,7 +435,7 @@ mod tests {
                 anchored_sids.push(anchor.sid.clone());
             }
         }
-        let unique_count: std::collections::HashSet<_> = anchored_sids.iter().collect();
+        let unique_count: rustc_hash::FxHashSet<_> = anchored_sids.iter().collect();
         assert_eq!(
             unique_count.len(),
             anchored_sids.len(),
@@ -699,10 +699,8 @@ mod tests {
     ) -> String {
         use crate::diff::skeleton::SlotRole;
 
-        let units_by_id: std::collections::HashMap<
-            &UnitId,
-            &crate::diff::skeleton::DecisionUnit<T>,
-        > = skeleton.units.iter().map(|unit| (&unit.id, unit)).collect();
+        let units_by_id: rustc_hash::FxHashMap<&UnitId, &crate::diff::skeleton::DecisionUnit<T>> =
+            skeleton.units.iter().map(|unit| (&unit.id, unit)).collect();
         let mut out = String::new();
         for slot in &skeleton.slots {
             let unit = units_by_id[&slot.unit_id];

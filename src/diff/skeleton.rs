@@ -2,7 +2,7 @@
 //! blocks, pair-loose coalesced moves occupying two slots bound to one
 //! decision, and a pure per-slot merge.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use similar::{Algorithm, ChangeTag, capture_diff_slices};
@@ -548,8 +548,8 @@ fn build_skeleton<T: DiffableToken>(
         .collect();
 
     let pairs = myers_pairs(&baseline_block_ids, &current_block_ids);
-    let shared_baseline: HashSet<usize> = pairs.iter().map(|&(b, _)| b).collect();
-    let shared_current: HashSet<usize> = pairs.iter().map(|&(_, c)| c).collect();
+    let shared_baseline: FxHashSet<usize> = pairs.iter().map(|&(b, _)| b).collect();
+    let shared_current: FxHashSet<usize> = pairs.iter().map(|&(_, c)| c).collect();
 
     // Interleave steps: between LCS anchors, emit the baseline-only run, then
     // the current-only run, then the shared block — the supersequence order.
@@ -615,14 +615,14 @@ fn build_skeleton<T: DiffableToken>(
         current_by_key.entry(key).or_default().push(index);
     }
 
-    let mut pair_for_baseline: HashMap<usize, usize> = HashMap::new();
-    let mut pair_for_current: HashMap<usize, usize> = HashMap::new();
+    let mut pair_for_baseline: FxHashMap<usize, usize> = FxHashMap::default();
+    let mut pair_for_current: FxHashMap<usize, usize> = FxHashMap::default();
     let mut ordered_pairs: Vec<(usize, usize)> = Vec::new();
 
     for key in &key_order {
         let bis = baseline_by_key.get(key).cloned().unwrap_or_default();
         let cis = current_by_key.get(key).cloned().unwrap_or_default();
-        let mut current_used: HashSet<usize> = HashSet::new();
+        let mut current_used: FxHashSet<usize> = FxHashSet::default();
         let mut baseline_left: Vec<usize> = Vec::new();
 
         for &bi in &bis {
@@ -658,8 +658,8 @@ fn build_skeleton<T: DiffableToken>(
     // shared (Myers order), coalesced (pairing insertion order), deleted
     // (baseline stream order), added (current stream order).
     let mut builds: Vec<UnitBuild<T>> = Vec::new();
-    let mut unit_for_baseline_block: HashMap<usize, usize> = HashMap::new();
-    let mut unit_for_current_block: HashMap<usize, usize> = HashMap::new();
+    let mut unit_for_baseline_block: FxHashMap<usize, usize> = FxHashMap::default();
+    let mut unit_for_current_block: FxHashMap<usize, usize> = FxHashMap::default();
 
     for &(pb, pc) in &pairs {
         let bb = &baseline_blocks[pb];

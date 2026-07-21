@@ -1,0 +1,9 @@
+# Force the FxHash tables (rustc_hash) over the std default-SipHash hash maps
+# in this parse-hot-path crate. `FxHashMap`/`FxHashSet` resolve to distinct
+# `rustc_hash` paths, so they are NOT flagged — only accidental
+# `std::collections::HashMap`/`HashSet` use is. See the Rust Performance Book,
+# "Hashing".
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "use rustc_hash::FxHashMap (default SipHash is slower for this crate's small integer/string keys)" },
+    { path = "std::collections::HashSet", reason = "use rustc_hash::FxHashSet" },
+]
