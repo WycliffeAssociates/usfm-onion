@@ -276,3 +276,29 @@ smaller secondary serial cost.
 book-`par_iter` and nesting is a wash-to-slight-regression there (consider gating chapter
 parallelism off when the caller is already parallel). Big fast-parsing books need the
 `assign_ids` fix before chapter parallelism pays off.
+
+## 2026-07-20 - CORRECTION: assign_ids reverted; the "1.0x collapse" was measurement noise
+
+Tried the `assign_ids` fix (per-chunk prefix-offset, byte-identical, oracle green) and
+**reverted it**: direct phase instrumentation showed `assign_ids` is only ~0.7ms of a ~9ms
+GEN parse — NOT the bottleneck the samply read implied. Moving it parallel was within noise
+(and marginally slower for Psalms). The real serial floor is `scan_boundaries` (byte
+pre-scan, ~40% of GEN) + the concat memcpy. It didn't earn its complexity (Slice struct +
+prefix machinery), so it's gone.
+
+Bigger correction: **GEN did NOT collapse to ~1.0x** in the careful re-measure (warmup +
+min-of-60, in-process serial baseline) — it was **~3x before AND after**. The earlier "1.0x"
+was almost certainly an Apple-Silicon **P/E-core scheduling artifact** of the single-thread
+serial baseline (a lone thread landing on an efficiency core swings the ratio 2-3x). Several
+wobbly single-thread readings this session likely share that cause.
+
+**What's solid vs noisy:**
+- SOLID: byte-identical correctness of all 7 ops (oracle + per-op corpus tests, 1 + full
+  threads). This never wavered.
+- NOISY: exact speedup magnitudes — single-thread baselines on this machine (P/E cores +
+  thermal + contention) are unreliable; treat the per-op numbers as order-of-magnitude.
+- ROBUST-ISH: the whole-corpus "nesting is ~wash" finding (par-vs-par, less baseline-
+  sensitive) and the "single book gets a real multi-x win" direction (magnitude uncertain).
+
+Before any further perf claims, a controlled measurement environment (pin to P-cores, or
+many-trial medians) is needed. Correctness is done; perf magnitude is polish.
