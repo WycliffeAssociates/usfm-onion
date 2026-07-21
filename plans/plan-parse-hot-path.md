@@ -1,209 +1,378 @@
-# Plan — parse/lex hot-path: alloc + one derived marker table + lexer-owned delimiter ws
+# Plan — reduce serial parse marker-resolution cost
 
-Status: in progress on branch `chapter-parallelism`. Gated by the behavior
-oracle (`tests/lint_oracle.rs`, `BLESS=1` to rebaseline) — the bar is
-**byte-identical output across the real-world corpus**, not USFM conformance.
-The oracle is the whole reason we can refactor the hot path aggressively here.
+Status: in progress on branch `chapter-parallelism`.
 
-## Why
+Plan depth: standard. Interview depth: regular. Testing tolerance: hardened for
+behavior preservation, standard for performance evidence.
 
-A rayon-free serial profile (`profile_ops parse/serial --book psalms`, the
-`parse/serial` op added to `benches/common.rs`) shows where single-thread
-ingest actually spends time — no parked-worker noise. After the Vec presize
-(workstream 1, landed), the picture on Psalms (272 KB):
+Progress log: `plans/progress-parse-hot-path.md`.
 
-- **Lexer (logos DFA + driver): ~28%** — `lex` self + `logos::lex::state*`.
-  Inherent scanning cost; no cheap lever (would mean replacing logos). Parked.
-- **Token construction: `parse_lexemes_seeded` + `push_token` ~18%.**
-- **Marker-catalog lookups: ~20%** — the top structural target. Same marker is
-  normalized-and-probed ~3× per occurrence across lex + parse (see below).
-- **Allocator/memmove: ~12%** — parser Vec now presized; remaining memmove is
-  the *lexer's* unpresized lexeme Vec + per-iteration free (the free is a
-  bench artifact — real single-call use pays it once).
+## Problem
 
-The redundancy, traced to call sites:
+Chapter-parallel parsing has a real single-large-book win, but lexing and the
+merge tail remain serial. After presizing the lexer and parser vectors, a
+rayon-free `parse/serial` profile on Psalms promoted repeated marker-catalog
+work to the largest addressable parse bucket.
 
-| Phase | Call | Site |
-|---|---|---|
-| lex | `marker_metadata()` → `lookup_marker_metadata` | `lexer.rs:160` |
-| lex | `marker_payload()` (cheap `match`) | `lexer.rs:319` |
-| parse | `structural_marker_info(name, kind)` ×6 | `parse/mod.rs` |
-| parse | `lookup_marker_whitespace(name)` via `park_ws`→`delimiter_absorption` | `parse/mod.rs:658` |
+The current marker path resolves overlapping facts independently:
 
-Each of `lookup_marker_metadata` / `structural_marker_info` /
-`lookup_marker_whitespace` independently re-runs normalization (strip `+`,
-milestone `-s/-e`, numbered variant, `table_cell_base`) + its own FxHashMap
-probe. `park_ws`'s cost (`#5`) is mostly this lookup, not whitespace scanning —
-so it is the *same* problem, not a SIMD candidate.
+1. The lexer calls `lookup_marker_metadata` while constructing each marker
+   lexeme.
+2. The lexer separately calls the cheap `marker_payload` predicate.
+3. The parser calls `structural_marker_info` once for the matching marker arm
+   (there are seven mutually exclusive call sites, not seven calls per marker).
+4. When following whitespace arrives, the parser calls
+   `lookup_marker_whitespace` through `delimiter_absorption`.
 
-## Hard constraint: ONE source-of-truth table
+Although only one parser arm fires per token, the *same* marker is still
+resolved independently up to three times across the pipeline: the lexer's
+`lookup_marker_metadata`, the parser's `structural_marker_info` (which probes
+the spec map again internally via `lookup_spec_marker`), and the parser's
+`lookup_marker_whitespace` through `delimiter_absorption`. Each repeats
+normalization, string classification, and a map probe. That cross-phase
+repetition — not any single call site — is what WS2A collapses.
 
-The marker data (`MARKER_SPECS`, `MARKER_WHITESPACE` in `marker_defs_data.rs`)
-is read crate-wide, not just by lex/parse:
+The likely win is eliminating that repeated normalization, string
+classification, and map probing. The profile does **not** yet prove that
+bit-packing the result, using a perfect hash, or carrying a dense ID through
+public token types is worth its additional complexity.
 
-- `lint_impl.rs` (10 sites, heaviest — incl. `marker_allows_context`),
-  `parse` (8), public `markers.rs` catalog (8), `html` (6), `usj` (5),
-  `walker` (4), `vref` (2), `token`/`lexer`/`export_tree` (1 each).
+## Solution
 
-So the packed row **must be a derived projection** of the existing tables — NOT
-a second hand-authored/codegen table that could drift. Marker data here is
-hand-curated Rust (unlike ssc's Unicode-derived `gen_charclass_table`), so a
-codegen xtask is the wrong tool. Derive in-process and guard drift with a test.
+First introduce one typed, derived marker projection and use it to resolve all
+hot facts together within each phase. Keep existing public lexeme and token
+shapes intact. Measure that simpler consolidation before considering a dense
+numeric handle across the lexer/parser boundary.
 
----
+If lookup remains material after consolidation, a second gated workstream may
+carry a private dense marker index between phases. That workstream must first
+choose an explicit Rust API-compatibility strategy; the behavior oracle cannot
+detect source-level API breakage.
 
-## Workstream 1 — right-size the token Vec (LANDED)
+## User stories
 
-`parse_lexemes_seeded`: `Vec::new()` → `Vec::with_capacity(lexemes.len())`.
-Parsing emits ≤1 token per lexeme (text runs merge; empty-doc flush adds ≤1),
-so `lexemes.len()` is a tight, never-under bound. Byte-identical (capacity
-never affects contents); parallel path presizes each chunk from its own slice.
-Result: `push_token` 17%→8%, wall −16% on Psalms serial.
+1. As a caller parsing one large marker-dense book, I want lower serial ingest
+   cost so chapter-parallel parsing spends less time with workers idle.
+2. As a wasm caller, I want the same cheaper serial path without requiring
+   rayon or changing output.
+3. As a maintainer, I want marker facts derived from the existing catalog so a
+   performance cache cannot silently become a second source of truth.
+4. As a Rust API caller, I want this optimization not to change public token or
+   lexeme construction unless that breaking change is reviewed separately.
+5. As a reviewer, I want correctness and performance claims tied to explicit
+   gates so complexity that benchmarks within noise is removed.
 
-### 1b — lexer lexeme Vec (follow-on, candidate)
+## Current evidence and measurement boundary
 
-`lexer.rs:51` is still `Vec::new()`; it now dominates the remaining ~7.6%
-memmove. No exact pre-count exists (first pass), so size heuristically from
-source length. Measured **bytes-per-lexeme** across the corpus (throwaway
-`measure_lex` example, since deleted):
+- `parse/serial` is the profiling lane: `lex` plus `parse_lexemes`, with rayon
+  absent from the call stack. Samply percentages are attribution evidence only.
+- Criterion is the timing authority. `benches/operations.rs` currently runs
+  only Luke, while the motivating profile is Psalms. Add a Psalms
+  `parse/serial` Criterion lane before changing marker resolution so the
+  before/after benchmark measures the actual target workload.
+- Keep Luke as the smaller/less marker-dense regression lane and the existing
+  `parallelism/en_ulb/parse/{serial,rayon}` pair as the batch guard.
+- Apple P/E-core scheduling made earlier single-thread ratios noisy. Compare
+  saved before/after baselines under the same idle conditions, repeat the
+  comparison three times, and report Criterion medians/intervals rather than a
+  best run.
+- Profiling builds identify where time moved. Release Criterion builds supply
+  every quoted speed number.
 
-| kind | B/lexeme |
-|---|---|
-| narrative prose (en_ulb/BSB Luke) | 14.6–16.7 (sparse end) |
-| poetry (en_ulb Psalms) | 7.35 |
-| `\w` dense (en_ult Hosea/1Pe) | 6.66–6.93 |
-| `\zaln` aligned (en_ult GEN/PSA/LUK, 4–5 MB) | **6.58–6.90 (floor)** |
+### Proposed retention gate
 
-The density floor is **~6.5 B/lexeme**. Size at **`source.len() / 6`** (just
-under the floor) → essentially never reallocs. Over-allocation is tight where
-it matters (5 MB aligned GEN: ~11% over) and loose only where absolute counts
-are tiny (small narrative prose: ~2.8× of a few-thousand-slot Vec, <1 MB
-transient, freed after parse). Do after WS2 and re-measure.
+Keep a workstream only when all are true:
 
-- **Arena is the wrong tool**: the lexeme buffer is one contiguous growable Vec;
-  the cost is the realloc-copy on growth, which happens under any allocator. A
-  capacity estimate removes it; an allocator does not.
-- **Buffer reuse/pooling** (thread-local Vec `.clear()`ed across chunks) is the
-  legit arena-adjacent idea, but it targets alloc+free churn (~4% `vm_dealloc`,
-  partly a bench artifact), not memmove, and is lifetime-fiddly
-  (`ScanToken<'a>` borrows source). Documented fallback, not first move.
-- Note: for `\w`/`\zaln`-dense books the *parser* Vc's `lexemes.len()` capacity
-  (WS1) over-allocates ~2.9× (lexemes ≫ tokens: GEN 764 k lexemes → 263 k
-  tokens) — transient and freed; acceptable, don't `shrink_to_fit` (a memmove).
+- byte-identical oracle output at one and full worker counts;
+- the targeted Samply bucket visibly shrinks or disappears;
+- the Psalms `parse/serial` Criterion median improves by at least 5% in all
+  three before/after comparisons; and
+- Luke and whole-corpus parse show no repeatable regression above 3%.
 
-## Workstream 2 — one derived, packed marker row (the main event)
+The 5%/3% thresholds are recommended defaults, not a product requirement. If
+Will wants a different complexity budget, decide it before WS2 begins and
+record it in the progress log.
 
-Add a `MarkerRow` derived once from `MARKER_SPECS`/`MARKER_WHITESPACE`, keyed by
-a dense `u16` marker id (≤238 base markers). Every hot lookup reads fields off
-`ROWS[id]` instead of re-normalizing + re-probing.
+## Goals
 
-### Layout — a single `u64` per row
+- Remove redundant marker normalization/classification from serial parse.
+- Preserve serialized token/CST/export/lint behavior exactly.
+- Keep one hand-edited marker source of truth.
+- Make each optimization independently revertible and benchmarkable.
 
-Bit budget (fits u64 with ~14 spare; u128 only if we later fold in all four
-whitespace positions + family + canonical-id for cold consumers — not needed
-for the hot path):
+## Non-goals
 
-| Field | Variants | Bits |
-|---|---|---|
-| `MarkerDefKind` | 13 | 4 |
-| `ParagraphCategory` (+None) | 11 | 4 |
-| `StructuralScopeKind` | 13 | 4 |
-| `InlineContext` (+None) | 5 | 3 |
-| `note_context` (`SpecContext` +None) | 21 | 5 |
-| `ClosingBehavior` | 4 | 2 |
-| `MarkerPayload` (None/Book/Num) | 3 | 2 |
-| bools: `absorbs_trailing_ws`, `deprecated`, `is_section`, `is_list`, `is_table_cell`, `milestone_end` | — | 6 |
-| **flags subtotal** | | **~30** |
-| **context-validity bitmask** over 20 `SpecContext` | | **20** |
+- Replacing Logos or parallelizing the lexer.
+- Replacing the public string-backed `MarkerId`.
+- Shrinking final `TokenData` in this plan.
+- Optimizing lint/context lookup before an ID is intentionally carried on final
+  tokens.
+- Adding a generated or hand-maintained perfect-hash table.
+- Reworking formatter whitespace semantics.
 
-- `marker_allows_context(m, c)` → `ROWS[id].contexts & (1<<c as u32)` — replaces
-  the `&'static [SpecContext]` slice scan (this is `lint_impl`'s hot predicate,
-  not just parse's).
-- `absorbs_trailing_ws` bit → `delimiter_absorption` becomes a field read,
-  killing most of `park_ws`'s cost.
-- Whole table ≈ 238 × 8 B ≈ **1.9 KB → permanently L1/L2-resident.** This is why
-  "keep v/p/c cached" needs no special-casing for the *data*: it's all hot.
+## Constraints and corrected assumptions
 
-### string → id (where "front-load hot markers" actually pays)
+### The existing catalog is more than two tables
 
-The data is always cache-hot; the real cost is computing the id. Fast-path the
-key:
-- Single-byte markers (`v p c q m s b d f x w …`) need no normalization → direct
-  dispatch (e.g. `[u16; 128]` by first byte, or pack ≤6 ASCII bytes into a u64
-  and match). Covers the bulk of real text.
-- Everything else falls to the existing normalize + interned-id map
-  (`FxHashMap<&'static str, u16>` built once, or a perfect hash).
-- Normalization itself (`table_cell_base` etc.) is unchanged work, but now done
-  **once** per marker, not 3×. The redundancy is the win, not new normalization.
+`MARKER_SPECS` and explicit `MARKER_WHITESPACE` rows are hand-curated inputs,
+but several facts are derived by code: default whitespace by marker kind and
+paragraph category, marker payload, family, block/closing behavior, note
+context, aliases, numbered variants, table-cell variants, nested markers, and
+milestone `-s`/`-e` forms. A row is valid only if it agrees with these existing
+predicates; deriving from the two slices alone is insufficient.
 
-### Deriving + drift guard
+### Canonical-row facts and occurrence facts are different
 
-- Build `ROWS` at first use (`LazyLock`) by packing each `MARKER_SPECS` /
-  `MARKER_WHITESPACE` row — or a `const fn` packer into a `static` if we want
-  zero runtime setup. Single edit point stays `marker_defs_data.rs`.
-- Test: for every marker, assert the packed row's unpacked fields `==` the
-  struct fields (`lookup_marker_metadata`, `structural_marker_info`,
-  `lookup_marker_whitespace().required_after_open_name` → absorb bit,
-  `contexts`). Mirrors ssc's "table pinned to predicate" discipline. This is
-  what makes it safe to be a projection rather than a parallel table.
+A canonical row may contain kind, structural info, payload, default whitespace
+absorption, deprecation, and a context mask. It must not contain facts that can
+vary for two raw spellings resolving to the same canonical marker:
 
-### Wiring
+- nested (`+` prefix);
+- milestone start versus end;
+- family role such as alias or numbered variant; or
+- the raw marker spelling itself.
 
-- Lexer computes the id once (it already visits every marker at `lexer.rs:160`),
-  stash it on the `MarkerToken`/`Lexeme` (add a `u16` field).
-- `structural_marker_info`, `lookup_marker_whitespace` (absorb bit),
-  `marker_payload`, and `lint_impl`'s context checks read `ROWS[id]`.
-- Rich/cold consumers (`markers.rs` public catalog, formatter's full 4-position
-  whitespace, family/source) keep reading the existing structs — untouched.
-- Keep the `MarkerMetadata`/`StructuralMarkerInfo`-by-value fields on `Token`
-  for now (public shape). *Endgame (separate, wider):* store just the `u16` id on
-  `Token` → shrinks `Token` (cheaper memmove, compounding WS1) and deletes the
-  parse-time `structural_marker_info` call. Big blast radius (CST/export/lint
-  read `token.data.structural`) — defer.
+Those remain occurrence-level facts computed from the raw spelling.
 
-Verify: oracle at 1 thread + full threads byte-identical; re-profile serial to
-confirm the ~20% lookup bucket + `park_ws` share actually drop.
+### A packed `u64` is not the first milestone
 
-## Workstream 3 — lexer-owned delimiter whitespace (optional, riskiest)
+The prior plan estimated a roughly 1.9 KiB packed table. A normal typed row
+table is also small enough to be cache-resident, is easier to review, and does
+not require relying on Rust enum discriminants. Start typed and record
+`size_of::<MarkerRow>()` plus total table bytes. Pack only if a profile shows
+row footprint or field loads remain material.
 
-Goal: stop *moving whitespace around* in the parser. The lexer already does
-contextual post-matching (`pending_payload_for` + `consume_contextual_payload`
-consume the `\c`/`\v` number). Mirror that: right after emitting a marker
-(`lexer.rs:120`), if `ROWS[id].absorbs_trailing_ws`, absorb the tag-end
-delimiter into the marker on the first scan — so `park_ws` / `pending_ws` /
-`delimiter_absorption` / `flush_pending_whitespace` largely disappear.
+If packing is later justified, use explicit encode/decode functions and
+explicit context-bit mappings. Do not cast enums with `as u32` unless their
+numeric representation and ordering become an intentional tested contract.
 
-Depends on WS2's absorb bit. This is a **structural simplification**, not the
-perf win (WS2 already makes the check a field read). Do it only if we want the
-parser state gone.
+### A dense index is private and distinct from `MarkerId`
 
-Byte-identical subtleties to preserve (all oracle-checked):
-- `park_ws` absorbs only the FIRST ws char (`absorbed_end = ws.start + 1`); the
-  remainder stays separate. Lexer must replicate.
-- `delimiter_absorption` also fires for `Number` (cv args, gated on
-  `cv_number == JustEmitted`) and `BookCode` — handle in
-  `consume_contextual_payload`, not just the marker arm.
-- `flush_pending_whitespace` reattaches non-absorbed pending ws to the *prior*
-  token's span; ensure moving absorption earlier doesn't change that.
-- Interaction with `push_token`'s adjacent-Text merge.
+If needed, introduce a private `MarkerIndex(u16)` with an explicit unknown
+representation and a checked construction path. The existing public
+`MarkerId(&'static str)` is a semantic/catalog API and is not repurposed.
 
-Not in logos regex itself (it can't table-lookup mid-match); this is driver-loop
-logic in `lex`, same as the existing payload consumption.
+### The oracle does not protect Rust source compatibility
 
-## Sequencing
+`MarkerToken`, `ScanToken`, `ScanResult`, `TokenData`, and their fields are
+public. Adding a private field, removing metadata, or adding a new public enum
+field can break downstream struct construction or exhaustive matching even
+when serialized output is identical. Any cross-phase dense-handle design must
+either preserve those shapes or be approved as a separate breaking change.
 
-1. WS1 token presize — **done**.
-2. WS2 packed derived row + drift test + wire hot lookups → oracle → re-profile.
-3. WS1b lexer Vec presize (re-measure after WS2).
-4. WS3 lexer-owned delimiter ws (only if the state removal is worth the risk).
-5. Endgame: `u16` id on `Token`, drop embedded structural/metadata (separate PR).
+## Workstream 0 — establish the gate
 
-## Risks / notes
+1. Add a Criterion lane for Psalms `parse/serial` using the exact shared
+   `run_named_op` body used by `profile_ops`.
+2. Save the pre-WS2 baseline for Psalms, Luke, and corpus parse.
+3. Record current `size_of` values for `MarkerMetadata`, `MarkerToken`,
+   `ScanToken`, `TokenData`, and `Token` in the progress log. Do not make these
+   brittle compile-time assertions unless size itself becomes a supported
+   contract.
+4. Capture one symbolicated `parse/serial --book psalms` profile and record
+   whether percentages are self-time or inclusive time. Avoid summing
+   overlapping stack percentages.
 
-- Every step is a behavior-preserving representation change → the oracle is the
-  gate. Rebaseline (`BLESS=1`) only if we *intend* a behavior change (we don't
-  here).
-- Don't add a codegen table (drift risk + wrong tool for hand-curated data);
-  derive + guard instead.
-- `profiling`-profile timings are for spotting hot spots, not quoting. Quote
-  from `cargo bench --bench operations` (release).
+Verification gate: the Criterion body and profiling body are identical, the
+baseline commands/results are in the progress log, and no product code changed.
+
+## Workstream 1 — vector presizing (landed in `8d4b848`)
+
+- `parse_lexemes_seeded` uses `Vec::with_capacity(lexemes.len())`.
+- `lex` uses the measured `source.len() / 6` heuristic.
+- Together they removed the realloc/memmove ladder and improved the profiling
+  build's Psalms serial wall time by roughly 35%.
+
+The earlier draft incorrectly left lexer presizing as a future WS1b. Both
+presizing changes are already landed. Do not repeat or reorder them around WS2.
+
+Follow-up only if later evidence requires it: the parser capacity is an upper
+bound and can over-allocate on `\\w`/`\\zaln`-dense data. Do not
+`shrink_to_fit`; measure peak-memory impact separately before changing it.
+
+## Workstream 2A — one typed, derived resolution per phase
+
+### Projection
+
+Add a private typed `MarkerRow`/`ResolvedMarker` API in `marker_defs` containing
+only facts consumed by the current lex/parse hot path:
+
+- canonical marker and `MarkerDefKind`;
+- marker family/metadata;
+- `StructuralMarkerInfo`;
+- `MarkerPayload`;
+- whether the opening form absorbs its following delimiter whitespace.
+
+Build the projection from the existing canonical spec plus existing derivation
+functions. An explicit whitespace row must override the category-derived
+default exactly as `lookup_marker_whitespace` does today.
+
+Do not add context masks, closing behavior, paragraph flags, or catalog-only
+fields merely because they fit. They are outside the measured parse path.
+
+Note for a future, separate lint-focused workstream (not WS2A): context
+validity is the one place a bitmask is a genuine *algorithmic* win — a `u32`
+bit-test on the typed row replacing lint's `marker_allows_context`
+`&[SpecContext]` slice scan. It rides on a plain `u32` field of the typed row
+and needs no bit-packing. Keep it out of the parse projection until lint
+lookup is independently profiled and shown hot.
+
+### Resolution
+
+- Resolve/normalize a raw marker once within the lexer and use that result for
+  both `MarkerMetadata` and pending payload.
+- In the parser, replace separate structural and whitespace lookups with one
+  resolution that supplies both facts. The seven `structural_marker_info` call
+  sites are mutually exclusive match arms; consolidate their construction,
+  but do not describe them as seven probes per occurrence.
+- Keep unknown-marker behavior identical.
+- Keep public `MarkerToken`, `ScanToken`, `ScanResult`, `TokenData`, and
+  serialized fields unchanged in WS2A.
+- Remove or narrow `fast_marker_metadata` only when the derived resolver covers
+  its cases and parity tests prove that aliases such as `fe`/`ef` retain the
+  current canonical metadata. Do not leave two competing hot-marker lists.
+
+This phase may still perform one resolution in the lexer and one in the parser.
+That is intentional: it captures the low-risk consolidation win without first
+changing a public boundary.
+
+### Drift/parity tests
+
+Test behavior, not the chosen bit layout:
+
+1. For every canonical `MARKER_SPECS` row, compare the projection with current
+   metadata, structural, payload, and effective whitespace predicates.
+2. Exercise normalization families explicitly: nested `+` markers, numbered
+   paragraph variants, numbered/hyphenated table cells, milestone `-s`/`-e`,
+   and the `esbe` alias.
+3. Extract every distinct raw marker spelling in `testData`/example corpora and
+   assert old/new resolution parity during the migration.
+4. Include unknown and malformed marker names so the optimization does not
+   accidentally turn them into known markers.
+
+Verification gate:
+
+- focused marker-definition and lexer/parser tests pass;
+- full library/workspace tests pass;
+- wasm target checks;
+- oracle passes unchanged at one and full worker counts (never `BLESS=1`);
+- retention gate passes; and
+- a new serial profile confirms what displaced the marker-resolution bucket.
+
+If the retention gate fails, revert WS2A rather than proceeding to a denser
+representation.
+
+## Workstream 2B — carry a dense handle across phases (conditional)
+
+Attempt only if WS2A passes but marker resolution remains a material profile
+bucket.
+
+API-compatibility decision (Will, resolved): a semver-breaking token/lexeme
+shape change **is acceptable this cycle** — `master` already carries a breaking
+diff change and the editor consumer will be updated alongside. So WS2B is not
+gated on preserving public shapes; choose the mechanism on engineering merit:
+
+1. Carry a private dense handle (e.g. `MarkerIndex(u16)`) on the lexeme/token
+   where it reads cleanest. Serialized output must stay byte-identical (the
+   oracle still gates that); source-level breakage is allowed and must be noted
+   in the changelog so the editor is updated in lockstep.
+2. A parallel sidecar `Vec<MarkerIndex>` keyed by token position is the
+   alternative — worth it only to avoid inflating the token enum's size/
+   alignment (a `u16` field that bumps the enum can cost more bandwidth than the
+   lookup it saves). This is a *memory-layout* tradeoff now, not a semver one.
+3. Stop: accept one lexer and one parser resolution because the remaining cost
+   does not justify any wider representation change.
+
+Measure sidecar allocation/cache cost against the lookup it replaces before
+choosing it. Do not claim lint can read `ROWS[id]` until final lintable tokens
+actually carry a stable handle.
+
+If implemented, measure the sizes from Workstream 0 again. A `u16` field that
+increases the enclosing enum due to alignment may cost more memory bandwidth
+than it saves in lookup time.
+
+Verification gate: the same correctness gates as WS2A, explicit downstream API
+compatibility evidence, and a second independent retention decision.
+
+## Workstream 3 — lexer-owned delimiter whitespace (optional, separate)
+
+This removes parser state; it is not assumed to be the main performance win.
+Only start after WS2 is measured and only if simplifying `pending_ws` is itself
+worth the behavior risk.
+
+The lexer may absorb delimiter whitespace immediately after a resolved marker,
+book code, or chapter/verse number, but must preserve:
+
+- only the first whitespace character is absorbed;
+- the remainder remains pending/separate exactly as today;
+- number absorption occurs only when `cv_number == JustEmitted`;
+- book-code absorption remains unconditional in that contextual position;
+- non-absorbed pending whitespace extends the prior token span;
+- adjacent text merging and empty-document behavior; and
+- exact source spans at chunk boundaries.
+
+Treat WS3 as its own commit and benchmark. If it simplifies code without a
+timing win, review it on maintainability alone rather than laundering it as a
+performance result.
+
+## Verification commands
+
+The implementing agent must record the exact commands supported by the current
+toolchain in the progress log. The intended lanes are:
+
+```sh
+cargo test --workspace
+cargo test --test lint_oracle -- --ignored
+RAYON_NUM_THREADS=1 cargo test --test lint_oracle -- --ignored
+cargo check --workspace --target wasm32-unknown-unknown
+cargo bench --bench operations
+cargo bench --bench parallelism
+```
+
+If the oracle test's actual ignored-test filter differs, discover it from the
+test binary and update this plan/progress log rather than copying a stale
+command. Never run `BLESS=1` for these representation-only changes.
+
+## Sequencing and stop conditions
+
+1. WS0 benchmark/profile baseline.
+2. WS2A typed projection and per-phase consolidation.
+3. Correctness gate, Criterion comparison, then serial re-profile.
+4. Stop if WS2A fails the retention gate or removes the material bucket.
+5. WS2B only if lookup remains material and the API strategy is explicitly
+   chosen.
+6. WS3 only as a separately justified simplification.
+
+At every gate, prefer the smaller landed design. A `u64`, perfect hash, dense
+ID on final tokens, or lexer-owned whitespace is not success unless its own
+measurement pays for its own complexity.
+
+## Risks and rollback
+
+- **Derived-data drift:** parity tests compare observable predicates over base
+  rows and normalization variants.
+- **Alias/variant collapse:** keep occurrence facts separate and test `+`,
+  numbered, table-cell, milestone, and alias forms.
+- **Public Rust API break:** WS2A forbids public shape changes; WS2B may break
+  source (approved this cycle — changelog it so the editor updates in lockstep)
+  but must keep serialized output byte-identical.
+- **Enum/table packing bugs:** typed rows first; packing is conditional and uses
+  explicit encoders if ever justified.
+- **Benchmark noise:** repeated Criterion comparisons and profile attribution,
+  not single-run ratios.
+- **Memory regression:** record enclosing type sizes and reject handle-carrying
+  designs that inflate hot vectors without a compensating measured win.
+- **Rollback:** each workstream is a separate commit and must leave the oracle
+  green, so a failed retention gate is reverted without disturbing the landed
+  chapter-parallel work.
+
+## Decisions still requiring Will
+
+1. Confirm or replace the proposed 5% win / 3% regression retention thresholds.
+2. ~~If WS2A leaves lookup hot, approve a source-compatible or breaking
+   dense-handle change.~~ **Resolved:** a semver-breaking token/lexeme change is
+   acceptable this cycle (editor updated alongside; `master` already breaks via
+   diff). WS2B chooses its mechanism on engineering merit; serialized output
+   still must stay byte-identical.
+3. Treat WS3 as optional maintainability work, or explicitly make removal of
+   parser whitespace state a goal independent of performance.
