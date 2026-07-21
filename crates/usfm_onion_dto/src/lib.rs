@@ -2,14 +2,21 @@ use serde::{Deserialize, Serialize};
 
 use usfm_onion::marker_defs::{
     BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
-    InlineContext as NativeInlineContext, MarkerFamily as NativeMarkerFamily,
-    MarkerFamilyRole as NativeMarkerFamilyRole, MarkerPayload as NativeMarkerPayload,
-    NoteFamily as NativeNoteFamily, NoteSubkind as NativeNoteSubkind,
-    ParagraphCategory as NativeParagraphCategory, SpecContext as NativeSpecContext,
+    InlineContext as NativeInlineContext, MarkerDefKind as NativeMarkerDefKind,
+    MarkerFamily as NativeMarkerFamily, MarkerFamilyRole as NativeMarkerFamilyRole,
+    MarkerPayload as NativeMarkerPayload, NoteFamily as NativeNoteFamily,
+    NoteSubkind as NativeNoteSubkind, ParagraphCategory as NativeParagraphCategory,
+    SpecContext as NativeSpecContext, StructuralMarkerInfo as NativeStructuralMarkerInfo,
+    StructuralScopeKind as NativeStructuralScopeKind,
 };
 use usfm_onion::markers::{
     MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
     UsfmMarkerInfo as NativeUsfmMarkerInfo,
+};
+use usfm_onion::token::{
+    AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
+    NumberRangeKind as NativeNumberRangeKind, Sid as NativeSid, Span as NativeSpan,
+    Token as NativeToken, TokenData as NativeTokenData, TokenKind as NativeTokenKind,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -491,6 +498,447 @@ pub fn map_marker_info(info: NativeUsfmMarkerInfo) -> MarkerInfo {
     info.into()
 }
 
+// ---------------------------------------------------------------------------
+// Token wire DTO — single source of truth for the flat token stream that
+// travels native → JS (wasm) and native → editor (Tauri commands). The
+// editor's hand-written parallel copy drifted and crashed the v0.0.9 desktop
+// nightly (`missing field 'span'`); defining the shape once here — with the
+// real contract, `span: Option<Span>` and its skip-if — removes that seam.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum TokenKind {
+    Newline,
+    OptBreak,
+    Marker,
+    EndMarker,
+    Milestone,
+    MilestoneEnd,
+    BookCode,
+    Number,
+    Text,
+}
+
+impl From<NativeTokenKind> for TokenKind {
+    fn from(value: NativeTokenKind) -> Self {
+        match value {
+            NativeTokenKind::Newline => Self::Newline,
+            NativeTokenKind::OptBreak => Self::OptBreak,
+            NativeTokenKind::Marker => Self::Marker,
+            NativeTokenKind::EndMarker => Self::EndMarker,
+            NativeTokenKind::Milestone => Self::Milestone,
+            NativeTokenKind::MilestoneEnd => Self::MilestoneEnd,
+            NativeTokenKind::BookCode => Self::BookCode,
+            NativeTokenKind::Number => Self::Number,
+            NativeTokenKind::Text => Self::Text,
+        }
+    }
+}
+
+impl From<TokenKind> for NativeTokenKind {
+    fn from(value: TokenKind) -> Self {
+        match value {
+            TokenKind::Newline => Self::Newline,
+            TokenKind::OptBreak => Self::OptBreak,
+            TokenKind::Marker => Self::Marker,
+            TokenKind::EndMarker => Self::EndMarker,
+            TokenKind::Milestone => Self::Milestone,
+            TokenKind::MilestoneEnd => Self::MilestoneEnd,
+            TokenKind::BookCode => Self::BookCode,
+            TokenKind::Number => Self::Number,
+            TokenKind::Text => Self::Text,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum NumberRangeKind {
+    Single,
+    Range,
+    Sequence,
+    SequenceWithRange,
+}
+
+impl From<NativeNumberRangeKind> for NumberRangeKind {
+    fn from(value: NativeNumberRangeKind) -> Self {
+        match value {
+            NativeNumberRangeKind::Single => Self::Single,
+            NativeNumberRangeKind::Range => Self::Range,
+            NativeNumberRangeKind::Sequence => Self::Sequence,
+            NativeNumberRangeKind::SequenceWithRange => Self::SequenceWithRange,
+        }
+    }
+}
+
+impl From<NumberRangeKind> for NativeNumberRangeKind {
+    fn from(value: NumberRangeKind) -> Self {
+        match value {
+            NumberRangeKind::Single => Self::Single,
+            NumberRangeKind::Range => Self::Range,
+            NumberRangeKind::Sequence => Self::Sequence,
+            NumberRangeKind::SequenceWithRange => Self::SequenceWithRange,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum StructuralScopeKind {
+    Unknown,
+    Header,
+    Block,
+    Note,
+    Character,
+    Milestone,
+    Chapter,
+    Verse,
+    TableRow,
+    TableCell,
+    Sidebar,
+    Periph,
+    Meta,
+}
+
+impl From<NativeStructuralScopeKind> for StructuralScopeKind {
+    fn from(value: NativeStructuralScopeKind) -> Self {
+        match value {
+            NativeStructuralScopeKind::Unknown => Self::Unknown,
+            NativeStructuralScopeKind::Header => Self::Header,
+            NativeStructuralScopeKind::Block => Self::Block,
+            NativeStructuralScopeKind::Note => Self::Note,
+            NativeStructuralScopeKind::Character => Self::Character,
+            NativeStructuralScopeKind::Milestone => Self::Milestone,
+            NativeStructuralScopeKind::Chapter => Self::Chapter,
+            NativeStructuralScopeKind::Verse => Self::Verse,
+            NativeStructuralScopeKind::TableRow => Self::TableRow,
+            NativeStructuralScopeKind::TableCell => Self::TableCell,
+            NativeStructuralScopeKind::Sidebar => Self::Sidebar,
+            NativeStructuralScopeKind::Periph => Self::Periph,
+            NativeStructuralScopeKind::Meta => Self::Meta,
+        }
+    }
+}
+
+impl From<StructuralScopeKind> for NativeStructuralScopeKind {
+    fn from(value: StructuralScopeKind) -> Self {
+        match value {
+            StructuralScopeKind::Unknown => NativeStructuralScopeKind::Unknown,
+            StructuralScopeKind::Header => NativeStructuralScopeKind::Header,
+            StructuralScopeKind::Block => NativeStructuralScopeKind::Block,
+            StructuralScopeKind::Note => NativeStructuralScopeKind::Note,
+            StructuralScopeKind::Character => NativeStructuralScopeKind::Character,
+            StructuralScopeKind::Milestone => NativeStructuralScopeKind::Milestone,
+            StructuralScopeKind::Chapter => NativeStructuralScopeKind::Chapter,
+            StructuralScopeKind::Verse => NativeStructuralScopeKind::Verse,
+            StructuralScopeKind::TableRow => NativeStructuralScopeKind::TableRow,
+            StructuralScopeKind::TableCell => NativeStructuralScopeKind::TableCell,
+            StructuralScopeKind::Sidebar => NativeStructuralScopeKind::Sidebar,
+            StructuralScopeKind::Periph => NativeStructuralScopeKind::Periph,
+            StructuralScopeKind::Meta => NativeStructuralScopeKind::Meta,
+        }
+    }
+}
+
+// `MarkerDefKind` (spec-level kind on tokens, distinct from `MarkerKind` which
+// is the catalog-level kind on `UsfmMarkerInfo`). Smaller variant set — the
+// spec doesn't distinguish milestone-start/-end or sidebar-start/-end.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum MarkerDefKind {
+    Paragraph,
+    Character,
+    Note,
+    Chapter,
+    Verse,
+    Milestone,
+    Figure,
+    Sidebar,
+    Periph,
+    Meta,
+    TableRow,
+    TableCell,
+    Header,
+}
+
+impl From<NativeMarkerDefKind> for MarkerDefKind {
+    fn from(value: NativeMarkerDefKind) -> Self {
+        match value {
+            NativeMarkerDefKind::Paragraph => Self::Paragraph,
+            NativeMarkerDefKind::Character => Self::Character,
+            NativeMarkerDefKind::Note => Self::Note,
+            NativeMarkerDefKind::Chapter => Self::Chapter,
+            NativeMarkerDefKind::Verse => Self::Verse,
+            NativeMarkerDefKind::Milestone => Self::Milestone,
+            NativeMarkerDefKind::Figure => Self::Figure,
+            NativeMarkerDefKind::Sidebar => Self::Sidebar,
+            NativeMarkerDefKind::Periph => Self::Periph,
+            NativeMarkerDefKind::Meta => Self::Meta,
+            NativeMarkerDefKind::TableRow => Self::TableRow,
+            NativeMarkerDefKind::TableCell => Self::TableCell,
+            NativeMarkerDefKind::Header => Self::Header,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct Span {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl From<NativeSpan> for Span {
+    fn from(span: NativeSpan) -> Self {
+        Self {
+            start: span.start,
+            end: span.end,
+        }
+    }
+}
+
+impl From<Span> for NativeSpan {
+    fn from(span: Span) -> Self {
+        NativeSpan {
+            start: span.start,
+            end: span.end,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct MarkerMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<MarkerDefKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<MarkerFamily>,
+}
+
+impl From<NativeMarkerMetadata> for MarkerMetadata {
+    fn from(metadata: NativeMarkerMetadata) -> Self {
+        Self {
+            canonical: metadata.canonical.map(ToOwned::to_owned),
+            kind: metadata.kind.map(Into::into),
+            family: metadata.family.map(Into::into),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct AttributeItem {
+    pub span: Span,
+    pub text: String,
+    pub key: String,
+    pub value: String,
+    #[serde(default)]
+    pub is_default: bool,
+}
+
+impl From<&NativeAttributeItem<'_>> for AttributeItem {
+    fn from(item: &NativeAttributeItem<'_>) -> Self {
+        Self {
+            span: item.span.into(),
+            text: item.source.to_string(),
+            key: item.key.to_string(),
+            value: decode_attr_value(item.value),
+            is_default: item.is_default,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct StructuralMarkerInfo {
+    pub scope_kind: StructuralScopeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline_context: Option<InlineContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note_context: Option<SpecContext>,
+}
+
+impl From<NativeStructuralMarkerInfo> for StructuralMarkerInfo {
+    fn from(info: NativeStructuralMarkerInfo) -> Self {
+        Self {
+            scope_kind: info.scope_kind.into(),
+            inline_context: info.inline_context.map(Into::into),
+            note_context: info.note_context.map(Into::into),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct NumberInfo {
+    pub start: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<u32>,
+    pub kind: NumberRangeKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct Token {
+    pub id: String,
+    pub kind: TokenKind,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<Span>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marker_metadata: Option<MarkerMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structural: Option<StructuralMarkerInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number_info: Option<NumberInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub book_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub book_code_valid: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<AttributeItem>,
+}
+
+impl<'a> From<&NativeToken<'a>> for Token {
+    fn from(token: &NativeToken<'a>) -> Self {
+        let mut value = Token {
+            id: format!("{}-{}", token.id.book_code, token.id.index),
+            kind: token.kind().into(),
+            source: token.source.to_string(),
+            span: Some(token.span.into()),
+            sid: token.sid.map(format_sid),
+            marker: token.marker_name().map(ToOwned::to_owned),
+            nested: None,
+            marker_metadata: None,
+            structural: None,
+            number_info: None,
+            book_code: None,
+            book_code_valid: None,
+            attributes: Vec::new(),
+        };
+
+        match &token.data {
+            NativeTokenData::Marker {
+                metadata,
+                structural,
+                nested,
+                ..
+            } => {
+                value.nested = Some(*nested);
+                value.marker_metadata = Some((*metadata).into());
+                value.structural = Some((*structural).into());
+                value.attributes = token
+                    .attributes()
+                    .map(|a| a.iter().map(Into::into).collect())
+                    .unwrap_or_default();
+            }
+            NativeTokenData::EndMarker {
+                metadata,
+                structural,
+                nested,
+                ..
+            } => {
+                value.nested = Some(*nested);
+                value.marker_metadata = Some((*metadata).into());
+                value.structural = Some((*structural).into());
+            }
+            NativeTokenData::Milestone {
+                metadata,
+                structural,
+                ..
+            } => {
+                value.marker_metadata = Some((*metadata).into());
+                value.structural = Some((*structural).into());
+                value.attributes = token
+                    .attributes()
+                    .map(|a| a.iter().map(Into::into).collect())
+                    .unwrap_or_default();
+            }
+            NativeTokenData::BookCode { code, is_valid } => {
+                value.book_code = Some((*code).to_string());
+                value.book_code_valid = Some(*is_valid);
+            }
+            NativeTokenData::Number { start, end, kind } => {
+                value.number_info = Some(NumberInfo {
+                    start: *start,
+                    end: *end,
+                    kind: (*kind).into(),
+                });
+            }
+            NativeTokenData::Newline
+            | NativeTokenData::OptBreak
+            | NativeTokenData::MilestoneEnd
+            | NativeTokenData::Text => {}
+        }
+
+        value
+    }
+}
+
+/// Formats a native `Sid` as its wire string (`"GEN 1:1"`, bridge/dup forms
+/// included via `verse_locator`). Shared so the wasm crate's native-token
+/// identity path and this DTO conversion produce byte-identical sids.
+pub fn format_sid(sid: NativeSid) -> String {
+    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
+}
+
+/// Decodes USFM-wire escapes in an attribute value so JS consumers see the
+/// logical string. Mirrors `encode_attr_value` on the emit side: `\\` → `\`,
+/// `\"` → `"`. Other backslash sequences are preserved verbatim (the lexer
+/// only recognizes those two escapes today).
+pub fn decode_attr_value(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.clone().next() {
+                Some('\\') => {
+                    chars.next();
+                    out.push('\\');
+                    continue;
+                }
+                Some('"') => {
+                    chars.next();
+                    out.push('"');
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(ch);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
@@ -532,5 +980,30 @@ mod tests {
         let value = marker_value("nd");
         assert_eq!(value.get("payload"), None);
         assert_eq!(value.get("paragraphCategory"), None);
+    }
+
+    /// Regression for the v0.0.9 desktop nightly crash (`missing field 'span'`).
+    /// A frontend-shaped token with NO `span` field must still deserialize into
+    /// `Token` — `span` is `Option<Span>` with a skip-if, so its absence on the
+    /// wire is the contract, not an error. This is the exact seam the editor's
+    /// hand-written parallel copy drifted on; single-sourcing `Token` here
+    /// makes both consumers share this shape.
+    #[test]
+    fn token_deserializes_without_span_field() {
+        // Fixture: the minimal frontend token shape, span omitted entirely.
+        let json = r#"{"id":"GEN-3","kind":"text","source":"In the beginning"}"#;
+        let token: super::Token = serde_json::from_str(json).expect("token must deserialize");
+        assert!(token.span.is_none(), "absent span must decode to None");
+        assert_eq!(token.id, "GEN-3");
+        assert_eq!(token.source, "In the beginning");
+        assert!(matches!(token.kind, super::TokenKind::Text));
+    }
+
+    #[test]
+    fn decode_attr_value_unescapes_quote_and_backslash() {
+        use super::decode_attr_value;
+        assert_eq!(decode_attr_value("plain"), "plain");
+        assert_eq!(decode_attr_value("a\\\"b"), "a\"b");
+        assert_eq!(decode_attr_value("a\\\\b"), "a\\b");
     }
 }

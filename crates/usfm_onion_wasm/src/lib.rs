@@ -31,17 +31,12 @@ use usfm_onion::lint::{
     LintSeverity as NativeLintSeverity, LintSuppression as NativeLintSuppression, LintableToken,
     TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
 };
-use usfm_onion::marker_defs::{
-    StructuralMarkerInfo as NativeStructuralMarkerInfo,
-    StructuralScopeKind as NativeStructuralScopeKind,
-};
+use usfm_onion::marker_defs::StructuralMarkerInfo as NativeStructuralMarkerInfo;
 use usfm_onion::markers::{is_known_marker, marker_catalog, marker_info};
 use usfm_onion::parse::parse as native_parse;
 use usfm_onion::token::{
-    AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
-    NumberRangeKind as NativeNumberRangeKind, Sid as NativeSid, Span as NativeSpan,
-    Token as NativeToken, TokenData as NativeTokenData, TokenKind as NativeTokenKind,
-    tokens_to_usfm,
+    NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
+    TokenKind as NativeTokenKind, tokens_to_usfm,
 };
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -53,9 +48,10 @@ use usfm_onion::vref::{
 };
 use usfm_onion::walker::WalkableToken;
 pub use usfm_onion_dto::{
-    BlockBehavior, ClosingBehavior, InlineContext, MarkerCategory, MarkerFamily, MarkerFamilyRole,
-    MarkerInfo, MarkerKind, MarkerPayload, NoteFamily, NoteSubkind, ParagraphCategory, SpecContext,
-    map_marker_info,
+    AttributeItem, BlockBehavior, ClosingBehavior, InlineContext, MarkerCategory, MarkerDefKind,
+    MarkerFamily, MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload,
+    NoteFamily, NoteSubkind, NumberInfo, NumberRangeKind, ParagraphCategory, Span, SpecContext,
+    StructuralMarkerInfo, StructuralScopeKind, Token, TokenKind, format_sid, map_marker_info,
 };
 
 // TODO: eventually move off of this ideally
@@ -112,85 +108,6 @@ export type UsjElement =
 // the previous stringify pairs produced. From impls in both directions keep
 // the boundary between native and FFI fully typed; no string parsing.
 // ---------------------------------------------------------------------------
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub enum TokenKind {
-    Newline,
-    OptBreak,
-    Marker,
-    EndMarker,
-    Milestone,
-    MilestoneEnd,
-    BookCode,
-    Number,
-    Text,
-}
-
-impl From<NativeTokenKind> for TokenKind {
-    fn from(value: NativeTokenKind) -> Self {
-        match value {
-            NativeTokenKind::Newline => Self::Newline,
-            NativeTokenKind::OptBreak => Self::OptBreak,
-            NativeTokenKind::Marker => Self::Marker,
-            NativeTokenKind::EndMarker => Self::EndMarker,
-            NativeTokenKind::Milestone => Self::Milestone,
-            NativeTokenKind::MilestoneEnd => Self::MilestoneEnd,
-            NativeTokenKind::BookCode => Self::BookCode,
-            NativeTokenKind::Number => Self::Number,
-            NativeTokenKind::Text => Self::Text,
-        }
-    }
-}
-
-impl From<TokenKind> for NativeTokenKind {
-    fn from(value: TokenKind) -> Self {
-        match value {
-            TokenKind::Newline => Self::Newline,
-            TokenKind::OptBreak => Self::OptBreak,
-            TokenKind::Marker => Self::Marker,
-            TokenKind::EndMarker => Self::EndMarker,
-            TokenKind::Milestone => Self::Milestone,
-            TokenKind::MilestoneEnd => Self::MilestoneEnd,
-            TokenKind::BookCode => Self::BookCode,
-            TokenKind::Number => Self::Number,
-            TokenKind::Text => Self::Text,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub enum NumberRangeKind {
-    Single,
-    Range,
-    Sequence,
-    SequenceWithRange,
-}
-
-impl From<NativeNumberRangeKind> for NumberRangeKind {
-    fn from(value: NativeNumberRangeKind) -> Self {
-        match value {
-            NativeNumberRangeKind::Single => Self::Single,
-            NativeNumberRangeKind::Range => Self::Range,
-            NativeNumberRangeKind::Sequence => Self::Sequence,
-            NativeNumberRangeKind::SequenceWithRange => Self::SequenceWithRange,
-        }
-    }
-}
-
-impl From<NumberRangeKind> for NativeNumberRangeKind {
-    fn from(value: NumberRangeKind) -> Self {
-        match value {
-            NumberRangeKind::Single => Self::Single,
-            NumberRangeKind::Range => Self::Range,
-            NumberRangeKind::Sequence => Self::Sequence,
-            NumberRangeKind::SequenceWithRange => Self::SequenceWithRange,
-        }
-    }
-}
-
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Tsify,
 )]
@@ -547,108 +464,6 @@ impl From<HtmlCallerScope> for NativeHtmlCallerScope {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub enum StructuralScopeKind {
-    Unknown,
-    Header,
-    Block,
-    Note,
-    Character,
-    Milestone,
-    Chapter,
-    Verse,
-    TableRow,
-    TableCell,
-    Sidebar,
-    Periph,
-    Meta,
-}
-
-impl From<NativeStructuralScopeKind> for StructuralScopeKind {
-    fn from(value: NativeStructuralScopeKind) -> Self {
-        match value {
-            NativeStructuralScopeKind::Unknown => Self::Unknown,
-            NativeStructuralScopeKind::Header => Self::Header,
-            NativeStructuralScopeKind::Block => Self::Block,
-            NativeStructuralScopeKind::Note => Self::Note,
-            NativeStructuralScopeKind::Character => Self::Character,
-            NativeStructuralScopeKind::Milestone => Self::Milestone,
-            NativeStructuralScopeKind::Chapter => Self::Chapter,
-            NativeStructuralScopeKind::Verse => Self::Verse,
-            NativeStructuralScopeKind::TableRow => Self::TableRow,
-            NativeStructuralScopeKind::TableCell => Self::TableCell,
-            NativeStructuralScopeKind::Sidebar => Self::Sidebar,
-            NativeStructuralScopeKind::Periph => Self::Periph,
-            NativeStructuralScopeKind::Meta => Self::Meta,
-        }
-    }
-}
-
-impl From<StructuralScopeKind> for NativeStructuralScopeKind {
-    fn from(value: StructuralScopeKind) -> Self {
-        match value {
-            StructuralScopeKind::Unknown => NativeStructuralScopeKind::Unknown,
-            StructuralScopeKind::Header => NativeStructuralScopeKind::Header,
-            StructuralScopeKind::Block => NativeStructuralScopeKind::Block,
-            StructuralScopeKind::Note => NativeStructuralScopeKind::Note,
-            StructuralScopeKind::Character => NativeStructuralScopeKind::Character,
-            StructuralScopeKind::Milestone => NativeStructuralScopeKind::Milestone,
-            StructuralScopeKind::Chapter => NativeStructuralScopeKind::Chapter,
-            StructuralScopeKind::Verse => NativeStructuralScopeKind::Verse,
-            StructuralScopeKind::TableRow => NativeStructuralScopeKind::TableRow,
-            StructuralScopeKind::TableCell => NativeStructuralScopeKind::TableCell,
-            StructuralScopeKind::Sidebar => NativeStructuralScopeKind::Sidebar,
-            StructuralScopeKind::Periph => NativeStructuralScopeKind::Periph,
-            StructuralScopeKind::Meta => NativeStructuralScopeKind::Meta,
-        }
-    }
-}
-
-// `MarkerDefKind` (spec-level kind on tokens, distinct from `MarkerKind` which
-// is the catalog-level kind on `UsfmMarkerInfo`). Smaller variant set — the
-// spec doesn't distinguish milestone-start/-end or sidebar-start/-end.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub enum MarkerDefKind {
-    Paragraph,
-    Character,
-    Note,
-    Chapter,
-    Verse,
-    Milestone,
-    Figure,
-    Sidebar,
-    Periph,
-    Meta,
-    TableRow,
-    TableCell,
-    Header,
-}
-
-impl From<usfm_onion::marker_defs::MarkerDefKind> for MarkerDefKind {
-    fn from(value: usfm_onion::marker_defs::MarkerDefKind) -> Self {
-        use usfm_onion::marker_defs::MarkerDefKind as K;
-        match value {
-            K::Paragraph => Self::Paragraph,
-            K::Character => Self::Character,
-            K::Note => Self::Note,
-            K::Chapter => Self::Chapter,
-            K::Verse => Self::Verse,
-            K::Milestone => Self::Milestone,
-            K::Figure => Self::Figure,
-            K::Sidebar => Self::Sidebar,
-            K::Periph => Self::Periph,
-            K::Meta => Self::Meta,
-            K::TableRow => Self::TableRow,
-            K::TableCell => Self::TableCell,
-            K::Header => Self::Header,
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Value types — schema-of-record for the JS surface. tsify-derived TS types
 // emit from these directly; their wire format is the byte-for-byte
@@ -675,14 +490,6 @@ pub struct VrefMap(pub std::collections::BTreeMap<String, String>);
 pub struct VrefOptions {
     #[serde(default)]
     trim: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct Span {
-    start: u32,
-    end: u32,
 }
 
 /// UTF-16 code-unit offsets into a `VerseProjection.text`. Deliberately a
@@ -724,80 +531,6 @@ pub struct VerseProjection {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(transparent)]
 pub struct VrefIndex(pub std::collections::BTreeMap<String, VerseProjection>);
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct MarkerMetadata {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    canonical: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    kind: Option<MarkerDefKind>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    family: Option<MarkerFamily>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct AttributeItem {
-    span: Span,
-    text: String,
-    key: String,
-    value: String,
-    #[serde(default)]
-    is_default: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct StructuralMarkerInfo {
-    scope_kind: StructuralScopeKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    inline_context: Option<InlineContext>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    note_context: Option<SpecContext>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct NumberInfo {
-    start: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    end: Option<u32>,
-    kind: NumberRangeKind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct Token {
-    id: String,
-    kind: TokenKind,
-    source: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    span: Option<Span>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    sid: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    marker: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    nested: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    marker_metadata: Option<MarkerMetadata>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    structural: Option<StructuralMarkerInfo>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    number_info: Option<NumberInfo>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    book_code: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    book_code_valid: Option<bool>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    attributes: Vec<AttributeItem>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -1764,78 +1497,12 @@ fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<Token> {
     tokens.iter().map(map_token).collect()
 }
 
+// Native token → wire DTO. The conversion body lives in `usfm_onion_dto`
+// (`From<&Token> for Token`) so the wasm and native-Tauri consumers share one
+// definition; this wrapper stays for the fn-pointer call sites (`map_token`
+// passed into `map_native_skeleton` / `map_diffs_by_chapter`).
 fn map_token(token: &NativeToken<'_>) -> Token {
-    let mut value = Token {
-        id: format!("{}-{}", token.id.book_code, token.id.index),
-        kind: token.kind().into(),
-        source: token.source.to_string(),
-        span: Some(map_span(token.span)),
-        sid: token.sid.map(format_sid),
-        marker: token.marker_name().map(ToOwned::to_owned),
-        nested: None,
-        marker_metadata: None,
-        structural: None,
-        number_info: None,
-        book_code: None,
-        book_code_valid: None,
-        attributes: Vec::new(),
-    };
-
-    match &token.data {
-        NativeTokenData::Marker {
-            metadata,
-            structural,
-            nested,
-            ..
-        } => {
-            value.nested = Some(*nested);
-            value.marker_metadata = Some(map_marker_metadata(*metadata));
-            value.structural = Some(map_structural_info(*structural));
-            value.attributes = token
-                .attributes()
-                .map(|a| a.iter().map(map_attribute_item).collect())
-                .unwrap_or_default();
-        }
-        NativeTokenData::EndMarker {
-            metadata,
-            structural,
-            nested,
-            ..
-        } => {
-            value.nested = Some(*nested);
-            value.marker_metadata = Some(map_marker_metadata(*metadata));
-            value.structural = Some(map_structural_info(*structural));
-        }
-        NativeTokenData::Milestone {
-            metadata,
-            structural,
-            ..
-        } => {
-            value.marker_metadata = Some(map_marker_metadata(*metadata));
-            value.structural = Some(map_structural_info(*structural));
-            value.attributes = token
-                .attributes()
-                .map(|a| a.iter().map(map_attribute_item).collect())
-                .unwrap_or_default();
-        }
-        NativeTokenData::BookCode { code, is_valid } => {
-            value.book_code = Some((*code).to_string());
-            value.book_code_valid = Some(*is_valid);
-        }
-        NativeTokenData::Number { start, end, kind } => {
-            value.number_info = Some(NumberInfo {
-                start: *start,
-                end: *end,
-                kind: (*kind).into(),
-            });
-        }
-        NativeTokenData::Newline
-        | NativeTokenData::OptBreak
-        | NativeTokenData::MilestoneEnd
-        | NativeTokenData::Text => {}
-    }
-
-    value
+    token.into()
 }
 
 fn map_format_token(token: &NativeFormatToken) -> Token {
@@ -1858,44 +1525,6 @@ fn map_format_token(token: &NativeFormatToken) -> Token {
         book_code_valid: None,
         attributes: Vec::new(),
     }
-}
-
-fn map_attribute_item(item: &NativeAttributeItem<'_>) -> AttributeItem {
-    AttributeItem {
-        span: map_span(item.span),
-        text: item.source.to_string(),
-        key: item.key.to_string(),
-        value: decode_attr_value(item.value),
-        is_default: item.is_default,
-    }
-}
-
-/// Decodes USFM-wire escapes in an attribute value so JS consumers see the
-/// logical string. Mirrors `encode_attr_value` on the emit side: `\\` → `\`,
-/// `\"` → `"`. Other backslash sequences are preserved verbatim (the lexer
-/// only recognizes those two escapes today).
-fn decode_attr_value(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    let mut chars = raw.chars();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            match chars.clone().next() {
-                Some('\\') => {
-                    chars.next();
-                    out.push('\\');
-                    continue;
-                }
-                Some('"') => {
-                    chars.next();
-                    out.push('"');
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        out.push(ch);
-    }
-    out
 }
 
 /// Re-escapes a logical attribute value for USFM emit. Inverse of
@@ -1935,34 +1564,16 @@ fn format_attribute_list(attrs: &[AttributeItem]) -> String {
     out
 }
 
-fn map_marker_metadata(metadata: NativeMarkerMetadata) -> MarkerMetadata {
-    MarkerMetadata {
-        canonical: metadata.canonical.map(ToOwned::to_owned),
-        kind: metadata.kind.map(Into::into),
-        family: metadata.family.map(Into::into),
-    }
-}
-
 fn map_structural_info(info: NativeStructuralMarkerInfo) -> StructuralMarkerInfo {
-    StructuralMarkerInfo {
-        scope_kind: info.scope_kind.into(),
-        inline_context: info.inline_context.map(Into::into),
-        note_context: info.note_context.map(Into::into),
-    }
+    info.into()
 }
 
 fn map_span(span: NativeSpan) -> Span {
-    Span {
-        start: span.start,
-        end: span.end,
-    }
+    span.into()
 }
 
 fn native_span(span: Span) -> NativeSpan {
-    NativeSpan {
-        start: span.start,
-        end: span.end,
-    }
+    span.into()
 }
 
 fn map_cst_document(document: &NativeCstDocument<'_>) -> CstDocument {
@@ -2420,10 +2031,6 @@ fn token_kind_wire_key(kind: NativeTokenKind) -> &'static str {
     }
 }
 
-fn format_sid(sid: NativeSid) -> String {
-    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2586,13 +2193,6 @@ mod tests {
         assert_eq!(encode_attr_value("plain"), "plain");
         assert_eq!(encode_attr_value("a\"b"), "a\\\"b");
         assert_eq!(encode_attr_value("a\\b"), "a\\\\b");
-    }
-
-    #[test]
-    fn decode_attr_value_unescapes_quote_and_backslash() {
-        assert_eq!(decode_attr_value("plain"), "plain");
-        assert_eq!(decode_attr_value("a\\\"b"), "a\"b");
-        assert_eq!(decode_attr_value("a\\\\b"), "a\\b");
     }
 
     #[test]
