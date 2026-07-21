@@ -195,7 +195,7 @@ html	591	8f0c172589c65884
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\fig* has no matching opening \\fig.","message_params":{"form":"named","marker":"fig"},"span":{"start":196,"end":202},"related_span":null,"token_id":"EXO-10","related_token_id":null,"sid":"EXO 25","marker":"fig","fix":null}
 summary	{"by_category":{"structure":2},"by_severity":{"error":2},"by_issue_type":{"usfm":2},"total_count":2,"suppressed_count":0}
 ### testData/biblica/CategoriesOnNotes/origin.usfm
-tokens	76	44b1b6f3c1bef365
+tokens	76	457a1deec8976115
 cst	76	7ad2ee8845bd3f67
 usj	1785	d56f476d99a7b6bc
 usx	1369	a824d9b7ff97307f
@@ -2398,7 +2398,7 @@ html	2959	0f2c50a09c362f77
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\c needs a space or newline before it.","message_params":{"marker":"c"},"span":{"start":1561,"end":1564},"related_span":null,"token_id":"MRK-80","related_token_id":null,"sid":"MRK 1","marker":"c","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"MRK-80","replacements":[{"kind":"Marker","text":"\n\\c ","marker":"c","sid":"MRK 1"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
 ### testData/specExamples/extended/contentCatogories1/origin.usfm
-tokens	96	ca77715c80f787cd
+tokens	96	417e30c3506f65ab
 cst	96	0adc4d0bdb8caa57
 usj	2611	7e9bb606db89adce
 usx	2129	51f0dabf084b78a2
@@ -2416,7 +2416,7 @@ html	4527	dec1d5d001e0287c
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 6b-11 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"6b-11"},"span":{"start":786,"end":792},"related_span":null,"token_id":"GEN-73","related_token_id":null,"sid":"GEN 1:6-11","marker":"v","fix":null}
 summary	{"by_category":{"structure":9,"numbering":1},"by_severity":{"error":10},"by_issue_type":{"usfm":9,"content":1},"total_count":10,"suppressed_count":0}
 ### testData/specExamples/extended/contentCatogories2/origin.usfm
-tokens	107	0b033698df5d44aa
+tokens	107	064bce38206f7340
 cst	107	ec00c4f87d43efbe
 usj	2540	18a246315bb1ddc7
 usx	2007	a6e062e78400505c
@@ -2427,7 +2427,7 @@ html	4261	182b0c94944f561f
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\sc* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"sc"},"span":{"start":961,"end":965},"related_span":null,"token_id":"GEN-79","related_token_id":null,"sid":"GEN 1:4","marker":"sc","fix":null}
 summary	{"by_category":{"structure":3},"by_severity":{"error":1,"warning":2},"by_issue_type":{"usfm":3},"total_count":3,"suppressed_count":0}
 ### testData/specExamples/extended/footnotes/origin.usfm
-tokens	192	39ebc7e3a09e4631
+tokens	192	06a820db794c0843
 cst	192	ebd5393c1dd92202
 usj	4908	0d8c4fbd9893d0e1
 usx	3674	a8f13bb72ec2a588
@@ -2917,7 +2917,7 @@ html	3402	7f0c8d74566fa96a
 {"code":"verse-outside-explicit-paragraph","category":"context","severity":"error","issue_type":"usfm","template":"Verses must appear inside a paragraph, list, or table.","message":"Verses must appear inside a paragraph, list, or table.","message_params":{},"span":{"start":767,"end":770},"related_span":null,"token_id":"GEN-77","related_token_id":null,"sid":"GEN 7:2","marker":"v","fix":null}
 summary	{"by_category":{"document":3,"structure":4,"context":5,"numbering":1},"by_severity":{"error":12,"warning":1},"by_issue_type":{"usfm":12,"content":1},"total_count":13,"suppressed_count":0}
 ### testData/synthetic/kitchen-sink.usfm
-tokens	979	949f0408f66be56c
+tokens	979	d85968b7b5b61bcc
 cst	979	cde3c0a137b774ab
 usj	19181	be4e3556453c6272
 usx	12909	26ff73dd8c11afdc
@@ -4314,7 +4314,7 @@ html	23564	096fdf3e71cd11c4
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":8771,"end":8774},"related_span":null,"token_id":"TIT-633","related_token_id":null,"sid":"TIT 3:14","marker":"s5","fix":null}
 summary	{"by_category":{"structure":40},"by_severity":{"error":22,"warning":18},"by_issue_type":{"usfm":39,"content":1},"total_count":40,"suppressed_count":0}
 ### testData/usfmjsTests/usfmBodyTestD/origin.usfm
-tokens	647	83c5639e4dd8a935
+tokens	647	a5cf3fddc804e343
 cst	647	eb5fd2de8cfd1ce2
 usj	17824	c1165d971d3b4c9c
 usx	15050	f8269a64d1805936

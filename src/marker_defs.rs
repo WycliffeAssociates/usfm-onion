@@ -1460,8 +1460,8 @@ fn fast_marker_metadata(marker: &str) -> Option<(&'static str, MarkerDefKind, u8
         "q2" => Some(("q2", MarkerDefKind::Paragraph, 20)),
         "q3" => Some(("q3", MarkerDefKind::Paragraph, 21)),
         "q4" => Some(("q4", MarkerDefKind::Paragraph, 22)),
-        "f" | "fe" | "ef" => Some(("f", MarkerDefKind::Note, 23)),
-        "x" | "ex" => Some(("x", MarkerDefKind::Note, 24)),
+        "f" => Some(("f", MarkerDefKind::Note, 23)),
+        "x" => Some(("x", MarkerDefKind::Note, 24)),
         "ft" => Some(("ft", MarkerDefKind::Character, 25)),
         "fr" => Some(("fr", MarkerDefKind::Character, 26)),
         "fq" => Some(("fq", MarkerDefKind::Character, 27)),
@@ -1918,14 +1918,14 @@ mod tests {
             assert_resolution_parity(raw);
         }
 
-        // `fe`/`ef` and `ex` are themselves literal `MARKER_SPECS` rows, but
-        // `lookup_marker_metadata`'s fast path deliberately collapses them to
-        // canonical `"f"`/`"x"`. The canonical-keyed parser lookups must
-        // follow that same collapse, not re-derive from `fe`/`ef`/`ex`'s own
-        // (unused) rows.
-        assert_eq!(lookup_marker_metadata("fe").map(|(c, ..)| c), Some("f"));
-        assert_eq!(lookup_marker_metadata("ef").map(|(c, ..)| c), Some("f"));
-        assert_eq!(lookup_marker_metadata("ex").map(|(c, ..)| c), Some("x"));
+        // `fe` (endnote), `ef` (extended footnote), and `ex` (extended
+        // cross-reference) are distinct markers with their own `MARKER_SPECS`
+        // rows, so they resolve to their OWN canonical — not collapsed to
+        // `"f"`/`"x"`. (They stay in the footnote/cross-reference note *family*
+        // via `marker_note_family`, which is a coarser axis than canonical.)
+        assert_eq!(lookup_marker_metadata("fe").map(|(c, ..)| c), Some("fe"));
+        assert_eq!(lookup_marker_metadata("ef").map(|(c, ..)| c), Some("ef"));
+        assert_eq!(lookup_marker_metadata("ex").map(|(c, ..)| c), Some("ex"));
     }
 
     #[test]
