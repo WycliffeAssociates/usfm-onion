@@ -4,8 +4,8 @@ mod parallel;
 use crate::lexer::lex;
 use crate::marker_defs::{absorbs_delimiter_whitespace_for_index, structural_info_for_index};
 use crate::token::{
-    AttributeItem, BookId, Lexeme, NumberRangeToken, ParseAnalysis, ParseResult, ScanToken, Sid,
-    Span, Token, TokenData, TokenId, TokenKind, tokens_to_usfm,
+    AttributeItem, BookId, Lexeme, MarkerAttrs, NumberRangeToken, ParseAnalysis, ParseResult,
+    ScanToken, Sid, Span, Token, TokenData, TokenId, TokenKind, tokens_to_usfm,
 };
 
 pub fn parse(source: &str) -> ParseResult<'_> {
@@ -116,8 +116,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                             metadata: marker.metadata,
                             structural: structural_info_for_index(marker.metadata.index),
                             nested: false,
-                            attributes: Vec::new(),
-                            attribute_source: None,
+                            attrs: None,
                         },
                     );
                     push_token(source, &mut tokens, marker_token);
@@ -155,8 +154,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                             metadata: marker.metadata,
                             structural: structural_info_for_index(marker.metadata.index),
                             nested: false,
-                            attributes: Vec::new(),
-                            attribute_source: None,
+                            attrs: None,
                         },
                         next_sid.clone(),
                     );
@@ -190,8 +188,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                         metadata: marker.metadata,
                         structural: structural_info_for_index(marker.metadata.index),
                         nested: false,
-                        attributes: Vec::new(),
-                        attribute_source: None,
+                        attrs: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -207,8 +204,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                         metadata: marker.metadata,
                         structural: structural_info_for_index(marker.metadata.index),
                         nested: true,
-                        attributes: Vec::new(),
-                        attribute_source: None,
+                        attrs: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -253,8 +249,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                         name: marker.name,
                         metadata: marker.metadata,
                         structural: structural_info_for_index(marker.metadata.index),
-                        attributes: Vec::new(),
-                        attribute_source: None,
+                        attrs: None,
                     },
                 );
                 push_token(source, &mut tokens, token);
@@ -514,22 +509,17 @@ fn attach_attributes_to_preceding_marker<'a>(
         return;
     };
     match &mut target.data {
-        TokenData::Marker {
-            attributes,
-            attribute_source,
-            ..
-        }
-        | TokenData::Milestone {
-            attributes,
-            attribute_source,
-            ..
-        } => {
-            if attributes.is_empty() {
-                *attributes = entries;
-            } else {
-                attributes.extend(entries);
+        TokenData::Marker { attrs, .. } | TokenData::Milestone { attrs, .. } => {
+            match attrs {
+                Some(existing) => existing.attributes.extend(entries),
+                None => {
+                    *attrs = Some(Box::new(MarkerAttrs {
+                        attributes: entries,
+                        attribute_source: None,
+                    }))
+                }
             }
-            *attribute_source = Some((span, raw_source));
+            attrs.as_mut().unwrap().attribute_source = Some((span, raw_source));
         }
         _ => unreachable!("filtered above"),
     }

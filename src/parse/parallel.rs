@@ -214,21 +214,14 @@ fn rebase_token(token: &mut Token<'_>, offset: u32) {
     let shift = |span: Span| Span::new(span.start + offset, span.end + offset);
     token.span = shift(token.span);
     match &mut token.data {
-        TokenData::Marker {
-            attributes,
-            attribute_source,
-            ..
-        }
-        | TokenData::Milestone {
-            attributes,
-            attribute_source,
-            ..
-        } => {
-            for attribute in attributes.iter_mut() {
-                attribute.span = shift(attribute.span);
-            }
-            if let Some((span, _)) = attribute_source {
-                *span = shift(*span);
+        TokenData::Marker { attrs, .. } | TokenData::Milestone { attrs, .. } => {
+            if let Some(attrs) = attrs {
+                for attribute in attrs.attributes.iter_mut() {
+                    attribute.span = shift(attribute.span);
+                }
+                if let Some((span, _)) = &mut attrs.attribute_source {
+                    *span = shift(*span);
+                }
             }
         }
         _ => {}

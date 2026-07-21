@@ -1786,13 +1786,15 @@ fn map_token(token: &NativeToken<'_>) -> Token {
             metadata,
             structural,
             nested,
-            attributes,
             ..
         } => {
             value.nested = Some(*nested);
             value.marker_metadata = Some(map_marker_metadata(*metadata));
             value.structural = Some(map_structural_info(*structural));
-            value.attributes = attributes.iter().map(map_attribute_item).collect();
+            value.attributes = token
+                .attributes()
+                .map(|a| a.iter().map(map_attribute_item).collect())
+                .unwrap_or_default();
         }
         NativeTokenData::EndMarker {
             metadata,
@@ -1807,12 +1809,14 @@ fn map_token(token: &NativeToken<'_>) -> Token {
         NativeTokenData::Milestone {
             metadata,
             structural,
-            attributes,
             ..
         } => {
             value.marker_metadata = Some(map_marker_metadata(*metadata));
             value.structural = Some(map_structural_info(*structural));
-            value.attributes = attributes.iter().map(map_attribute_item).collect();
+            value.attributes = token
+                .attributes()
+                .map(|a| a.iter().map(map_attribute_item).collect())
+                .unwrap_or_default();
         }
         NativeTokenData::BookCode { code, is_valid } => {
             value.book_code = Some((*code).to_string());

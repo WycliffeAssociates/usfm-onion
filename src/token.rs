@@ -257,6 +257,24 @@ pub struct AttributeItem<'a> {
     pub is_default: bool,
 }
 
+/// USFM 3.1 attribute payload for a `Marker`/`Milestone` opener. Boxed and
+/// made optional on the token so the common no-attribute case pays no cost:
+/// attribute lists are rare, but the two fields below were previously present
+/// (empty/`None`) on every token.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MarkerAttrs<'a> {
+    /// USFM 3.1 character-level attributes attached to the opening marker.
+    /// Empty when the source had no `|...` attribute list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<AttributeItem<'a>>,
+    /// Verbatim `|...` attribute-list slice plus its byte span in the source,
+    /// kept so `tokens_to_usfm` can re-emit it at exactly the original
+    /// position regardless of whether this marker has an explicit closer.
+    /// `None` when no attribute list was present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribute_source: Option<(Span, &'a str)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type")]
 pub enum TokenData<'a> {
@@ -267,16 +285,12 @@ pub enum TokenData<'a> {
         metadata: MarkerMetadata,
         structural: StructuralMarkerInfo,
         nested: bool,
-        /// USFM 3.1 character-level attributes attached to this opening marker.
-        /// Empty when the source had no `|...` attribute list.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attributes: Vec<AttributeItem<'a>>,
-        /// Verbatim `|...` attribute-list slice plus its byte span in the source,
-        /// kept so `tokens_to_usfm` can re-emit it at exactly the original
-        /// position regardless of whether this marker has an explicit closer.
-        /// `None` when no attribute list was present.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        attribute_source: Option<(Span, &'a str)>,
+        /// Attribute list attached to this opening marker. `None` when the
+        /// source had no `|...` attribute list — the common case, kept cheap
+        /// by boxing so it costs a pointer-sized `None` instead of an empty
+        /// `Vec` + `Option` pair on every token.
+        #[serde(flatten)]
+        attrs: Option<Box<MarkerAttrs<'a>>>,
     },
     EndMarker {
         name: &'a str,
@@ -288,15 +302,10 @@ pub enum TokenData<'a> {
         name: &'a str,
         metadata: MarkerMetadata,
         structural: StructuralMarkerInfo,
-        /// USFM 3.1 attributes attached to a milestone-start (e.g. `\zaln-s |...\*`).
-        /// Empty for milestone-ends and milestones without an attribute list.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attributes: Vec<AttributeItem<'a>>,
-        /// Verbatim `|...` attribute-list slice plus its byte span in the source,
-        /// kept so `tokens_to_usfm` can re-emit it at exactly the original position.
-        /// `None` when no attribute list was present.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        attribute_source: Option<(Span, &'a str)>,
+        /// Attribute list attached to a milestone-start (e.g. `\zaln-s |...\*`).
+        /// `None` for milestone-ends and milestones without an attribute list.
+        #[serde(flatten)]
+        attrs: Option<Box<MarkerAttrs<'a>>>,
     },
     MilestoneEnd,
     BookCode {
@@ -340,9 +349,12 @@ impl<'a> Token<'a> {
     /// Returns `None` for tokens that cannot carry attributes (text, numbers, end markers, etc.).
     pub fn attributes(&self) -> Option<&[AttributeItem<'a>]> {
         match &self.data {
-            TokenData::Marker { attributes, .. } | TokenData::Milestone { attributes, .. } => {
-                Some(attributes.as_slice())
-            }
+            TokenData::Marker { attrs, .. } | TokenData::Milestone { attrs, .. } => Some(
+                attrs
+                    .as_deref()
+                    .map(|a| a.attributes.as_slice())
+                    .unwrap_or(&[]),
+            ),
             _ => None,
         }
     }
@@ -389,15 +401,15 @@ pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
         output.push_str(token.source);
 
         if let TokenData::Marker {
-            attribute_source: Some((span, slice)),
-            ..
+            attrs: Some(attrs), ..
         }
         | TokenData::Milestone {
-            attribute_source: Some((span, slice)),
-            ..
+            attrs: Some(attrs), ..
         } = &token.data
         {
-            pending.push((*span, slice));
+            if let Some((span, slice)) = attrs.attribute_source {
+                pending.push((span, slice));
+            }
         }
     }
 
