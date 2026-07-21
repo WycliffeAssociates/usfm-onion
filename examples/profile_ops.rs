@@ -14,10 +14,15 @@
 //!   cargo build --profile profiling --example profile_ops
 //!   samply record -- target/profiling/examples/profile_ops diff/tokens 500
 //!   samply record -- target/profiling/examples/profile_ops parse/string 2000
+//!   samply record -- target/profiling/examples/profile_ops parse/serial 2000 --book psalms
 //!   samply record -- target/profiling/examples/profile_ops lint/tokens 3000 --book bsb
 //!   target/profiling/examples/profile_ops --list   # print valid op names
 //!
-//! `--book <ulb|bsb>` (default `ulb`) selects the fixture: `ulb` is
+//! `parse/serial` forces the serial ingest path (lex + parse_lexemes),
+//! bypassing parse()'s chapter-parallel routing so a big book like
+//! `--book psalms` profiles with no rayon in the stack — pure lib work.
+//!
+//! `--book <ulb|bsb|psalms>` (default `ulb`) selects the fixture: `ulb` is
 //! en_ulb's Luke (491 `\s5` chunk markers — undocumented, so each fires a
 //! lint issue; good for seeing what a real, recurring lint finding costs).
 //! `bsb` is BSB's Luke (no `\s5`, but otherwise more USFM-varied — `\r`,
@@ -77,8 +82,9 @@ fn main() {
     let book = match book_name.as_str() {
         "ulb" => common::load_luke(),
         "bsb" => common::load_bsb_luke(),
+        "psalms" => common::load_psalms(),
         other => {
-            eprintln!("unknown --book {other:?}; expected ulb|bsb");
+            eprintln!("unknown --book {other:?}; expected ulb|bsb|psalms");
             std::process::exit(1);
         }
     };

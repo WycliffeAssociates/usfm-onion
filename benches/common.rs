@@ -30,7 +30,7 @@ use usfm_onion::format::{
 use usfm_onion::html::{HtmlOptions, tokens_to_html, usfm_to_html};
 use usfm_onion::lexer::lex;
 use usfm_onion::lint::{LintOptions, LintScope, lint_tokens, lint_usfm};
-use usfm_onion::parse::parse;
+use usfm_onion::parse::{parse, parse_lexemes};
 use usfm_onion::token::ParseResult;
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -136,6 +136,7 @@ fn collect_usfm_paths(root: &Path, paths: &mut Vec<PathBuf>) {
 pub const OP_NAMES: &[&str] = &[
     "lex/string",
     "parse/string",
+    "parse/serial",
     "usj/string",
     "usx/string",
     "cst/tokens",
@@ -190,6 +191,16 @@ pub fn run_named_op(name: &str, fx: &Fixture) {
         }
         "parse/string" => {
             black_box(parse(&fx.book.source));
+        }
+        "parse/serial" => {
+            // The serial counterpart of `parse/string`: lex + parse_lexemes
+            // directly, bypassing parse()'s >=256KB chapter-parallel routing.
+            // This is the exact code wasm ships, with no rayon in the call
+            // stack — so a flamegraph attributes cycles to real lib work
+            // (lexer, token construction, assign_ids) instead of parked
+            // rayon workers.
+            let scan = lex(&fx.book.source);
+            black_box(parse_lexemes(&fx.book.source, &scan.tokens));
         }
         "usj/string" => {
             black_box(usfm_to_usj(&fx.book.source).expect("USJ export"));

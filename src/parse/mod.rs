@@ -43,7 +43,13 @@ pub(crate) fn parse_lexemes_seeded<'a>(
         state.current_book = BookId::from_str(code);
         state.current_sid = state.current_book.map(|book| Sid::new(book, 0, 0));
     }
-    let mut tokens = Vec::new();
+    // Presize from the lexeme count: parsing emits at most one token per lexeme
+    // (adjacent text runs merge in `push_token`, so usually fewer; the empty-doc
+    // `flush_pending_whitespace` edge adds at most one), so `lexemes.len()` is a
+    // tight, never-under upper bound. This eliminates the realloc `memmove`
+    // ladder from growing a zero-capacity Vec — the parallel path presizes each
+    // chapter chunk the same way from its own lexeme slice.
+    let mut tokens = Vec::with_capacity(lexemes.len());
     let mut cursor = 0usize;
 
     while cursor < lexemes.len() {
