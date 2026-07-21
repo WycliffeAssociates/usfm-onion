@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -40,9 +40,24 @@ pub trait LintableToken: WalkableToken {
     fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
         None
     }
+
+    /// Whether this token's marker is valid in `context`, applying the same
+    /// "effective context" promotions as [`marker_allows_effective_context`].
+    /// The default resolves the marker by name (used by editor tokens that
+    /// carry no catalog handle); [`Token`] overrides it to bit-test the marker
+    /// index the lexer already stamped, avoiding a per-token re-hash on lint's
+    /// hot path. Both forms are byte-identical — the stamped index resolves to
+    /// the same canonical row the name would.
+    fn allows_effective_context(&self, context: SpecContext) -> bool {
+        marker_allows_effective_context(self.marker().unwrap_or_default(), context)
+    }
 }
 
 impl<'a> LintableToken for Token<'a> {
+    fn allows_effective_context(&self, context: SpecContext) -> bool {
+        crate::marker_defs::marker_allows_effective_context_for_index(self.marker_index(), context)
+    }
+
     fn span(&self) -> Option<Span> {
         Some(self.span)
     }
@@ -391,6 +406,16 @@ impl LintCode {
             | Self::ContentAfterBlankMarker => LintIssueType::Usfm,
         }
     }
+
+    /// Single-bit mask for this code, keyed by its enum discriminant. Used by
+    /// [`EnabledCodes`] to store rule allow/deny sets as a `u64` bitmask instead
+    /// of a `BTreeSet`, turning [`EnabledCodes::has`] into a branchless bit test.
+    /// The fieldless enum has `< 64` variants, so every discriminant fits a
+    /// `u64`; the drift-guard test `enabled_codes_bitmask_matches_btreeset`
+    /// asserts that invariant and that this mask agrees with the old set logic.
+    const fn bit(self) -> u64 {
+        1u64 << (self as u32)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -700,8 +725,12 @@ struct DocumentLintState {
 
 #[derive(Debug, Clone)]
 struct EnabledCodes {
-    allowed: Option<BTreeSet<LintCode>>,
-    disabled: BTreeSet<LintCode>,
+    /// `None` = all codes allowed. `Some(mask)` = only the set bits are allowed.
+    /// A `u64` bitmask keyed by `LintCode::bit` replaces the old `BTreeSet`, so
+    /// `has` is a bit test rather than a per-token B-tree probe.
+    allowed: Option<u64>,
+    /// Disabled codes as a `u64` bitmask keyed by `LintCode::bit`.
+    disabled: u64,
     /// When false (scope is `Chapter`), `LintCategory::Document` codes are
     /// suppressed at the `has` chokepoint — they need the book head.
     run_document_rules: bool,
@@ -782,8 +811,8 @@ impl DocumentLintState {
         }
     }
 
-    fn select_top_level_slot(&self, marker_name: &str) -> TopLevelSlot {
-        if marker_name == "periph" {
+    fn select_top_level_slot<T: LintableToken>(&self, token: &T) -> TopLevelSlot {
+        if token.marker() == Some("periph") {
             return TopLevelSlot::AwaitDivision;
         }
 
@@ -794,7 +823,7 @@ impl DocumentLintState {
             .iter()
             .copied()
             .skip(start)
-            .find(|(_, context)| marker_allows_effective_context(marker_name, *context))
+            .find(|(_, context)| token.allows_effective_context(*context))
             .map(|(slot, _)| slot)
             .unwrap_or(self.slot)
     }
@@ -818,7 +847,7 @@ impl DocumentLintState {
                     self.block_context = None;
                     self.note_stack.clear();
                 } else {
-                    self.slot = self.select_top_level_slot(name);
+                    self.slot = self.select_top_level_slot(token);
                 }
             }
             MarkerKind::Chapter => {
@@ -828,7 +857,7 @@ impl DocumentLintState {
             }
             MarkerKind::Paragraph => {
                 if self.current_note_context().is_none() {
-                    self.slot = self.select_top_level_slot(name);
+                    self.slot = self.select_top_level_slot(token);
                 }
                 self.block_context = Some(paragraph_block_context_for(token, name));
             }
@@ -867,25 +896,29 @@ impl DocumentLintState {
 impl EnabledCodes {
     fn new(options: &LintOptions) -> Self {
         Self {
-            allowed: options
-                .enabled_codes
-                .as_ref()
-                .map(|codes| codes.iter().copied().collect()),
-            disabled: options.disabled_codes.iter().copied().collect(),
+            allowed: options.enabled_codes.as_ref().map(|codes| {
+                codes
+                    .iter()
+                    .copied()
+                    .fold(0u64, |mask, code| mask | code.bit())
+            }),
+            disabled: options
+                .disabled_codes
+                .iter()
+                .copied()
+                .fold(0u64, |mask, code| mask | code.bit()),
             run_document_rules: options.scope.runs_document_rules(),
         }
     }
 
     fn has(&self, code: LintCode) -> bool {
-        if self.disabled.contains(&code) {
+        if self.disabled & code.bit() != 0 {
             return false;
         }
         if !self.run_document_rules && code.category() == LintCategory::Document {
             return false;
         }
-        self.allowed
-            .as_ref()
-            .is_none_or(|allowed| allowed.contains(&code))
+        self.allowed.is_none_or(|allowed| allowed & code.bit() != 0)
     }
 
     fn has_any(&self, codes: &[LintCode]) -> bool {
@@ -1346,7 +1379,7 @@ fn lint_structure_rules<T: LintableToken>(
             {
                 top_level_root_context(
                     document_state.kind,
-                    document_state.select_top_level_slot(marker),
+                    document_state.select_top_level_slot(token),
                 )
             } else if marker_kind == MarkerKind::Periph {
                 SpecContext::Peripheral
@@ -1454,7 +1487,7 @@ fn lint_structure_rules<T: LintableToken>(
                         | MarkerKind::TableRow
                 )
             {
-                let next_slot = document_state.select_top_level_slot(marker);
+                let next_slot = document_state.select_top_level_slot(token);
                 top_level_root_context(document_state.kind, next_slot)
             } else {
                 document_state.current_validation_context_for_kind(marker_kind)
@@ -1462,7 +1495,7 @@ fn lint_structure_rules<T: LintableToken>(
 
             if enabled.has(LintCode::MarkerNotValidInContext)
                 && marker_kind != MarkerKind::Unknown
-                && !marker_allows_effective_context(marker, validation_context)
+                && !token.allows_effective_context(validation_context)
             {
                 issues.push(simple_issue(
                     LintCode::MarkerNotValidInContext,
@@ -3012,6 +3045,157 @@ fn format_token_id(id: TokenId<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+
+    /// Every `LintCode` variant. The bitmask drift guard iterates this; if a
+    /// variant is added, the exhaustive match below fails to compile, forcing
+    /// this list (and the `< 64` bit-width invariant) to be kept in sync.
+    const ALL_LINT_CODES: &[LintCode] = &[
+        LintCode::MissingIdMarker,
+        LintCode::DuplicateIdMarker,
+        LintCode::IdMarkerNotAtFileStart,
+        LintCode::EmptyParagraph,
+        LintCode::MissingChapterNumber,
+        LintCode::MissingVerseNumber,
+        LintCode::VerseIsEmpty,
+        LintCode::UnknownToken,
+        LintCode::UnknownMarker,
+        LintCode::UnknownCloseMarker,
+        LintCode::ContentBeforeFirstChapter,
+        LintCode::VerseOutsideExplicitParagraph,
+        LintCode::NoteSubmarkerOutsideNote,
+        LintCode::MetadataOutsideTarget,
+        LintCode::MarkerNotValidInContext,
+        LintCode::MissingMilestoneSelfClose,
+        LintCode::StrayCloseMarker,
+        LintCode::MisnestedCloseMarker,
+        LintCode::ImplicitlyClosedMarker,
+        LintCode::UnclosedMarker,
+        LintCode::DuplicateChapterNumber,
+        LintCode::DuplicateVerseNumber,
+        LintCode::InvalidNumberRange,
+        LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
+        LintCode::MissingWhitespaceBeforeMarker,
+        LintCode::MissingHorizontalWhitespaceAfterMarkerName,
+        LintCode::MissingTagEndDelimiterAfterMarker,
+        LintCode::MissingContentSpaceAfterCloseMarker,
+        LintCode::VerseInSectionOrOtherParagraph,
+        LintCode::ContentAfterBlankMarker,
+    ];
+
+    /// Compile-time exhaustiveness anchor: adding a `LintCode` variant breaks
+    /// this match until `ALL_LINT_CODES` above is updated too.
+    fn _all_lint_codes_is_exhaustive(code: LintCode) {
+        match code {
+            LintCode::MissingIdMarker
+            | LintCode::DuplicateIdMarker
+            | LintCode::IdMarkerNotAtFileStart
+            | LintCode::EmptyParagraph
+            | LintCode::MissingChapterNumber
+            | LintCode::MissingVerseNumber
+            | LintCode::VerseIsEmpty
+            | LintCode::UnknownToken
+            | LintCode::UnknownMarker
+            | LintCode::UnknownCloseMarker
+            | LintCode::ContentBeforeFirstChapter
+            | LintCode::VerseOutsideExplicitParagraph
+            | LintCode::NoteSubmarkerOutsideNote
+            | LintCode::MetadataOutsideTarget
+            | LintCode::MarkerNotValidInContext
+            | LintCode::MissingMilestoneSelfClose
+            | LintCode::StrayCloseMarker
+            | LintCode::MisnestedCloseMarker
+            | LintCode::ImplicitlyClosedMarker
+            | LintCode::UnclosedMarker
+            | LintCode::DuplicateChapterNumber
+            | LintCode::DuplicateVerseNumber
+            | LintCode::InvalidNumberRange
+            | LintCode::NumberRangeNotPrecededByMarkerExpectingNumber
+            | LintCode::MissingWhitespaceBeforeMarker
+            | LintCode::MissingHorizontalWhitespaceAfterMarkerName
+            | LintCode::MissingTagEndDelimiterAfterMarker
+            | LintCode::MissingContentSpaceAfterCloseMarker
+            | LintCode::VerseInSectionOrOtherParagraph
+            | LintCode::ContentAfterBlankMarker => {}
+        }
+    }
+
+    /// Reference implementation of the pre-bitmask `EnabledCodes::has`, kept in
+    /// the test to assert the `u64` bitmask reproduces the old B-tree logic
+    /// exactly across every code and every allowed/disabled/document-scope
+    /// combination (drift guard for Task 1).
+    fn reference_has(
+        allowed: &Option<BTreeSet<LintCode>>,
+        disabled: &BTreeSet<LintCode>,
+        run_document_rules: bool,
+        code: LintCode,
+    ) -> bool {
+        if disabled.contains(&code) {
+            return false;
+        }
+        if !run_document_rules && code.category() == LintCategory::Document {
+            return false;
+        }
+        allowed.as_ref().is_none_or(|a| a.contains(&code))
+    }
+
+    #[test]
+    fn enabled_codes_bitmask_matches_btreeset() {
+        // Every discriminant must fit a u64 bit index; otherwise `bit()` shifts
+        // out of range and the mask silently drops codes.
+        for &code in ALL_LINT_CODES {
+            assert!(
+                (code as u32) < 64,
+                "LintCode discriminant {} exceeds u64 bitmask width",
+                code as u32
+            );
+        }
+
+        // A spread of allowed/disabled subsets: none, all, and every prefix.
+        let mut allowed_variants: Vec<Option<Vec<LintCode>>> = vec![None];
+        for len in 0..=ALL_LINT_CODES.len() {
+            allowed_variants.push(Some(ALL_LINT_CODES[..len].to_vec()));
+        }
+        let mut disabled_variants: Vec<Vec<LintCode>> = vec![Vec::new()];
+        for len in 0..=ALL_LINT_CODES.len() {
+            // Take from the tail so allowed/disabled sets overlap and diverge.
+            disabled_variants.push(ALL_LINT_CODES[ALL_LINT_CODES.len() - len..].to_vec());
+        }
+
+        for run_document_rules in [true, false] {
+            let scope = if run_document_rules {
+                LintScope::Book
+            } else {
+                LintScope::Chapter(1)
+            };
+            assert_eq!(scope.runs_document_rules(), run_document_rules);
+
+            for allowed in &allowed_variants {
+                for disabled in &disabled_variants {
+                    let options = LintOptions {
+                        scope,
+                        enabled_codes: allowed.clone(),
+                        disabled_codes: disabled.clone(),
+                        suppressed: Vec::new(),
+                        allow_implicit_chapter_content_verse: false,
+                    };
+                    let bitmask = EnabledCodes::new(&options);
+
+                    let ref_allowed: Option<BTreeSet<LintCode>> =
+                        allowed.as_ref().map(|c| c.iter().copied().collect());
+                    let ref_disabled: BTreeSet<LintCode> = disabled.iter().copied().collect();
+
+                    for &code in ALL_LINT_CODES {
+                        assert_eq!(
+                            bitmask.has(code),
+                            reference_has(&ref_allowed, &ref_disabled, run_document_rules, code),
+                            "has disagreement for {code:?} (allowed={allowed:?}, disabled={disabled:?}, run_document_rules={run_document_rules})"
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn template_renders_plain_placeholders() {

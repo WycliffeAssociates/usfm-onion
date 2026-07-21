@@ -368,6 +368,19 @@ impl<'a> Token<'a> {
         }
     }
 
+    /// The dense marker-catalog handle the lexer stamped on this marker
+    /// (WS2B), or [`MarkerIndex::UNKNOWN`] for non-marker tokens. Lets marker
+    /// consumers (e.g. lint's context check) drive index-keyed catalog lookups
+    /// off the already-resolved handle instead of re-hashing the marker name.
+    pub(crate) fn marker_index(&self) -> MarkerIndex {
+        match self.data {
+            TokenData::Marker { metadata, .. }
+            | TokenData::EndMarker { metadata, .. }
+            | TokenData::Milestone { metadata, .. } => metadata.index,
+            _ => MarkerIndex::UNKNOWN,
+        }
+    }
+
     pub fn to_usfm_fragment(&self) -> &'a str {
         self.source
     }

@@ -152,6 +152,19 @@ pub enum SpecContext {
     CrossReference,
 }
 
+impl SpecContext {
+    /// Single-bit mask for this context, keyed by its enum discriminant. The
+    /// fieldless enum has `< 32` variants, so every discriminant fits a `u32`;
+    /// [`ResolvedMarker::effective_context_mask`] ORs these to turn the
+    /// per-context `&[SpecContext]` slice scan in
+    /// [`marker_allows_effective_context`] into a branchless bit test. The
+    /// drift-guard test `effective_context_mask_matches_slice_scan` asserts the
+    /// `< 32` invariant and that the mask agrees with the slice scan.
+    const fn bit(self) -> u32 {
+        1u32 << (self as u32)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum MarkerFamily {
     Footnote,
@@ -833,10 +846,30 @@ pub fn marker_allows_context(marker: &str, context: SpecContext) -> bool {
 }
 
 pub fn marker_allows_effective_context(marker: &str, context: SpecContext) -> bool {
-    marker_allows_context(marker, context)
-        || (context == SpecContext::PeripheralContent
-            && marker_allows_context(marker, SpecContext::ChapterContent))
-        || marker_allows_embedded_char_context(marker, context)
+    // One hash to resolve the canonical row, then a bit test against its
+    // precomputed effective-context mask — replaces the prior three string
+    // resolutions (two `marker_allows_context` probes plus
+    // `marker_allows_embedded_char_context`) and their `&[SpecContext]` slice
+    // scans. Byte-identical: `effective_context_mask` bakes in the same
+    // peripheral-content and embedded-character promotions this used to compute
+    // per call (drift-guarded by `effective_context_mask_matches_slice_scan`).
+    match lookup_spec_marker_indexed(marker) {
+        Some((index, _)) => marker_allows_effective_context_for_index(index, context),
+        None => false,
+    }
+}
+
+/// [`marker_allows_effective_context`] driven off an already-resolved
+/// [`MarkerIndex`] — a bit test against the row's `effective_context_mask`, no
+/// hashing. Lint routes the hot `Token` path here via the marker index the
+/// lexer already stamped on the token (WS2B), instead of re-resolving the
+/// marker by name. Returns `false` for an unresolved marker, matching the
+/// string form's `None` arm.
+pub(crate) fn marker_allows_effective_context_for_index(
+    index: MarkerIndex,
+    context: SpecContext,
+) -> bool {
+    resolved_marker_row(index).is_some_and(|row| row.effective_context_mask & context.bit() != 0)
 }
 
 pub fn marker_is_note_sub(marker: &str) -> bool {
@@ -990,6 +1023,50 @@ pub(crate) struct ResolvedMarker {
     /// occurrence via `lookup_marker_whitespace`, now precomputed once per
     /// canonical row.
     pub(crate) absorbs_delimiter_whitespace: bool,
+    /// `SpecContext` bitmask (one bit per [`SpecContext::bit`]) of the contexts
+    /// in which this canonical marker is valid *including* the "effective
+    /// context" promotions `marker_allows_effective_context` applies over the
+    /// raw `contexts` slice (peripheral-content falls back to chapter-content;
+    /// character markers valid in section/para/list/table are also valid inside
+    /// notes). Precomputed once per canonical row so the per-token context
+    /// check is a bit test instead of a `&[SpecContext]` slice scan. All these
+    /// promotions depend only on the canonical row's `contexts`/`kind`, so the
+    /// mask reproduces `marker_allows_effective_context` exactly — see the
+    /// drift-guard test `effective_context_mask_matches_slice_scan`.
+    pub(crate) effective_context_mask: u32,
+}
+
+/// Compute the effective-context bitmask for a canonical marker row from its
+/// `contexts` slice and `kind`, reproducing `marker_allows_effective_context`
+/// for every [`SpecContext`]. Shared by [`marker_rows`] (production) and the
+/// drift-guard test.
+fn effective_context_mask_for(contexts: &[SpecContext], kind: MarkerDefKind) -> u32 {
+    let base = contexts.iter().fold(0u32, |mask, ctx| mask | ctx.bit());
+
+    let mut effective = base;
+
+    // Peripheral-content fallback: a marker valid in chapter-content is also
+    // accepted in peripheral-content (mirrors the `context == PeripheralContent`
+    // arm of `marker_allows_effective_context`).
+    if base & SpecContext::ChapterContent.bit() != 0 {
+        effective |= SpecContext::PeripheralContent.bit();
+    }
+
+    // Embedded character markers: a `Character` marker valid in any of
+    // section/para/list/table is also valid inside notes (footnote /
+    // cross-reference), mirroring `marker_allows_embedded_char_context`.
+    let embeds_in_notes = kind == MarkerDefKind::Character
+        && base
+            & (SpecContext::Section.bit()
+                | SpecContext::Para.bit()
+                | SpecContext::List.bit()
+                | SpecContext::Table.bit())
+            != 0;
+    if embeds_in_notes {
+        effective |= SpecContext::Footnote.bit() | SpecContext::CrossReference.bit();
+    }
+
+    effective
 }
 
 /// Dense-table handle into [`marker_rows`]: the position of a canonical
@@ -1042,10 +1119,12 @@ fn marker_rows() -> &'static [ResolvedMarker] {
                 let structural = structural_marker_info(spec.marker, Some(spec.kind));
                 let payload = marker_payload(spec.marker);
                 let absorbs_delimiter_whitespace = absorbs_delimiter_whitespace(spec.marker);
+                let effective_context_mask = effective_context_mask_for(spec.contexts, spec.kind);
                 ResolvedMarker {
                     structural,
                     payload,
                     absorbs_delimiter_whitespace,
+                    effective_context_mask,
                 }
             })
             .collect()
@@ -1349,24 +1428,6 @@ fn fast_paragraph_structural_info(marker: &str) -> Option<StructuralMarkerInfo> 
     Some(info)
 }
 
-fn marker_allows_embedded_char_context(marker: &str, context: SpecContext) -> bool {
-    if !matches!(context, SpecContext::Footnote | SpecContext::CrossReference) {
-        return false;
-    }
-
-    let Some(spec) = lookup_spec_marker(marker) else {
-        return false;
-    };
-
-    spec.kind == MarkerDefKind::Character
-        && spec.contexts.iter().any(|ctx| {
-            matches!(
-                ctx,
-                SpecContext::Section | SpecContext::Para | SpecContext::List | SpecContext::Table
-            )
-        })
-}
-
 fn table_cell_base(marker: &str) -> Option<&str> {
     for prefix in ["th", "thr", "thc", "tc", "tcr", "tcc"] {
         if let Some(suffix) = marker.strip_prefix(prefix)
@@ -1667,13 +1728,129 @@ mod tests {
         MARKER_SPECS, MarkerDefKind, MarkerIndex, SpecContext,
         absorbs_delimiter_whitespace_for_canonical, lookup_marker_metadata,
         lookup_marker_whitespace, lookup_spec_marker, marker_allows_context,
-        marker_allows_effective_context, marker_index_by_canonical, marker_payload, marker_rows,
-        resolve_marker_metadata, resolved_marker_for_canonical, resolved_marker_row,
-        structural_info_for_canonical, structural_marker_info,
+        marker_allows_effective_context, marker_allows_effective_context_for_index,
+        marker_index_by_canonical, marker_payload, marker_rows, resolve_marker_metadata,
+        resolved_marker_for_canonical, resolved_marker_row, structural_info_for_canonical,
+        structural_marker_info,
     };
     use crate::whitespace::{
         FormatWhitespacePreference, StructuralWhitespaceRequirement, WhitespaceFormatCategory,
     };
+
+    /// Every `SpecContext` variant. The effective-context mask drift guard
+    /// iterates this; adding a variant breaks the exhaustive match below until
+    /// this list (and the `< 32` bit-width invariant) is kept in sync.
+    const ALL_SPEC_CONTEXTS: &[SpecContext] = &[
+        SpecContext::Scripture,
+        SpecContext::BookIdentification,
+        SpecContext::BookHeaders,
+        SpecContext::BookTitles,
+        SpecContext::BookIntroduction,
+        SpecContext::BookIntroductionEndTitles,
+        SpecContext::BookChapterLabel,
+        SpecContext::ChapterContent,
+        SpecContext::Peripheral,
+        SpecContext::PeripheralContent,
+        SpecContext::PeripheralDivision,
+        SpecContext::Chapter,
+        SpecContext::Verse,
+        SpecContext::Section,
+        SpecContext::Para,
+        SpecContext::List,
+        SpecContext::Table,
+        SpecContext::Sidebar,
+        SpecContext::Footnote,
+        SpecContext::CrossReference,
+    ];
+
+    fn _all_spec_contexts_is_exhaustive(ctx: SpecContext) {
+        match ctx {
+            SpecContext::Scripture
+            | SpecContext::BookIdentification
+            | SpecContext::BookHeaders
+            | SpecContext::BookTitles
+            | SpecContext::BookIntroduction
+            | SpecContext::BookIntroductionEndTitles
+            | SpecContext::BookChapterLabel
+            | SpecContext::ChapterContent
+            | SpecContext::Peripheral
+            | SpecContext::PeripheralContent
+            | SpecContext::PeripheralDivision
+            | SpecContext::Chapter
+            | SpecContext::Verse
+            | SpecContext::Section
+            | SpecContext::Para
+            | SpecContext::List
+            | SpecContext::Table
+            | SpecContext::Sidebar
+            | SpecContext::Footnote
+            | SpecContext::CrossReference => {}
+        }
+    }
+
+    /// Reference implementation of the pre-bitmask `marker_allows_effective_context`:
+    /// the base `contexts` slice scan plus the peripheral-content fallback and
+    /// the embedded-character-in-notes promotion, exactly as the old code
+    /// (`marker_allows_context` + `marker_allows_embedded_char_context`)
+    /// computed them. The drift guard asserts the `effective_context_mask` bit
+    /// test reproduces this for every marker and every context (Task 2).
+    fn reference_effective_context(marker: &str, context: SpecContext) -> bool {
+        let embedded = matches!(context, SpecContext::Footnote | SpecContext::CrossReference)
+            && lookup_spec_marker(marker).is_some_and(|spec| {
+                spec.kind == MarkerDefKind::Character
+                    && spec.contexts.iter().any(|ctx| {
+                        matches!(
+                            ctx,
+                            SpecContext::Section
+                                | SpecContext::Para
+                                | SpecContext::List
+                                | SpecContext::Table
+                        )
+                    })
+            });
+
+        marker_allows_context(marker, context)
+            || (context == SpecContext::PeripheralContent
+                && marker_allows_context(marker, SpecContext::ChapterContent))
+            || embedded
+    }
+
+    #[test]
+    fn effective_context_mask_matches_slice_scan() {
+        // Every discriminant must fit a u32 bit index; otherwise `bit()` shifts
+        // out of range and the mask silently drops contexts.
+        for &ctx in ALL_SPEC_CONTEXTS {
+            assert!(
+                (ctx as u32) < 32,
+                "SpecContext discriminant {} exceeds u32 bitmask width",
+                ctx as u32
+            );
+        }
+
+        for spec in MARKER_SPECS {
+            let index = resolve_marker_metadata(spec.marker).3;
+            for &ctx in ALL_SPEC_CONTEXTS {
+                let reference = reference_effective_context(spec.marker, ctx);
+
+                // String form (now mask-backed) matches the old slice scan.
+                assert_eq!(
+                    marker_allows_effective_context(spec.marker, ctx),
+                    reference,
+                    "string mask disagreement for \\{} in {ctx:?}",
+                    spec.marker
+                );
+
+                // Index form (the token-index hot path lint uses) matches too:
+                // the marker index the lexer stamps resolves to the same row.
+                assert_eq!(
+                    marker_allows_effective_context_for_index(index, ctx),
+                    reference,
+                    "index mask disagreement for \\{} in {ctx:?}",
+                    spec.marker
+                );
+            }
+        }
+    }
 
     #[test]
     fn marker_whitespace_lookup_resolves_canonical_and_variants() {
