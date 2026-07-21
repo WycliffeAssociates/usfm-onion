@@ -242,3 +242,37 @@ Follow-ups (not blocking):
   the matrix over the big corpus or `#[ignore]` + a CI-only run; the boundary + testData
   coverage is fast and catches the merge logic.
 - Diff parallelization (was deferred); the `\c`-partition + `map_ordered` pattern transfers.
+
+## 2026-07-20 - Honest re-benchmark (vs master serial) + samply diagnosis
+
+A Sonnet subagent benchmarked master (book-only `par_iter`, what scripture-editor runs) vs
+the branch (book + nested chapter). Correcting the record: earlier per-op speedups were
+measured full-pool vs 1-thread-*partitioned*, which flatters the ratio (the 1-thread baseline
+carries decomposition overhead). Honest results vs master serial:
+
+- **Whole corpus (book-level `par_iter`), nested chapter on top:** MIXED, not a clean win —
+  parse -22%, usj -5% (faster); lint +6%, usx +11% (SLOWER, nested-rayon oversubscription);
+  format/html ~wash. Book-`par_iter` already saturates 10 cores, so nesting mostly adds
+  coordination cost.
+- **Single book (Psalms, marker-dense):** real win — parse 1.99x, lint 1.93x, usj 1.86x,
+  html 4.41x, vref 1.54x.
+- **Single book (Genesis en_ult, 5MB/263k tokens, fast-per-byte):** ~1.0x — NO win. The win
+  tracks per-token work *density*, not book size.
+
+**samply (parse, debuginfo, unsymbolicated but clear):** Genesis is Amdahl-bound — ~50%
+kernel-park (workers idle) while the SERIAL main-thread work runs: byte pre-scan (O bytes) +
+merge (`concat` + `assign_ids`, O tokens). Not alloc, not a hot parallel fn. Corpus profile:
+work distributes *evenly* across workers (rayon balancing confirmed), so Table 1's wash is
+coordination-vs-marginal-gain, not imbalance.
+
+**Actionable fix (biggest lever):** kill the serial `assign_ids` pass — cheap serial
+prefix-sum of per-chunk token counts → assign ids per-chunk (base + local) INSIDE the parallel
+map (same prefix-offset trick html used for note counters). Moves the dominant serial work
+into the parallel section; should recover Genesis-class big-book parse. Byte pre-scan is a
+smaller secondary serial cost.
+
+**Net honest assessment:** the genuine, shipped win is the **single marker-dense book** case
+(editor editing one book / one-book API calls). Whole-corpus batch is already served by
+book-`par_iter` and nesting is a wash-to-slight-regression there (consider gating chapter
+parallelism off when the caller is already parallel). Big fast-parsing books need the
+`assign_ids` fix before chapter parallelism pays off.
