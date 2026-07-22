@@ -419,10 +419,9 @@ pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
         | TokenData::Milestone {
             attrs: Some(attrs), ..
         } = &token.data
+            && let Some((span, slice)) = attrs.attribute_source
         {
-            if let Some((span, slice)) = attrs.attribute_source {
-                pending.push((span, slice));
-            }
+            pending.push((span, slice));
         }
     }
 

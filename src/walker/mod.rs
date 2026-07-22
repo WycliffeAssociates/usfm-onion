@@ -619,31 +619,29 @@ impl<'tokens> WalkerState<'tokens> {
         if matches!(
             info.scope_kind,
             StructuralScopeKind::Note | StructuralScopeKind::Character
-        ) {
-            if let Some(match_pos) = self.stack.iter().rposition(|frame| {
-                matches!(
-                    frame.scope_kind,
-                    StructuralScopeKind::Note | StructuralScopeKind::Character
-                ) && frame.marker == marker
-            }) {
-                // Pop everything above the match as ImplicitByOpen,
-                // then pop the matched frame as Explicit.
-                while self.stack.len() > match_pos + 1 {
-                    let frame = self.stack.pop().expect("len checked");
-                    self.bookkeep_on_pop(&frame);
-                    let ctx = self.make_ctx();
-                    visitor.on_leave_scope(&ctx, &frame, LeaveReason::ImplicitByOpen);
-                }
-                let frame = self.stack.pop().expect("match_pos exists");
+        ) && let Some(match_pos) = self.stack.iter().rposition(|frame| {
+            matches!(
+                frame.scope_kind,
+                StructuralScopeKind::Note | StructuralScopeKind::Character
+            ) && frame.marker == marker
+        }) {
+            // Pop everything above the match as ImplicitByOpen,
+            // then pop the matched frame as Explicit.
+            while self.stack.len() > match_pos + 1 {
+                let frame = self.stack.pop().expect("len checked");
                 self.bookkeep_on_pop(&frame);
                 let ctx = self.make_ctx();
-                visitor.on_leave_scope(&ctx, &frame, LeaveReason::Explicit);
-                // Fire the EndMarker token event so visitors can
-                // append it as a leaf.
-                let ctx = self.make_ctx();
-                visitor.on_end_marker(&ctx, token, index);
-                return;
+                visitor.on_leave_scope(&ctx, &frame, LeaveReason::ImplicitByOpen);
             }
+            let frame = self.stack.pop().expect("match_pos exists");
+            self.bookkeep_on_pop(&frame);
+            let ctx = self.make_ctx();
+            visitor.on_leave_scope(&ctx, &frame, LeaveReason::Explicit);
+            // Fire the EndMarker token event so visitors can
+            // append it as a leaf.
+            let ctx = self.make_ctx();
+            visitor.on_end_marker(&ctx, token, index);
+            return;
         }
         // Unmatched end marker: fall through as on_other. Lint (step
         // 6) will surface these.

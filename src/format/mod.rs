@@ -1334,14 +1334,10 @@ fn move_chapter_labels_after_chapter_into<T: FormattableToken>(tokens: &[T], out
         }
 
         let mut chapter_block_end = chapter_marker_index + 1;
-        while chapter_block_end < tokens.len() {
+        if chapter_block_end < tokens.len() {
             let probe = &tokens[chapter_block_end];
-            match probe.kind() {
-                TokenKind::Number => {
-                    chapter_block_end += 1;
-                    break;
-                }
-                _ => break,
+            if probe.kind() == TokenKind::Number {
+                chapter_block_end += 1;
             }
         }
 

@@ -1435,15 +1435,12 @@ fn should_trim_trailing_text_before(next: Option<&UsjNode>) -> bool {
 fn extract_inline_text(exporter: &UsjExporter<'_, '_>, children: &[ExportNode]) -> Option<String> {
     let mut text = String::new();
     for node in children {
-        match node {
-            ExportNode::Leaf { token_index } => {
-                let token = &exporter.document.tokens[*token_index];
-                if matches!(token.data, TokenData::Text) {
-                    text.push_str(token.source);
-                    continue;
-                }
+        if let ExportNode::Leaf { token_index } = node {
+            let token = &exporter.document.tokens[*token_index];
+            if matches!(token.data, TokenData::Text) {
+                text.push_str(token.source);
+                continue;
             }
-            _ => {}
         }
         let mut exported = exporter.export_non_attribute_children(std::slice::from_ref(node));
         for node in exported.drain(..) {

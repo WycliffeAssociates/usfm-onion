@@ -473,7 +473,7 @@ fn message_params<const N: usize>(pairs: [(&str, String); N]) -> MessageParams {
 /// - `{name}` and `{name, number}` — substitutes `params[name]`.
 /// - `{name, select, key1 {…} key2 {…} other {…}}` — branches on
 ///   `params[name]`, falling through to `other {…}` when no key matches.
-/// Literal `{` / `}` are not currently escapable; templates avoid them.
+///   Literal `{` / `}` are not currently escapable; templates avoid them.
 ///
 /// Localisers can replace this implementation with a full
 /// ICU-MessageFormat-compatible renderer without touching emit sites —

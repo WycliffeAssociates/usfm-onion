@@ -516,15 +516,14 @@ impl<'tokens, 'src: 'tokens> Visitor<'tokens, Token<'src>> for HtmlVisitor<'toke
             StructuralScopeKind::TableRow => {
                 ensure_table_open(&mut self.stack, self.options.prefer_native_elements);
             }
-            StructuralScopeKind::TableCell => {
+            StructuralScopeKind::TableCell
                 if !self
                     .stack
                     .iter()
-                    .any(|item| item.scope_kind == StructuralScopeKind::TableRow)
-                {
-                    ensure_table_open(&mut self.stack, self.options.prefer_native_elements);
-                    self.stack.push(synthetic_table_row());
-                }
+                    .any(|item| item.scope_kind == StructuralScopeKind::TableRow) =>
+            {
+                ensure_table_open(&mut self.stack, self.options.prefer_native_elements);
+                self.stack.push(synthetic_table_row());
             }
             _ => {}
         }

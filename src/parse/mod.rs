@@ -62,7 +62,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                 // do not pollute the preceding marker's `attribute_source`.
                 let token = Token {
                     id: TokenId::new("", 0),
-                    sid: state.current_sid.clone(),
+                    sid: state.current_sid,
                     span: attr_span,
                     source: attr_source,
                     data: TokenData::Text,
@@ -84,7 +84,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                 flush_pending_whitespace(source, &mut state, &mut tokens);
                 let token = Token {
                     id: TokenId::new("", 0),
-                    sid: state.current_sid.clone(),
+                    sid: state.current_sid,
                     span: token.span,
                     source: token.lexeme,
                     data: TokenData::Newline,
@@ -156,7 +156,7 @@ pub(crate) fn parse_lexemes_seeded<'a>(
                             nested: false,
                             attrs: None,
                         },
-                        next_sid.clone(),
+                        next_sid,
                     );
                     push_token(source, &mut tokens, marker_token);
                     if let Some(ws) = number.leading_ws {

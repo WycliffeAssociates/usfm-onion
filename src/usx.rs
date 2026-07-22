@@ -116,10 +116,10 @@ pub fn usx_to_usj(source: &str) -> Result<UsjDocument, UsxError> {
                 if tag == "usx" {
                     break;
                 }
-                if let Some(frame) = stack.pop() {
-                    if let Some(node) = frame_to_node(frame) {
-                        push_node(&mut content, &mut stack, node);
-                    }
+                if let Some(frame) = stack.pop()
+                    && let Some(node) = frame_to_node(frame)
+                {
+                    push_node(&mut content, &mut stack, node);
                 }
             }
             Event::Text(text) => {
@@ -183,8 +183,7 @@ fn read_attrs(
         let attr = attr.map_err(quick_xml::Error::from)?;
         let key = decode_name(attr.key.as_ref());
         let value = attr
-            .decode_and_unescape_value(reader.decoder())
-            .map_err(quick_xml::Error::from)?
+            .decode_and_unescape_value(reader.decoder())?
             .into_owned();
         attrs.insert(key, value);
     }
@@ -1034,7 +1033,7 @@ mod tests {
     ) -> std::collections::BTreeMap<String, String> {
         extra
             .iter()
-            .filter(|(key, _)| !drop_keys.iter().any(|drop| *drop == key.as_str()))
+            .filter(|(key, _)| !drop_keys.contains(&key.as_str()))
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect()
     }
