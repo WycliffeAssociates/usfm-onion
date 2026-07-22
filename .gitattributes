@@ -1,0 +1,10 @@
+# Test fixtures are byte-exact inputs to the lossless lint oracle. Never let the
+# platform mutate their bytes (line-ending conversion, etc.) — treat them as
+# binary so every checkout, on every OS, gets identical content.
+#
+# Why: with core.autocrlf=input, 68 .usfm fixtures silently carried CRLF in a
+# local working tree while the committed blobs were LF. The oracle baseline was
+# blessed against those CRLF bytes, so it passed locally but FAILED on every
+# clean checkout (CI, fresh clone, git worktree). Pinning -text makes the corpus
+# reproducible so the oracle is a real gate again.
+testData/** -text
