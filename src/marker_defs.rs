@@ -15,7 +15,7 @@
 //!   `marker_*` predicate helpers — the query surface that html/usj/lint/format
 //!   consume.
 //!
-//! The static data table lives in [`crate::marker_defs_data`]. The
+//! The static data table lives in a private `marker_defs_data` submodule. The
 //! consumer-friendly catalog (with resolved instance-level kinds and
 //! categorization) lives in [`crate::markers`].
 

@@ -15,20 +15,20 @@
 //!   eventually reaches through `marker_info()` / `marker_catalog()`.
 //!
 //! Definition-level types and predicate helpers live in
-//! [`crate::marker_defs`]. The static data table they query lives in
-//! [`crate::marker_defs_data`] and is hand-curated.
+//! [`crate::marker_defs`]. The static data table they query is a private
+//! submodule of `marker_defs` and is hand-curated.
 
 use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
+use crate::marker_defs::MARKER_SPECS;
 use crate::marker_defs::{
     BlockBehavior, ClosingBehavior, InlineContext, MarkerDef, MarkerFamily, MarkerFamilyRole,
     MarkerPayload, NoteFamily, NoteSubkind, ParagraphCategory, SpecContext, lookup_marker_def,
     marker_is_note_sub, marker_payload,
 };
-use crate::marker_defs_data::MARKER_SPECS;
 
 /// The kind of a marker as it appears in a document (instance-level / resolved).
 ///

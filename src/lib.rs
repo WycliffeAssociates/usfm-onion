@@ -11,7 +11,6 @@ pub mod lint {
     pub use crate::lint_impl::*;
 }
 pub mod marker_defs;
-mod marker_defs_data;
 #[path = "markers.rs"]
 pub mod markers;
 pub mod par;
