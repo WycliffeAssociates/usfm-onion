@@ -13,6 +13,19 @@ use usfm_onion::markers::{
     MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
     UsfmMarkerInfo as NativeUsfmMarkerInfo,
 };
+use usfm_onion::diff::{
+    CoveredSide as NativeCoveredSide, DecisionStatus as NativeDecisionStatus,
+    DecisionUnitKind as NativeDecisionUnitKind, MergeSide as NativeMergeSide,
+    SlotRole as NativeSlotRole,
+};
+use usfm_onion::html::{
+    HtmlCallerScope as NativeHtmlCallerScope, HtmlCallerStyle as NativeHtmlCallerStyle,
+    HtmlNoteMode as NativeHtmlNoteMode,
+};
+use usfm_onion::lint::{
+    LintCategory as NativeLintCategory, LintCode as NativeLintCode,
+    LintIssueType as NativeLintIssueType, LintSeverity as NativeLintSeverity,
+};
 use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
     NumberRangeKind as NativeNumberRangeKind, Sid as NativeSid, Span as NativeSpan,
@@ -939,6 +952,385 @@ pub fn decode_attr_value(raw: &str) -> String {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Lint enums — output wire contract (kebab-case, matching the native serde).
+// `LintCode` is also an input (enabled/disabled/suppressed), so it converts
+// both directions; the other three are output-only (native → wire).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "kebab-case")]
+pub enum LintCategory {
+    Document,
+    Structure,
+    Context,
+    Numbering,
+}
+
+impl From<NativeLintCategory> for LintCategory {
+    fn from(value: NativeLintCategory) -> Self {
+        match value {
+            NativeLintCategory::Document => Self::Document,
+            NativeLintCategory::Structure => Self::Structure,
+            NativeLintCategory::Context => Self::Context,
+            NativeLintCategory::Numbering => Self::Numbering,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "kebab-case")]
+pub enum LintSeverity {
+    Error,
+    Warning,
+}
+
+impl From<NativeLintSeverity> for LintSeverity {
+    fn from(value: NativeLintSeverity) -> Self {
+        match value {
+            NativeLintSeverity::Error => Self::Error,
+            NativeLintSeverity::Warning => Self::Warning,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "kebab-case")]
+pub enum LintIssueType {
+    Usfm,
+    Content,
+}
+
+impl From<NativeLintIssueType> for LintIssueType {
+    fn from(value: NativeLintIssueType) -> Self {
+        match value {
+            NativeLintIssueType::Usfm => Self::Usfm,
+            NativeLintIssueType::Content => Self::Content,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "kebab-case")]
+pub enum LintCode {
+    MissingIdMarker,
+    DuplicateIdMarker,
+    IdMarkerNotAtFileStart,
+    EmptyParagraph,
+    MissingChapterNumber,
+    MissingVerseNumber,
+    VerseIsEmpty,
+    UnknownToken,
+    UnknownMarker,
+    UnknownCloseMarker,
+    ContentBeforeFirstChapter,
+    VerseOutsideExplicitParagraph,
+    NoteSubmarkerOutsideNote,
+    MetadataOutsideTarget,
+    MarkerNotValidInContext,
+    MissingMilestoneSelfClose,
+    StrayCloseMarker,
+    MisnestedCloseMarker,
+    ImplicitlyClosedMarker,
+    UnclosedMarker,
+    DuplicateChapterNumber,
+    DuplicateVerseNumber,
+    InvalidNumberRange,
+    NumberRangeNotPrecededByMarkerExpectingNumber,
+    MissingWhitespaceBeforeMarker,
+    MissingHorizontalWhitespaceAfterMarkerName,
+    MissingTagEndDelimiterAfterMarker,
+    MissingContentSpaceAfterCloseMarker,
+    VerseInSectionOrOtherParagraph,
+    ContentAfterBlankMarker,
+}
+
+impl From<NativeLintCode> for LintCode {
+    fn from(value: NativeLintCode) -> Self {
+        match value {
+            NativeLintCode::MissingIdMarker => Self::MissingIdMarker,
+            NativeLintCode::DuplicateIdMarker => Self::DuplicateIdMarker,
+            NativeLintCode::IdMarkerNotAtFileStart => Self::IdMarkerNotAtFileStart,
+            NativeLintCode::EmptyParagraph => Self::EmptyParagraph,
+            NativeLintCode::MissingChapterNumber => Self::MissingChapterNumber,
+            NativeLintCode::MissingVerseNumber => Self::MissingVerseNumber,
+            NativeLintCode::VerseIsEmpty => Self::VerseIsEmpty,
+            NativeLintCode::UnknownToken => Self::UnknownToken,
+            NativeLintCode::UnknownMarker => Self::UnknownMarker,
+            NativeLintCode::UnknownCloseMarker => Self::UnknownCloseMarker,
+            NativeLintCode::ContentBeforeFirstChapter => Self::ContentBeforeFirstChapter,
+            NativeLintCode::VerseOutsideExplicitParagraph => Self::VerseOutsideExplicitParagraph,
+            NativeLintCode::NoteSubmarkerOutsideNote => Self::NoteSubmarkerOutsideNote,
+            NativeLintCode::MetadataOutsideTarget => Self::MetadataOutsideTarget,
+            NativeLintCode::MarkerNotValidInContext => Self::MarkerNotValidInContext,
+            NativeLintCode::MissingMilestoneSelfClose => Self::MissingMilestoneSelfClose,
+            NativeLintCode::StrayCloseMarker => Self::StrayCloseMarker,
+            NativeLintCode::MisnestedCloseMarker => Self::MisnestedCloseMarker,
+            NativeLintCode::ImplicitlyClosedMarker => Self::ImplicitlyClosedMarker,
+            NativeLintCode::UnclosedMarker => Self::UnclosedMarker,
+            NativeLintCode::DuplicateChapterNumber => Self::DuplicateChapterNumber,
+            NativeLintCode::DuplicateVerseNumber => Self::DuplicateVerseNumber,
+            NativeLintCode::InvalidNumberRange => Self::InvalidNumberRange,
+            NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                Self::NumberRangeNotPrecededByMarkerExpectingNumber
+            }
+            NativeLintCode::MissingWhitespaceBeforeMarker => Self::MissingWhitespaceBeforeMarker,
+            NativeLintCode::MissingHorizontalWhitespaceAfterMarkerName => {
+                Self::MissingHorizontalWhitespaceAfterMarkerName
+            }
+            NativeLintCode::MissingTagEndDelimiterAfterMarker => {
+                Self::MissingTagEndDelimiterAfterMarker
+            }
+            NativeLintCode::MissingContentSpaceAfterCloseMarker => {
+                Self::MissingContentSpaceAfterCloseMarker
+            }
+            NativeLintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
+            NativeLintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
+        }
+    }
+}
+
+impl From<LintCode> for NativeLintCode {
+    fn from(value: LintCode) -> Self {
+        match value {
+            LintCode::MissingIdMarker => Self::MissingIdMarker,
+            LintCode::DuplicateIdMarker => Self::DuplicateIdMarker,
+            LintCode::IdMarkerNotAtFileStart => Self::IdMarkerNotAtFileStart,
+            LintCode::EmptyParagraph => Self::EmptyParagraph,
+            LintCode::MissingChapterNumber => Self::MissingChapterNumber,
+            LintCode::MissingVerseNumber => Self::MissingVerseNumber,
+            LintCode::VerseIsEmpty => Self::VerseIsEmpty,
+            LintCode::UnknownToken => Self::UnknownToken,
+            LintCode::UnknownMarker => Self::UnknownMarker,
+            LintCode::UnknownCloseMarker => Self::UnknownCloseMarker,
+            LintCode::ContentBeforeFirstChapter => Self::ContentBeforeFirstChapter,
+            LintCode::VerseOutsideExplicitParagraph => Self::VerseOutsideExplicitParagraph,
+            LintCode::NoteSubmarkerOutsideNote => Self::NoteSubmarkerOutsideNote,
+            LintCode::MetadataOutsideTarget => Self::MetadataOutsideTarget,
+            LintCode::MarkerNotValidInContext => Self::MarkerNotValidInContext,
+            LintCode::MissingMilestoneSelfClose => Self::MissingMilestoneSelfClose,
+            LintCode::StrayCloseMarker => Self::StrayCloseMarker,
+            LintCode::MisnestedCloseMarker => Self::MisnestedCloseMarker,
+            LintCode::ImplicitlyClosedMarker => Self::ImplicitlyClosedMarker,
+            LintCode::UnclosedMarker => Self::UnclosedMarker,
+            LintCode::DuplicateChapterNumber => Self::DuplicateChapterNumber,
+            LintCode::DuplicateVerseNumber => Self::DuplicateVerseNumber,
+            LintCode::InvalidNumberRange => Self::InvalidNumberRange,
+            LintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                Self::NumberRangeNotPrecededByMarkerExpectingNumber
+            }
+            LintCode::MissingWhitespaceBeforeMarker => Self::MissingWhitespaceBeforeMarker,
+            LintCode::MissingHorizontalWhitespaceAfterMarkerName => {
+                Self::MissingHorizontalWhitespaceAfterMarkerName
+            }
+            LintCode::MissingTagEndDelimiterAfterMarker => Self::MissingTagEndDelimiterAfterMarker,
+            LintCode::MissingContentSpaceAfterCloseMarker => {
+                Self::MissingContentSpaceAfterCloseMarker
+            }
+            LintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
+            LintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Diff enums — the native enums serialize as PascalCase (an internal form);
+// the wire contract the JS boundary sees is camelCase, so these wire types
+// carry the camelCase serde attrs. `MergeSide` is also an input (chosen side),
+// so it converts both directions; the rest are output-only (native → wire).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum SlotRole {
+    Shared,
+    BaselineOnly,
+    CurrentOnly,
+    PairBaseline,
+    PairCurrent,
+}
+
+impl From<NativeSlotRole> for SlotRole {
+    fn from(value: NativeSlotRole) -> Self {
+        match value {
+            NativeSlotRole::Shared => Self::Shared,
+            NativeSlotRole::BaselineOnly => Self::BaselineOnly,
+            NativeSlotRole::CurrentOnly => Self::CurrentOnly,
+            NativeSlotRole::PairBaseline => Self::PairBaseline,
+            NativeSlotRole::PairCurrent => Self::PairCurrent,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum DecisionUnitKind {
+    Shared,
+    Added,
+    Deleted,
+    Coalesced,
+}
+
+impl From<NativeDecisionUnitKind> for DecisionUnitKind {
+    fn from(value: NativeDecisionUnitKind) -> Self {
+        match value {
+            NativeDecisionUnitKind::Shared => Self::Shared,
+            NativeDecisionUnitKind::Added => Self::Added,
+            NativeDecisionUnitKind::Deleted => Self::Deleted,
+            NativeDecisionUnitKind::Coalesced => Self::Coalesced,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum DecisionStatus {
+    Unchanged,
+    Modified,
+    Added,
+    Deleted,
+    Moved,
+}
+
+impl From<NativeDecisionStatus> for DecisionStatus {
+    fn from(value: NativeDecisionStatus) -> Self {
+        match value {
+            NativeDecisionStatus::Unchanged => Self::Unchanged,
+            NativeDecisionStatus::Modified => Self::Modified,
+            NativeDecisionStatus::Added => Self::Added,
+            NativeDecisionStatus::Deleted => Self::Deleted,
+            NativeDecisionStatus::Moved => Self::Moved,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum MergeSide {
+    Baseline,
+    Current,
+}
+
+impl From<NativeMergeSide> for MergeSide {
+    fn from(value: NativeMergeSide) -> Self {
+        match value {
+            NativeMergeSide::Baseline => Self::Baseline,
+            NativeMergeSide::Current => Self::Current,
+        }
+    }
+}
+
+impl From<MergeSide> for NativeMergeSide {
+    fn from(value: MergeSide) -> Self {
+        match value {
+            MergeSide::Baseline => Self::Baseline,
+            MergeSide::Current => Self::Current,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum CoveredSide {
+    Baseline,
+    Current,
+}
+
+impl From<NativeCoveredSide> for CoveredSide {
+    fn from(value: NativeCoveredSide) -> Self {
+        match value {
+            NativeCoveredSide::Baseline => Self::Baseline,
+            NativeCoveredSide::Current => Self::Current,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HTML option enums — input-only wire contract (JS → native). The native
+// enums (`usfm_onion::html`) deliberately derive no `Serialize`; these wire
+// types carry the serde/tsify boundary shape and convert one way into native.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "lowercase")]
+pub enum HtmlNoteMode {
+    Extracted,
+    Inline,
+}
+
+impl From<HtmlNoteMode> for NativeHtmlNoteMode {
+    fn from(value: HtmlNoteMode) -> Self {
+        match value {
+            HtmlNoteMode::Extracted => Self::Extracted,
+            HtmlNoteMode::Inline => Self::Inline,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum HtmlCallerStyle {
+    Numeric,
+    AlphaLower,
+    AlphaUpper,
+    RomanLower,
+    RomanUpper,
+    Source,
+}
+
+impl From<HtmlCallerStyle> for NativeHtmlCallerStyle {
+    fn from(value: HtmlCallerStyle) -> Self {
+        match value {
+            HtmlCallerStyle::Numeric => Self::Numeric,
+            HtmlCallerStyle::AlphaLower => Self::AlphaLower,
+            HtmlCallerStyle::AlphaUpper => Self::AlphaUpper,
+            HtmlCallerStyle::RomanLower => Self::RomanLower,
+            HtmlCallerStyle::RomanUpper => Self::RomanUpper,
+            HtmlCallerStyle::Source => Self::Source,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum HtmlCallerScope {
+    DocumentSequential,
+    VerseSequential,
+}
+
+impl From<HtmlCallerScope> for NativeHtmlCallerScope {
+    fn from(value: HtmlCallerScope) -> Self {
+        match value {
+            HtmlCallerScope::DocumentSequential => Self::DocumentSequential,
+            HtmlCallerScope::VerseSequential => Self::VerseSequential,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
@@ -1005,5 +1397,63 @@ mod tests {
         assert_eq!(decode_attr_value("plain"), "plain");
         assert_eq!(decode_attr_value("a\\\"b"), "a\"b");
         assert_eq!(decode_attr_value("a\\\\b"), "a\\b");
+    }
+
+    /// Boundary-enum wire contract. These were hand-mirrored in the wasm crate
+    /// before being single-sourced here; the exact JS-facing strings are the
+    /// contract the golden outputs enforce, pinned at the dto layer too. Lint
+    /// enums are kebab-case (matching native serde); diff/html enums are the
+    /// camelCase/lowercase the boundary sees, which for the diff enums differs
+    /// from the native PascalCase `Serialize`.
+    #[test]
+    fn boundary_enums_serialize_the_js_wire_strings() {
+        use super::{
+            CoveredSide, DecisionStatus, DecisionUnitKind, HtmlCallerScope, HtmlCallerStyle,
+            HtmlNoteMode, LintCategory, LintCode, LintSeverity, MergeSide, SlotRole,
+        };
+
+        // Lint: kebab-case.
+        assert_eq!(serde_json::to_value(LintCategory::Numbering).unwrap(), json!("numbering"));
+        assert_eq!(serde_json::to_value(LintSeverity::Warning).unwrap(), json!("warning"));
+        assert_eq!(
+            serde_json::to_value(LintCode::IdMarkerNotAtFileStart).unwrap(),
+            json!("id-marker-not-at-file-start")
+        );
+
+        // Diff: camelCase wire (native serializes these PascalCase — different form).
+        assert_eq!(serde_json::to_value(SlotRole::BaselineOnly).unwrap(), json!("baselineOnly"));
+        assert_eq!(serde_json::to_value(DecisionUnitKind::Coalesced).unwrap(), json!("coalesced"));
+        assert_eq!(serde_json::to_value(DecisionStatus::Moved).unwrap(), json!("moved"));
+        assert_eq!(serde_json::to_value(MergeSide::Baseline).unwrap(), json!("baseline"));
+        assert_eq!(serde_json::to_value(CoveredSide::Current).unwrap(), json!("current"));
+
+        // Html input config.
+        assert_eq!(serde_json::to_value(HtmlNoteMode::Extracted).unwrap(), json!("extracted"));
+        assert_eq!(serde_json::to_value(HtmlCallerStyle::AlphaLower).unwrap(), json!("alphaLower"));
+        assert_eq!(
+            serde_json::to_value(HtmlCallerScope::VerseSequential).unwrap(),
+            json!("verseSequential")
+        );
+    }
+
+    /// The input-direction enums must round-trip from their wire string into the
+    /// native type (the conversion the wasm boundary relies on).
+    #[test]
+    fn input_enums_deserialize_and_convert_into_native() {
+        use super::{HtmlNoteMode, LintCode, MergeSide};
+        use usfm_onion::html::HtmlNoteMode as NativeHtmlNoteMode;
+        use usfm_onion::lint::LintCode as NativeLintCode;
+
+        let mode: HtmlNoteMode = serde_json::from_value(json!("inline")).unwrap();
+        assert!(matches!(NativeHtmlNoteMode::from(mode), NativeHtmlNoteMode::Inline));
+
+        let code: LintCode = serde_json::from_value(json!("unclosed-marker")).unwrap();
+        assert!(matches!(NativeLintCode::from(code), NativeLintCode::UnclosedMarker));
+
+        let side: MergeSide = serde_json::from_value(json!("current")).unwrap();
+        assert!(matches!(
+            usfm_onion::diff::MergeSide::from(side),
+            usfm_onion::diff::MergeSide::Current
+        ));
     }
 }
