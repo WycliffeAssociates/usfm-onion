@@ -1,22 +1,6 @@
 {
   "issues": [
     {
-      "category": "context",
-      "code": "verse-outside-explicit-paragraph",
-      "issueType": "usfm",
-      "marker": "v",
-      "message": "Verses must appear inside a paragraph, list, or table.",
-      "messageParams": {},
-      "severity": "error",
-      "sid": "GEN 2:1",
-      "span": {
-        "end": 116,
-        "start": 113
-      },
-      "template": "Verses must appear inside a paragraph, list, or table.",
-      "tokenId": "GEN-22"
-    },
-    {
       "category": "structure",
       "code": "missing-tag-end-delimiter-after-marker",
       "fix": {
@@ -48,6 +32,22 @@
       },
       "template": "\\{marker} needs a space before the text that follows.",
       "tokenId": "GEN-6"
+    },
+    {
+      "category": "context",
+      "code": "verse-outside-explicit-paragraph",
+      "issueType": "usfm",
+      "marker": "v",
+      "message": "Verses must appear inside a paragraph, list, or table.",
+      "messageParams": {},
+      "severity": "error",
+      "sid": "GEN 2:1",
+      "span": {
+        "end": 116,
+        "start": 113
+      },
+      "template": "Verses must appear inside a paragraph, list, or table.",
+      "tokenId": "GEN-22"
     }
   ],
   "summary": {
