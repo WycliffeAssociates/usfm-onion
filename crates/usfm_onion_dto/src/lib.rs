@@ -46,7 +46,9 @@ use usfm_onion::markers::{
 use usfm_onion::diff::{
     CoveredSide as NativeCoveredSide, DecisionStatus as NativeDecisionStatus,
     DecisionUnitKind as NativeDecisionUnitKind, MergeSide as NativeMergeSide,
-    SlotRole as NativeSlotRole,
+    SlotRole as NativeSlotRole, TextDiffMode as NativeTextDiffMode,
+    TextDiffRun as NativeTextDiffRun, TextDiffRunKind as NativeTextDiffRunKind,
+    UnitTextDiff as NativeUnitTextDiff,
 };
 use usfm_onion::html::{
     HtmlCallerScope as NativeHtmlCallerScope, HtmlCallerStyle as NativeHtmlCallerStyle,
@@ -1300,6 +1302,111 @@ impl From<NativeCoveredSide> for CoveredSide {
 }
 
 // ---------------------------------------------------------------------------
+// Intra-unit text diff wire types (2026-07-24) — presentation-only word/char
+// runs attached to a Modified/Added/Deleted `DecisionUnit`. `TextDiffMode`
+// and `DiffOptions` are inputs (the caller picks a granularity), so they
+// convert wire → native; `TextDiffRunKind`/`TextDiffRun`/`UnitTextDiff` are
+// outputs (native → wire) only. See
+// `plans/approved/plan-intra-unit-text-diff-2026-07-20.md`.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum TextDiffMode {
+    #[default]
+    None,
+    Words,
+    Chars,
+}
+
+impl From<TextDiffMode> for NativeTextDiffMode {
+    fn from(value: TextDiffMode) -> Self {
+        match value {
+            TextDiffMode::None => Self::None,
+            TextDiffMode::Words => Self::Words,
+            TextDiffMode::Chars => Self::Chars,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum TextDiffRunKind {
+    Unchanged,
+    Added,
+    Removed,
+}
+
+impl From<NativeTextDiffRunKind> for TextDiffRunKind {
+    fn from(value: NativeTextDiffRunKind) -> Self {
+        match value {
+            NativeTextDiffRunKind::Unchanged => Self::Unchanged,
+            NativeTextDiffRunKind::Added => Self::Added,
+            NativeTextDiffRunKind::Removed => Self::Removed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct TextDiffRun {
+    pub text: String,
+    pub kind: TextDiffRunKind,
+}
+
+impl From<NativeTextDiffRun> for TextDiffRun {
+    fn from(run: NativeTextDiffRun) -> Self {
+        Self {
+            text: run.text,
+            kind: run.kind.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct UnitTextDiff {
+    /// Kinds: `Unchanged` | `Removed`.
+    pub baseline: Vec<TextDiffRun>,
+    /// Kinds: `Unchanged` | `Added`.
+    pub current: Vec<TextDiffRun>,
+}
+
+impl From<NativeUnitTextDiff> for UnitTextDiff {
+    fn from(value: NativeUnitTextDiff) -> Self {
+        Self {
+            baseline: value.baseline.into_iter().map(Into::into).collect(),
+            current: value.current.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// Optional trailing argument on the wasm diff entry points. Omitting it (or
+/// omitting `textDiff`) is `"none"` — today's behavior, computing nothing.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct DiffOptions {
+    #[serde(default)]
+    text_diff: TextDiffMode,
+}
+
+impl From<DiffOptions> for NativeTextDiffMode {
+    fn from(value: DiffOptions) -> Self {
+        value.text_diff.into()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // HTML option enums — input-only wire contract (JS → native). The native
 // enums (`usfm_onion::html`) deliberately derive no `Serialize`; these wire
 // types carry the serde/tsify boundary shape and convert one way into native.
@@ -1499,5 +1606,96 @@ mod tests {
             usfm_onion::diff::MergeSide::from(side),
             usfm_onion::diff::MergeSide::Current
         ));
+    }
+
+    /// Text-diff wire strings (Gate 4). `TextDiffMode`/`TextDiffRunKind` are
+    /// camelCase like the other diff enums; single-word variants read the
+    /// same either way, so this pins the exact set of accepted strings.
+    #[test]
+    fn text_diff_enums_serialize_the_js_wire_strings() {
+        use super::{TextDiffMode, TextDiffRunKind};
+
+        assert_eq!(serde_json::to_value(TextDiffMode::None).unwrap(), json!("none"));
+        assert_eq!(serde_json::to_value(TextDiffMode::Words).unwrap(), json!("words"));
+        assert_eq!(serde_json::to_value(TextDiffMode::Chars).unwrap(), json!("chars"));
+
+        assert_eq!(
+            serde_json::to_value(TextDiffRunKind::Unchanged).unwrap(),
+            json!("unchanged")
+        );
+        assert_eq!(serde_json::to_value(TextDiffRunKind::Added).unwrap(), json!("added"));
+        assert_eq!(serde_json::to_value(TextDiffRunKind::Removed).unwrap(), json!("removed"));
+    }
+
+    /// `TextDiffMode` is an input (the caller picks a granularity), so it must
+    /// round-trip from its wire string into the native enum the same way
+    /// `MergeSide`/`LintCode` do above.
+    #[test]
+    fn text_diff_mode_deserializes_and_converts_into_native() {
+        use super::TextDiffMode;
+        use usfm_onion::diff::TextDiffMode as NativeTextDiffMode;
+
+        let mode: TextDiffMode = serde_json::from_value(json!("words")).unwrap();
+        assert!(matches!(NativeTextDiffMode::from(mode), NativeTextDiffMode::Words));
+
+        let mode: TextDiffMode = serde_json::from_value(json!("chars")).unwrap();
+        assert!(matches!(NativeTextDiffMode::from(mode), NativeTextDiffMode::Chars));
+
+        let mode: TextDiffMode = serde_json::from_value(json!("none")).unwrap();
+        assert!(matches!(NativeTextDiffMode::from(mode), NativeTextDiffMode::None));
+    }
+
+    /// `DiffOptions` omitted entirely (empty object) must resolve to `"none"`
+    /// — the additive/back-compatible contract the plan requires: an absent
+    /// option must be byte-identical to today's no-text-diff behavior.
+    #[test]
+    fn diff_options_default_and_omitted_field_resolve_to_none_mode() {
+        use super::DiffOptions;
+        use usfm_onion::diff::TextDiffMode as NativeTextDiffMode;
+
+        let options: DiffOptions = serde_json::from_value(json!({})).unwrap();
+        assert!(matches!(NativeTextDiffMode::from(options), NativeTextDiffMode::None));
+        assert!(matches!(
+            NativeTextDiffMode::from(DiffOptions::default()),
+            NativeTextDiffMode::None
+        ));
+    }
+
+    /// `UnitTextDiff`/`TextDiffRun` are outputs, so the guard is a native →
+    /// wire mapping test rather than a round trip: the exact runs a native
+    /// `unit_text_diff` call produces must survive the DTO conversion.
+    #[test]
+    fn unit_text_diff_maps_native_runs_into_wire_runs() {
+        use super::{TextDiffRun, TextDiffRunKind, UnitTextDiff};
+        use usfm_onion::diff::{
+            TextDiffRun as NativeTextDiffRun, TextDiffRunKind as NativeTextDiffRunKind,
+            UnitTextDiff as NativeUnitTextDiff,
+        };
+
+        let native = NativeUnitTextDiff {
+            baseline: vec![NativeTextDiffRun {
+                text: "heaven".to_string(),
+                kind: NativeTextDiffRunKind::Removed,
+            }],
+            current: vec![NativeTextDiffRun {
+                text: "heavens".to_string(),
+                kind: NativeTextDiffRunKind::Added,
+            }],
+        };
+        let wire: UnitTextDiff = native.into();
+        assert_eq!(
+            wire.baseline,
+            vec![TextDiffRun {
+                text: "heaven".to_string(),
+                kind: TextDiffRunKind::Removed
+            }]
+        );
+        assert_eq!(
+            wire.current,
+            vec![TextDiffRun {
+                text: "heavens".to_string(),
+                kind: TextDiffRunKind::Added
+            }]
+        );
     }
 }

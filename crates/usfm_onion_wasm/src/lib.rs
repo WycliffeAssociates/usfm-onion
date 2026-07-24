@@ -6,12 +6,14 @@ use wasm_bindgen::prelude::*;
 use usfm_onion::cst::{CstDocument as NativeCstDocument, CstNode as NativeCstNode, parse_cst};
 use usfm_onion::diff::{
     Anchor as NativeAnchor, CoveredBy as NativeCoveredBy, DecisionUnit as NativeDecisionUnit,
-    DiffSkeleton as NativeDiffSkeleton, DiffableToken, Slot as NativeSlot, UnitId as NativeUnitId,
+    DiffSkeleton as NativeDiffSkeleton, DiffableToken, Slot as NativeSlot,
+    TextDiffMode as NativeTextDiffMode, UnitId as NativeUnitId,
     derive_canonical_sids as native_derive_canonical_sids,
     diff_skeleton as native_diff_skeleton,
     diff_skeleton_by_chapter as native_diff_skeleton_by_chapter,
     diff_skeleton_canonical as native_diff_skeleton_canonical,
     merge_diff_blocks as native_merge_diff_blocks, revert_diff_block as native_revert_diff_block,
+    unit_text_diff as native_unit_text_diff,
 };
 use usfm_onion::format::{
     FormatOptions as NativeFormatOptions, FormatRule as NativeFormatRule,
@@ -45,11 +47,12 @@ use usfm_onion::vref::{
 use usfm_onion::walker::WalkableToken;
 pub use usfm_onion_dto::{
     AttributeItem, BlockBehavior, ClosingBehavior, CoveredSide, DecisionStatus, DecisionUnitKind,
-    HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory, LintCode,
-    LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily, MarkerFamilyRole,
-    MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide, NoteFamily, NoteSubkind,
-    NumberInfo, NumberRangeKind, ParagraphCategory, SlotRole, Span, SpecContext,
-    StructuralMarkerInfo, StructuralScopeKind, Token, TokenKind, format_sid, map_marker_info,
+    DiffOptions, HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory,
+    LintCode, LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily,
+    MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide,
+    NoteFamily, NoteSubkind, NumberInfo, NumberRangeKind, ParagraphCategory, SlotRole, Span,
+    SpecContext, StructuralMarkerInfo, StructuralScopeKind, TextDiffMode, TextDiffRun,
+    TextDiffRunKind, Token, TokenKind, UnitTextDiff, format_sid, map_marker_info,
 };
 
 // TODO: eventually move off of this ideally
@@ -422,6 +425,8 @@ pub struct DecisionUnit {
     covered_by: Option<CoveredBy>,
     is_whitespace_change: bool,
     is_usfm_structure_change: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    text_diff: Option<UnitTextDiff>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -641,15 +646,24 @@ impl ParsedUsfm {
         map_vref_index(usfm_to_vref_index(&self.source))
     }
 
-    pub fn diff(&self, other: &ParsedUsfm) -> DiffSkeleton {
-        map_native_skeleton(&native_diff_usfm(&self.source, &other.source), map_token)
+    pub fn diff(&self, other: &ParsedUsfm, options: Option<DiffOptions>) -> DiffSkeleton {
+        map_native_skeleton(
+            &native_diff_usfm(&self.source, &other.source),
+            map_token,
+            diff_options_into_native(options),
+        )
     }
 
     #[wasm_bindgen(js_name = diffByChapter)]
-    pub fn diff_by_chapter(&self, other: &ParsedUsfm) -> DiffsByChapterMap {
+    pub fn diff_by_chapter(
+        &self,
+        other: &ParsedUsfm,
+        options: Option<DiffOptions>,
+    ) -> DiffsByChapterMap {
         DiffsByChapterMap(map_diffs_by_chapter(
             &native_diff_skeleton_by_chapter(&self.source, &other.source),
             map_token,
+            diff_options_into_native(options),
         ))
     }
 }
@@ -774,23 +788,40 @@ fn native_diff_usfm<'a>(
 }
 
 #[wasm_bindgen(js_name = diffUsfm)]
-pub fn wasm_diff_usfm(left: &str, right: &str) -> DiffSkeleton {
-    map_native_skeleton(&native_diff_usfm(left, right), map_token)
+pub fn wasm_diff_usfm(left: &str, right: &str, options: Option<DiffOptions>) -> DiffSkeleton {
+    map_native_skeleton(
+        &native_diff_usfm(left, right),
+        map_token,
+        diff_options_into_native(options),
+    )
 }
 
 #[wasm_bindgen(js_name = diffUsfmByChapter)]
-pub fn wasm_diff_usfm_by_chapter(left: &str, right: &str) -> DiffsByChapterMap {
+pub fn wasm_diff_usfm_by_chapter(
+    left: &str,
+    right: &str,
+    options: Option<DiffOptions>,
+) -> DiffsByChapterMap {
     DiffsByChapterMap(map_diffs_by_chapter(
         &native_diff_skeleton_by_chapter(left, right),
         map_token,
+        diff_options_into_native(options),
     ))
 }
 
 #[wasm_bindgen(js_name = diffTokens)]
-pub fn wasm_diff_tokens(left: Vec<Token>, right: Vec<Token>) -> DiffSkeleton {
+pub fn wasm_diff_tokens(
+    left: Vec<Token>,
+    right: Vec<Token>,
+    options: Option<DiffOptions>,
+) -> DiffSkeleton {
     let left = parse_walk_tokens_from_values(left);
     let right = parse_walk_tokens_from_values(right);
-    map_native_skeleton(&native_diff_skeleton(&left, &right), map_walk_token)
+    map_native_skeleton(
+        &native_diff_skeleton(&left, &right),
+        map_walk_token,
+        diff_options_into_native(options),
+    )
 }
 
 #[wasm_bindgen(js_name = mergeDiffBlocks)]
@@ -1024,6 +1055,12 @@ fn html_options_into_native(value: Option<HtmlOptions>) -> NativeHtmlOptions {
             .map(Into::into)
             .unwrap_or(NativeHtmlCallerScope::VerseSequential),
     }
+}
+
+/// Omitting `options` (or omitting `textDiff` on a supplied `DiffOptions`)
+/// resolves to `TextDiffMode::None` — today's behavior, computing nothing.
+fn diff_options_into_native(value: Option<DiffOptions>) -> NativeTextDiffMode {
+    value.unwrap_or_default().into()
 }
 
 fn parse_walk_tokens_from_values(values: Vec<Token>) -> Vec<WalkToken> {
@@ -1323,16 +1360,17 @@ fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssue {
     }
 }
 
-fn map_native_skeleton<T>(
+fn map_native_skeleton<T: DiffableToken>(
     skeleton: &NativeDiffSkeleton<T>,
     map_token: impl Fn(&T) -> Token,
+    text_diff_mode: NativeTextDiffMode,
 ) -> DiffSkeleton {
     DiffSkeleton {
         slots: skeleton.slots.iter().map(map_native_slot).collect(),
         units: skeleton
             .units
             .iter()
-            .map(|unit| map_native_decision_unit(unit, &map_token))
+            .map(|unit| map_native_decision_unit(unit, &map_token, text_diff_mode))
             .collect(),
     }
 }
@@ -1352,9 +1390,10 @@ fn map_native_anchor(anchor: &NativeAnchor) -> Anchor {
     }
 }
 
-fn map_native_decision_unit<T>(
+fn map_native_decision_unit<T: DiffableToken>(
     unit: &NativeDecisionUnit<T>,
     map_token: &impl Fn(&T) -> Token,
+    text_diff_mode: NativeTextDiffMode,
 ) -> DecisionUnit {
     DecisionUnit {
         id: unit.id.to_string(),
@@ -1373,6 +1412,7 @@ fn map_native_decision_unit<T>(
         covered_by: unit.covered_by.as_ref().map(map_native_covered_by),
         is_whitespace_change: unit.is_whitespace_change,
         is_usfm_structure_change: unit.is_usfm_structure_change,
+        text_diff: native_unit_text_diff(unit, text_diff_mode).map(Into::into),
     }
 }
 
@@ -1406,12 +1446,13 @@ fn map_walk_token(token: &WalkToken) -> Token {
     }
 }
 
-fn map_diffs_by_chapter<T>(
+fn map_diffs_by_chapter<T: DiffableToken>(
     by_chapter: &std::collections::BTreeMap<
         String,
         std::collections::BTreeMap<u32, NativeDiffSkeleton<T>>,
     >,
     map_token: impl Fn(&T) -> Token,
+    text_diff_mode: NativeTextDiffMode,
 ) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>> {
     by_chapter
         .iter()
@@ -1421,7 +1462,7 @@ fn map_diffs_by_chapter<T>(
                 chapters
                     .iter()
                     .map(|(chapter, skeleton)| {
-                        (*chapter, map_native_skeleton(skeleton, &map_token))
+                        (*chapter, map_native_skeleton(skeleton, &map_token, text_diff_mode))
                     })
                     .collect(),
             )
@@ -1946,5 +1987,157 @@ mod tests {
             Some(&"2".to_string())
         );
         assert_eq!(mapped.message_params.get("found"), Some(&"3".to_string()));
+    }
+
+    // --- DiffOptions / textDiff wire threading (Gate 4) ---
+    //
+    // `DiffOptions`'s `text_diff` field is intentionally private (mirroring
+    // the plan's sketch) — the wasm boundary only ever builds one by
+    // deserializing the JS-facing wire shape, never by Rust field
+    // construction. These tests do the same.
+
+    fn diff_options(text_diff: &str) -> DiffOptions {
+        serde_json::from_value(serde_json::json!({ "textDiff": text_diff }))
+            .expect("DiffOptions must deserialize from its wire shape")
+    }
+
+    #[test]
+    fn omitted_and_explicit_none_diff_options_produce_no_text_diff_and_match_byte_for_byte() {
+        let baseline = "\\id GEN\n\\c 1\n\\v 1 heaven\n\\v 2 old text\n\\v 3 same text\n";
+        let current = "\\id GEN\n\\c 1\n\\v 1 heavens\n\\v 3 same text\n\\v 4 new text\n";
+
+        let omitted = wasm_diff_usfm(baseline, current, None);
+        let explicit_none = wasm_diff_usfm(baseline, current, Some(diff_options("none")));
+
+        for skeleton in [&omitted, &explicit_none] {
+            assert!(
+                skeleton.units.iter().all(|u| u.text_diff.is_none()),
+                "omitted/\"none\" DiffOptions must compute no text_diff on any unit"
+            );
+        }
+        // Additive/back-compatible per the plan: omitting the option must be
+        // byte-identical to passing an explicit "none" — and, since neither
+        // computes a text_diff, both must be byte-identical to a caller that
+        // never knew this feature existed.
+        assert_eq!(
+            serde_json::to_string(&omitted).unwrap(),
+            serde_json::to_string(&explicit_none).unwrap()
+        );
+    }
+
+    #[test]
+    fn words_mode_populates_text_diff_on_changed_units_only() {
+        let baseline = "\\id GEN\n\\c 1\n\\v 1 heaven\n\\v 2 old text\n\\v 3 same text\n";
+        let current = "\\id GEN\n\\c 1\n\\v 1 heavens\n\\v 3 same text\n\\v 4 new text\n";
+
+        let skeleton = wasm_diff_usfm(baseline, current, Some(diff_options("words")));
+
+        let modified = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Modified))
+            .expect("expected one Modified unit (v1 heaven -> heavens)");
+        assert!(modified.text_diff.is_some(), "Modified must carry a text_diff");
+
+        let added = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Added))
+            .expect("expected one Added unit (v4)");
+        assert!(added.text_diff.is_some(), "Added must carry a text_diff");
+
+        let deleted = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Deleted))
+            .expect("expected one Deleted unit (v2)");
+        assert!(deleted.text_diff.is_some(), "Deleted must carry a text_diff");
+
+        let unchanged = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Unchanged))
+            .expect("expected one Unchanged unit (v3)");
+        assert!(
+            unchanged.text_diff.is_none(),
+            "Unchanged (byte-equal) must not carry a text_diff"
+        );
+    }
+
+    #[test]
+    fn words_mode_leaves_a_pure_move_without_a_text_diff() {
+        // Verses swapped, byte-identical text either side -> Moved.
+        let baseline = "\\id GEN\n\\c 1\n\\v 1 First verse.\n\\v 2 Second verse.\n";
+        let current = "\\id GEN\n\\c 1\n\\v 2 Second verse.\n\\v 1 First verse.\n";
+
+        let skeleton = wasm_diff_usfm(baseline, current, Some(diff_options("words")));
+        let moved = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Moved))
+            .expect("expected one Moved unit");
+        assert!(
+            moved.text_diff.is_none(),
+            "a pure move (byte-equal text) must not read as a content change"
+        );
+    }
+
+    #[test]
+    fn words_mode_current_and_baseline_runs_highlight_the_changed_word() {
+        let baseline = "\\id GEN\n\\c 1\n\\v 1 heaven\n";
+        let current = "\\id GEN\n\\c 1\n\\v 1 heavens\n";
+
+        let skeleton = wasm_diff_usfm(baseline, current, Some(diff_options("words")));
+        let modified = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Modified))
+            .expect("expected one Modified unit");
+        let text_diff = modified
+            .text_diff
+            .as_ref()
+            .expect("Modified unit must carry a text_diff under \"words\"");
+
+        assert!(
+            text_diff
+                .current
+                .iter()
+                .any(|r| r.text == "heavens" && matches!(r.kind, TextDiffRunKind::Added)),
+            "current runs must highlight the new word \"heavens\": {:?}",
+            text_diff.current
+        );
+        assert!(
+            text_diff
+                .baseline
+                .iter()
+                .any(|r| r.text == "heaven" && matches!(r.kind, TextDiffRunKind::Removed)),
+            "baseline runs must highlight the removed word \"heaven\": {:?}",
+            text_diff.baseline
+        );
+    }
+
+    #[test]
+    fn chars_mode_is_also_threaded_through_diff_options() {
+        let baseline = "\\id GEN\n\\c 1\n\\v 1 heaven\n";
+        let current = "\\id GEN\n\\c 1\n\\v 1 heavens\n";
+
+        let skeleton = wasm_diff_usfm(baseline, current, Some(diff_options("chars")));
+        let modified = skeleton
+            .units
+            .iter()
+            .find(|u| matches!(u.status, DecisionStatus::Modified))
+            .expect("expected one Modified unit");
+        let text_diff = modified
+            .text_diff
+            .as_ref()
+            .expect("Modified unit must carry a text_diff under \"chars\"");
+        assert!(
+            text_diff
+                .current
+                .iter()
+                .any(|r| r.text == "s" && matches!(r.kind, TextDiffRunKind::Added)),
+            "grapheme-level diff must isolate the added \"s\": {:?}",
+            text_diff.current
+        );
     }
 }
