@@ -39,6 +39,8 @@ mod skeleton_proptest;
 pub mod text_diff;
 #[cfg(test)]
 mod text_diff_fixtures;
+#[cfg(test)]
+mod text_diff_proptest;
 pub use skeleton::{
     Anchor, CoveredBy, CoveredSide, DecisionStatus, DecisionUnit, DecisionUnitKind, DiffSkeleton,
     DupContext, MergeError, MergeSide, Slot, SlotRole, UnitId, diff_skeleton,

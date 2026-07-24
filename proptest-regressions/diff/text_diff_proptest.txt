@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc cd88edcde9923c6b4af35d7313178b56b408175db2b0c5eb0fa00cd24b9a6b24 # shrinks to (baseline, current) = (Doc { eol: Lf, chapters: [Chapter { number: 1, open_marker: "m", heading: None, verses: [Verse { number: 1, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }] }, Chapter { number: 2, open_marker: "m", heading: None, verses: [Verse { number: 1, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }, Verse { number: 2, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }, Verse { number: 3, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 1 }] }] }, Doc { eol: Lf, chapters: [Chapter { number: 1, open_marker: "m", heading: None, verses: [Verse { number: 1, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }] }, Chapter { number: 2, open_marker: "m", heading: None, verses: [Verse { number: 1, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }, Verse { number: 2, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }, Verse { number: 3, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 0 }, Verse { number: 4, end: None, words: ["alpha"], wrapped: false, trailing_extra_spaces: 1 }] }] })

@@ -57,13 +57,13 @@ struct Chapter {
 }
 
 #[derive(Debug, Clone)]
-struct Doc {
+pub(super) struct Doc {
     eol: Eol,
     chapters: Vec<Chapter>,
 }
 
 impl Doc {
-    fn render(&self) -> String {
+    pub(super) fn render(&self) -> String {
         let nl = self.eol.as_str();
         let mut out = format!("\\id {BOOK}{nl}");
         for chapter in &self.chapters {
@@ -331,7 +331,11 @@ fn renumber_from(chapter: &mut Chapter, start_index: usize) {
     }
 }
 
-fn edited_doc_strategy() -> impl Strategy<Value = (Doc, Doc)> {
+/// `pub(super)` (rather than the module-private default) so the Gate 3
+/// text-diff property suite (`text_diff_proptest.rs`, a sibling module under
+/// `crate::diff`) can reuse this exact generator instead of duplicating the
+/// ~300-line structured-document model.
+pub(super) fn edited_doc_strategy() -> impl Strategy<Value = (Doc, Doc)> {
     (
         doc_strategy(),
         prop::collection::vec(edit_strategy(), 0..=3),
