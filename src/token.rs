@@ -464,17 +464,61 @@ impl<'a> SerializableAttribute for AttributeItem<'a> {
     }
 }
 
-/// The minimal contract [`tokens_to_usfm_reconstruct`] needs to serialize a
-/// token stream back to USFM. Implemented by native [`Token`] (for
+/// The minimal contract a token needs to satisfy for lossless token-stream
+/// serialization back to USFM. Implemented by native [`Token`] (for
 /// contract-reference and parity testing against [`tokens_to_usfm`]) and by
 /// owned/editor-authored token representations at the wire boundary, which
-/// have no reliable byte spans and so cannot use the span-based emitter.
+/// have no reliable byte spans and so serialize via [`tokens_to_usfm_reconstruct`]
+/// instead of the span-based [`tokens_to_usfm`].
 ///
-/// See the trait's own doc comment (added alongside the wire impl) for the
-/// full two-contract framing; in short: `source()` excludes the `|...`
-/// attribute list, `attributes()` is the structured/authorable form, and
-/// `attribute_list()` is the verbatim trivia slice `tokens_to_usfm_reconstruct`
-/// prefers whenever it's present.
+/// # Five methods
+///
+/// - `kind()` / `marker()` — drive attribute placement: character markers
+///   attach before `\name*`, paragraph markers before the next newline,
+///   milestones before their own close.
+/// - `source()` — the raw marker + text bytes, **excluding** the `|...`
+///   attribute list (that's carried separately, see below). Must stay
+///   verbatim (exact whitespace, exact backslash) for byte-losslessness.
+/// - `attributes()` — the structured attribute list (`key`/`value`/
+///   `is_default`). Used for reading/semantics and for *authoring* new
+///   attributes.
+/// - `attribute_list()` — the verbatim `|...` slice, when one exists. This is
+///   what makes a *structured* token losslessly serializable without the
+///   caller ever reconstructing a pipe by hand.
+///
+/// # Two contracts, not one
+///
+/// A consumer that can only emit USFM text needs nothing but that: emit ->
+/// `parse(&str)` -> full fidelity, attributes inline in the string. That's
+/// the **string floor**, always sufficient, and the fallback whenever the
+/// token path is inconvenient. `SerializableToken` is the **token path** — the
+/// smaller, optional fast path for a consumer that can hand back tokens
+/// satisfying this trait instead of paying for a re-parse.
+///
+/// # Verbatim preferred, reconstruct only for authored attributes
+///
+/// The emitter always prefers `attribute_list()` when it's `Some`: the
+/// original bytes (whitespace, quote style, encoding) ride through untouched.
+/// It reconstructs from `attributes()` only when `attribute_list()` is
+/// `None` — the editor-authored case, where canonical formatting is correct
+/// because there's no original trivia to preserve.
+///
+/// This is the one rule an editor needs: **touch an attribute, drop its
+/// verbatim; onion re-serializes the whole list from structure.** There is
+/// no partial/per-item verbatim-preservation — editing one attribute in a
+/// list means the entire list is reconstructed, not just the changed entry.
+/// An editor that never touches attributes never has to think about this.
+///
+/// # The one sanctioned divergence between the two emitters
+///
+/// [`tokens_to_usfm`] (native, span-based) and [`tokens_to_usfm_reconstruct`]
+/// (this trait, spanless) agree on every well-formed input, but not on
+/// malformed ones: a marker with an attribute list that is never closed (a
+/// parser-recovery scenario) keeps its exact byte offset under span-drain,
+/// while the spanless/closer-shape emitter — having no matching closer to
+/// trigger the drain — pushes it to the end of the token stream instead.
+/// Native callers get byte-exact recovery; owned/wire tokens do not, because
+/// they have no span to recover a position from.
 pub trait SerializableToken {
     type Attr: SerializableAttribute;
 
@@ -977,5 +1021,17 @@ mod tokens_to_usfm_reconstruct_parity {
         ] {
             assert_parity(source);
         }
+    }
+}
+
+#[cfg(test)]
+mod encode_attr_value_tests {
+    use super::encode_attr_value;
+
+    #[test]
+    fn escapes_quote_and_backslash() {
+        assert_eq!(encode_attr_value("plain"), "plain");
+        assert_eq!(encode_attr_value("a\"b"), "a\\\"b");
+        assert_eq!(encode_attr_value("a\\b"), "a\\\\b");
     }
 }
