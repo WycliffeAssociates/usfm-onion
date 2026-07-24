@@ -2140,4 +2140,119 @@ mod tests {
             text_diff.current
         );
     }
+
+    // --- native <-> wasm parity fixture (Gate 5) ---
+    //
+    // The Gate 4 tests above prove the DTO path *populates* text_diff and pin
+    // a few ASCII runs. This fixture proves the wasm DTO path is byte-identical
+    // to the native `unit_text_diff` computation for the HARDENED multilingual
+    // pins that `src/diff/text_diff_fixtures.rs` gates (apostrophe, Hebrew
+    // niqqud, Arabic RTL, Thai, punctuation-adjacent). The wasm entry point
+    // (`wasm_diff_usfm`) and the native reference (`native_diff_usfm` +
+    // `native_unit_text_diff`) walk the SAME canonical-sid skeleton, so any
+    // drift in `map_native_skeleton`, the `From<Native*>` conversions, or the
+    // serde rename would surface here — and it's a plain cargo test, no pkg
+    // build. This is the seam the fixture oracle can't reach: those run the
+    // native fn directly; these run it through the wasm boundary's DTO path.
+
+    /// The single Modified unit's `text_diff` as produced by the wasm DTO
+    /// entry point.
+    fn wasm_path_modified_text_diff(
+        baseline: &str,
+        current: &str,
+        mode: &str,
+    ) -> Option<UnitTextDiff> {
+        let skeleton = wasm_diff_usfm(baseline, current, Some(diff_options(mode)));
+        let modified = skeleton
+            .units
+            .into_iter()
+            .filter(|u| matches!(u.status, DecisionStatus::Modified))
+            .collect::<Vec<_>>();
+        assert_eq!(modified.len(), 1, "fixture must have exactly one Modified unit");
+        modified.into_iter().next().unwrap().text_diff
+    }
+
+    /// The same unit's `text_diff` computed natively (canonical-sid skeleton,
+    /// exactly as the wasm path builds it) and converted into the wire DTO.
+    fn native_path_modified_text_diff(
+        baseline: &str,
+        current: &str,
+        mode: &str,
+    ) -> Option<UnitTextDiff> {
+        use usfm_onion::diff::DecisionStatus as NativeDecisionStatus;
+        let native_mode = NativeTextDiffMode::from(diff_options(mode));
+        let skeleton = native_diff_usfm(baseline, current);
+        let modified = skeleton
+            .units
+            .iter()
+            .filter(|u| matches!(u.status, NativeDecisionStatus::Modified))
+            .collect::<Vec<_>>();
+        assert_eq!(modified.len(), 1, "fixture must have exactly one Modified unit");
+        native_unit_text_diff(modified[0], native_mode).map(Into::into)
+    }
+
+    fn assert_wasm_matches_native(baseline: &str, current: &str, mode: &str, label: &str) {
+        let wasm = wasm_path_modified_text_diff(baseline, current, mode);
+        let native = native_path_modified_text_diff(baseline, current, mode);
+        // Non-trivial: two Nones would pass vacuously, but every pin here is a
+        // Modified content change, so both sides MUST carry runs.
+        assert!(
+            wasm.is_some(),
+            "{label}: wasm path produced no text_diff for a Modified unit"
+        );
+        assert_eq!(
+            wasm, native,
+            "{label}: wasm DTO text_diff must byte-match the native computation"
+        );
+    }
+
+    #[test]
+    fn parity_apostrophe_straight_vs_curly_words() {
+        assert_wasm_matches_native(
+            "\\id GEN\n\\c 1\n\\v 1 They don't know.\n",
+            "\\id GEN\n\\c 1\n\\v 1 They don\u{2019}t know.\n",
+            "words",
+            "apostrophe straight vs curly",
+        );
+    }
+
+    #[test]
+    fn parity_hebrew_combining_niqqud_chars() {
+        assert_wasm_matches_native(
+            "\\id GEN\n\\c 1\n\\v 1 \u{05D0}\u{05D5}\u{05E8}\n",
+            "\\id GEN\n\\c 1\n\\v 1 \u{05D0}\u{05D5}\u{05BC}\u{05E8}\n",
+            "chars",
+            "Hebrew combining niqqud",
+        );
+    }
+
+    #[test]
+    fn parity_arabic_rtl_word_edit_words() {
+        assert_wasm_matches_native(
+            "\\id GEN\n\\c 1\n\\v 1 \u{0641}\u{064A} \u{0627}\u{0644}\u{0628}\u{062F}\u{0621} \u{062E}\u{0644}\u{0642} \u{0627}\u{0644}\u{0644}\u{0647}\n",
+            "\\id GEN\n\\c 1\n\\v 1 \u{0641}\u{064A} \u{0627}\u{0644}\u{0628}\u{062F}\u{0621} \u{062E}\u{0644}\u{0642} \u{0627}\u{0644}\u{0631}\u{0628}\n",
+            "words",
+            "Arabic RTL word edit",
+        );
+    }
+
+    #[test]
+    fn parity_thai_no_space_segment_edit_words() {
+        assert_wasm_matches_native(
+            "\\id GEN\n\\c 1\n\\v 1 \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}\u{0E42}\u{0E25}\u{0E01}\n",
+            "\\id GEN\n\\c 1\n\\v 1 \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}\u{0E1B}\u{0E23}\u{0E30}\u{0E40}\u{0E17}\u{0E28}\n",
+            "words",
+            "Thai no-space segment edit",
+        );
+    }
+
+    #[test]
+    fn parity_latin_punctuation_adjacent_edit_words() {
+        assert_wasm_matches_native(
+            "\\id GEN\n\\c 1\n\\v 1 Hello, world!\n",
+            "\\id GEN\n\\c 1\n\\v 1 Hello, there!\n",
+            "words",
+            "Latin punctuation-adjacent edit",
+        );
+    }
 }
