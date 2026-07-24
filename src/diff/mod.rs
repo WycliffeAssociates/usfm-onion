@@ -36,11 +36,16 @@ pub mod skeleton;
 mod skeleton_fixtures;
 #[cfg(test)]
 mod skeleton_proptest;
+pub mod text_diff;
 pub use skeleton::{
     Anchor, CoveredBy, CoveredSide, DecisionStatus, DecisionUnit, DecisionUnitKind, DiffSkeleton,
     DupContext, MergeError, MergeSide, Slot, SlotRole, UnitId, diff_skeleton,
     diff_skeleton_by_chapter, diff_skeleton_by_chapter_from_tokens, diff_skeleton_canonical,
     merge_diff_blocks, merge_skeleton, revert_diff_block,
+};
+pub use text_diff::{
+    TextDiffMode, TextDiffRun, TextDiffRunKind, UnitTextDiff, diff_skeleton_with_text,
+    unit_text_diff,
 };
 
 pub trait DiffableToken: Clone {
