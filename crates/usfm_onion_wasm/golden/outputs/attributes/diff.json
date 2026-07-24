@@ -474,6 +474,7 @@
           }
         },
         {
+          "attributeSource": "|lemma=\"grace\" ",
           "attributes": [
             {
               "isDefault": false,
@@ -580,6 +581,7 @@
           }
         },
         {
+          "attributeSource": "|lemma=\"grace\" ",
           "attributes": [
             {
               "isDefault": false,

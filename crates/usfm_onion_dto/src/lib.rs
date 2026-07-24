@@ -60,8 +60,9 @@ use usfm_onion::lint::{
 };
 use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
-    NumberRangeKind as NativeNumberRangeKind, Sid as NativeSid, Span as NativeSpan,
-    Token as NativeToken, TokenData as NativeTokenData, TokenKind as NativeTokenKind,
+    NumberRangeKind as NativeNumberRangeKind, SerializableAttribute, SerializableToken,
+    Sid as NativeSid, Span as NativeSpan, Token as NativeToken, TokenData as NativeTokenData,
+    TokenKind as NativeTokenKind,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -871,6 +872,14 @@ pub struct Token {
     pub book_code_valid: Option<bool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<AttributeItem>,
+    /// Verbatim `|...` attribute-list slice (native `MarkerAttrs.attribute_source`),
+    /// carried across the wire so a passed-through token stays byte-lossless
+    /// through `tokens_to_usfm_reconstruct`. `None` when the source had no
+    /// attribute list, or when an editor authored/edited the attributes
+    /// itself — see [`SerializableToken`] for the "touch an attribute, drop
+    /// its verbatim" rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribute_source: Option<String>,
 }
 
 impl<'a> From<&NativeToken<'a>> for Token {
@@ -889,6 +898,7 @@ impl<'a> From<&NativeToken<'a>> for Token {
             book_code: None,
             book_code_valid: None,
             attributes: Vec::new(),
+            attribute_source: None,
         };
 
         match &token.data {
@@ -896,6 +906,7 @@ impl<'a> From<&NativeToken<'a>> for Token {
                 metadata,
                 structural,
                 nested,
+                attrs,
                 ..
             } => {
                 value.nested = Some(*nested);
@@ -905,6 +916,10 @@ impl<'a> From<&NativeToken<'a>> for Token {
                     .attributes()
                     .map(|a| a.iter().map(Into::into).collect())
                     .unwrap_or_default();
+                value.attribute_source = attrs
+                    .as_deref()
+                    .and_then(|a| a.attribute_source)
+                    .map(|(_, slice)| slice.to_string());
             }
             NativeTokenData::EndMarker {
                 metadata,
@@ -919,6 +934,7 @@ impl<'a> From<&NativeToken<'a>> for Token {
             NativeTokenData::Milestone {
                 metadata,
                 structural,
+                attrs,
                 ..
             } => {
                 value.marker_metadata = Some((*metadata).into());
@@ -927,6 +943,10 @@ impl<'a> From<&NativeToken<'a>> for Token {
                     .attributes()
                     .map(|a| a.iter().map(Into::into).collect())
                     .unwrap_or_default();
+                value.attribute_source = attrs
+                    .as_deref()
+                    .and_then(|a| a.attribute_source)
+                    .map(|(_, slice)| slice.to_string());
             }
             NativeTokenData::BookCode { code, is_valid } => {
                 value.book_code = Some((*code).to_string());
@@ -946,6 +966,44 @@ impl<'a> From<&NativeToken<'a>> for Token {
         }
 
         value
+    }
+}
+
+impl SerializableAttribute for AttributeItem {
+    fn key(&self) -> &str {
+        &self.key
+    }
+
+    fn value(&self) -> &str {
+        &self.value
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+}
+
+impl SerializableToken for Token {
+    type Attr = AttributeItem;
+
+    fn kind(&self) -> NativeTokenKind {
+        self.kind.into()
+    }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker.as_deref()
+    }
+
+    fn source(&self) -> &str {
+        &self.source
+    }
+
+    fn attributes(&self) -> &[Self::Attr] {
+        &self.attributes
+    }
+
+    fn attribute_list(&self) -> Option<&str> {
+        self.attribute_source.as_deref()
     }
 }
 
