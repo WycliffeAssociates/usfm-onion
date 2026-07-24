@@ -210,6 +210,16 @@ pub enum LintCode {
     /// fires only on genuine content riding the same line — `\b here`,
     /// not `\b ` followed by a newline. Anchored at the content.
     ContentAfterBlankMarker,
+    /// A `\id` book code that is not a canonical USFM identifier even when
+    /// uppercased (`is_valid_book_code`). Advisory: the file still parses and a
+    /// caller may supply the authoritative book id out of band, so this is a
+    /// `Warning`. Anchored at the book-code token.
+    InvalidBookCode,
+    /// A `\id` book code whose uppercase form IS canonical, but the literal is
+    /// not uppercase (e.g. `php` for `PHP`). Distinct from [`Self::InvalidBookCode`]
+    /// because the fix is deterministic — uppercase it. `Warning`, anchored at
+    /// the book-code token.
+    BookCodeNotUppercase,
 }
 
 impl LintCode {
@@ -249,6 +259,8 @@ impl LintCode {
             Self::MissingContentSpaceAfterCloseMarker => "missing-content-space-after-close-marker",
             Self::VerseInSectionOrOtherParagraph => "verse-in-section-or-other-paragraph",
             Self::ContentAfterBlankMarker => "content-after-blank-marker",
+            Self::InvalidBookCode => "invalid-book-code",
+            Self::BookCodeNotUppercase => "book-code-not-uppercase",
         }
     }
 
@@ -323,6 +335,12 @@ impl LintCode {
             Self::ContentAfterBlankMarker => {
                 "This content shares a line with \\{marker}, but \\{marker} is a blank line that takes no content. Put it in its own paragraph (\\p, \\q, …) on the next line."
             }
+            Self::InvalidBookCode => {
+                "The \\id book code \"{code}\" is not a recognized USFM book identifier."
+            }
+            Self::BookCodeNotUppercase => {
+                "The \\id book code \"{code}\" must be uppercase: {uppercase}."
+            }
         }
     }
 
@@ -331,7 +349,9 @@ impl LintCode {
             Self::MissingIdMarker
             | Self::ContentBeforeFirstChapter
             | Self::DuplicateIdMarker
-            | Self::IdMarkerNotAtFileStart => LintCategory::Document,
+            | Self::IdMarkerNotAtFileStart
+            | Self::InvalidBookCode
+            | Self::BookCodeNotUppercase => LintCategory::Document,
             Self::EmptyParagraph
             | Self::VerseIsEmpty
             | Self::UnknownToken
@@ -363,9 +383,10 @@ impl LintCode {
 
     pub fn severity(self) -> LintSeverity {
         match self {
-            Self::EmptyParagraph | Self::MissingContentSpaceAfterCloseMarker => {
-                LintSeverity::Warning
-            }
+            Self::EmptyParagraph
+            | Self::MissingContentSpaceAfterCloseMarker
+            | Self::InvalidBookCode
+            | Self::BookCodeNotUppercase => LintSeverity::Warning,
             _ => LintSeverity::Error,
         }
     }
@@ -401,7 +422,9 @@ impl LintCode {
             | Self::MissingTagEndDelimiterAfterMarker
             | Self::MissingContentSpaceAfterCloseMarker
             | Self::VerseInSectionOrOtherParagraph
-            | Self::ContentAfterBlankMarker => LintIssueType::Usfm,
+            | Self::ContentAfterBlankMarker
+            | Self::InvalidBookCode
+            | Self::BookCodeNotUppercase => LintIssueType::Usfm,
         }
     }
 
@@ -1195,6 +1218,31 @@ fn lint_structure_rules<T: LintableToken>(
         let token_kind = token.kind();
         if token_kind == TokenKind::Newline {
             continue;
+        }
+
+        if token_kind == TokenKind::BookCode {
+            let code = token.text().trim();
+            if !code.is_empty() && !crate::lexer::is_valid_book_code(code) {
+                let upper = code.to_uppercase();
+                if crate::lexer::is_valid_book_code(&upper) {
+                    if enabled.has(LintCode::BookCodeNotUppercase) {
+                        issues.push(simple_issue(
+                            LintCode::BookCodeNotUppercase,
+                            message_params([
+                                ("code", code.to_string()),
+                                ("uppercase", upper),
+                            ]),
+                            token,
+                        ));
+                    }
+                } else if enabled.has(LintCode::InvalidBookCode) {
+                    issues.push(simple_issue(
+                        LintCode::InvalidBookCode,
+                        message_params([("code", code.to_string())]),
+                        token,
+                    ));
+                }
+            }
         }
 
         if token_kind == TokenKind::Marker {
@@ -2518,6 +2566,8 @@ mod tests {
         LintCode::MissingContentSpaceAfterCloseMarker,
         LintCode::VerseInSectionOrOtherParagraph,
         LintCode::ContentAfterBlankMarker,
+        LintCode::InvalidBookCode,
+        LintCode::BookCodeNotUppercase,
     ];
 
     /// Compile-time exhaustiveness anchor: adding a `LintCode` variant breaks
@@ -2553,7 +2603,9 @@ mod tests {
             | LintCode::MissingTagEndDelimiterAfterMarker
             | LintCode::MissingContentSpaceAfterCloseMarker
             | LintCode::VerseInSectionOrOtherParagraph
-            | LintCode::ContentAfterBlankMarker => {}
+            | LintCode::ContentAfterBlankMarker
+            | LintCode::InvalidBookCode
+            | LintCode::BookCodeNotUppercase => {}
         }
     }
 
@@ -3058,6 +3110,73 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == LintCode::DuplicateIdMarker)
         );
+    }
+
+    #[test]
+    fn unrecognized_book_code_fires_invalid_book_code() {
+        // ZZZ is not canonical even uppercased → truly invalid, not a casing issue.
+        let result = lint_usfm(
+            "\\id ZZZ\n\\c 1\n\\v 1 text",
+            LintOptions::scoped(LintScope::Book),
+        );
+        let issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::InvalidBookCode)
+            .expect("an unrecognized book code must fire InvalidBookCode");
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert_eq!(issue.category, LintCategory::Document);
+        assert_eq!(issue.message_params.get("code").map(String::as_str), Some("ZZZ"));
+        // Must NOT also fire the casing rule.
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::BookCodeNotUppercase)
+        );
+    }
+
+    #[test]
+    fn miscased_book_code_fires_book_code_not_uppercase_with_fix() {
+        // `php` uppercases to canonical `PHP` → a casing issue, not invalid.
+        let result = lint_usfm(
+            "\\id php\n\\c 1\n\\v 1 text",
+            LintOptions::scoped(LintScope::Book),
+        );
+        let issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::BookCodeNotUppercase)
+            .expect("a miscased-but-valid book code must fire BookCodeNotUppercase");
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert_eq!(issue.message_params.get("code").map(String::as_str), Some("php"));
+        // The deterministic fix target is carried so braid can uppercase it.
+        assert_eq!(issue.message_params.get("uppercase").map(String::as_str), Some("PHP"));
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|i| i.code == LintCode::InvalidBookCode)
+        );
+    }
+
+    #[test]
+    fn valid_book_codes_do_not_fire_either_book_code_rule() {
+        // Includes XXA — one of the extra-material codes the audit added to the
+        // canonical set (spec 94–100); it must NOT be flagged.
+        for code in ["GEN", "3JN", "XXA", "1MA"] {
+            let result = lint_usfm(
+                &format!("\\id {code}\n\\c 1\n\\v 1 text"),
+                LintOptions::scoped(LintScope::Book),
+            );
+            assert!(
+                !result.issues.iter().any(|issue| matches!(
+                    issue.code,
+                    LintCode::InvalidBookCode | LintCode::BookCodeNotUppercase
+                )),
+                "valid code {code} must not fire either book-code rule"
+            );
+        }
     }
 
     #[test]

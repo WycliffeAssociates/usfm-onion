@@ -178,5 +178,17 @@
     "code": "content-after-blank-marker",
     "issueType": "usfm",
     "severity": "error"
+  },
+  {
+    "category": "document",
+    "code": "invalid-book-code",
+    "issueType": "usfm",
+    "severity": "warning"
+  },
+  {
+    "category": "document",
+    "code": "book-code-not-uppercase",
+    "issueType": "usfm",
+    "severity": "warning"
   }
 ]

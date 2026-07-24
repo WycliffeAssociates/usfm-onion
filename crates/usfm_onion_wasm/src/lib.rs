@@ -1645,6 +1645,8 @@ fn lint_code_variants() -> Vec<NativeLintCode> {
         NativeLintCode::MissingContentSpaceAfterCloseMarker,
         NativeLintCode::VerseInSectionOrOtherParagraph,
         NativeLintCode::ContentAfterBlankMarker,
+        NativeLintCode::InvalidBookCode,
+        NativeLintCode::BookCodeNotUppercase,
     ]
 }
 

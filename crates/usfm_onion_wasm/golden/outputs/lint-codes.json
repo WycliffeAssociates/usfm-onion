@@ -28,5 +28,7 @@
   "missing-tag-end-delimiter-after-marker",
   "missing-content-space-after-close-marker",
   "verse-in-section-or-other-paragraph",
-  "content-after-blank-marker"
+  "content-after-blank-marker",
+  "invalid-book-code",
+  "book-code-not-uppercase"
 ]

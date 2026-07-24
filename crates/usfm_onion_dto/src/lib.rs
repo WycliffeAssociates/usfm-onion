@@ -1,3 +1,33 @@
+//! Target-agnostic serde/tsify wire DTOs for the usfm_onion boundary — the
+//! **single source** for every type that crosses the wasm/TS and native-Rust
+//! (Tauri) boundaries. Never hand-mirror one of these on the far side; the
+//! `usfm_onion_wasm` crate re-exports them (`pub use usfm_onion_dto::…`).
+//!
+//! ## Adding or changing a boundary type without drift
+//!
+//! 1. **Define it once, here.** `#[derive(Serialize, Deserialize)]` always;
+//!    `#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]` +
+//!    `#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]` for
+//!    the TS/ABI. Keep core (`usfm_onion`) wasm-bindgen-free — it stays the
+//!    native representation; this crate is its wire form.
+//! 2. **serde `rename_all` = the WIRE contract, not the native enum's.** Some
+//!    native types serialize differently internally (e.g. the diff enums are
+//!    PascalCase natively but camelCase on the wire). Copy the wire casing.
+//! 3. **Add the `From<Native…>` conversion(s) here** (both directions if the
+//!    type is also an input). For enums these matches are *exhaustive*, so
+//!    adding a native variant fails to compile until you mirror it — that is
+//!    the primary drift guard; lean on it.
+//! 4. **Hand-lists that are NOT compiler-guarded** must be updated manually:
+//!    the native `ALL_LINT_CODES` test array and `usfm_onion_wasm::lint_code_variants`.
+//! 5. **Prove it:** a serde round-trip / wire-string test here (see the
+//!    `boundary_enums_*` tests), then `npm run golden:wasm` (+ `:web`). A new
+//!    variant makes `lint-codes.json` and the generated `.d.ts` grow — inspect,
+//!    then `golden:wasm:update`. The golden is a real gate; it rots silently if
+//!    not run.
+//!
+//! Structs have **no** exhaustiveness link across the boundary — guard those
+//! with a same-payload deserialize test (see `token_deserializes_without_span_field`).
+
 use serde::{Deserialize, Serialize};
 
 use usfm_onion::marker_defs::{
@@ -1051,6 +1081,8 @@ pub enum LintCode {
     MissingContentSpaceAfterCloseMarker,
     VerseInSectionOrOtherParagraph,
     ContentAfterBlankMarker,
+    InvalidBookCode,
+    BookCodeNotUppercase,
 }
 
 impl From<NativeLintCode> for LintCode {
@@ -1094,6 +1126,8 @@ impl From<NativeLintCode> for LintCode {
             }
             NativeLintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
             NativeLintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
+            NativeLintCode::InvalidBookCode => Self::InvalidBookCode,
+            NativeLintCode::BookCodeNotUppercase => Self::BookCodeNotUppercase,
         }
     }
 }
@@ -1137,6 +1171,8 @@ impl From<LintCode> for NativeLintCode {
             }
             LintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
             LintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
+            LintCode::InvalidBookCode => Self::InvalidBookCode,
+            LintCode::BookCodeNotUppercase => Self::BookCodeNotUppercase,
         }
     }
 }
@@ -1418,6 +1454,14 @@ mod tests {
         assert_eq!(
             serde_json::to_value(LintCode::IdMarkerNotAtFileStart).unwrap(),
             json!("id-marker-not-at-file-start")
+        );
+        assert_eq!(
+            serde_json::to_value(LintCode::InvalidBookCode).unwrap(),
+            json!("invalid-book-code")
+        );
+        assert_eq!(
+            serde_json::to_value(LintCode::BookCodeNotUppercase).unwrap(),
+            json!("book-code-not-uppercase")
         );
 
         // Diff: camelCase wire (native serializes these PascalCase — different form).

@@ -516,10 +516,17 @@ fn make_span(start: usize, end: usize) -> Span {
     Span::new(start as u32, end as u32)
 }
 
-fn is_valid_book_code(code: &str) -> bool {
+pub(crate) fn is_valid_book_code(code: &str) -> bool {
     matches!(
         code,
         "FRT"
+            | "XXA"
+            | "XXB"
+            | "XXC"
+            | "XXD"
+            | "XXE"
+            | "XXF"
+            | "XXG"
             | "GEN"
             | "EXO"
             | "LEV"
