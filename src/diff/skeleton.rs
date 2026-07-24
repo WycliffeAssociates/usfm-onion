@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use similar::{Algorithm, ChangeTag, capture_diff_slices};
 
 use super::{
-    DiffableToken, SidBlock, classify_text_diff, derive_canonical_sids,
-    group_tokens_by_book_and_chapter, partition_by_sid,
+    DiffableToken, SidBlock, build_sid_blocks, build_sid_blocks_canonical, classify_text_diff,
+    group_tokens_by_book_and_chapter,
 };
 use crate::parse::parse;
 use crate::token::{BookId, Sid, Token};
@@ -142,15 +142,15 @@ pub struct DiffSkeleton<T> {
 /// External/app-shaped token diff (interim calling convention: carried sids
 /// trusted unchanged — see [`super::build_sid_blocks`]).
 pub fn diff_skeleton<T: DiffableToken>(baseline: &[T], current: &[T]) -> DiffSkeleton<T> {
-    let baseline_sids: Vec<String> = baseline
-        .iter()
-        .map(|token| token.sid_string().unwrap_or_default())
-        .collect();
-    let current_sids: Vec<String> = current
-        .iter()
-        .map(|token| token.sid_string().unwrap_or_default())
-        .collect();
-    build_skeleton(baseline, &baseline_sids, current, &current_sids)
+    // Partition on each token's cheap `sid_key` (no per-token `sid_string`
+    // allocation); the sid `String` is materialized once per block inside
+    // `build_sid_blocks`.
+    build_skeleton(
+        baseline,
+        build_sid_blocks(baseline),
+        current,
+        build_sid_blocks(current),
+    )
 }
 
 /// Native calling convention for parsed `Token` streams: sids come from
@@ -161,9 +161,12 @@ pub fn diff_skeleton_canonical<T: DiffableToken>(
     current: &[T],
     current_book: &str,
 ) -> DiffSkeleton<T> {
-    let baseline_sids = derive_canonical_sids(baseline, baseline_book);
-    let current_sids = derive_canonical_sids(current, current_book);
-    build_skeleton(baseline, &baseline_sids, current, &current_sids)
+    build_skeleton(
+        baseline,
+        build_sid_blocks_canonical(baseline, baseline_book),
+        current,
+        build_sid_blocks_canonical(current, current_book),
+    )
 }
 
 /// Native, source-level diff grouped by book and chapter — one canonical
@@ -529,15 +532,10 @@ fn unique_id(taken: &mut FxHashSet<String>, want: String) -> UnitId {
 
 fn build_skeleton<T: DiffableToken>(
     baseline_tokens: &[T],
-    baseline_sids: &[String],
+    baseline_blocks: Vec<SidBlock>,
     current_tokens: &[T],
-    current_sids: &[String],
+    current_blocks: Vec<SidBlock>,
 ) -> DiffSkeleton<T> {
-    let baseline_blocks: Vec<SidBlock> =
-        partition_by_sid(baseline_tokens, |index| baseline_sids[index].clone());
-    let current_blocks: Vec<SidBlock> =
-        partition_by_sid(current_tokens, |index| current_sids[index].clone());
-
     let baseline_block_ids: Vec<String> = baseline_blocks
         .iter()
         .map(|block| block.block_id.clone())

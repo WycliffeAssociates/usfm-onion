@@ -1,8 +1,35 @@
 use crate::format::FormatToken;
-use crate::token::{Token, TokenData, TokenKind};
+use crate::token::{Sid, Token, TokenData, TokenKind};
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use std::collections::BTreeMap;
+
+/// A cheap, non-allocating partition key for [`partition_by_sid`]. Native
+/// tokens carry a `Copy` compact [`Sid`]; app/wire tokens carry an already
+/// allocated sid string we borrow. Both render to the *same* sid string a
+/// per-token `sid_string()` would have produced — but only once per block, so
+/// the hot boundary scan compares keys instead of allocating a `String` per
+/// token. `Empty` mirrors the old `unwrap_or_default()` (`""`).
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum SidKey<'a> {
+    Compact(Sid),
+    Text(&'a str),
+    Empty,
+}
+
+impl SidKey<'_> {
+    /// Materialize the sid string this key represents — byte-identical to the
+    /// old per-token `DiffableToken::sid_string().unwrap_or_default()`.
+    fn to_sid_string(&self) -> String {
+        match self {
+            SidKey::Compact(sid) => {
+                format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
+            }
+            SidKey::Text(text) => (*text).to_owned(),
+            SidKey::Empty => String::new(),
+        }
+    }
+}
 
 pub mod skeleton;
 #[cfg(test)]
@@ -22,6 +49,16 @@ pub trait DiffableToken: Clone {
     }
     fn sid_string(&self) -> Option<String> {
         self.sid().map(ToOwned::to_owned)
+    }
+    /// Cheap, non-allocating partition key. Default borrows the token's carried
+    /// sid string; native [`Token`] overrides it to carry the `Copy` compact
+    /// [`Sid`] instead of formatting one per call. Must render (via
+    /// [`SidKey::to_sid_string`]) to exactly what `sid_string()` returns.
+    fn sid_key(&self) -> SidKey<'_> {
+        match self.sid() {
+            Some(text) => SidKey::Text(text),
+            None => SidKey::Empty,
+        }
     }
     fn text(&self) -> &str;
     fn id(&self) -> Option<&str> {
@@ -52,6 +89,16 @@ impl<'a> DiffableToken for Token<'a> {
     fn sid_string(&self) -> Option<String> {
         self.sid
             .map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator()))
+    }
+
+    fn sid_key(&self) -> SidKey<'_> {
+        // The compact Sid is `Copy` — key on it directly rather than formatting
+        // a `String` per token (the diff's #1 hot spot). `to_sid_string()`
+        // reproduces `sid_string()` exactly, once per block.
+        match self.sid {
+            Some(sid) => SidKey::Compact(sid),
+            None => SidKey::Empty,
+        }
     }
 
     fn text(&self) -> &str {
@@ -183,24 +230,37 @@ pub struct SidBlock {
 /// first contiguous occurrence, then `#1`, `#2`, ... for a later
 /// non-contiguous reuse of the exact same sid. Block id never depends on a
 /// token's own id — id drift across baseline/current is a supported input.
-fn partition_by_sid<T: DiffableToken>(
+fn partition_by_sid<T, K, KeyFn>(
     tokens: &[T],
-    sid_at: impl Fn(usize) -> String,
-) -> Vec<SidBlock> {
-    let mut blocks = Vec::new();
-    let mut occurrence_by_sid = FxHashMap::<String, usize>::default();
+    key_at: KeyFn,
+    to_sid_string: impl Fn(&K) -> String,
+) -> Vec<SidBlock>
+where
+    T: DiffableToken,
+    K: PartialEq + Eq + std::hash::Hash + Clone,
+    KeyFn: Fn(usize) -> K,
+{
+    // Upper bounds: at most one block/occurrence-entry per token. Pre-sizing
+    // avoids the RawVec grow→malloc chain the profile flagged as the #2 cost.
+    let mut blocks = Vec::with_capacity(tokens.len());
+    let mut occurrence_by_sid =
+        FxHashMap::<K, usize>::with_capacity_and_hasher(tokens.len(), Default::default());
     let mut prev_block_id: Option<String> = None;
     let mut start = 0usize;
 
     while start < tokens.len() {
-        let current_sid = sid_at(start);
+        // Boundary scan compares cheap keys (Copy Sid / borrowed &str), not a
+        // freshly allocated `String` per token.
+        let current_key = key_at(start);
         let mut end_exclusive = start + 1;
 
-        while end_exclusive < tokens.len() && sid_at(end_exclusive) == current_sid {
+        while end_exclusive < tokens.len() && key_at(end_exclusive) == current_key {
             end_exclusive += 1;
         }
 
-        let occurrence = occurrence_by_sid.entry(current_sid.clone()).or_insert(0);
+        // Materialize the sid string once per block, not once per token.
+        let current_sid = to_sid_string(&current_key);
+        let occurrence = occurrence_by_sid.entry(current_key).or_insert(0);
         let block_id = if *occurrence == 0 {
             current_sid.clone()
         } else {
@@ -232,9 +292,11 @@ fn partition_by_sid<T: DiffableToken>(
 /// This is the interim calling convention for external/app-shaped token
 /// streams (`FormatToken`): carried sids are trusted unchanged, verbatim.
 pub fn build_sid_blocks<T: DiffableToken>(tokens: &[T]) -> Vec<SidBlock> {
-    partition_by_sid(tokens, |index| {
-        tokens[index].sid_string().unwrap_or_default()
-    })
+    partition_by_sid(
+        tokens,
+        |index| tokens[index].sid_key(),
+        SidKey::to_sid_string,
+    )
 }
 
 /// Partition using [`derive_canonical_sids`] — the native calling convention
@@ -244,7 +306,11 @@ pub fn build_sid_blocks_canonical<T: DiffableToken>(
     book_code: &str,
 ) -> Vec<SidBlock> {
     let canonical = derive_canonical_sids(tokens, book_code);
-    partition_by_sid(tokens, |index| canonical[index].clone())
+    partition_by_sid(
+        tokens,
+        |index| canonical[index].as_str(),
+        |key: &&str| (*key).to_owned(),
+    )
 }
 
 fn token_kind_key(kind: TokenKind) -> &'static str {
