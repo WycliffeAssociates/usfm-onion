@@ -394,7 +394,12 @@ impl<'a> Token<'a> {
 /// own span starts at or past the attribute list's start position. This works
 /// uniformly for character markers (`\w word|attr\w*`), milestones
 /// (`\zaln-s |attr\*`), and paragraph-level markers (`\periph title|attr\n`)
-/// without needing to know whether the marker has an explicit closer.
+/// without needing to know whether the marker has an explicit closer — even a
+/// malformed/unclosed marker's attribute list lands at its original byte
+/// position, because this algorithm only needs span order, never a closer
+/// match. That span-based guarantee is native `Token`'s only; see
+/// [`tokens_to_usfm_reconstruct`] for the spanless equivalent owned/editor
+/// tokens use, and why the two aren't interchangeable.
 pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
     let mut output = String::new();
     let mut pending: Vec<(Span, &str)> = Vec::new();
@@ -430,6 +435,260 @@ pub fn tokens_to_usfm(tokens: &[Token<'_>]) -> String {
     pending.sort_by_key(|(span, _)| span.start);
     for (_, slice) in pending {
         output.push_str(slice);
+    }
+
+    output
+}
+
+/// Read-only view of an attribute item, generic over the borrowed native
+/// representation ([`AttributeItem`], `&str` fields) and owned/wire
+/// representations (`String` fields) so [`format_attribute_list`] can serve
+/// both without a shared concrete struct across the wire boundary.
+pub trait SerializableAttribute {
+    fn key(&self) -> &str;
+    fn value(&self) -> &str;
+    fn is_default(&self) -> bool;
+}
+
+impl<'a> SerializableAttribute for AttributeItem<'a> {
+    fn key(&self) -> &str {
+        self.key
+    }
+
+    fn value(&self) -> &str {
+        self.value
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+}
+
+/// The minimal contract [`tokens_to_usfm_reconstruct`] needs to serialize a
+/// token stream back to USFM. Implemented by native [`Token`] (for
+/// contract-reference and parity testing against [`tokens_to_usfm`]) and by
+/// owned/editor-authored token representations at the wire boundary, which
+/// have no reliable byte spans and so cannot use the span-based emitter.
+///
+/// See the trait's own doc comment (added alongside the wire impl) for the
+/// full two-contract framing; in short: `source()` excludes the `|...`
+/// attribute list, `attributes()` is the structured/authorable form, and
+/// `attribute_list()` is the verbatim trivia slice `tokens_to_usfm_reconstruct`
+/// prefers whenever it's present.
+pub trait SerializableToken {
+    type Attr: SerializableAttribute;
+
+    fn kind(&self) -> TokenKind;
+    fn marker(&self) -> Option<&str>;
+    fn source(&self) -> &str;
+    fn attributes(&self) -> &[Self::Attr];
+    fn attribute_list(&self) -> Option<&str>;
+}
+
+impl<'a> SerializableToken for Token<'a> {
+    type Attr = AttributeItem<'a>;
+
+    fn kind(&self) -> TokenKind {
+        Token::kind(self)
+    }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker_name()
+    }
+
+    fn source(&self) -> &str {
+        self.source
+    }
+
+    fn attributes(&self) -> &[Self::Attr] {
+        Token::attributes(self).unwrap_or(&[])
+    }
+
+    fn attribute_list(&self) -> Option<&str> {
+        match &self.data {
+            TokenData::Marker {
+                attrs: Some(attrs), ..
+            }
+            | TokenData::Milestone {
+                attrs: Some(attrs), ..
+            } => attrs.attribute_source.map(|(_, slice)| slice),
+            _ => None,
+        }
+    }
+}
+
+/// Re-escapes a logical attribute value for USFM emit. Inverse of the wire
+/// boundary's attribute-value decode: `\` → `\\`, `"` → `\"`. Native
+/// `AttributeItem::value` is already raw/still-encoded, so this only ever
+/// runs on the reconstruct path (`attribute_list()` is `None`) — encoding an
+/// already-encoded native value would double-encode it, which is why the
+/// verbatim slice always wins when present.
+pub fn encode_attr_value(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Renders a parsed attribute list as a `|key="value" ...` slice. The leading
+/// `|` is included; no trailing whitespace. `is_default` items are emitted as
+/// the bare value (USFM 3.1 default-attribute shorthand). Used only when a
+/// token has no verbatim `attribute_list()` to emit instead (editor-authored
+/// attributes).
+pub fn format_attribute_list<A: SerializableAttribute>(attrs: &[A]) -> String {
+    let mut out = String::from("|");
+    for (i, item) in attrs.iter().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        if item.is_default() {
+            out.push_str(&encode_attr_value(item.value()));
+        } else {
+            out.push_str(item.key());
+            out.push_str("=\"");
+            out.push_str(&encode_attr_value(item.value()));
+            out.push('"');
+        }
+    }
+    out
+}
+
+#[derive(Clone, Copy)]
+enum CloserShape {
+    MatchingEndMarker,
+    MilestoneEnd,
+    ParagraphBoundary,
+}
+
+/// Decide how an attribute-bearing marker is closed. Milestones use the
+/// token kind (authoritative — the lexer/parser already classified the
+/// source as a `Milestone` token). For non-milestone openers we consult
+/// the marker catalog by name to distinguish paragraph-style markers
+/// (drain before next newline) from character-style markers (drain
+/// before matching `\name*` close).
+fn closer_shape(token_kind: TokenKind, marker_name: &str) -> CloserShape {
+    if matches!(token_kind, TokenKind::Milestone) {
+        return CloserShape::MilestoneEnd;
+    }
+    match crate::marker_defs::lookup_marker_metadata(marker_name).map(|(_, kind, _)| kind) {
+        Some(
+            MarkerDefKind::Paragraph
+            | MarkerDefKind::Periph
+            | MarkerDefKind::Header
+            | MarkerDefKind::TableRow,
+        ) => CloserShape::ParagraphBoundary,
+        // Character, Note, Figure, TableCell, Chapter, Verse, Sidebar,
+        // Meta, and unknown markers all use the "matching EndMarker"
+        // rule. Unknown markers default to character behavior so a
+        // round-trip of unrecognized custom markers still positions
+        // their attribute lists correctly relative to a `\name*` close.
+        _ => CloserShape::MatchingEndMarker,
+    }
+}
+
+enum PendingAttrs<'t, T: SerializableToken + ?Sized> {
+    /// The original `|...` slice, emitted byte-for-byte.
+    Verbatim(&'t str),
+    /// No verbatim slice available (editor-authored) — reconstruct from
+    /// the structured attribute list.
+    Structured(&'t [T::Attr]),
+}
+
+struct Pending<'t, T: SerializableToken + ?Sized> {
+    marker_name: String,
+    shape: CloserShape,
+    attrs: PendingAttrs<'t, T>,
+}
+
+fn is_paragraph_marker<T: SerializableToken>(token: &T) -> bool {
+    if !matches!(token.kind(), TokenKind::Marker) {
+        return false;
+    }
+    token
+        .marker()
+        .map(|name| matches!(closer_shape(TokenKind::Marker, name), CloserShape::ParagraphBoundary))
+        .unwrap_or(false)
+}
+
+fn token_closes<T: SerializableToken>(pending: &Pending<'_, T>, token: &T) -> bool {
+    match pending.shape {
+        CloserShape::MatchingEndMarker => {
+            matches!(token.kind(), TokenKind::EndMarker)
+                && token.marker() == Some(pending.marker_name.as_str())
+        }
+        CloserShape::MilestoneEnd => matches!(token.kind(), TokenKind::MilestoneEnd),
+        CloserShape::ParagraphBoundary => {
+            matches!(token.kind(), TokenKind::Newline) || is_paragraph_marker(token)
+        }
+    }
+}
+
+fn emit_pending<T: SerializableToken>(output: &mut String, attrs: PendingAttrs<'_, T>) {
+    match attrs {
+        PendingAttrs::Verbatim(slice) => output.push_str(slice),
+        PendingAttrs::Structured(attrs) => output.push_str(&format_attribute_list(attrs)),
+    }
+}
+
+/// Serialize a [`SerializableToken`] stream back to USFM without relying on
+/// byte spans — the emitter owned/editor-authored tokens use, since they
+/// have no reliable span to drive [`tokens_to_usfm`]'s span-drain algorithm.
+///
+/// Each attribute-bearing marker/milestone is pushed onto a LIFO stack of
+/// pending attribute lists on encounter; before emitting each subsequent
+/// token we drain any pending entries that token closes (matching
+/// `EndMarker`, `MilestoneEnd`, or a paragraph boundary — see
+/// [`CloserShape`](enum@CloserShape)). Any pending lists remaining at
+/// end-of-stream are flushed in LIFO order. A pending entry emits its
+/// verbatim `attribute_list()` slice when present, else reconstructs from
+/// `attributes()`.
+///
+/// Agrees with [`tokens_to_usfm`] on every well-formed input (see the
+/// `tokens_to_usfm_reconstruct_parity` test). The one sanctioned divergence:
+/// a malformed/unclosed attribute-bearing marker's attribute list lands at
+/// end-of-stream here (no closer ever arrives to trigger the drain) instead
+/// of at its original byte position — a real difference from `tokens_to_usfm`,
+/// but the same recovery behavior the previous wasm-side emitter already had.
+pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String {
+    let mut output = String::new();
+    let mut pending: Vec<Pending<'_, T>> = Vec::new();
+
+    for token in tokens {
+        while let Some(top) = pending.last() {
+            if token_closes(top, token) {
+                let drained = pending.pop().unwrap();
+                emit_pending(&mut output, drained.attrs);
+            } else {
+                break;
+            }
+        }
+
+        output.push_str(token.source());
+
+        let has_attrs = token.attribute_list().is_some() || !token.attributes().is_empty();
+        if matches!(token.kind(), TokenKind::Marker | TokenKind::Milestone)
+            && has_attrs
+            && let Some(name) = token.marker()
+        {
+            let attrs = match token.attribute_list() {
+                Some(slice) => PendingAttrs::Verbatim(slice),
+                None => PendingAttrs::Structured(token.attributes()),
+            };
+            pending.push(Pending {
+                marker_name: name.to_string(),
+                shape: closer_shape(token.kind(), name),
+                attrs,
+            });
+        }
+    }
+
+    while let Some(drained) = pending.pop() {
+        emit_pending(&mut output, drained.attrs);
     }
 
     output
@@ -675,5 +934,48 @@ mod tokens_to_usfm_round_trip {
         // normalize to canonical `key="value"` spacing.
         let source = "\\w x|lemma = \"y\"\\w*";
         assert_eq!(round_trip(source), source);
+    }
+}
+
+/// Parity between the two emitters: [`tokens_to_usfm`] (span-drain, native
+/// `Token` only) and [`tokens_to_usfm_reconstruct`] (spanless, closer-shape
+/// — the one owned/wire tokens must use, since they carry no reliable span).
+/// The two algorithms are NOT interchangeable in general — span-drain places
+/// a malformed/unclosed marker's attribute list at its original byte offset,
+/// while closer-shape can only place it once a matching closer is seen and
+/// falls back to end-of-stream otherwise (see `tokens_to_usfm_reconstruct`'s
+/// doc comment) — but they must agree on every WELL-FORMED input, which is
+/// what this suite pins.
+#[cfg(test)]
+mod tokens_to_usfm_reconstruct_parity {
+    use super::{tokens_to_usfm, tokens_to_usfm_reconstruct};
+    use crate::parse::parse;
+
+    fn assert_parity(source: &str) {
+        let tokens = parse(source).tokens;
+        assert_eq!(
+            tokens_to_usfm_reconstruct(&tokens),
+            tokens_to_usfm(&tokens),
+            "reconstruct/span-drain emitters diverged for well-formed input {source:?}"
+        );
+    }
+
+    #[test]
+    fn agrees_on_well_formed_gate_0_corpus() {
+        for source in [
+            "\\w gracious|grace\\w*",
+            "\\w word|note=\"a\\\"b\"\\w*",
+            "\\w word|lemma=\"x\" strong=\"H0430\"\\w*",
+            "\\zaln-s |x-strong=\"H0430\"\\*word\\zaln-e\\*",
+            "\\w x|lemma = \"y\"\\w*",
+            // Attribute-bearing marker nested inside another marker — the
+            // inner `\nd*` closer must be matched by name, not confused
+            // with the outer `\w*`.
+            "\\w \\nd x|k=\"v\"\\nd* y\\w*",
+            // Paragraph-level attribute list (closer = next newline).
+            "\\periph title|periph=\"Title Page\"\n",
+        ] {
+            assert_parity(source);
+        }
     }
 }
