@@ -626,3 +626,54 @@ mod sid_size_guard {
         assert_eq!(sid.to_string(), "GEN 1:1-2");
     }
 }
+
+/// Frozen oracle: `parse(source) -> tokens_to_usfm(tokens)` must reproduce
+/// `source` byte-for-byte. These pass against today's span-drain emitter
+/// (`tokens_to_usfm`) and pin its behavior before the emitter is rewritten
+/// to a generic, `closer_shape`-based one — any future rewrite must keep
+/// every one of these byte-identical, including the non-canonical-whitespace
+/// case, which only a verbatim-slice emitter (not a reconstruct-from-parts
+/// one) can reproduce.
+#[cfg(test)]
+mod tokens_to_usfm_round_trip {
+    use super::tokens_to_usfm;
+    use crate::parse::parse;
+
+    fn round_trip(source: &str) -> String {
+        let tokens = parse(source).tokens;
+        tokens_to_usfm(&tokens)
+    }
+
+    #[test]
+    fn default_attribute_shorthand() {
+        let source = "\\w gracious|grace\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn embedded_escaped_quote_in_attribute_value() {
+        let source = "\\w word|note=\"a\\\"b\"\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn multiple_attributes() {
+        let source = "\\w word|lemma=\"x\" strong=\"H0430\"\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn milestone_with_attributes() {
+        let source = "\\zaln-s |x-strong=\"H0430\"\\*word\\zaln-e\\*";
+        assert_eq!(round_trip(source), source);
+    }
+
+    #[test]
+    fn non_canonical_attribute_list_whitespace() {
+        // Extra inter-item spaces and spaced-out `=` — only a verbatim-slice
+        // emitter preserves this; a reconstruct-from-parts emitter would
+        // normalize to canonical `key="value"` spacing.
+        let source = "\\w x|lemma = \"y\"\\w*";
+        assert_eq!(round_trip(source), source);
+    }
+}
