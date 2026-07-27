@@ -79,6 +79,14 @@ export interface Segment {
 }
 
 /**
+ * Optional trailing argument on the wasm diff entry points. Omitting it (or
+ * omitting `textDiff`) is `\"none\"` — today\'s behavior, computing nothing.
+ */
+export interface DiffOptions {
+    textDiff?: TextDiffMode;
+}
+
+/**
  * Staged decisions for [`wasm_merge_diff_blocks`]: `Record<string,
  * MergeSide>` plus the default applied to any unit not present in the map.
  */
@@ -158,6 +166,7 @@ export interface DecisionUnit {
     coveredBy?: CoveredBy;
     isWhitespaceChange: boolean;
     isUsfmStructureChange: boolean;
+    textDiff?: UnitTextDiff;
 }
 
 export interface DiffSkeleton {
@@ -310,6 +319,11 @@ export interface StructuralMarkerInfo {
     noteContext?: SpecContext;
 }
 
+export interface TextDiffRun {
+    text: string;
+    kind: TextDiffRunKind;
+}
+
 export interface Token {
     id: string;
     kind: TokenKind;
@@ -324,6 +338,15 @@ export interface Token {
     bookCode?: string;
     bookCodeValid?: boolean;
     attributes?: AttributeItem[];
+    /**
+     * Verbatim `|...` attribute-list slice (native `MarkerAttrs.attribute_source`),
+     * carried across the wire so a passed-through token stays byte-lossless
+     * through `tokens_to_usfm_reconstruct`. `None` when the source had no
+     * attribute list, or when an editor authored/edited the attributes
+     * itself — see [`SerializableToken`] for the \"touch an attribute, drop
+     * its verbatim\" rule.
+     */
+    attributeSource?: string;
 }
 
 export interface TokenTemplate {
@@ -331,6 +354,17 @@ export interface TokenTemplate {
     text: string;
     marker?: string;
     sid?: string;
+}
+
+export interface UnitTextDiff {
+    /**
+     * Kinds: `Unchanged` | `Removed`.
+     */
+    baseline: TextDiffRun[];
+    /**
+     * Kinds: `Unchanged` | `Added`.
+     */
+    current: TextDiffRun[];
 }
 
 export interface VrefOptions {
@@ -357,7 +391,7 @@ export type InlineContext = "para" | "section" | "list" | "table";
 
 export type LintCategory = "document" | "structure" | "context" | "numbering";
 
-export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "duplicate-verse-number" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph" | "content-after-blank-marker";
+export type LintCode = "missing-id-marker" | "duplicate-id-marker" | "id-marker-not-at-file-start" | "empty-paragraph" | "missing-chapter-number" | "missing-verse-number" | "verse-is-empty" | "unknown-token" | "unknown-marker" | "unknown-close-marker" | "content-before-first-chapter" | "verse-outside-explicit-paragraph" | "note-submarker-outside-note" | "metadata-outside-target" | "marker-not-valid-in-context" | "missing-milestone-self-close" | "stray-close-marker" | "misnested-close-marker" | "implicitly-closed-marker" | "unclosed-marker" | "duplicate-chapter-number" | "duplicate-verse-number" | "invalid-number-range" | "number-range-not-preceded-by-marker-expecting-number" | "missing-whitespace-before-marker" | "missing-horizontal-whitespace-after-marker-name" | "missing-tag-end-delimiter-after-marker" | "missing-content-space-after-close-marker" | "verse-in-section-or-other-paragraph" | "content-after-blank-marker" | "invalid-book-code" | "book-code-not-uppercase";
 
 export type LintIssueType = "usfm" | "content";
 
@@ -389,6 +423,10 @@ export type SpecContext = "scripture" | "bookIdentification" | "bookHeaders" | "
 
 export type StructuralScopeKind = "unknown" | "header" | "block" | "note" | "character" | "milestone" | "chapter" | "verse" | "tableRow" | "tableCell" | "sidebar" | "periph" | "meta";
 
+export type TextDiffMode = "none" | "words" | "chars";
+
+export type TextDiffRunKind = "unchanged" | "added" | "removed";
+
 export type TokenFix = { type: "replaceToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; replacements: TokenTemplate[] } | { type: "deleteToken"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string } | { type: "insertAfter"; code: string; label: string; labelParams: Record<string, string>; targetTokenId: string; insert: TokenTemplate[] };
 
 export type TokenKind = "newline" | "optBreak" | "marker" | "endMarker" | "milestone" | "milestoneEnd" | "bookCode" | "number" | "text";
@@ -400,8 +438,8 @@ export class ParsedUsfm {
     [Symbol.dispose](): void;
     applyTokenFix(fix: TokenFix): Token[];
     cst(): CstDocument;
-    diff(other: ParsedUsfm): DiffSkeleton;
-    diffByChapter(other: ParsedUsfm): DiffsByChapterMap;
+    diff(other: ParsedUsfm, options?: DiffOptions | null): DiffSkeleton;
+    diffByChapter(other: ParsedUsfm, options?: DiffOptions | null): DiffsByChapterMap;
     format(options?: FormatOptions | null): string;
     lint(options: LintOptions): LintResult;
     revertDiffBlock(current: ParsedUsfm, block_id: string): Token[];
@@ -425,11 +463,11 @@ export class UsfmMarkerCatalog {
 
 export function applyTokenFix(tokens: Token[], fix: TokenFix): Token[];
 
-export function diffTokens(left: Token[], right: Token[]): DiffSkeleton;
+export function diffTokens(left: Token[], right: Token[], options?: DiffOptions | null): DiffSkeleton;
 
-export function diffUsfm(left: string, right: string): DiffSkeleton;
+export function diffUsfm(left: string, right: string, options?: DiffOptions | null): DiffSkeleton;
 
-export function diffUsfmByChapter(left: string, right: string): DiffsByChapterMap;
+export function diffUsfmByChapter(left: string, right: string, options?: DiffOptions | null): DiffsByChapterMap;
 
 export function formatRuleMeta(): FormatRuleMeta[];
 
@@ -483,9 +521,9 @@ export interface InitOutput {
     readonly __wbg_parsedusfm_free: (a: number, b: number) => void;
     readonly __wbg_usfmmarkercatalog_free: (a: number, b: number) => void;
     readonly applyTokenFix: (a: number, b: number, c: number, d: number) => void;
-    readonly diffTokens: (a: number, b: number, c: number, d: number) => number;
-    readonly diffUsfm: (a: number, b: number, c: number, d: number) => number;
-    readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number) => number;
+    readonly diffTokens: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly diffUsfm: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly diffUsfmByChapter: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly formatRuleMeta: (a: number) => void;
     readonly formatRules: (a: number) => void;
     readonly formatTokens: (a: number, b: number, c: number) => number;
@@ -502,8 +540,8 @@ export interface InitOutput {
     readonly parse: (a: number, b: number) => number;
     readonly parsedusfm_applyTokenFix: (a: number, b: number, c: number) => void;
     readonly parsedusfm_cst: (a: number) => number;
-    readonly parsedusfm_diff: (a: number, b: number) => number;
-    readonly parsedusfm_diffByChapter: (a: number, b: number) => number;
+    readonly parsedusfm_diff: (a: number, b: number, c: number) => number;
+    readonly parsedusfm_diffByChapter: (a: number, b: number, c: number) => number;
     readonly parsedusfm_format: (a: number, b: number, c: number) => void;
     readonly parsedusfm_lint: (a: number, b: number) => number;
     readonly parsedusfm_revertDiffBlock: (a: number, b: number, c: number, d: number, e: number) => void;

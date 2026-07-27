@@ -42,20 +42,22 @@ export class ParsedUsfm {
     }
     /**
      * @param {ParsedUsfm} other
+     * @param {DiffOptions | null} [options]
      * @returns {DiffSkeleton}
      */
-    diff(other) {
+    diff(other, options) {
         _assertClass(other, ParsedUsfm);
-        const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
         return takeObject(ret);
     }
     /**
      * @param {ParsedUsfm} other
+     * @param {DiffOptions | null} [options]
      * @returns {DiffsByChapterMap}
      */
-    diffByChapter(other) {
+    diffByChapter(other, options) {
         _assertClass(other, ParsedUsfm);
-        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
         return takeObject(ret);
     }
     /**
@@ -311,42 +313,45 @@ export function applyTokenFix(tokens, fix) {
 /**
  * @param {Token[]} left
  * @param {Token[]} right
+ * @param {DiffOptions | null} [options]
  * @returns {DiffSkeleton}
  */
-export function diffTokens(left, right) {
+export function diffTokens(left, right, options) {
     const ptr0 = passArrayJsValueToWasm0(left, wasm.__wbindgen_export);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passArrayJsValueToWasm0(right, wasm.__wbindgen_export);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffTokens(ptr0, len0, ptr1, len1);
+    const ret = wasm.diffTokens(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
     return takeObject(ret);
 }
 
 /**
  * @param {string} left
  * @param {string} right
+ * @param {DiffOptions | null} [options]
  * @returns {DiffSkeleton}
  */
-export function diffUsfm(left, right) {
+export function diffUsfm(left, right, options) {
     const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1);
+    const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
     return takeObject(ret);
 }
 
 /**
  * @param {string} left
  * @param {string} right
+ * @param {DiffOptions | null} [options]
  * @returns {DiffsByChapterMap}
  */
-export function diffUsfmByChapter(left, right) {
+export function diffUsfmByChapter(left, right, options) {
     const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1);
+    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
     return takeObject(ret);
 }
 
