@@ -1,7 +1,7 @@
 //! Target-agnostic serde/tsify wire DTOs for the usfm_onion boundary — the
 //! **single source** for every type that crosses the wasm/TS and native-Rust
 //! (Tauri) boundaries. Never hand-mirror one of these on the far side; the
-//! `usfm_onion_wasm` crate re-exports them (`pub use usfm_onion_dto::…`).
+//! `usfm_onion_wasm` crate re-exports them (`pub use usfm_onion_wire::dto::…`).
 //!
 //! ## Adding or changing a boundary type without drift
 //!
