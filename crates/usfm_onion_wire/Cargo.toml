@@ -1,5 +1,5 @@
 [package]
-name = "usfm_onion_dto"
+name = "usfm_onion_wire"
 description = "Target-agnostic serde DTOs for the usfm_onion marker wire contract"
 version.workspace = true
 edition.workspace = true

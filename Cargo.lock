@@ -790,17 +790,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "usfm_onion_dto"
-version = "0.0.9"
-dependencies = [
- "serde",
- "serde_json",
- "tsify",
- "usfm_onion",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "usfm_onion_wasm"
 version = "0.0.9"
 dependencies = [
@@ -810,7 +799,18 @@ dependencies = [
  "serde_json",
  "tsify",
  "usfm_onion",
- "usfm_onion_dto",
+ "usfm_onion_wire",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "usfm_onion_wire"
+version = "0.0.9"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tsify",
+ "usfm_onion",
  "wasm-bindgen",
 ]
 

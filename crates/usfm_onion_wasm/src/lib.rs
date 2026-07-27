@@ -45,7 +45,7 @@ use usfm_onion::vref::{
     usfm_to_vref_index, usfm_to_vref_map_with_options,
 };
 use usfm_onion::walker::WalkableToken;
-pub use usfm_onion_dto::{
+pub use usfm_onion_wire::dto::{
     AttributeItem, BlockBehavior, ClosingBehavior, CoveredSide, DecisionStatus, DecisionUnitKind,
     DiffOptions, HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory,
     LintCode, LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily,
@@ -1170,7 +1170,7 @@ fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<Token> {
     tokens.iter().map(map_token).collect()
 }
 
-// Native token → wire DTO. The conversion body lives in `usfm_onion_dto`
+// Native token → wire DTO. The conversion body lives in `usfm_onion_wire::dto`
 // (`From<&Token> for Token`) so the wasm and native-Tauri consumers share one
 // definition; this wrapper stays for the fn-pointer call sites (`map_token`
 // passed into `map_native_skeleton` / `map_diffs_by_chapter`).
