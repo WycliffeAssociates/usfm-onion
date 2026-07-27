@@ -8,7 +8,7 @@
 
 use usfm_onion::lint::{LintCode, LintOptions, LintScope, LintableToken, lint_tokens};
 use usfm_onion::marker_defs::StructuralMarkerInfo;
-use usfm_onion::token::{NumberRangeKind, Span, TokenKind};
+use usfm_onion::token::{NumberRangeKind, Span, TokenKind, UsfmToken};
 use usfm_onion::walker::WalkableToken;
 
 #[derive(Clone)]
@@ -56,19 +56,22 @@ impl BareToken {
     }
 }
 
-impl WalkableToken for BareToken {
+impl UsfmToken for BareToken {
     fn kind(&self) -> TokenKind {
         self.kind
     }
     fn marker(&self) -> Option<&str> {
         self.marker.as_deref()
     }
+    fn source(&self) -> &str {
+        &self.text
+    }
+}
+
+impl WalkableToken for BareToken {
     fn structural(&self) -> Option<StructuralMarkerInfo> {
         // Deliberately bare — the walker should derive this from the marker name.
         None
-    }
-    fn text(&self) -> &str {
-        &self.text
     }
 }
 

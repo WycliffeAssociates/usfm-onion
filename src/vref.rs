@@ -419,7 +419,7 @@ impl IndexedVrefVisitor {
     }
 
     fn push_token<T: LintableToken>(&mut self, token: &T) {
-        let text = token.text();
+        let text = token.source();
         let len = utf16_len(text);
         self.current.segments.push(Segment {
             token_id: token.id().unwrap_or_default(),
@@ -463,7 +463,7 @@ impl<'tokens, T: LintableToken> Visitor<'tokens, T> for IndexedVrefVisitor {
         _token_index: usize,
     ) {
         self.flush_current_verse();
-        if let Some(reference) = verse_ref_str(token.sid(), token.text()) {
+        if let Some(reference) = verse_ref_str(token.sid(), token.source()) {
             self.current_ref = Some(reference);
         }
     }

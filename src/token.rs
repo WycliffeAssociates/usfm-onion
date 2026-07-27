@@ -519,30 +519,39 @@ impl<'a> SerializableAttribute for AttributeItem<'a> {
 /// trigger the drain — pushes it to the end of the token stream instead.
 /// Native callers get byte-exact recovery; owned/wire tokens do not, because
 /// they have no span to recover a position from.
-pub trait SerializableToken {
+/// Base contract every token shape satisfies, regardless of which
+/// higher-level trait (`SerializableToken`, `WalkableToken`, …) a consumer
+/// needs on top. `marker()` is `None` for non-marker kinds (Text, Number,
+/// Newline, OptBreak, BookCode) — that's honest, not a lying default.
+pub trait UsfmToken {
+    fn kind(&self) -> TokenKind;
+    fn source(&self) -> &str;
+    fn marker(&self) -> Option<&str>;
+}
+
+pub trait SerializableToken: UsfmToken {
     type Attr: SerializableAttribute;
 
-    fn kind(&self) -> TokenKind;
-    fn marker(&self) -> Option<&str>;
-    fn source(&self) -> &str;
     fn attributes(&self) -> &[Self::Attr];
     fn attribute_list(&self) -> Option<&str>;
 }
 
-impl<'a> SerializableToken for Token<'a> {
-    type Attr = AttributeItem<'a>;
-
+impl<'a> UsfmToken for Token<'a> {
     fn kind(&self) -> TokenKind {
         Token::kind(self)
-    }
-
-    fn marker(&self) -> Option<&str> {
-        self.marker_name()
     }
 
     fn source(&self) -> &str {
         self.source
     }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker_name()
+    }
+}
+
+impl<'a> SerializableToken for Token<'a> {
+    type Attr = AttributeItem<'a>;
 
     fn attributes(&self) -> &[Self::Attr] {
         Token::attributes(self).unwrap_or(&[])

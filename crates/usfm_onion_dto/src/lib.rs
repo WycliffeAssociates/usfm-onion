@@ -62,7 +62,7 @@ use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
     NumberRangeKind as NativeNumberRangeKind, SerializableAttribute, SerializableToken,
     Sid as NativeSid, Span as NativeSpan, Token as NativeToken, TokenData as NativeTokenData,
-    TokenKind as NativeTokenKind,
+    TokenKind as NativeTokenKind, UsfmToken,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -983,9 +983,7 @@ impl SerializableAttribute for AttributeItem {
     }
 }
 
-impl SerializableToken for Token {
-    type Attr = AttributeItem;
-
+impl UsfmToken for Token {
     fn kind(&self) -> NativeTokenKind {
         self.kind.into()
     }
@@ -997,6 +995,10 @@ impl SerializableToken for Token {
     fn source(&self) -> &str {
         &self.source
     }
+}
+
+impl SerializableToken for Token {
+    type Attr = AttributeItem;
 
     fn attributes(&self) -> &[Self::Attr] {
         &self.attributes

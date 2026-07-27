@@ -32,7 +32,7 @@ use crate::marker_defs::{
     InlineContext, ParagraphCategory, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
     lookup_marker_def, marker_allows_effective_context, structural_marker_info,
 };
-use crate::token::{Token, TokenData, TokenKind};
+use crate::token::{Token, TokenData, TokenKind, UsfmToken};
 
 /// Recompute the `StructuralMarkerInfo` a parser would attach to this
 /// marker. Used as a fallback in the walker when a `WalkableToken`
@@ -59,14 +59,8 @@ fn derive_structural_from_marker(marker: &str) -> StructuralMarkerInfo {
 /// needs a single shared "source lifetime."
 ///
 /// `LintableToken` (public surface) is a supertrait of this one.
-pub trait WalkableToken {
-    fn kind(&self) -> TokenKind;
-    fn marker(&self) -> Option<&str>;
+pub trait WalkableToken: UsfmToken {
     fn structural(&self) -> Option<StructuralMarkerInfo>;
-    /// Returns the token's source slice. For `Text` tokens this is the
-    /// content; for marker/milestone tokens it is the literal source
-    /// span. Visitors typically only read `text()` inside `on_text`.
-    fn text(&self) -> &str;
     /// True when the *next* token in the original stream is a
     /// `Number` token. Only consulted for `\c` / `\v` markers — they
     /// open a scope iff a number follows. Defaults to `false`; callers
@@ -80,14 +74,6 @@ pub trait WalkableToken {
 }
 
 impl<'a> WalkableToken for Token<'a> {
-    fn kind(&self) -> TokenKind {
-        Token::kind(self)
-    }
-
-    fn marker(&self) -> Option<&str> {
-        self.marker_name()
-    }
-
     fn structural(&self) -> Option<StructuralMarkerInfo> {
         match self.data {
             TokenData::Marker { structural, .. }
@@ -95,10 +81,6 @@ impl<'a> WalkableToken for Token<'a> {
             | TokenData::Milestone { structural, .. } => Some(structural),
             _ => None,
         }
-    }
-
-    fn text(&self) -> &str {
-        self.source
     }
 
     // next_is_number stays at the default for `Token<'a>` — see
@@ -1049,7 +1031,7 @@ mod tests {
             _token_index: usize,
         ) {
             self.events
-                .push(format!("chapter[{}]", token.text().trim()));
+                .push(format!("chapter[{}]", token.source().trim()));
         }
 
         fn on_verse(
@@ -1058,7 +1040,7 @@ mod tests {
             token: &'tokens T,
             _token_index: usize,
         ) {
-            self.events.push(format!("verse[{}]", token.text().trim()));
+            self.events.push(format!("verse[{}]", token.source().trim()));
         }
 
         fn on_text(
@@ -1067,7 +1049,7 @@ mod tests {
             token: &'tokens T,
             _token_index: usize,
         ) {
-            let s = token.text();
+            let s = token.source();
             if !s.trim().is_empty() {
                 self.events.push(format!("text[{:?}]", s));
             }

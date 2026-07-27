@@ -34,7 +34,7 @@ use usfm_onion::markers::{is_known_marker, marker_catalog, marker_info};
 use usfm_onion::parse::parse as native_parse;
 use usfm_onion::token::{
     NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
-    TokenKind as NativeTokenKind, tokens_to_usfm, tokens_to_usfm_reconstruct,
+    TokenKind as NativeTokenKind, UsfmToken, tokens_to_usfm, tokens_to_usfm_reconstruct,
 };
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -486,7 +486,7 @@ struct WalkToken {
     number_info: Option<(u32, Option<u32>, NativeNumberRangeKind)>,
 }
 
-impl WalkableToken for WalkToken {
+impl UsfmToken for WalkToken {
     fn kind(&self) -> NativeTokenKind {
         self.kind
     }
@@ -495,12 +495,14 @@ impl WalkableToken for WalkToken {
         self.marker.as_deref()
     }
 
+    fn source(&self) -> &str {
+        &self.text
+    }
+}
+
+impl WalkableToken for WalkToken {
     fn structural(&self) -> Option<NativeStructuralMarkerInfo> {
         self.structural
-    }
-
-    fn text(&self) -> &str {
-        &self.text
     }
 }
 

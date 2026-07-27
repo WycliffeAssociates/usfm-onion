@@ -12,7 +12,7 @@ use crate::marker_defs::{
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
-use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind};
+use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind, UsfmToken};
 use crate::walker::WalkableToken;
 
 /// Public token-shape contract for `lint_tokens` and friends.
@@ -22,7 +22,7 @@ use crate::walker::WalkableToken;
 /// downstream consumers (`Token<'_>`, `FormatToken`, the editor's own
 /// `EditorToken`) all flow through the same single scope state machine
 /// for the structural rules. The methods on `WalkableToken` (`kind`,
-/// `marker`, `text`, `structural`) are inherited; this trait adds the
+/// `marker`, `source`, `structural`) are inherited; this trait adds the
 /// lint-specific fields the walker doesn't need (`span`, `sid`, `id`,
 /// `number_info`).
 pub trait LintableToken: WalkableToken {
@@ -76,7 +76,7 @@ impl<'a> LintableToken for Token<'a> {
     }
 }
 
-impl WalkableToken for FormatToken {
+impl UsfmToken for FormatToken {
     fn kind(&self) -> TokenKind {
         self.kind
     }
@@ -85,10 +85,12 @@ impl WalkableToken for FormatToken {
         self.marker.as_deref()
     }
 
-    fn text(&self) -> &str {
+    fn source(&self) -> &str {
         &self.text
     }
+}
 
+impl WalkableToken for FormatToken {
     fn structural(&self) -> Option<StructuralMarkerInfo> {
         self.structural
     }
@@ -1188,7 +1190,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                 if enabled.has(LintCode::VerseIsEmpty)
                     && let Some(next_index) = next_significant_token_index(tokens, index + 1)
                     && tokens[next_index].kind() == TokenKind::Text
-                    && tokens[next_index].text().trim().is_empty()
+                    && tokens[next_index].source().trim().is_empty()
                 {
                     issues.push(issue(
                         LintCode::VerseIsEmpty,
@@ -1221,7 +1223,7 @@ fn lint_structure_rules<T: LintableToken>(
         }
 
         if token_kind == TokenKind::BookCode {
-            let code = token.text().trim();
+            let code = token.source().trim();
             if !code.is_empty() && !crate::lexer::is_valid_book_code(code) {
                 let upper = code.to_uppercase();
                 if crate::lexer::is_valid_book_code(&upper) {
@@ -1420,7 +1422,7 @@ fn lint_structure_rules<T: LintableToken>(
             }
             saw_content = true;
         } else if token_kind == TokenKind::Text {
-            if !token.text().trim().is_empty() {
+            if !token.source().trim().is_empty() {
                 saw_content = true;
             }
         } else if !matches!(token_kind, TokenKind::Newline | TokenKind::OptBreak) {
@@ -1563,7 +1565,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
             continue;
         };
         let number_token = &tokens[number_index];
-        let value = number_token.text().trim();
+        let value = number_token.source().trim();
         let parsed_range = token_number_range(number_token).or_else(|| parse_number_range(value));
 
         if enabled.has(LintCode::InvalidNumberRange) && parsed_range.is_none() {
@@ -1689,7 +1691,7 @@ fn lint_whitespace_rules<T: LintableToken>(
             && index > 0
         {
             let prev = &tokens[index - 1];
-            let prev_text = prev.text();
+            let prev_text = prev.source();
             let satisfied = match spec.required_before_open {
                 Req::SingleNewline | Req::AtLeastOneNewline => {
                     prev_text.chars().next_back().is_some_and(is_newline_char)
@@ -1727,7 +1729,7 @@ fn lint_whitespace_rules<T: LintableToken>(
         // name. Rule 2 fires when the spec demands HS / newline / any
         // WS; rule 3 fires when the spec demands a tag-end delimiter
         // (WS, EOI, or the `|` attribute opener).
-        let marker_tail = token.text().chars().next_back();
+        let marker_tail = token.source().chars().next_back();
         let after_name_satisfied_by_marker_token = match spec.required_after_open_name {
             Req::AtLeastOneHorizontalWhitespace => {
                 marker_tail.is_some_and(is_horizontal_whitespace_char)
@@ -1740,7 +1742,7 @@ fn lint_whitespace_rules<T: LintableToken>(
         };
 
         let next_token = tokens.get(index + 1);
-        let next_text = next_token.map(|n| n.text()).unwrap_or("");
+        let next_text = next_token.map(|n| n.source()).unwrap_or("");
         let next_first = next_text.chars().next();
 
         if !after_name_satisfied_by_marker_token && marker_is_intentionally_empty_block(marker) {
@@ -1851,7 +1853,7 @@ fn lint_whitespace_rules<T: LintableToken>(
             if next.kind() != TokenKind::Text {
                 continue;
             }
-            let next_text = next.text();
+            let next_text = next.source();
             if next_text.chars().next().is_some_and(|c| c.is_alphabetic()) {
                 issues.push(simple_issue(
                     LintCode::MissingContentSpaceAfterCloseMarker,
@@ -1876,7 +1878,7 @@ fn requirement_demands_leading_ws(req: crate::whitespace::StructuralWhitespaceRe
 }
 
 fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
-    let text = token.text();
+    let text = token.source();
     let trimmed = text.trim_start_matches([' ', '\t']);
     let remainder = trimmed.strip_prefix('\\')?;
     let marker_len = remainder
@@ -1897,7 +1899,7 @@ fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
     }
     Some(simple_issue_with_marker(
         LintCode::UnknownToken,
-        message_params([("text", token.text().to_string())]),
+        message_params([("text", token.source().to_string())]),
         marker,
         token,
     ))
@@ -1908,7 +1910,7 @@ fn next_book_code_after_marker<T: LintableToken>(
     marker_index: usize,
 ) -> Option<&str> {
     let next_index = next_significant_token_index(tokens, marker_index + 1)?;
-    (tokens[next_index].kind() == TokenKind::BookCode).then(|| tokens[next_index].text().trim())
+    (tokens[next_index].kind() == TokenKind::BookCode).then(|| tokens[next_index].source().trim())
 }
 
 fn infer_document_kind(book_code: &str) -> DocumentKind {
@@ -1976,7 +1978,7 @@ fn verse_has_text_or_note<T: LintableToken>(tokens: &[T], start: usize) -> bool 
         match token.kind() {
             TokenKind::Newline => continue,
             TokenKind::Text => {
-                if !token.text().trim().is_empty() {
+                if !token.source().trim().is_empty() {
                     return true;
                 }
             }
@@ -1996,7 +1998,7 @@ fn token_primary_number<T: LintableToken>(token: &T) -> Option<u32> {
     token
         .number_info()
         .map(|(start, _, _)| start)
-        .or_else(|| parse_primary_number(token.text()))
+        .or_else(|| parse_primary_number(token.source()))
 }
 
 fn token_number_range<T: LintableToken>(token: &T) -> Option<(u32, u32)> {
@@ -2252,7 +2254,7 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
 fn content_after_blank_marker<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<&T> {
     use crate::whitespace::{is_horizontal_whitespace_char, is_newline_char};
     for token in &tokens[marker_index + 1..] {
-        for ch in token.text().chars() {
+        for ch in token.source().chars() {
             if is_newline_char(ch) {
                 return None;
             }
@@ -2273,7 +2275,7 @@ fn empty_paragraph_boundary_index<T: LintableToken>(
         let token = &tokens[index];
         match token.kind() {
             TokenKind::Newline | TokenKind::OptBreak => index += 1,
-            TokenKind::Text if token.text().trim().is_empty() => index += 1,
+            TokenKind::Text if token.source().trim().is_empty() => index += 1,
             TokenKind::Marker => return empty_paragraph_boundary_token(token).then_some(index),
             _ => return None,
         }
@@ -2387,7 +2389,7 @@ fn prepend_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, prefix:
         target_token_id: target.id().expect("fixable token should have id"),
         replacements: vec![crate::format::TokenTemplate {
             kind: target.kind(),
-            text: format!("{}{}", prefix, target.text()),
+            text: format!("{}{}", prefix, target.source()),
             marker: target.marker().map(ToOwned::to_owned),
             sid: target.sid(),
         }],
@@ -2404,7 +2406,7 @@ fn append_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, suffix: 
         target_token_id: target.id().expect("fixable token should have id"),
         replacements: vec![crate::format::TokenTemplate {
             kind: target.kind(),
-            text: format!("{}{}", target.text(), suffix),
+            text: format!("{}{}", target.source(), suffix),
             marker: target.marker().map(ToOwned::to_owned),
             sid: target.sid(),
         }],
@@ -2972,7 +2974,7 @@ mod tests {
         lane: u8,
     }
 
-    impl WalkableToken for EditorToken {
+    impl UsfmToken for EditorToken {
         fn kind(&self) -> TokenKind {
             self.token_kind
         }
@@ -2981,10 +2983,12 @@ mod tests {
             self.token_marker.as_deref()
         }
 
-        fn text(&self) -> &str {
+        fn source(&self) -> &str {
             &self.token_text
         }
+    }
 
+    impl WalkableToken for EditorToken {
         fn structural(&self) -> Option<StructuralMarkerInfo> {
             None
         }
