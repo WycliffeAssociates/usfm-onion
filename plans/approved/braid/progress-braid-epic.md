@@ -1498,3 +1498,112 @@ non-`cargo fmt`-clean file and was left alone.
   `bench-remote.sh`, `.claude/`). Every commit used explicit paths.
 - Next: owner review of the §D.6 rows, then the string dictionary, marker descriptor, and sparse
   record columns. Row 4 (finding `marker_string_idx`) must be settled before any finding column.
+
+## 2026-07-28 — Phase A: finding-marker verdict, remaining token columns, token-section gate
+
+- Two commits: `3d435bd` (adjudications applied + finding-marker freeze) and `b274090` (all remaining
+  token columns + whole-section codec + Phase A corpus gate). Base `8cc7cb9`.
+
+### Finding `marker_string_idx` — premise rejected, no string dictionary
+
+- `LintIssue.marker` is written in exactly **three** places in `src/lint_impl.rs`, so the producer set
+  is closed: `issue()` `:2356` copies the anchored token's own marker; `simple_issue_with_marker()`
+  `:2427` takes a caller-supplied `&str` (5 call sites); and the `missing-id-marker` literal at
+  `:1437`. The five override sites pass `"c"` (`:1518`), `"v"` (`:1572`, `:1599`, `:1613`), and — for
+  `unknown-token` `:1900` — a `[a-z0-9-]+` slice of the anchored token's **own source**, guarded on
+  the line above by `lookup_marker(marker).kind != MarkerKind::Unknown`, so it is a catalog marker by
+  construction and a source slice as well.
+- Corpus evidence (`cargo test -p usfm_onion_wire --test corpus -- --ignored`, 262 testData fixtures
+  + `en_ult` + `en_ulb`): **62,948 findings, 62,945 with a marker, 31,928 via the anchored token,
+  31,017 via a catalog ordinal, 0 needing a span, 0 falling through.** `unknown-marker`'s 13,953
+  non-catalog names cost nothing — they arrive on the anchored-token arm, whose name the row's own
+  descriptor already carries. `unknown-token` and `invalid-number-range` have zero corpus occurrences
+  (token-path-only per 0D §2.1) and are covered by the static argument.
+- Frozen (freeze §M): finding field **4** redefined before implementation from `marker_string_idx` to
+  `marker_ref` — optional per-row column, fixed width 8, `{tag:u8, span_len:u8, ordinal:u16,
+  span_offset:u32}` over tags 0 = anchored token, 1 = catalog ordinal, 2 = source span, 3 =
+  explicitly absent. Tag 2 has no current producer (frozen so a future non-catalog off-token marker
+  needs no version bump); tag 3 keeps "no marker on a token that has one" encodable. **No
+  finding-section string dictionary; finding field id 7 stays unassigned.** Two drift guards: the
+  ignored corpus test above, plus an unignored assertion that `id`/`c`/`v` remain catalog markers.
+
+### Adjudications applied (`3d435bd`)
+
+- `nested` stays a descriptor flag. Attribute source is a span with a typed encoder refusal. Absent
+  vs empty attribute source is distinct, encoded as sentinel offset `0xffff_ffff` (the framing's
+  presence-flag bit was removed in favour of the sentinel the owner named). Fields 6/7 declare fixed
+  element width 16.
+- **Extended beyond the two named rows:** field 11 (marker descriptors) also declares fixed width 8,
+  since the framing fixed its record at 8 bytes. Same argument as ruling 5 — a uniform array should
+  let the generic container enforce `count * width == byte_len`. Flagged here rather than applied
+  silently. Only fields 9/10 (offset array + character data) and field 8 (two arrays of different
+  record sizes) remain `element_width = 0`.
+
+### Remaining columns and the token-section codec (`b274090`)
+
+- `token_payload.rs`: string dictionary, marker descriptors, sparse number/book-code/attribute
+  records, each with a validate-everything-at-construction view and a first-use-order builder.
+  Sparse lookup is a binary search over ascending `token_idx` — no map, no allocation. Two
+  correctness details found while testing: string offsets are now validated as a **set** before any
+  slice is decoded (a descending offset previously surfaced as `InvalidUtf8` instead of the shape
+  violation it is), and each string is decoded individually because a whole-region UTF-8 check
+  accepts an offset that splits a code point.
+- `token_codec.rs`: `encode_token_section` (parsed tokens + exact source) and `decode_token_section`
+  reconstructing core's own `Token<'a>`. Marker metadata and structural info are **recovered** by
+  calling `marker_metadata` / `structural_marker_info`, never stored — which is what the section's
+  `catalog_stamp` gates. Binding order: source length, then content hash (catches same-length
+  different bytes), then stamp; and a hash match is not proof — every span still goes through
+  `str::get`, which rejects an out-of-range span and a split character in one lookup.
+- `catalog.rs`: the stamp is a content hash over the ordered marker registry (ordinal, marker,
+  canonical, kind, family, category, each length-prefixed), because nothing in the build enforces a
+  crate-version bump per registry edit.
+- **Core change, one line of visibility:** `usfm_onion::parse::assign_ids` is now `pub`. The wire
+  omits the id column for parsed books and reproduces positional ids by calling the same function
+  parsing used. The alternatives were storing the column the layout deliberately omits (31–41% of
+  section bytes per Gate 0E) or reimplementing the rule in the wire crate — the named algorithm-fork
+  footgun. Flagged as a deliberate public-API addition for the ledger.
+- Two appended `EncodeError` variants: `TooManyDescriptors { book, found }` (mirrors `TooManySids`
+  for the descriptor ceiling) and `UnboundSpan { book, token_idx }` (the adjudicated refusal for a
+  token or attribute source that does not bind; unreachable through serialize-then-encode).
+
+### Gates
+
+- `cargo test --workspace`: core 250 passed / 12 ignored, **wire 117 passed / 1 ignored**, wasm 25
+  passed, all integration targets green, 0 failed.
+- `cargo test --test lint_oracle -- --ignored`: 1 passed. `npm run check:wasm:web`: green.
+  `cargo clippy -p usfm_onion_wire --all-targets`: no wire warnings.
+- **Phase A token-section gate** (`cargo test -p usfm_onion_wire -- --ignored`, 44 s debug / 2.4 s
+  release — hence `#[ignore]`, same rationale as the lint oracle): all `testData/**/*.usfm` plus
+  `en_ult` and `en_ulb` — **395 books, 5,716,969 tokens, zero mismatches.** Equality is `Token`'s own
+  `PartialEq` (every public field including `MarkerMetadata` and `StructuralMarkerInfo`), plus
+  `OwnedToken::from_parsed` parity on the narrow cases. The gate also counts verse bridges wider than
+  127 verses — the one documented lossy packed-sid path — and asserts the count is **0**, so it
+  cannot pass by never reaching the lossy branch.
+- Rejection coverage: wrong source length, same-length wrong bytes, catalog-stamp mismatch, and
+  thirteen hand-corrupted payload violations (offset ordering, split code point, dangling name index,
+  reserved bytes, unknown flags, unknown discriminant, dual-encoded absent end, out-of-range token
+  index, non-partitioning attribute rows, out-of-source span, default-shorthand with a key, a Number
+  row with no record, attributes on a row that cannot carry them). Truncation at every byte and
+  single-byte corruption at every offset assert no panic.
+
+### Process note
+
+- While formatting, `rustfmt` on `lib.rs` recursed into `src/dto.rs` and reformatted it — the
+  pre-existing non-`cargo fmt`-clean file that must stay untouched. Caught in `git status` before
+  committing and restored byte-for-byte from `HEAD` with `git show HEAD:… > …` (a file write, not a
+  git state change). `dto.rs` is unchanged in both commits. Also amended `b274090` once, immediately
+  after creating it, because the first attempt omitted `schema.rs` and so would not have compiled;
+  amending was preferred to leaving a broken commit in history.
+- Owner's untracked leftovers untouched (`handoff-*.md`, `alloc_sizes.txt`, `lib_sizes.txt`,
+  `bench-remote.sh`, `.claude/`). Working tree carries zero modified tracked files.
+
+### Open / next
+
+- **New stop for owner review:** `encode_token_section` takes parsed borrowed `Token<'a>` because
+  spans are required columns and `OwnedToken` is spanless by design. §5.1's `CorpusSectionInput`
+  promises `tokens: &'a [OwnedToken]`, and `tokens_to_usfm` shows the concatenation of `token.source`
+  is **not** the source (attribute-list slices are re-emitted at their own spans), so spans cannot be
+  derived by a running offset over owned tokens. Encoding an owned/live token stream needs a decision:
+  derive spans from core's spanless reconstruct emitter, or carry spans on the owned token. Not
+  guessed here.
+- Then: finding section columns (`marker_ref` per §M, common row, sidecars, patch table).
