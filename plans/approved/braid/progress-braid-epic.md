@@ -1696,3 +1696,74 @@ non-`cargo fmt`-clean file and was left alone.
 
 - Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, and the packed
   patch table.
+
+## 2026-07-28 — attribute-position fidelity: the owned emitter is byte-lossless
+
+- Two commits: `1143ac1` (core field + emitter + gate, with the approved plan file) and `94a4158`
+  (freeze/epic + API ledger). Base `52f08ac`. Executes
+  `plans/approved/attribute-position-fidelity.md`, adjudicated pre-Phase-F on conceptual-correctness
+  grounds.
+
+### Chosen encoding: `attribute_offset: Option<BytePos>` on `OwnedMarkerAttrs`
+
+- **Distance from the end of the owning token's own source to the start of its attribute list**,
+  populated by `OwnedToken::from_parsed` from the real parsed spans (`checked_sub`, so a list recorded
+  before its owner falls back rather than pretending to be zero).
+- Rationale in one line: one `u32` distance covers every observed shape while an
+  opener-adjacent/closer-adjacent enum cannot — `\w \+pn Proper Noun\+pn*|keyword\w*` puts the list
+  *after* the owning marker's closer, which no closer-relative variant can name — and a distance from
+  the owner (not an absolute offset) stays meaningful when other tokens in the stream are edited.
+- Shapes covered, all four classes verified in core tests: opener-adjacent alignment (`\k-s | x-tw=…`,
+  offset 0, closer lines below); ordinary closer-adjacent (`\w abc|k="v"\w*`, offset 3, past the
+  intervening text); past-the-nested-closer (`\+pn` above); unclosed `\fig` (no closer ever arrives);
+  newline-split list (remainder parses as text).
+- **No stop needed** — no shape required approximation. The offset representation the plan preferred
+  turned out to be sufficient on its own; no per-quirk variants were added.
+
+### Emitter
+
+- `Pending` gains `target: Option<usize>` = output position at which a remembered list is due. Before
+  each token the emitter drains due targets in ascending order, then applies the historical closer rule
+  to entries with no target; end-of-stream drains due targets then flushes the remainder LIFO.
+- This is deliberately the *same* rule the span-based `tokens_to_usfm` already applies to absolute
+  offsets — one concept in two coordinate systems, not a second algorithm. Both `reconstruct` entry
+  points still share one implementation and the span recorder is still optional.
+- `SerializableToken::attribute_offset()` is **defaulted to `None`**, so positionless ingest (wire
+  DTO, editor `lexicalToTokens`) keeps today's closer-adjacent behavior and no implementor outside core
+  changes. There is no `TokenDto → OwnedToken` conversion in the tree yet; when it lands it gets the
+  default for free. Covered by a test using a purpose-built positionless token type, so the default is
+  asserted directly rather than inferred.
+
+### Completion criterion — met
+
+- Owned corpus gate: **`byte_exact=395 diverged=0`** (was 376/19). The enumerated divergence constant
+  is now `[&str; 0]`, kept as an empty list rather than deleted so a regression names the fixture
+  instead of failing a count; `diverged.len() == 0` is asserted alongside it.
+- Parsed-path behavior unchanged: `tokens_to_usfm` untouched, lint oracle byte-identical. What did
+  change is that `tokens_to_usfm_reconstruct` now *agrees* with the span-based emitter on the four
+  previously divergent shapes — asserted directly in core's existing parity module, which is a
+  strictly stronger invariant than before.
+
+### Gates
+
+- `cargo test --workspace`: core **255 passed** / 12 ignored (4 new core tests), wire 123 / 2 ignored,
+  wasm 25, 0 failed. `lint_oracle -- --ignored`: 1 passed. `npm run check:wasm:web`: green.
+  Both ignored corpus gates in release: parsed 395 books / 5,716,969 tokens / 0 mismatches; owned 395
+  books / 5,716,969 tokens / 1,263,854 attribute-bearing / 395 byte-exact / 0 diverged. Wire clippy
+  clean; `src/token.rs` `cargo fmt`-clean.
+
+### Docs
+
+- Freeze: the "emitter losslessness — recorded limit" section becomes "resolved", with the format
+  consequence retained (an owned section is bound to the derived source; for parse-origin tokens the
+  two are now the same bytes). API ledger gains `OwnedToken::attribute_offset` and the defaulted
+  `SerializableToken::attribute_offset` — six new public core items across this packet and the last,
+  all byte-neutral except where the reconstruct emitter was previously shifted.
+- Epic §7 notes that serializing a parse-origin owned stream is byte-lossless while the returned
+  per-book sources remain the authoritative pairing for edited tokens.
+- `plans/approved/attribute-position-fidelity.md` committed with the work.
+
+### Next
+
+- Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, the packed patch
+  table.
