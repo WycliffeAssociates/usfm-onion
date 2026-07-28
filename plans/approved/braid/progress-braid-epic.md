@@ -1937,3 +1937,66 @@ non-`cargo fmt`-clean file and was left alone.
 
 - Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, the packed
   patch table (Phase B).
+
+## 2026-07-28 — Phase B: finding codec STOPPED on framing gaps (freeze §F)
+
+- One commit: `9d6d024` (freeze §F + the counterexample test). Base `0e726df`. **No codec code
+  written** — this is a stop, not a partial implementation.
+
+### Why stopped rather than built
+
+Of the six frozen finding-section fields, four are implementable exactly as written; two name values
+the byte tables allocate no storage for. That is the same class of gap that stopped Phase A before the
+mixed payloads, and the owner's ruling then was explicit: freeze the framing **before** implementing
+the columns. Applied again here.
+
+- **Determined, no amendment needed:** field 0 common row (§7.6, 16 bytes) with all eight flag bits
+  (§3.3); field 2 `overflow_span` (`{offset:u32,len:u32}`); field 4 `marker_ref` (§M.3 8-byte tagged
+  record). Field 1 (`related_token_idx` + related span) is determined up to one **mechanical** choice —
+  §7.6 gives the related span no widths, so it takes the same `u16`/`u16` as the primary span with the
+  same overflow escape. Recorded as mechanical, not raised.
+- **GAP 1 (blocking) — message payloads have no byte storage.** Field 3 is a frozen `u32` index column
+  of width 4; what it indexes has no field id and no framing, and §M had closed the finding-section
+  string-dictionary question with "field id 7 stays unassigned". That was correct **for markers**, on
+  marker evidence, and does not extend to `MessageParams` (`BTreeMap<String, String>`).
+  **Proven, not argued** — committed test `message_params_can_carry_values_absent_from_the_source`:
+  `\id php Philippians` → `book-code-not-uppercase` with `message_params["uppercase"] == "PHP"`, which
+  is neither a substring of the source (it says `php`) nor a catalog marker, so neither a span nor a
+  stamp-gated ordinal can name it. Gate 0D §2 already called that parameter "load-bearing for
+  remediation … the only encoded remedy" for the code. 24 of 32 codes carry parameters, and §7.6's own
+  closing rule forbids dropping a field that cannot be encoded — it requires amending the schema first.
+  Proposal in §F.2: field 7 = finding-section string dictionary (the §D.1 framing verbatim), field 8 =
+  message payload table as two ascending arrays with a derived second count; parameters stored as
+  key/value pairs, **not** 24 per-code typed structs, which §5.3 could be read as implying — raised
+  explicitly rather than chosen silently.
+- **GAP 2 (deferred, per packet authorisation) — patch table.** Field 6 is frozen only as prose: no
+  record shape, ordering key, or width, and its contents need more string storage than field 7 alone
+  implies (`TokenFix` = four `String`s + a `MessageParams` + `Vec<TokenTemplate>` of three more each).
+  No framing invented. Disposition: findings encode **without fix resolution** — fields 5 and 6
+  unemitted, common-row flag bit 5 clear. Braid owns patch resolution (§5.3) and a `patch_id` is
+  snapshot-bound to a braid identifier that does not exist yet, so the braid phase that produces it is
+  where this should be frozen. Recorded consequence: the `fix` of codes 24/25/26 (the only three with a
+  producer per Gate 0D §2.2) decodes as `None` until then; every other field of those findings
+  round-trips.
+
+### Why not build the four determined fields now
+
+It would fail the packet's own conformance criterion by construction — 24 of 32 codes decoding with
+empty `message_params` is a red gate, not a green one — and it would mean a second pass over a
+directory table GAP 1 is about to extend by two rows. §F.4 records the recommended sequence: adjudicate
+F.2, then land all fields in one pass with the per-code gate green from the start.
+
+### Gates (unchanged code, all still green)
+
+- `cargo test --workspace`: core 255 passed / 12 ignored, wire 141 passed + the new counterexample
+  test, wasm 25, 0 failed. `lint_oracle -- --ignored`: 1 passed. `npm run check:wasm:web`: green.
+  `cargo fmt --check -p usfm_onion_wire`: clean.
+- Both corpus gates in release, unchanged: parsed `books=395 tokens=5,716,969 wide_bridges=0
+  anchor_only=100`; owned `books=395 tokens=5,716,969 attributed_tokens=1,263,854 byte_exact=395
+  diverged=0`.
+
+### Not delivered this packet (blocked on F.2)
+
+Finding encode/decode, the per-LintCode corpus conformance gate, hand-built fixtures for the three
+token-path-only codes, the corruption battery, and finding golden vectors. All of it is scoped and
+ready to land in one pass once F.2 is adjudicated.
