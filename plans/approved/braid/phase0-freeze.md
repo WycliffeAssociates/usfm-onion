@@ -201,7 +201,7 @@ unrelated things). Assignment order = the order §7.4/§7.6 list the fields in p
 | 5 | `patch_id[N]:u32` → snapshot-bound braid patch table | optional — present iff flag bit `fix` is used by any row |
 | 6 | packed patch table (flat, sorted, non-overlapping insert/replace/delete edits incl. replacement token templates) | optional — present iff field 5 is present and non-empty |
 
-Row counts: token section fields **13** (ids 0–12); finding section fields **7** (ids 0–6).
+Row counts: token section fields **13** (ids 0–12); finding section fields **7** (ids 0–6), with two more proposed in §F.2 (ids 7–8) after Phase B found message parameters have no byte storage.
 
 ---
 
@@ -1078,7 +1078,7 @@ present only when some row needs a tag other than 0.
 - Tag 2 has **no current producer**, exactly like the finding row's `overflow` flag bit. It is frozen
   anyway so that a future rule naming a non-catalog marker not on its anchored token is encodable
   without a format version bump.
-- **No finding-section string dictionary is added.** Finding field id 7 stays unassigned.
+- **No finding-section string dictionary is added** for the marker reference. Finding field id 7 stayed unassigned on that basis; §F.2 reopens it for message parameters, which are arbitrary strings and not covered by the marker evidence above.
 
 ---
 
@@ -1146,3 +1146,97 @@ The encoder decides between the two forms by proof, not by a caller flag: it emi
 dictionary only when some id differs from the positional form that stream's own `assign_ids` pass
 produces. Emitting them otherwise would store a dictionary Gate 0E measured at 31–41% of section bytes
 and 100% redundant.
+
+---
+
+## F. Finding-section framing — 2026-07-28 (STOP: two gaps, proposal pending adjudication)
+
+Phase B's finding codec was scoped to encode the §7.6 common row and every record-aligned sidecar.
+Four of the six frozen fields are fully determined and implementable as written. **Two are not**, and
+both fail for the same reason the token section's mixed payloads did: the spec names a value the byte
+tables allocate no storage for. Per the freeze-before-implement rule, they are proposed here rather
+than guessed in code.
+
+### F.1 Determined, no amendment needed
+
+| field | status |
+| --- | --- |
+| 0 — common row | fully determined by §7.6 (16 bytes) and §3.3 (all eight flag bits) |
+| 2 — `overflow_span` | fully determined: `{offset:u32, len:u32}`, 8 bytes, width 8 |
+| 4 — `marker_ref` | fully determined by §M.3 (8-byte tagged record; tag 2 producerless by proof) |
+| 1 — `related_token_idx` + related span | determined **up to one mechanical choice**: §7.6 says "`related_token_idx[N]:u32` plus related token-relative span" without giving the span's widths. Taken as `{token_idx:u32, offset:u16, len:u16}` = 8 bytes, width 8 — the related span is the same kind of value as the primary span in the common row and therefore takes the same widths, with the same `overflow` escape available if it ever needs more. Recorded as mechanical, not raised as a decision. |
+
+### F.2 GAP 1 — message payloads have no byte storage (blocking)
+
+Field 3 is frozen as `message_payload_idx[N]:u32`, an index column of fixed width 4. What it indexes
+has **no field id and no framing**: the finding field table ends at id 6, and §M closed the question of
+a finding-section string dictionary with "none is added; finding field id 7 stays unassigned."
+
+That conclusion was correct **for markers**, on marker evidence. It does not extend to message
+parameters, which are `BTreeMap<String, String>` of arbitrary strings. Proven by counterexample rather
+than argued — `message_params_can_carry_values_absent_from_the_source` in the wire crate's corpus
+tests: linting `\id php Philippians` yields `book-code-not-uppercase` with
+`message_params["uppercase"] == "PHP"`, a value that
+
+- is **not** a substring of the source (the source says `php`), so no span can name it, and
+- is **not** a catalog marker, so no stamp-gated ordinal can name it.
+
+Gate 0D §2 already flagged this parameter as "load-bearing for remediation … the only encoded remedy"
+for that code. 24 of 32 rule codes carry message parameters; without storage for them, those codes
+cannot round-trip, which §7.6's own closing rule forbids ("Every current `LintIssue` must round-trip
+semantically … Phase B amends the schema before coding; it does not drop the field").
+
+**Proposed amendment (not decided):**
+
+| `field_id` | name | width | required/optional |
+| ---: | --- | --- | --- |
+| 7 | finding-section string dictionary — the §D.1 framing verbatim (`[u32; count]` starts + concatenated UTF-8 data) | `0` (mixed) | optional — present iff any field that indexes it is present |
+| 8 | message payload table | `0` (mixed) | optional — present iff field 3 is present |
+
+Field 8 framing, mirroring §D.5's two-array shape so the second count is derived rather than stored:
+
+- `count` (directory) = number of payload rows. `message_payload_idx[N]` indexes this array.
+- Row entries, 8 bytes each: `{first_pair:u32, pair_count:u32}`. Contiguous and ascending, together
+  covering exactly the pair array — the same partition rule field 8's token-section analogue uses.
+- Pair entries, 8 bytes each: `{key_index:u32, value_index:u32}` into field 7.
+- Pair order is the `BTreeMap`'s own key order, which is deterministic and is what makes the encoding
+  reproducible without a comparator at read time.
+
+Note this stores parameters as **key/value data**, not as 24 per-code typed structs. §5.3 assigns a
+schema id per code and lists each code's param shape, which remains the *validation* contract a
+consumer may apply; it is not a reason to fork the storage 24 ways, and a flat pair list round-trips
+`MessageParams` byte-for-byte, which typed structs would only do if every shape were also frozen field
+by field. Raised explicitly because §5.3 could be read either way.
+
+### F.3 GAP 2 — patch table framing (deferred, not proposed)
+
+Field 6 is frozen only as prose: "a packed patch table of flat, sorted, non-overlapping
+insert/replace/delete edits, including replacement token templates". No record shape, no ordering key,
+no width. And its contents need more string storage than field 7 alone implies: `TokenFix` carries
+`code: String`, `label: String`, `label_params: MessageParams`, `target_token_id: String`, and
+`Vec<TokenTemplate>` where `TokenTemplate` is `{kind, text: String, marker: Option<String>,
+sid: Option<String>}`.
+
+Per this packet's own instruction, no framing is invented. **Findings encode without fix resolution**:
+field 5 (`patch_id`) and field 6 are not emitted, and common-row flag bit 5 (`fix`) stays clear. This
+is consistent with §5.3's division of labour — braid owns patch resolution and the patch table is
+snapshot-bound to a braid `PatchId` that does not exist until braid does — so the natural time to
+freeze this framing is the braid phase that produces it, not the wire phase that would only be storing
+someone else's not-yet-defined identifiers.
+
+Consequence to record: the `fix` payload of codes 24, 25, and 26 (`missing-whitespace-before-marker`,
+`missing-horizontal-whitespace-after-marker-name`, `missing-tag-end-delimiter-after-marker` — the only
+three with a producer, per Gate 0D §2.2) does not survive a wire round trip until that framing lands.
+Their `LintIssue.fix` decodes as `None`. Every other field of those findings round-trips.
+
+### F.4 What is blocked and what is not
+
+With F.2 unadjudicated, a finding codec can still be built for the common row and fields 1, 2, and 4 —
+the anchor, the flags, the related anchor, the overflow span, and the marker reference. What it cannot
+do is claim per-code conformance: 24 of 32 codes would decode with empty `message_params`, so the
+"every LintCode round-trips" gate would be failing by construction rather than passing. Implementing
+the codec against a field table that F.2 is about to extend also risks a second pass over the same
+directory rows.
+
+Recommended sequence, matching how the token section was landed: adjudicate F.2, then implement all
+six-plus-two fields in one pass with the per-code conformance gate green from the start.

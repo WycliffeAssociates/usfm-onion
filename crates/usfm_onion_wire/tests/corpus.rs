@@ -151,3 +151,27 @@ fn every_finding_marker_uses_a_frozen_representation() {
     println!("findings={findings} with_marker={with_marker}");
     assert!(with_marker > 0, "corpus must exercise the marker field");
 }
+
+/// Evidence for the Phase B message-payload framing stop: a lint message
+/// parameter whose value appears nowhere in the source and is not a catalog
+/// marker, so no span or ordinal can encode it.
+#[test]
+fn message_params_can_carry_values_absent_from_the_source() {
+    let source = "\\id php Philippians\n";
+    let parsed = parse(source);
+    let result = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+    let issue = result
+        .issues
+        .iter()
+        .find(|issue| issue.code == usfm_onion::lint::LintCode::BookCodeNotUppercase)
+        .expect("lower-case book code is flagged");
+    let uppercase = issue
+        .message_params
+        .get("uppercase")
+        .expect("the remedy parameter");
+    assert_eq!(uppercase, "PHP");
+    // Neither a source slice nor a catalog marker: a span cannot name it and an
+    // ordinal cannot either.
+    assert!(!source.contains(uppercase.as_str()));
+    assert_eq!(lookup_marker(uppercase).kind, MarkerKind::Unknown);
+}
