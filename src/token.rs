@@ -445,6 +445,21 @@ pub struct OwnedBookCode {
 struct OwnedMarkerAttrs {
     attributes: Box<[OwnedAttribute]>,
     attribute_source: Option<Box<str>>,
+    /// Bytes from the end of the owning token's own source to the start of the
+    /// attribute list, in the stream this token came from.
+    ///
+    /// The verbatim attribute text always survived the drop to owned tokens; its
+    /// *position* did not, and one placement rule cannot express every real
+    /// layout — an alignment list sits at the opener, a wordlist list can sit
+    /// past a nested closer, and an unclosed `\fig`'s list sits in the middle of
+    /// the following text. A distance from the owner is the smallest fact that
+    /// covers all of them, and unlike an absolute offset it stays meaningful
+    /// after tokens elsewhere in the stream are edited.
+    ///
+    /// `None` for tokens built without positions (editor- or DTO-authored): those
+    /// never had a position to remember, and the emitter falls back to placing
+    /// the list at the marker's closer.
+    attribute_offset: Option<BytePos>,
 }
 
 /// The payload variant follows `kind` exactly. Keeping it private prevents a
@@ -510,7 +525,7 @@ impl OwnedToken {
                 metadata: *metadata,
                 structural: *structural,
                 nested: *nested,
-                attrs: owned_marker_attrs(attrs),
+                attrs: owned_marker_attrs(attrs, value.span.end),
             },
             TokenData::EndMarker {
                 name,
@@ -532,7 +547,7 @@ impl OwnedToken {
                 marker: Box::from(*name),
                 metadata: *metadata,
                 structural: *structural,
-                attrs: owned_marker_attrs(attrs),
+                attrs: owned_marker_attrs(attrs, value.span.end),
             },
             TokenData::BookCode { code, is_valid } => OwnedTokenPayload::BookCode(OwnedBookCode {
                 code: Box::from(*code),
@@ -626,6 +641,21 @@ impl OwnedToken {
         }
     }
 
+    /// Distance from the end of this token's own source to the start of its
+    /// attribute list, when the token remembers one. `None` means no remembered
+    /// position, and a serializer places the list at the marker's closer.
+    pub fn attribute_offset(&self) -> Option<BytePos> {
+        match &self.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => attrs.attribute_offset,
+            _ => None,
+        }
+    }
+
     pub fn attribute_list(&self) -> Option<&str> {
         match &self.payload {
             OwnedTokenPayload::Marker {
@@ -657,7 +687,10 @@ impl OwnedToken {
     }
 }
 
-fn owned_marker_attrs(attrs: &Option<Box<MarkerAttrs<'_>>>) -> Option<OwnedMarkerAttrs> {
+fn owned_marker_attrs(
+    attrs: &Option<Box<MarkerAttrs<'_>>>,
+    owner_end: BytePos,
+) -> Option<OwnedMarkerAttrs> {
     attrs.as_deref().map(|attrs| OwnedMarkerAttrs {
         attributes: attrs
             .attributes
@@ -670,6 +703,12 @@ fn owned_marker_attrs(attrs: &Option<Box<MarkerAttrs<'_>>>) -> Option<OwnedMarke
             })
             .collect(),
         attribute_source: attrs.attribute_source.map(|(_, source)| Box::from(source)),
+        // `checked_sub` rather than a saturating one: a list recorded as starting
+        // before the token that owns it is not a distance this can represent, so
+        // it falls back to the closer rule instead of pretending to be zero.
+        attribute_offset: attrs
+            .attribute_source
+            .and_then(|(span, _)| span.start.checked_sub(owner_end)),
     })
 }
 
@@ -821,6 +860,16 @@ pub trait SerializableToken: UsfmToken {
 
     fn attributes(&self) -> &[Self::Attr];
     fn attribute_list(&self) -> Option<&str>;
+
+    /// Bytes from the end of this token's own source to the start of its
+    /// attribute list, for tokens that remember where the list sat.
+    ///
+    /// Defaults to `None`, which means "no remembered position" and leaves
+    /// [`tokens_to_usfm_reconstruct`] placing the list at the marker's closer —
+    /// the behavior every implementor had before this existed.
+    fn attribute_offset(&self) -> Option<BytePos> {
+        None
+    }
 }
 
 impl<'a> UsfmToken for Token<'a> {
@@ -842,6 +891,16 @@ impl<'a> SerializableToken for Token<'a> {
 
     fn attributes(&self) -> &[Self::Attr] {
         Token::attributes(self).unwrap_or(&[])
+    }
+
+    fn attribute_offset(&self) -> Option<BytePos> {
+        match &self.data {
+            TokenData::Marker { attrs, .. } | TokenData::Milestone { attrs, .. } => attrs
+                .as_deref()
+                .and_then(|attrs| attrs.attribute_source)
+                .and_then(|(span, _)| span.start.checked_sub(self.span.end)),
+            _ => None,
+        }
     }
 
     fn attribute_list(&self) -> Option<&str> {
@@ -894,6 +953,10 @@ impl SerializableToken for OwnedToken {
 
     fn attribute_list(&self) -> Option<&str> {
         self.attribute_list()
+    }
+
+    fn attribute_offset(&self) -> Option<BytePos> {
+        OwnedToken::attribute_offset(self)
     }
 }
 
@@ -1068,10 +1131,12 @@ struct Pending<'t, T: SerializableToken + ?Sized> {
     marker_name: String,
     shape: CloserShape,
     attrs: PendingAttrs<'t, T>,
-    /// Row that queued this list. Attribute lists are emitted at their closer,
-    /// not next to their marker, so a span recorder cannot infer the owner from
-    /// emission order.
+    /// Row that queued this list. A list is not emitted next to its marker, so a
+    /// span recorder cannot infer the owner from emission order.
     row: usize,
+    /// Output position this list must be emitted at, for a token that remembered
+    /// where it sat. `None` falls back to the closer rule.
+    target: Option<usize>,
 }
 
 fn is_paragraph_marker<T: SerializableToken>(token: &T) -> bool {
@@ -1180,15 +1245,19 @@ fn reconstruct<T: SerializableToken>(
     let mut pending: Vec<Pending<'_, T>> = Vec::new();
 
     for (row, token) in tokens.iter().enumerate() {
+        // Positioned lists first, in ascending target order, so a stream that
+        // remembers its layout reproduces it byte for byte. This is the same rule
+        // the span-based emitter applies to absolute offsets, expressed as a
+        // distance from the owning token instead.
+        while let Some(index) = due_pending(&pending, output.len()) {
+            let drained = pending.remove(index);
+            emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
+        }
+        // Then the closer rule, for lists with no remembered position.
         while let Some(top) = pending.last() {
-            if token_closes(top, token) {
+            if top.target.is_none() && token_closes(top, token) {
                 let drained = pending.pop().unwrap();
-                let start = output.len();
-                emit_pending(&mut output, drained.attrs);
-                if let Some(spans) = spans.as_deref_mut() {
-                    spans[drained.row].attribute_list =
-                        Some(Span::new(start as BytePos, output.len() as BytePos));
-                }
+                emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
             } else {
                 break;
             }
@@ -1214,20 +1283,48 @@ fn reconstruct<T: SerializableToken>(
                 shape: closer_shape(token.kind(), name),
                 attrs,
                 row,
+                target: token
+                    .attribute_offset()
+                    .map(|offset| output.len() + offset as usize),
             });
         }
     }
 
+    // End of stream: anything positioned is due by definition, then the
+    // closer-ruled remainder flushes LIFO as it always has.
+    while let Some(index) = due_pending(&pending, output.len()) {
+        let drained = pending.remove(index);
+        emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
+    }
     while let Some(drained) = pending.pop() {
-        let start = output.len();
-        emit_pending(&mut output, drained.attrs);
-        if let Some(spans) = spans.as_deref_mut() {
-            spans[drained.row].attribute_list =
-                Some(Span::new(start as BytePos, output.len() as BytePos));
-        }
+        emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
     }
 
     output
+}
+
+/// Index of the positioned pending list with the smallest target that `position`
+/// has reached. Linear because `pending` is bounded by marker nesting depth.
+fn due_pending<T: SerializableToken>(pending: &[Pending<'_, T>], position: usize) -> Option<usize> {
+    pending
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.target.is_some_and(|target| target <= position))
+        .min_by_key(|(_, entry)| entry.target)
+        .map(|(index, _)| index)
+}
+
+fn emit_pending_recorded<T: SerializableToken>(
+    output: &mut String,
+    pending: Pending<'_, T>,
+    spans: Option<&mut Vec<ReconstructedSpans>>,
+) {
+    let start = output.len();
+    let row = pending.row;
+    emit_pending(output, pending.attrs);
+    if let Some(spans) = spans {
+        spans[row].attribute_list = Some(Span::new(start as BytePos, output.len() as BytePos));
+    }
 }
 
 /// Three-byte USFM book code (`GEN`, `EXO`, …) stored as raw ASCII bytes.
@@ -1425,7 +1522,7 @@ mod sid_size_guard {
 #[cfg(test)]
 mod owned_token_tests {
     use super::{
-        OwnedToken, StableTokenId, TokenKind, tokens_to_usfm_reconstruct,
+        OwnedAttribute, OwnedToken, StableTokenId, TokenKind, tokens_to_usfm_reconstruct,
         tokens_to_usfm_reconstruct_spanned,
     };
     use crate::diff::{DiffableToken, derive_canonical_sids};
@@ -1483,6 +1580,115 @@ mod owned_token_tests {
                 .map(|issue| issue.code)
                 .collect::<Vec<_>>()
         );
+    }
+
+    /// A token stream with no remembered positions — the shape an editor or a
+    /// wire DTO produces. Exercises the `SerializableToken::attribute_offset`
+    /// default rather than asserting it indirectly.
+    struct PositionlessToken {
+        kind: TokenKind,
+        source: String,
+        marker: Option<String>,
+        attribute_list: Option<String>,
+    }
+
+    impl super::UsfmToken for PositionlessToken {
+        fn kind(&self) -> TokenKind {
+            self.kind
+        }
+
+        fn source(&self) -> &str {
+            &self.source
+        }
+
+        fn marker(&self) -> Option<&str> {
+            self.marker.as_deref()
+        }
+    }
+
+    impl super::SerializableToken for PositionlessToken {
+        type Attr = OwnedAttribute;
+
+        fn attributes(&self) -> &[Self::Attr] {
+            &[]
+        }
+
+        fn attribute_list(&self) -> Option<&str> {
+            self.attribute_list.as_deref()
+        }
+        // `attribute_offset` deliberately not implemented: the default is what
+        // every ingest path relies on.
+    }
+
+    #[test]
+    fn owned_tokens_remember_where_their_attribute_list_sat() {
+        // The four shapes an emitter with only a closer rule could not reproduce.
+        for source in [
+            "\\p And\\fig something | and some more text\n",
+            "\\p \\w \\+pn Proper Noun\\+pn*|keyword\\w* def\n",
+            "\\p \\qt1-s |sid=\"a\"\nwho=\"Paul\"\\*said\n",
+            "\\k-s | x-tw=\"a\"\n\\w b|c=\"d\"\\w*\n\\k-e\\*\n",
+        ] {
+            let owned = parse(source)
+                .tokens
+                .iter()
+                .map(OwnedToken::from_parsed)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                tokens_to_usfm_reconstruct(&owned),
+                source,
+                "owned round trip for {source:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn attribute_offset_is_the_distance_from_the_owning_token() {
+        // `\\w ` ends at 3 and its list starts at 7, four bytes later, past the
+        // intervening text token. An offset from the owner — not an absolute
+        // position — is what stays meaningful when other tokens are edited.
+        let source = "\\p \\w abc|k=\"v\"\\w*";
+        let owned = parse(source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+        let word = owned
+            .iter()
+            .find(|token| token.marker_name() == Some("w"))
+            .expect("character marker");
+        assert_eq!(word.attribute_offset(), Some(3));
+        assert_eq!(word.attribute_list(), Some("|k=\"v\""));
+
+        // A milestone whose list sits immediately after the opener remembers zero.
+        let owned = parse("\\k-s | x=\"a\"\ntext\\k-e\\*")
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+        let opener = owned
+            .iter()
+            .find(|token| token.marker_name() == Some("k-s"))
+            .expect("milestone opener");
+        assert_eq!(opener.attribute_offset(), Some(0));
+    }
+
+    #[test]
+    fn tokens_without_a_remembered_position_still_emit_at_the_closer() {
+        let token =
+            |kind, source: &str, marker: Option<&str>, list: Option<&str>| PositionlessToken {
+                kind,
+                source: source.to_string(),
+                marker: marker.map(ToOwned::to_owned),
+                attribute_list: list.map(ToOwned::to_owned),
+            };
+        let tokens = [
+            token(TokenKind::Marker, "\\w ", Some("w"), Some("|k=\"v\"")),
+            token(TokenKind::Text, "word", None, None),
+            token(TokenKind::EndMarker, "\\w*", Some("w"), None),
+        ];
+        // Unchanged behavior: with nothing remembered, the list goes to the closer.
+        assert_eq!(tokens_to_usfm_reconstruct(&tokens), "\\w word|k=\"v\"\\w*");
     }
 
     #[test]
@@ -1649,6 +1855,25 @@ mod tokens_to_usfm_reconstruct_parity {
             "\\w \\nd x|k=\"v\"\\nd* y\\w*",
             // Paragraph-level attribute list (closer = next newline).
             "\\periph title|periph=\"Title Page\"\n",
+        ] {
+            assert_parity(source);
+        }
+    }
+
+    #[test]
+    fn agrees_where_the_list_is_nowhere_near_the_closer() {
+        // Each of these used to diverge, because the emitter's only rule was "at
+        // the marker's closer" and none of them puts the list there. They agree now
+        // that the token remembers the distance to its own list.
+        for source in [
+            // Unclosed marker: the list sits mid-text and no closer ever arrives.
+            "\\p And\\fig something | and some more text\n",
+            // List belongs to the nested marker but sits *after* its closer.
+            "\\p \\w \\+pn Proper Noun\\+pn*|keyword\\w* def\n",
+            // List split by a newline: the remainder parses as text.
+            "\\p \\qt1-s |sid=\"a\"\nwho=\"Paul\"\\*said\n",
+            // Old-format alignment: list at the opener, closer lines below.
+            "\\k-s | x-tw=\"a\"\n\\w b|c=\"d\"\\w*\n\\k-e\\*\n",
         ] {
             assert_parity(source);
         }

@@ -249,10 +249,9 @@ fn owned_encoded(source: &str) -> (String, Vec<u8>) {
 /// tokens compared against a fresh parse of the derived source.
 fn assert_owned_round_trips(source: &str) {
     let (derived, bytes) = owned_encoded(source);
-    // Byte identity holds for well-formed input. It is *not* a property of the
-    // reconstruct emitter in general: a deferred attribute list is emitted at its
-    // closer, which for malformed input is not where it started. See the corpus
-    // gate's documented divergence set.
+    // Byte identity: an owned token remembers where its attribute list sat, so
+    // serializing a parse-origin stream reproduces the source exactly — including
+    // the malformed shapes where the list is nowhere near the marker's closer.
     assert_eq!(derived, source, "derived source must be byte-identical");
 
     let container = read_container(&bytes).expect("container decodes");
@@ -683,41 +682,18 @@ fn corpus_token_sections_round_trip() {
 
 /// Fixtures the reconstruct emitter does not reproduce byte for byte.
 ///
-/// All nineteen are the same shape: a deferred attribute list is emitted at its
-/// **closer**, and for these inputs the closer is not where the list started.
-/// `\fig` never closes so its list drains at end of stream; a list belonging to a
-/// nested `\+pn` is closed before the list's original position; a list containing
-/// a newline is split by the parser; and the `oldformat` alignment fixtures put
-/// `\k-s | x-tw="…"` several lines before its `\k-e\*`.
+/// **Empty, and asserted empty.** It was nineteen: an unclosed `\fig`, a list
+/// owned by a nested `\+pn` and sitting past that marker's closer, a list split by
+/// a newline, and fifteen `oldformat` alignment fixtures whose `\k-s | x-tw="…"`
+/// sits lines above its `\k-e\*`. All were the same cause — the emitter had only
+/// one placement rule, "at the marker's closer", because the position of an
+/// attribute list was dropped when a token became owned while its text survived.
 ///
-/// This is **pre-existing** emitter behaviour, not an artifact of the span capture
-/// added for the wire — the gate asserts below that the spanned emitter's bytes
-/// equal the plain emitter's on every file — and core's own doc comment names the
-/// class. The span-based `tokens_to_usfm` reproduces all nineteen exactly.
-///
-/// Listed rather than counted, so a twentieth has to be understood and added
-/// deliberately.
-const EMITTER_DIVERGENCES: [&str; 19] = [
-    "testData/paratextTests/FigureNotClosed/origin.usfm",
-    "testData/paratextTests/WordlistMarkerNestedProperNounWithKeyword_Pass/origin.usfm",
-    "testData/special-cases/newline-attributes/origin.usfm",
-    "testData/synthetic/kitchen-sink.usfm",
-    "testData/usfmjsTests/57-TIT.greek.oldformat/origin.usfm",
-    "testData/usfmjsTests/57-TIT.partial.oldformat/origin.usfm",
-    "testData/usfmjsTests/acts-1-20.aligned.crammed.oldformat/origin.usfm",
-    "testData/usfmjsTests/acts-1-20.aligned.oldformat/origin.usfm",
-    "testData/usfmjsTests/acts_1_11.aligned.oldformat/origin.usfm",
-    "testData/usfmjsTests/acts_1_4.aligned.oldformat/origin.usfm",
-    "testData/usfmjsTests/acts_1_milestone.oldformat/origin.usfm",
-    "testData/usfmjsTests/greek_verse_objects/origin.usfm",
-    "testData/usfmjsTests/heb1-1_multi_alignment.oldformat/origin.usfm",
-    "testData/usfmjsTests/mat-4-6.oldformat/origin.usfm",
-    "testData/usfmjsTests/mat-4-6.whitespace.oldformat/origin.usfm",
-    "testData/usfmjsTests/tit1-1_alignment.oldformat/origin.usfm",
-    "testData/usfmjsTests/tit_1_12.alignment.oldformat/origin.usfm",
-    "testData/usfmjsTests/tit_1_12.alignment.zaln.not.start/origin.usfm",
-    "testData/usfmjsTests/tw_words.oldformat/origin.usfm",
-];
+/// Owned tokens now remember the distance from their own end to their list, and
+/// the emitter honours it, so serializing a parse-origin stream reproduces the
+/// file byte for byte. Kept as a list rather than deleted so a regression names
+/// the fixture that broke instead of just failing a count.
+const EMITTER_DIVERGENCES: [&str; 0] = [];
 
 /// The owned-path gate: the same corpus through spanless owned tokens, where the
 /// source and every span come from the reconstruct emitter rather than off a parse.
@@ -783,8 +759,9 @@ fn corpus_owned_token_sections_round_trip() {
         }
 
         if derived == source {
-            // Where serialization is byte-exact, the stronger claim must hold too:
-            // the wire agrees with a fresh parse of the source it describes.
+            // Now every book: the wire agrees with a fresh parse of the source it
+            // describes. The branch remains so that a regression still reports the
+            // diverging fixture by name below instead of failing here.
             let fresh = parse(&derived);
             assert_eq!(
                 decoded.len(),
@@ -818,10 +795,13 @@ fn corpus_owned_token_sections_round_trip() {
         books - diverged.len(),
         diverged.len()
     );
+    // Serializing owned tokens reproduces every corpus file byte for byte. The
+    // list, not a count, so a regression names the fixture.
     assert_eq!(
         diverged, EMITTER_DIVERGENCES,
-        "the set of fixtures the reconstruct emitter does not reproduce byte-for-byte changed"
+        "a fixture stopped round-tripping byte-for-byte through the reconstruct emitter"
     );
+    assert_eq!(diverged.len(), 0, "byte identity must hold for every book");
     assert!(books > 300, "corpus should cover both fixture sets");
     // The attribute path is the one that cannot use a running offset, so the gate
     // is only meaningful if the corpus actually exercises it.
