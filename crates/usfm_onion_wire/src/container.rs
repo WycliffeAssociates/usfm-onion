@@ -1,9 +1,7 @@
 //! Container header, table of contents, section header, and field directory —
 //! the trust boundary of the wire format.
 //!
-//! Layout is specified per field by the container specification the freeze
-//! document (`plans/approved/braid/phase0-freeze.md`) numbers; the constants
-//! live in [`crate::schema`]. Nothing here trusts a declared count, offset,
+//! Layout constants live in [`crate::schema`]. Nothing here trusts a declared count, offset,
 //! length, width, flag, or discriminant: each is validated against the enclosing
 //! byte range before any view is constructed and before any allocation is sized
 //! from it. That ordering is the point — a hostile `section_count` of `u32::MAX`
@@ -44,6 +42,7 @@ pub enum ElementWidth {
     Two,
     Four,
     Eight,
+    Sixteen,
 }
 
 impl ElementWidth {
@@ -54,6 +53,7 @@ impl ElementWidth {
             2 => Some(Self::Two),
             4 => Some(Self::Four),
             8 => Some(Self::Eight),
+            16 => Some(Self::Sixteen),
             _ => None,
         }
     }
@@ -65,6 +65,7 @@ impl ElementWidth {
             Self::Two => 2,
             Self::Four => 4,
             Self::Eight => 8,
+            Self::Sixteen => 16,
         }
     }
 
@@ -161,6 +162,7 @@ pub struct Container<'a> {
     bytes: &'a [u8],
     header: ContainerHeader,
     toc: Vec<TocEntry>,
+    allow_omitted_checksums: bool,
 }
 
 impl<'a> Container<'a> {
@@ -177,26 +179,66 @@ impl<'a> Container<'a> {
     pub fn section(&self, index: usize) -> Option<Result<Section<'a>, DecodeError>> {
         self.toc
             .get(index)
-            .map(|entry| read_section(self.bytes, entry))
+            .map(|entry| read_section(self.bytes, entry, self.allow_omitted_checksums))
     }
 
     pub fn sections(&self) -> impl Iterator<Item = Result<Section<'a>, DecodeError>> + '_ {
-        self.toc.iter().map(|entry| read_section(self.bytes, entry))
+        self.toc
+            .iter()
+            .map(|entry| read_section(self.bytes, entry, self.allow_omitted_checksums))
     }
 }
 
 /// Validates a container header, its integrity checksum, and its whole TOC.
 pub fn read_container(bytes: &[u8]) -> Result<Container<'_>, DecodeError> {
+    read_container_with_policy(bytes, false)
+}
+
+/// Explicit transient-data entry point. Omitted checksums are accepted, while
+/// present checksums and all structural invariants are still validated.
+pub fn read_container_unchecked(bytes: &[u8]) -> Result<Container<'_>, DecodeError> {
+    read_container_with_policy(bytes, true)
+}
+
+fn read_container_with_policy(
+    bytes: &[u8],
+    allow_omitted_checksums: bool,
+) -> Result<Container<'_>, DecodeError> {
     let header = read_container_header(bytes)?;
     // Checked before the TOC is parsed: if the buffer is corrupt there is no
     // reason to act on any count it declares.
-    if header.checksum != CHECKSUM_OMITTED
-        && integrity_checksum(bytes, CONTAINER_CHECKSUM_OFFSET) != header.checksum
-    {
+    validate_checksum(
+        bytes,
+        CONTAINER_CHECKSUM_OFFSET,
+        header.checksum,
+        allow_omitted_checksums,
+    )?;
+    let toc = read_toc(bytes, &header)?;
+    Ok(Container {
+        bytes,
+        header,
+        toc,
+        allow_omitted_checksums,
+    })
+}
+
+fn validate_checksum(
+    bytes: &[u8],
+    checksum_offset: usize,
+    expected: u64,
+    allow_omitted: bool,
+) -> Result<(), DecodeError> {
+    if expected == CHECKSUM_OMITTED {
+        return if allow_omitted {
+            Ok(())
+        } else {
+            Err(DecodeError::ChecksumMismatch)
+        };
+    }
+    if integrity_checksum(bytes, checksum_offset) != expected {
         return Err(DecodeError::ChecksumMismatch);
     }
-    let toc = read_toc(bytes, &header)?;
-    Ok(Container { bytes, header, toc })
+    Ok(())
 }
 
 fn read_container_header(bytes: &[u8]) -> Result<ContainerHeader, DecodeError> {
@@ -362,14 +404,19 @@ fn read_book(raw: [u8; 3]) -> Result<BookId, DecodeError> {
     BookId::from_str(text).ok_or(DecodeError::InvalidToc)
 }
 
-fn read_section<'a>(bytes: &'a [u8], entry: &TocEntry) -> Result<Section<'a>, DecodeError> {
+fn read_section<'a>(
+    bytes: &'a [u8],
+    entry: &TocEntry,
+    allow_omitted_checksums: bool,
+) -> Result<Section<'a>, DecodeError> {
     let section_bytes = window(bytes, entry.offset, entry.byte_len)?;
     let (header, directory_count) = read_section_header(section_bytes, entry)?;
-    if header.checksum != CHECKSUM_OMITTED
-        && integrity_checksum(section_bytes, SECTION_CHECKSUM_OFFSET) != header.checksum
-    {
-        return Err(DecodeError::ChecksumMismatch);
-    }
+    validate_checksum(
+        section_bytes,
+        SECTION_CHECKSUM_OFFSET,
+        header.checksum,
+        allow_omitted_checksums,
+    )?;
     let fields = read_directory(section_bytes, &header, directory_count)?;
     Ok(Section { header, fields })
 }
@@ -465,6 +512,7 @@ fn read_directory<'a>(
     let directory_bytes = window(section_bytes, SECTION_HEADER_LEN as u64, directory_len)?;
 
     let mut fields: Vec<SectionField<'a>> = Vec::with_capacity(directory_count as usize);
+    let mut seen_ids: Vec<u16> = Vec::with_capacity(directory_count as usize);
     let mut ranges: Vec<(u64, u64)> = Vec::with_capacity(directory_count as usize);
     let mut cursor = Cursor::new(directory_bytes);
     for _ in 0..directory_count {
@@ -481,15 +529,18 @@ fn read_directory<'a>(
         let byte_len = u64::from(cursor.u32()?);
         let count = cursor.u32()?;
 
-        match header
-            .kind
-            .field_table()
-            .iter()
-            .find(|(known, _)| *known == id)
-        {
+        let spec = header.kind.field_table().iter().find(|spec| spec.id == id);
+        match spec {
             // A known id's required-ness is fixed by the schema; a producer that
             // disagrees is describing a different format.
-            Some((_, expected)) if *expected != required => {
+            Some(spec) if spec.required != required => {
+                return Err(DecodeError::InvalidSection);
+            }
+            Some(spec)
+                if spec
+                    .element_width
+                    .is_some_and(|expected| expected != width.as_u8()) =>
+            {
                 return Err(DecodeError::InvalidSection);
             }
             Some(_) => {}
@@ -497,11 +548,12 @@ fn read_directory<'a>(
             // one, refuse a required one rather than silently dropping data the
             // producer says is load-bearing.
             None if required => return Err(DecodeError::InvalidSection),
-            None => continue,
+            None => {}
         }
-        if fields.iter().any(|field| field.id == id) {
+        if seen_ids.contains(&id) {
             return Err(DecodeError::InvalidSection);
         }
+        seen_ids.push(id);
         // A payload inside the header/directory region would alias the very
         // bytes that describe it.
         if offset < payload_start {
@@ -517,13 +569,15 @@ fn read_directory<'a>(
         }
         let payload = window(section_bytes, offset, byte_len)?;
         ranges.push((offset, offset + byte_len));
-        fields.push(SectionField {
-            id,
-            width,
-            required,
-            count,
-            bytes: payload,
-        });
+        if spec.is_some() {
+            fields.push(SectionField {
+                id,
+                width,
+                required,
+                count,
+                bytes: payload,
+            });
+        }
     }
 
     ranges.sort_unstable();
@@ -541,8 +595,8 @@ fn validate_field_set(
     header: &SectionHeader,
     fields: &[SectionField<'_>],
 ) -> Result<(), DecodeError> {
-    for (id, required) in header.kind.field_table() {
-        if *required && !fields.iter().any(|field| field.id == *id) {
+    for spec in header.kind.field_table() {
+        if spec.required && !fields.iter().any(|field| field.id == spec.id) {
             return Err(DecodeError::InvalidSection);
         }
     }
@@ -631,7 +685,7 @@ pub fn write_container(sections: &[SectionPayload<'_>]) -> Result<Vec<u8>, Encod
 
     let toc_len = TOC_ENTRY_LEN * ordered.len();
     // Sections start after the TOC on the container-wide 16-byte grid. Because
-    // every section starts 16-aligned and no field needs more than 8, a field's
+    // every section starts 16-aligned and no field needs more than 16, a field's
     // section-relative alignment is also its absolute alignment.
     let sections_base = (CONTAINER_HEADER_LEN + toc_len).next_multiple_of(SECTION_ALIGN as usize);
     let toc_padding = sections_base - CONTAINER_HEADER_LEN - toc_len;
@@ -757,11 +811,22 @@ fn write_section(section: &SectionPayload<'_>) -> Result<Vec<u8>, EncodeError> {
                 field_id: field.id,
             }));
         }
+        if kind
+            .field_table()
+            .iter()
+            .find(|spec| spec.id == field.id)
+            .and_then(|spec| spec.element_width)
+            .is_some_and(|expected| expected != field.width.as_u8())
+        {
+            return Err(refuse(LayoutRefusal::FieldExtentMismatch {
+                field_id: field.id,
+            }));
+        }
     }
-    for (id, required) in kind.field_table() {
-        if *required && !fields.iter().any(|field| field.id == *id) {
+    for spec in kind.field_table() {
+        if spec.required && !fields.iter().any(|field| field.id == spec.id) {
             return Err(refuse(LayoutRefusal::MissingRequiredField {
-                field_id: *id,
+                field_id: spec.id,
             }));
         }
     }
@@ -816,8 +881,8 @@ fn write_section(section: &SectionPayload<'_>) -> Result<Vec<u8>, EncodeError> {
         body.u8(field.width.as_u8());
         let required = required_ids
             .iter()
-            .find(|(known, _)| *known == field.id)
-            .is_some_and(|(_, required)| *required);
+            .find(|spec| spec.id == field.id)
+            .is_some_and(|spec| spec.required);
         body.u8(if required { FIELD_FLAG_REQUIRED } else { 0 });
         body.u32(*offset as u32);
         body.u32(field.bytes.len() as u32);

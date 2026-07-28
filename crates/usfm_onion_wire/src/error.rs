@@ -1,8 +1,7 @@
 //! Typed codec failures.
 //!
-//! Variant names are frozen by `plans/approved/braid/phase0-freeze.md` §6.2
-//! (`DecodeError`) and §6.8 plus its adjudication appendix (`EncodeError`).
-//! Both enums are expected-failure *values*: no panic, no string message as the
+//! Variant names and payloads are an append-only wire/API contract. Both enums
+//! are expected-failure *values*: no panic, no string message as the
 //! carrier of meaning, no Rust debug formatting exposed as API. `Display` text
 //! is for logs only; callers match on variants.
 //!
@@ -106,9 +105,7 @@ pub enum EncodeError {
     /// A section set this writer refuses to lay out, because the result would
     /// be a container its own reader rejects as non-canonical.
     ///
-    /// Appended after the freeze's two §6.8 variants, which cover only the
-    /// §7.4/§7.5 payload refusals and name no structural one. Per the freeze's
-    /// append-only rule this takes the next unused position; nothing is
+    /// Appended after the two payload refusals; no existing variant is
     /// renumbered.
     InvalidSectionLayout { book: BookId, reason: LayoutRefusal },
 }

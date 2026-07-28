@@ -1,11 +1,9 @@
 //! Frozen v1 wire schema constants.
 //!
-//! Every value here is frozen by `plans/approved/braid/phase0-freeze.md`
-//! (assignment rule: declaration/text order, ascending from 0, append-only
-//! forever, tombstone-on-removal). Layout offsets and widths come from the
-//! container specification the freeze document numbers. Nothing in this module
-//! may be renumbered: a wire integer that changes meaning silently reinterprets
-//! every already-encoded container.
+//! Stable integer assignments use declaration order, ascend from zero, and are
+//! append-only. Removed values are tombstoned rather than reused. A wire integer
+//! that changes meaning would silently reinterpret every already-encoded
+//! container.
 //!
 //! v1 is little-endian only. There is no endianness flag and no byte-order
 //! heuristic: a big-endian producer fails the magic/version checks, which is
@@ -71,8 +69,8 @@ pub const TOC_FLAGS_KNOWN: u16 = 0;
 
 /// Section header `flags:u8` bit 0 — ids are positional (`{book}-{index}`), so
 /// the explicit id column and its dictionary are omitted and the decoder
-/// synthesizes ids from book + row. Location adjudicated in the freeze
-/// document's §3.2 (section header, not the container or TOC flags field).
+/// synthesizes ids from book + row. This belongs to the section header because
+/// it changes one token section, not the container as a whole.
 pub const SECTION_FLAG_POSITIONAL_IDS: u8 = 1 << 0;
 
 /// Token sections may only set [`SECTION_FLAG_POSITIONAL_IDS`]; finding
@@ -90,15 +88,24 @@ pub const FIELD_FLAG_REQUIRED: u8 = 1 << 0;
 pub const FIELD_FLAGS_KNOWN: u8 = FIELD_FLAG_REQUIRED;
 
 /// `element_width` value for a field whose payload is not a uniform array
-/// (string dictionaries, sparse keyed records — the freeze document's field
-/// tables call these "mixed"). `byte_len` is authoritative for such a field
-/// and no alignment is implied.
+/// (string dictionaries and sparse keyed records). `byte_len` is authoritative
+/// for such a field and no alignment is implied.
 pub const ELEMENT_WIDTH_VARIABLE: u8 = 0;
 
 /// Uniform column widths a v1 field entry may declare, besides
 /// [`ELEMENT_WIDTH_VARIABLE`]. Anything else is a producer this build cannot
 /// interpret.
-pub const ELEMENT_WIDTHS: [u8; 4] = [1, 2, 4, 8];
+pub const ELEMENT_WIDTHS: [u8; 5] = [1, 2, 4, 8, 16];
+
+/// One known field-directory entry. `element_width = None` means the semantic
+/// field codec owns its mixed record shape; the generic container still checks
+/// its declared width, extent, range, alignment, and overlap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FieldSpec {
+    pub id: u16,
+    pub element_width: Option<u8>,
+    pub required: bool,
+}
 
 /// `sid_index` / `marker_descriptor_index` "none" sentinel. Because the
 /// sentinel consumes a value, a book with more than [`MAX_DISTINCT_SIDS`]
@@ -144,10 +151,9 @@ impl SectionKind {
         }
     }
 
-    /// Field ids defined for this kind, and whether each is required. Unknown
-    /// ids are not in this table and are resolved through
-    /// [`FIELD_FLAG_REQUIRED`] instead.
-    pub const fn field_table(self) -> &'static [(u16, bool)] {
+    /// Field ids, fixed widths where applicable, and requiredness. Unknown ids
+    /// are resolved through [`FIELD_FLAG_REQUIRED`] instead.
+    pub const fn field_table(self) -> &'static [FieldSpec] {
         match self {
             Self::Token => token_field::TABLE,
             Self::Finding => finding_field::TABLE,
@@ -158,6 +164,8 @@ impl SectionKind {
 /// Token-section field ids. The id space is **per section kind**: the same
 /// integer in a finding section names an unrelated field.
 pub mod token_field {
+    use super::FieldSpec;
+
     pub const KIND: u16 = 0;
     pub const SPAN_START: u16 = 1;
     pub const SPAN_END: u16 = 2;
@@ -171,20 +179,68 @@ pub mod token_field {
     pub const STRING_DICTIONARY: u16 = 10;
     pub const MARKER_DESCRIPTOR_DICTIONARY: u16 = 11;
 
-    /// `(field_id, required)`, in frozen id order.
-    pub const TABLE: &[(u16, bool)] = &[
-        (KIND, true),
-        (SPAN_START, true),
-        (SPAN_END, true),
-        (TOKEN_ID_INDEX, false),
-        (SID_INDEX, true),
-        (MARKER_DESCRIPTOR_INDEX, true),
-        (NUMBER_RECORDS, false),
-        (BOOK_CODE_RECORDS, false),
-        (ATTRIBUTE_RECORDS, false),
-        (TOKEN_ID_DICTIONARY, false),
-        (STRING_DICTIONARY, true),
-        (MARKER_DESCRIPTOR_DICTIONARY, true),
+    /// Field requirements and any fixed uniform width, in stable id order.
+    pub const TABLE: &[FieldSpec] = &[
+        FieldSpec {
+            id: KIND,
+            element_width: Some(1),
+            required: true,
+        },
+        FieldSpec {
+            id: SPAN_START,
+            element_width: Some(4),
+            required: true,
+        },
+        FieldSpec {
+            id: SPAN_END,
+            element_width: Some(4),
+            required: true,
+        },
+        FieldSpec {
+            id: TOKEN_ID_INDEX,
+            element_width: Some(4),
+            required: false,
+        },
+        FieldSpec {
+            id: SID_INDEX,
+            element_width: Some(2),
+            required: true,
+        },
+        FieldSpec {
+            id: MARKER_DESCRIPTOR_INDEX,
+            element_width: Some(2),
+            required: true,
+        },
+        FieldSpec {
+            id: NUMBER_RECORDS,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: BOOK_CODE_RECORDS,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: ATTRIBUTE_RECORDS,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: TOKEN_ID_DICTIONARY,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: STRING_DICTIONARY,
+            element_width: None,
+            required: true,
+        },
+        FieldSpec {
+            id: MARKER_DESCRIPTOR_DICTIONARY,
+            element_width: None,
+            required: true,
+        },
     ];
 
     /// Fields that exist only when ids are explicit; they are omitted together
@@ -195,6 +251,8 @@ pub mod token_field {
 
 /// Finding-section field ids.
 pub mod finding_field {
+    use super::FieldSpec;
+
     pub const COMMON_ROW: u16 = 0;
     pub const RELATED_TOKEN_IDX: u16 = 1;
     pub const OVERFLOW_SPAN: u16 = 2;
@@ -203,20 +261,47 @@ pub mod finding_field {
     pub const PATCH_ID: u16 = 5;
     pub const PATCH_TABLE: u16 = 6;
 
-    /// `(field_id, required)`, in frozen id order.
-    pub const TABLE: &[(u16, bool)] = &[
-        (COMMON_ROW, true),
-        (RELATED_TOKEN_IDX, false),
-        (OVERFLOW_SPAN, false),
-        (MESSAGE_PAYLOAD_IDX, false),
-        (MARKER_STRING_IDX, false),
-        (PATCH_ID, false),
-        (PATCH_TABLE, false),
+    /// Field requirements and any fixed uniform width, in stable id order.
+    pub const TABLE: &[FieldSpec] = &[
+        FieldSpec {
+            id: COMMON_ROW,
+            element_width: Some(16),
+            required: true,
+        },
+        FieldSpec {
+            id: RELATED_TOKEN_IDX,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: OVERFLOW_SPAN,
+            element_width: Some(8),
+            required: false,
+        },
+        FieldSpec {
+            id: MESSAGE_PAYLOAD_IDX,
+            element_width: Some(4),
+            required: false,
+        },
+        FieldSpec {
+            id: MARKER_STRING_IDX,
+            element_width: Some(4),
+            required: false,
+        },
+        FieldSpec {
+            id: PATCH_ID,
+            element_width: Some(4),
+            required: false,
+        },
+        FieldSpec {
+            id: PATCH_TABLE,
+            element_width: None,
+            required: false,
+        },
     ];
 }
 
-/// Finding common-row `flags:u8` bits (finding record offset 14). Bit order is
-/// the freeze document's §3.3 assignment.
+/// Finding common-row `flags:u8` bits (finding record offset 14).
 pub mod finding_flag {
     /// Set = `AnchorOnly` fidelity; clear = `Exact`.
     pub const ANCHOR_ONLY: u8 = 1 << 0;
@@ -255,8 +340,8 @@ mod tests {
         // A gap or reorder here means a decoder and an encoder built from this
         // table would disagree about what an id means.
         for table in [token_field::TABLE, finding_field::TABLE] {
-            for (index, (field_id, _)) in table.iter().enumerate() {
-                assert_eq!(usize::from(*field_id), index);
+            for (index, field) in table.iter().enumerate() {
+                assert_eq!(usize::from(field.id), index);
             }
         }
     }

@@ -6,15 +6,16 @@
 //! are the ones a hostile buffer attacks: no input panics, and no declared count
 //! or offset is acted on before the bytes it claims are proved to exist.
 
-use usfm_onion::token::BookId;
-use usfm_onion_wire::container::{
-    Container, ElementWidth, FieldPayload, Section, SectionPayload, SectionVariant, read_container,
+use crate::container::{
+    Container, ElementWidth, FieldPayload, Section, SectionPayload, SectionVariant,
+    read_container as read_checked_container, read_container_unchecked as read_container,
     write_container,
 };
-use usfm_onion_wire::error::{DecodeError, EncodeError, LayoutRefusal};
-use usfm_onion_wire::schema::{
+use crate::error::{DecodeError, EncodeError, LayoutRefusal};
+use crate::schema::{
     CONTAINER_HEADER_LEN, SECTION_HEADER_LEN, SectionKind, finding_field, token_field,
 };
+use usfm_onion::token::BookId;
 
 // Two-token payloads for the required token columns. Values are irrelevant to
 // container validation; only their widths and lengths are.
@@ -105,7 +106,7 @@ fn finding_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
         record_count: 1,
         fields: vec![FieldPayload {
             id: finding_field::COMMON_ROW,
-            width: ElementWidth::Variable,
+            width: ElementWidth::Sixteen,
             count: 1,
             bytes: &FINDING_ROW,
         }],
@@ -284,6 +285,22 @@ fn unknown_optional_field_is_skipped() {
     assert_eq!(sections[0].fields().len(), 7);
 }
 
+#[test]
+fn unknown_optional_field_is_structurally_validated_before_skipping() {
+    let mut section = token_section("GEN", 1);
+    section.fields.push(FieldPayload {
+        id: 4000,
+        width: ElementWidth::Four,
+        count: 1,
+        bytes: &SPAN_STARTS[..4],
+    });
+    let mut bytes = unchecked(write(&[section]));
+    let section_len = read_u64(&bytes, section_offset(&bytes, 0) + 32) as u32;
+    let unknown = directory_entry(&bytes, 0, 7);
+    put_u32(&mut bytes, unknown + 4, section_len);
+    assert_eq!(read_all(&bytes), Err(DecodeError::Truncated));
+}
+
 // ------------------------------------------------------- no panic, ever
 
 #[test]
@@ -413,6 +430,26 @@ fn container_checksum_mismatch_rejects() {
     put_u64(&mut wrong_stamp, 24, 1);
     assert_eq!(
         read_container(&wrong_stamp),
+        Err(DecodeError::ChecksumMismatch)
+    );
+}
+
+#[test]
+fn persistent_reader_rejects_omitted_checksums() {
+    let bytes = unchecked(write(&[token_section("GEN", 1)]));
+    assert_eq!(
+        read_checked_container(&bytes),
+        Err(DecodeError::ChecksumMismatch)
+    );
+
+    let mut bytes = write(&[token_section("GEN", 1)]);
+    let section = section_offset(&bytes, 0);
+    put_u64(&mut bytes, section + 40, 0);
+    let container_checksum = crate::primitives::integrity_checksum(&bytes, 24);
+    put_u64(&mut bytes, 24, container_checksum);
+    let container = read_checked_container(&bytes).expect("outer checksum is valid");
+    assert_eq!(
+        container.section(0).expect("section exists"),
         Err(DecodeError::ChecksumMismatch)
     );
 }
@@ -658,6 +695,15 @@ fn known_field_with_the_wrong_required_bit_rejects() {
     let mut bytes = unchecked(write(&[token_section("GEN", 1)]));
     let entry = directory_entry(&bytes, 0, 0);
     put_u8(&mut bytes, entry + 3, 0);
+    assert_eq!(read_all(&bytes), Err(DecodeError::InvalidSection));
+}
+
+#[test]
+fn known_field_with_the_wrong_width_rejects() {
+    let mut bytes = unchecked(write(&[token_section("GEN", 1)]));
+    let entry = directory_entry(&bytes, 0, 0);
+    put_u8(&mut bytes, entry + 2, 2);
+    put_u32(&mut bytes, entry + 8, 4);
     assert_eq!(read_all(&bytes), Err(DecodeError::InvalidSection));
 }
 

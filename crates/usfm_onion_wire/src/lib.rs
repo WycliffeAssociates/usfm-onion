@@ -5,10 +5,17 @@
 //! orchestration, or host glue, and it never reimplements core logic — core
 //! types cross the boundary through the conversions in [`dto`].
 
-pub mod container;
+// Internal substrate for the semantic codecs; kept private so construction
+// helpers do not become a second, lower-level public wire API.
+#[allow(dead_code)]
+mod container;
 pub mod dto;
 pub mod error;
+#[allow(dead_code)]
 mod primitives;
 pub mod schema;
+
+#[cfg(test)]
+mod container_tests;
 
 pub use error::{DecodeError, EncodeError, LayoutRefusal};
