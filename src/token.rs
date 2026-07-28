@@ -1201,8 +1201,11 @@ pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String 
 /// Where one token's bytes landed in a reconstructed source.
 ///
 /// `token` and `attribute_list` are not adjacent and cannot be derived from one
-/// another: a list is emitted at its closer, or at end-of-stream for an unclosed
-/// marker, which may be thousands of bytes after the marker that owns it.
+/// another: a token that remembers where its list sat
+/// ([`SerializableToken::attribute_offset`]) has it placed at that remembered
+/// distance; a positionless token falls back to the historical rule of its
+/// closer, or end-of-stream for an unclosed marker — either way, the list may
+/// land thousands of bytes after the marker that owns it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReconstructedSpans {
     /// The token's own text, excluding any attribute list — the same slice a
