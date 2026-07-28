@@ -591,6 +591,15 @@ impl OwnedToken {
         }
     }
 
+    /// The compact canonical anchor, when this token has one.
+    ///
+    /// Distinct from [`Self::sid`], which is the formatted spelling: the packed
+    /// wire anchor is eight bytes built from the structured value, and
+    /// re-parsing the string form to recover it would fork core's formatting.
+    pub fn parsed_sid(&self) -> Option<Sid> {
+        self.parsed_sid
+    }
+
     pub fn number_info(&self) -> Option<&OwnedNumberInfo> {
         match &self.payload {
             OwnedTokenPayload::Number(number) => Some(number),
@@ -1059,6 +1068,10 @@ struct Pending<'t, T: SerializableToken + ?Sized> {
     marker_name: String,
     shape: CloserShape,
     attrs: PendingAttrs<'t, T>,
+    /// Row that queued this list. Attribute lists are emitted at their closer,
+    /// not next to their marker, so a span recorder cannot infer the owner from
+    /// emission order.
+    row: usize,
 }
 
 fn is_paragraph_marker<T: SerializableToken>(token: &T) -> bool {
@@ -1067,7 +1080,12 @@ fn is_paragraph_marker<T: SerializableToken>(token: &T) -> bool {
     }
     token
         .marker()
-        .map(|name| matches!(closer_shape(TokenKind::Marker, name), CloserShape::ParagraphBoundary))
+        .map(|name| {
+            matches!(
+                closer_shape(TokenKind::Marker, name),
+                CloserShape::ParagraphBoundary
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -1111,20 +1129,76 @@ fn emit_pending<T: SerializableToken>(output: &mut String, attrs: PendingAttrs<'
 /// of at its original byte position — a real difference from `tokens_to_usfm`,
 /// but the same recovery behavior the previous wasm-side emitter already had.
 pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String {
+    reconstruct(tokens, None)
+}
+
+/// Where one token's bytes landed in a reconstructed source.
+///
+/// `token` and `attribute_list` are not adjacent and cannot be derived from one
+/// another: a list is emitted at its closer, or at end-of-stream for an unclosed
+/// marker, which may be thousands of bytes after the marker that owns it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReconstructedSpans {
+    /// The token's own text, excluding any attribute list — the same slice a
+    /// parsed [`Token`]'s `span` covers.
+    pub token: Span,
+    /// Where this token's attribute list was emitted, when it has one.
+    pub attribute_list: Option<Span>,
+}
+
+/// [`tokens_to_usfm_reconstruct`], plus where every token's bytes landed.
+///
+/// Exists because spanless owned tokens cannot be encoded to the packed wire
+/// format, which stores span columns: the caller serializes and gets the spans
+/// as a by-product of the single emission pass, rather than re-lexing the result
+/// or having owned tokens carry span state that could go stale. This emitter is
+/// the only code that knows where a deferred attribute list actually lands.
+///
+/// Spans index the returned `String`, so they are only meaningful against it.
+pub fn tokens_to_usfm_reconstruct_spanned<T: SerializableToken>(
+    tokens: &[T],
+) -> (String, Vec<ReconstructedSpans>) {
+    let mut spans = vec![
+        ReconstructedSpans {
+            token: Span::new(0, 0),
+            attribute_list: None,
+        };
+        tokens.len()
+    ];
+    let output = reconstruct(tokens, Some(&mut spans));
+    (output, spans)
+}
+
+/// The one implementation both entry points use, so the spanned variant cannot
+/// drift from the plain one. `spans` is `None` on the plain path, which is the
+/// per-keystroke editor path and pays nothing for recording it would discard.
+fn reconstruct<T: SerializableToken>(
+    tokens: &[T],
+    mut spans: Option<&mut Vec<ReconstructedSpans>>,
+) -> String {
     let mut output = String::new();
     let mut pending: Vec<Pending<'_, T>> = Vec::new();
 
-    for token in tokens {
+    for (row, token) in tokens.iter().enumerate() {
         while let Some(top) = pending.last() {
             if token_closes(top, token) {
                 let drained = pending.pop().unwrap();
+                let start = output.len();
                 emit_pending(&mut output, drained.attrs);
+                if let Some(spans) = spans.as_deref_mut() {
+                    spans[drained.row].attribute_list =
+                        Some(Span::new(start as BytePos, output.len() as BytePos));
+                }
             } else {
                 break;
             }
         }
 
+        let start = output.len();
         output.push_str(token.source());
+        if let Some(spans) = spans.as_deref_mut() {
+            spans[row].token = Span::new(start as BytePos, output.len() as BytePos);
+        }
 
         let has_attrs = token.attribute_list().is_some() || !token.attributes().is_empty();
         if matches!(token.kind(), TokenKind::Marker | TokenKind::Milestone)
@@ -1139,12 +1213,18 @@ pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String 
                 marker_name: name.to_string(),
                 shape: closer_shape(token.kind(), name),
                 attrs,
+                row,
             });
         }
     }
 
     while let Some(drained) = pending.pop() {
+        let start = output.len();
         emit_pending(&mut output, drained.attrs);
+        if let Some(spans) = spans.as_deref_mut() {
+            spans[drained.row].attribute_list =
+                Some(Span::new(start as BytePos, output.len() as BytePos));
+        }
     }
 
     output
@@ -1344,7 +1424,10 @@ mod sid_size_guard {
 
 #[cfg(test)]
 mod owned_token_tests {
-    use super::{OwnedToken, StableTokenId, TokenKind, tokens_to_usfm_reconstruct};
+    use super::{
+        OwnedToken, StableTokenId, TokenKind, tokens_to_usfm_reconstruct,
+        tokens_to_usfm_reconstruct_spanned,
+    };
     use crate::diff::{DiffableToken, derive_canonical_sids};
     use crate::lint::{LintOptions, LintScope, LintableToken, lint_tokens};
     use crate::parse::parse;
@@ -1400,6 +1483,48 @@ mod owned_token_tests {
                 .map(|issue| issue.code)
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn spanned_reconstruct_agrees_with_the_plain_emitter_and_locates_every_token() {
+        // An attribute-bearing marker is the case that matters: its list is
+        // emitted at the closer, so the concatenation of token sources is not
+        // the source and a span cannot be a running offset.
+        let source = "\\id GEN\n\\c 1\n\\p \\w grace|lemma=\"grace\"\\w* and more\n";
+        let parsed = parse(source);
+        let tokens = parsed
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+
+        let (rebuilt, spans) = tokens_to_usfm_reconstruct_spanned(&tokens);
+        assert_eq!(rebuilt, source);
+        assert_eq!(rebuilt, tokens_to_usfm_reconstruct(&tokens));
+        assert_eq!(spans.len(), tokens.len());
+
+        for (token, span) in tokens.iter().zip(&spans) {
+            assert_eq!(
+                &rebuilt[span.token.as_range()],
+                token.source(),
+                "token span must name the token's own text"
+            );
+            assert_eq!(
+                span.attribute_list.map(|list| &rebuilt[list.as_range()]),
+                token.attribute_list(),
+                "attribute-list span must name the verbatim list"
+            );
+        }
+
+        // The list lands after the marker's own text, not adjacent to it.
+        let word = spans
+            .iter()
+            .zip(&tokens)
+            .find(|(_, token)| token.marker_name() == Some("w"))
+            .map(|(span, _)| *span)
+            .expect("character marker");
+        let list = word.attribute_list.expect("verbatim list");
+        assert!(list.start > word.token.end);
     }
 
     #[test]
