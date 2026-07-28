@@ -1108,8 +1108,9 @@ present only when some row needs a tag other than 0.
 | `usfm_onion::token::OwnedToken::parsed_sid() -> Option<Sid>` | core | rust | The packed wire anchor is eight bytes built from the structured `Sid`. `OwnedToken` held it privately and exposed only the formatted spelling; re-parsing that string would fork core's formatting. |
 | `usfm_onion::token::OwnedToken::attribute_offset() -> Option<BytePos>` | core | rust | Distance from the token's own end to its attribute list, per `attribute-position-fidelity.md`. Backs the placement an owned token remembers; `None` keeps the historical closer rule for positionless ingest. |
 | `usfm_onion::token::SerializableToken::attribute_offset()` (defaulted) | core | rust | Lets the generic emitter read that placement from any token type. Defaulted to `None`, so no implementor outside core changes and every ingest path keeps its current behavior. |
+| `usfm_onion::lint::LintCode::render_message(&MessageParams) -> String` | core | rust | Reuses the one core ICU compatibility renderer for a code's own frozen template. The wire decoder needs the same derived `LintIssue.message`; it receives no arbitrary-template renderer and therefore cannot fork catalog behavior. |
 
-Six new public core items total. Emitted bytes are unchanged for the parsed/borrowed path and for any
+Seven new public core items total. Emitted bytes are unchanged for the parsed/borrowed path and for any
 token with no remembered position; the reconstruct emitter's output changes only where it was
 previously byte-shifted, which is the point of the fix.
 

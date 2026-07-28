@@ -346,6 +346,16 @@ impl LintCode {
         }
     }
 
+    /// Renders this code's stable template with its validated message arguments.
+    ///
+    /// Wire decoders need the same English compatibility message core emitted,
+    /// but must not gain an arbitrary-template renderer that could fork the
+    /// catalog contract.  Keeping the code lookup here makes the template and
+    /// renderer one core-owned operation.
+    pub fn render_message(self, params: &MessageParams) -> String {
+        render_template(self.template(), params)
+    }
+
     pub fn category(self) -> LintCategory {
         match self {
             Self::MissingIdMarker
@@ -2737,6 +2747,28 @@ mod tests {
         let template = "{form, select, milestone-end {EM} other {NAMED}}";
         let rendered = render_template(template, &MessageParams::default());
         assert_eq!(rendered, "NAMED");
+    }
+
+    #[test]
+    fn code_owned_renderer_matches_every_emitted_issue_message() {
+        // The wire may reconstruct messages only through `LintCode`; this
+        // checks the public seam against core's existing issue construction,
+        // including select and number templates exercised by these inputs.
+        for source in [
+            "\\id php\n",
+            "\\p\n\\p text\n",
+            "\\c 1\n\\v 1\n",
+            "\\c 1\n\\p \\v 1 text\n",
+        ] {
+            for issue in lint_usfm(source, LintOptions::scoped(LintScope::Book)).issues {
+                assert_eq!(
+                    issue.code.render_message(&issue.message_params),
+                    issue.message,
+                    "{}",
+                    issue.code.code()
+                );
+            }
+        }
     }
 
     #[test]

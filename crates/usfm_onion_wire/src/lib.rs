@@ -13,6 +13,8 @@ mod catalog;
 mod container;
 pub mod dto;
 pub mod error;
+#[allow(dead_code)]
+mod finding_section;
 // Not part of the wire boundary contract — used by the `generate_js_schema`
 // example and its own drift-check test to render the checked-in
 // `js/wire-schema.{js,d.ts}` constants module. `pub` only so the example

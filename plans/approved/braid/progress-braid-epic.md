@@ -2015,3 +2015,10 @@ ready to land in one pass once F.2 is adjudicated.
 
 Expose the existing core renderer for wire use, or explicitly change the Phase B Rust semantic-decode
 contract. Do not add a wire-local MessageFormat renderer.
+
+### Adjudication applied
+
+The core exposes only `LintCode::render_message(&MessageParams)`, which delegates to its existing
+private renderer for that code's own frozen template. This preserves semantic decode without exposing
+arbitrary-template rendering or creating a wire-local renderer. The Phase 0 API ledger records the
+append-only public addition.
