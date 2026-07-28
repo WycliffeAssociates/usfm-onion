@@ -14,6 +14,8 @@ pub mod error;
 #[allow(dead_code)]
 mod primitives;
 pub mod schema;
+#[allow(dead_code)]
+mod token_section;
 
 #[cfg(test)]
 mod container_tests;

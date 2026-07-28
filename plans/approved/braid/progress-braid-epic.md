@@ -1348,3 +1348,25 @@ commits, no bless/update env vars, no git reset/clean/checkout. Deliverable:
   can exercise that private trust boundary.
 - Verification after review fixes: `cargo test -p usfm_onion_wire` — 70 passed, 0 failed. Full
   workspace/wasm gates remain for the next committed slice.
+
+## 2026-07-27 — Phase A step 3a: fixed token columns and packed SID
+
+- Added explicit stable `TokenKindTag:u8` and `NumberRangeKindTag:u8` conversions. They do not rely
+  on Rust enum representation and exhaustively test the frozen declaration-order tables.
+- Added an internal zero-copy `TokenColumns` view over the fixed per-row fields. It requires every
+  fixed column count to equal the section token count, rejects unknown token-kind discriminants,
+  enforces explicit token ids when `positional_ids` is clear, and uses checked little-endian row
+  accessors. Source-bound span validation remains with `decode_borrowed`, where source bytes exist.
+- Added the explicit eight-byte `PackedSid` codec: `book[3] | chapter:u16 | verse:u16 |
+  delta_and_fidelity:u8`. Exact delta 127 round-trips; the high fidelity bit remains meaningful
+  with a low-seven-bit delta; wider deltas degrade to an anchor-only first anchor. The codec takes
+  source-derived fidelity explicitly rather than guessing from core `Sid`.
+- Did not implement mixed string/marker dictionaries or sparse number/book/attribute records. Their
+  directory ids and semantic contents are frozen, but their internal offset/record byte layouts and
+  marker-catalog stamp envelope are not specified precisely enough to write an independent decoder.
+  That is the next normative-layout amendment, not an implementation guess.
+- Verification: `cargo test --workspace` (core 247 passed / 12 ignored; wire suite and all other
+  targets green), `cargo test --test lint_oracle -- --ignored` (1 passed), and wasm32 wire check
+  with `--features wasm` all green. `cargo clippy -p usfm_onion_wire --all-targets` reports only
+  the five pre-existing core warnings; the wire crate adds none. A `-D warnings` probe stops on
+  those same core warnings before checking wire.

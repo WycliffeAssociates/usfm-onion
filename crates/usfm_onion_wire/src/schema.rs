@@ -9,6 +9,8 @@
 //! heuristic: a big-endian producer fails the magic/version checks, which is
 //! the intended rejection path.
 
+use usfm_onion::token::{NumberRangeKind, TokenKind};
+
 /// Container magic, ASCII `uson` (container header offset 0).
 pub const CONTAINER_MAGIC: [u8; 4] = *b"uson";
 
@@ -120,6 +122,127 @@ pub const INDEX_NONE_U32: u32 = u32::MAX;
 /// this is a loud refusal for structurally legal non-scriptural input rather
 /// than a reason to widen the column.
 pub const MAX_DISTINCT_SIDS: u32 = INDEX_NONE_U16 as u32;
+
+/// Packed SID dictionary record width and final-byte bit allocation.
+pub const PACKED_SID_LEN: usize = 8;
+pub const SID_FIDELITY_BIT: u8 = 1 << 7;
+pub const SID_DELTA_MASK: u8 = SID_FIDELITY_BIT - 1;
+
+/// Stable token-row discriminant, separate from Rust's enum layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TokenKindTag {
+    Newline = 0,
+    OptBreak = 1,
+    Marker = 2,
+    EndMarker = 3,
+    Milestone = 4,
+    MilestoneEnd = 5,
+    BookCode = 6,
+    Number = 7,
+    Text = 8,
+}
+
+impl TokenKindTag {
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Newline),
+            1 => Some(Self::OptBreak),
+            2 => Some(Self::Marker),
+            3 => Some(Self::EndMarker),
+            4 => Some(Self::Milestone),
+            5 => Some(Self::MilestoneEnd),
+            6 => Some(Self::BookCode),
+            7 => Some(Self::Number),
+            8 => Some(Self::Text),
+            _ => None,
+        }
+    }
+
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+impl From<TokenKind> for TokenKindTag {
+    fn from(value: TokenKind) -> Self {
+        match value {
+            TokenKind::Newline => Self::Newline,
+            TokenKind::OptBreak => Self::OptBreak,
+            TokenKind::Marker => Self::Marker,
+            TokenKind::EndMarker => Self::EndMarker,
+            TokenKind::Milestone => Self::Milestone,
+            TokenKind::MilestoneEnd => Self::MilestoneEnd,
+            TokenKind::BookCode => Self::BookCode,
+            TokenKind::Number => Self::Number,
+            TokenKind::Text => Self::Text,
+        }
+    }
+}
+
+impl From<TokenKindTag> for TokenKind {
+    fn from(value: TokenKindTag) -> Self {
+        match value {
+            TokenKindTag::Newline => Self::Newline,
+            TokenKindTag::OptBreak => Self::OptBreak,
+            TokenKindTag::Marker => Self::Marker,
+            TokenKindTag::EndMarker => Self::EndMarker,
+            TokenKindTag::Milestone => Self::Milestone,
+            TokenKindTag::MilestoneEnd => Self::MilestoneEnd,
+            TokenKindTag::BookCode => Self::BookCode,
+            TokenKindTag::Number => Self::Number,
+            TokenKindTag::Text => Self::Text,
+        }
+    }
+}
+
+/// Stable number-payload discriminant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum NumberRangeKindTag {
+    Single = 0,
+    Range = 1,
+    Sequence = 2,
+    SequenceWithRange = 3,
+}
+
+impl NumberRangeKindTag {
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Single),
+            1 => Some(Self::Range),
+            2 => Some(Self::Sequence),
+            3 => Some(Self::SequenceWithRange),
+            _ => None,
+        }
+    }
+
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+impl From<NumberRangeKind> for NumberRangeKindTag {
+    fn from(value: NumberRangeKind) -> Self {
+        match value {
+            NumberRangeKind::Single => Self::Single,
+            NumberRangeKind::Range => Self::Range,
+            NumberRangeKind::Sequence => Self::Sequence,
+            NumberRangeKind::SequenceWithRange => Self::SequenceWithRange,
+        }
+    }
+}
+
+impl From<NumberRangeKindTag> for NumberRangeKind {
+    fn from(value: NumberRangeKindTag) -> Self {
+        match value {
+            NumberRangeKindTag::Single => Self::Single,
+            NumberRangeKindTag::Range => Self::Range,
+            NumberRangeKindTag::Sequence => Self::Sequence,
+            NumberRangeKindTag::SequenceWithRange => Self::SequenceWithRange,
+        }
+    }
+}
 
 /// Top-level section kind (TOC entry offset 0, section header offset 8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -349,5 +472,48 @@ mod tests {
     #[test]
     fn finding_flags_reserve_the_top_bit() {
         assert_eq!(finding_flag::KNOWN, 0x7f);
+    }
+
+    #[test]
+    fn token_kind_tags_match_the_stable_table() {
+        let kinds = [
+            TokenKind::Newline,
+            TokenKind::OptBreak,
+            TokenKind::Marker,
+            TokenKind::EndMarker,
+            TokenKind::Milestone,
+            TokenKind::MilestoneEnd,
+            TokenKind::BookCode,
+            TokenKind::Number,
+            TokenKind::Text,
+        ];
+        for (value, kind) in kinds.into_iter().enumerate() {
+            let tag = TokenKindTag::from(kind);
+            assert_eq!(usize::from(tag.as_u8()), value);
+            assert_eq!(
+                TokenKind::from(TokenKindTag::from_u8(tag.as_u8()).unwrap()),
+                kind
+            );
+        }
+        assert_eq!(TokenKindTag::from_u8(9), None);
+    }
+
+    #[test]
+    fn number_range_tags_match_the_stable_table() {
+        let kinds = [
+            NumberRangeKind::Single,
+            NumberRangeKind::Range,
+            NumberRangeKind::Sequence,
+            NumberRangeKind::SequenceWithRange,
+        ];
+        for (value, kind) in kinds.into_iter().enumerate() {
+            let tag = NumberRangeKindTag::from(kind);
+            assert_eq!(usize::from(tag.as_u8()), value);
+            assert_eq!(
+                NumberRangeKind::from(NumberRangeKindTag::from_u8(tag.as_u8()).unwrap()),
+                kind
+            );
+        }
+        assert_eq!(NumberRangeKindTag::from_u8(4), None);
     }
 }

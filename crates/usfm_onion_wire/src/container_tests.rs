@@ -15,6 +15,7 @@ use crate::error::{DecodeError, EncodeError, LayoutRefusal};
 use crate::schema::{
     CONTAINER_HEADER_LEN, SECTION_HEADER_LEN, SectionKind, finding_field, token_field,
 };
+use crate::token_section::TokenColumns;
 use usfm_onion::token::BookId;
 
 // Two-token payloads for the required token columns. Values are irrelevant to
@@ -143,6 +144,12 @@ fn read_u64(bytes: &[u8], at: usize) -> u64 {
     let mut raw = [0u8; 8];
     raw.copy_from_slice(&bytes[at..at + 8]);
     u64::from_le_bytes(raw)
+}
+
+fn read_u32(bytes: &[u8], at: usize) -> u32 {
+    let mut raw = [0u8; 4];
+    raw.copy_from_slice(&bytes[at..at + 4]);
+    u32::from_le_bytes(raw)
 }
 
 fn toc_entry_at(index: usize) -> usize {
@@ -841,6 +848,82 @@ fn positional_ids_flag_contradicting_the_id_columns_rejects() {
     let offset = section_offset(&bytes, 0);
     put_u8(&mut bytes, offset + 9, 1);
     assert_eq!(read_all(&bytes), Err(DecodeError::InvalidSection));
+}
+
+// ------------------------------------------------ semantic token column view
+
+#[test]
+fn token_columns_expose_checked_per_row_values() {
+    let bytes = write(&[token_section("GEN", 1)]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+    assert_eq!(columns.len(), 2);
+    assert!(!columns.is_empty());
+    assert_eq!(columns.kind(0).unwrap().as_u8(), 8);
+    assert_eq!(columns.span(1), Some((5, 9)));
+    assert_eq!(columns.token_id_index(0), None);
+    assert_eq!(columns.sid_index(0), Some(u16::MAX));
+    assert_eq!(columns.marker_descriptor_index(1), Some(u16::MAX));
+    assert_eq!(columns.kind(2), None);
+}
+
+#[test]
+fn token_columns_reject_record_count_mismatch() {
+    let mut bytes = unchecked(write(&[token_section("GEN", 1)]));
+    let section = section_offset(&bytes, 0);
+    put_u32(&mut bytes, section + 16, 3);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert!(matches!(
+        TokenColumns::from_section(&sections[0]),
+        Err(DecodeError::InvalidSection)
+    ));
+}
+
+#[test]
+fn token_columns_require_explicit_ids_when_not_positional() {
+    let mut section = token_section("GEN", 1);
+    section.variant = SectionVariant::Token {
+        positional_ids: false,
+    };
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert!(matches!(
+        TokenColumns::from_section(&sections[0]),
+        Err(DecodeError::InvalidSection)
+    ));
+}
+
+#[test]
+fn token_columns_require_id_dictionary_with_explicit_ids() {
+    let mut section = token_section("GEN", 1);
+    section.variant = SectionVariant::Token {
+        positional_ids: false,
+    };
+    section.fields.push(FieldPayload {
+        id: token_field::TOKEN_ID_INDEX,
+        width: ElementWidth::Four,
+        count: 2,
+        bytes: &SPAN_STARTS,
+    });
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert!(matches!(
+        TokenColumns::from_section(&sections[0]),
+        Err(DecodeError::InvalidSection)
+    ));
+}
+
+#[test]
+fn token_columns_reject_unknown_kind_discriminant() {
+    let mut bytes = unchecked(write(&[token_section("GEN", 1)]));
+    let kind_entry = directory_entry(&bytes, 0, 0);
+    let kind_payload = section_offset(&bytes, 0) + read_u32(&bytes, kind_entry + 4) as usize;
+    put_u8(&mut bytes, kind_payload, 9);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert!(matches!(
+        TokenColumns::from_section(&sections[0]),
+        Err(DecodeError::InvalidDiscriminant)
+    ));
 }
 
 // ------------------------------------------------------------- writer refusals
