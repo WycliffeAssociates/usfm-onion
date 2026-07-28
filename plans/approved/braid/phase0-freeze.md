@@ -761,3 +761,208 @@ same alignment as its absolute offset — the property every field-payload align
 The dictionary is required even when it is empty: a token section with no anchored token declares
 field 12 with `count = 0`, so the presence of the field never has to be inferred from the index
 column's contents.
+
+---
+
+## Mixed-payload framing — 2026-07-28 (proposed, pending adjudication)
+
+Executes row 4 of the 2026-07-28 adjudication: exact byte framing for the token-section payloads
+whose directory ids and semantic names were frozen but whose byte shapes were not, so an independent
+decoder could not be written. Rows marked **OWNER-DECISION** are genuine choices the plan does not
+determine and are framed, not decided; everything else is a mechanical consequence of the plan text,
+of `src/` reality, or of the container rules already frozen above.
+
+General rules for every payload in this section:
+
+- **No internal alignment guarantee.** These fields declare `element_width = 0`, so the container
+  aligns them to one byte. Every multi-byte value inside them is read with an explicit
+  little-endian load, never by casting a slice to a wider type, so alignment is not needed and is
+  not promised. A future zero-copy column must declare a real fixed width to earn alignment.
+- **Sub-record sizes are not constrained to `{1,2,4,8,16}`.** That set constrains a *directory*
+  `element_width`, which these fields do not use. Records inside a variable payload may be any
+  size; the size is fixed by this document and validated by the semantic codec.
+- **Counts.** The directory entry's `count` means what each subsection below says it means, never
+  "bytes". Any second count is *derived* from `byte_len` rather than stored, so the two can never
+  disagree.
+- **Ordering is canonical and ascending**, so a decoder reproduces order by reading order and an
+  encoder needs no comparator over hashed keys.
+- **Validation order** is always: checked arithmetic, then extent against `byte_len`, then
+  per-record range/discriminant/index checks, then cross-record ordering. Nothing is allocated from
+  a count before its bytes are proved present.
+- **Error mapping** follows the 2026-07-27 container adjudication: shape/extent/index/ordering
+  violations are `InvalidSection`; an out-of-table enum value is `InvalidDiscriminant`; bad string
+  bytes are `InvalidUtf8`; a stamp mismatch is `CatalogMismatch`; set-but-undefined bits are
+  `UnsupportedFlags`.
+
+### D.1 UTF-8 string dictionary — token fields 9 and 10
+
+One shape serves both the token-id dictionary (field 9) and the generic string dictionary
+(field 10), and any later string dictionary.
+
+| region | bytes | contents |
+| --- | --- | --- |
+| offsets | `4 * count` | `[u32; count]`, byte offset of each string within `data` |
+| data | `byte_len - 4 * count` | concatenated UTF-8 bytes, no separators, no terminators |
+
+- `count` (directory) = number of strings. `count == 0` requires `byte_len == 0`.
+- String `i` is `data[offsets[i] .. offsets[i + 1]]`, where `offsets[count]` is implicitly
+  `data_len`. Storing only the starts — not `count + 1` bounds — is what makes the empty dictionary
+  zero bytes instead of four.
+- `offsets[0]` must be `0`; offsets must be non-decreasing and at most `data_len`. Equal adjacent
+  offsets mean an empty string, which is legal and required: the USFM 3.1 default-attribute
+  shorthand stores an empty key.
+- Each string is validated as UTF-8 individually rather than validating `data` once. A single
+  whole-region check would accept offsets that split a multi-byte code point.
+- An index into a dictionary is valid iff it is `< count`. There is no "absent" sentinel: a field
+  that needs absence carries its own flag or omits its record, because index `0` is a legal string.
+- Duplicate strings are permitted by the format and avoided by the encoder — dedupe is what makes
+  the marker-name and attribute-key columns cheap — but a decoder must not assume uniqueness.
+
+### D.2 Marker descriptor dictionary — token field 11
+
+`marker_descriptor_index[N]:u16` (field 5) indexes this dictionary; `0xffff` means "row has no
+marker", so the dictionary holds at most **65,535** entries and an encoder needing more refuses.
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | name index | `u32` | into the generic string dictionary (field 10); the marker name **as written**, without the leading backslash and with any `+` nesting prefix and numeric suffix intact |
+| 4 | flags | `u8` | bit 0 = `nested`; other bits reserved and reject when set |
+| 5 | reserved | `[u8; 3]` | zero |
+
+Record size 8; `count` = number of distinct descriptors.
+
+**The wire stores no marker metadata fields at all.** `MarkerMetadata` and `StructuralMarkerInfo`
+are pure functions of the marker name in `src/`: a decoder recovers them by calling
+`usfm_onion::token::marker_metadata(name)` and then
+`usfm_onion::marker_defs::structural_marker_info(name, metadata.kind)`. This is the §4.3 rule
+(reuse core logic, never reimplement it across the boundary) applied to the descriptor, and it has
+three consequences worth stating because each one is a cost the alternative design would have paid:
+
+1. **No new stable integer tables are needed in v1** for `MarkerDefKind` (13 variants),
+   `MarkerFamily` (7), `StructuralScopeKind` (13), `InlineContext` (4), or `SpecContext` (20). None
+   of them ever reaches the wire, so none has to be frozen, renumber-protected, or kept in sync.
+2. **`MarkerMetadata.canonical` is recoverable at all.** It is `Option<&'static str>` — a catalog
+   pointer — so it *cannot* be rebuilt from arbitrary wire bytes. A name plus a matching catalog is
+   the only construction that yields it. `MarkerMetadata.index` is likewise a build-unstable
+   perf handle (`#[serde(skip)]` in core) and must never be encoded.
+3. **The recovery is gated by the section header's `catalog_stamp`.** A stamp mismatch is
+   `DecodeError::CatalogMismatch`, raised before any descriptor is resolved. The tradeoff is
+   explicit: sections do not survive a catalog change, in exchange for never carrying a stale copy
+   of metadata that disagrees with the engine reading it.
+
+Unknown markers need no special case: `marker_metadata` returns all-`None` and
+`structural_marker_info` returns `scope_kind: Unknown` for a name the catalog does not know, which
+is exactly what the parser produced. The raw name survives in the string dictionary either way, so
+"reproduce unknown markers" is satisfied without a per-descriptor unknown flag.
+
+Canonical order: ascending `name_index`, then `nested` clear before set.
+
+### D.3 Sparse number records — token field 6
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | token index | `u32` | row this record describes; `< record_count` |
+| 4 | start | `u32` | first number |
+| 8 | end | `u32` | range end; `0` when the `has_end` flag is clear |
+| 12 | kind | `u8` | `NumberRangeKind` stable tag (§2) |
+| 13 | flags | `u8` | bit 0 = `has_end`; other bits reserved and reject when set |
+| 14 | reserved | `[u8; 2]` | zero |
+
+Record size 16; `count` = number of `Number`-kind rows. `start`/`end` are `u32`, not `u16`, because
+raw source numbers reach 999,999 in adversarial fixtures while core `Sid` saturates at 65,535 — the
+token payload must not inherit the anchor's ceiling.
+
+Validation: `token index` strictly ascending across records; every record's row must have kind tag
+`Number`, and every `Number` row must have exactly one record — a sparse column that disagrees with
+the kind column is `InvalidSection`, not a row silently missing its payload. `has_end` clear with a
+nonzero `end` is rejected, so the absent case has exactly one encoding.
+
+### D.4 Sparse book-code records — token field 7
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | token index | `u32` | `< record_count` |
+| 4 | code index | `u32` | into the generic string dictionary; the code **as written**, which may be neither three characters nor uppercase |
+| 8 | flags | `u8` | bit 0 = `is_valid`; other bits reserved and reject when set |
+| 9 | reserved | `[u8; 7]` | zero |
+
+Record size 16; `count` = number of `BookCode`-kind rows, one record each, strictly ascending.
+
+`is_valid` is stored rather than recomputed on decode, unlike marker metadata, for two reasons:
+core's `is_valid_book_code` is `pub(crate)` and not reachable from the wire crate, and the canonical
+book list is **not** covered by the marker-catalog stamp — so recomputing would let a change to the
+book list silently rewrite the meaning of an already-encoded token, which is the one thing the stamp
+mechanism exists to prevent.
+
+### D.5 Sparse attribute records — token field 8
+
+Two ascending arrays in one payload. `count` (directory) = number of rows carrying an attribute
+list. The attribute-entry count `M` is **derived**: `M = (byte_len - 24 * count) / 20`, and
+`byte_len - 24 * count` must be a positive multiple of 20 (or zero when `count` is zero).
+
+Row entries (24 bytes each, `count` of them):
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | token index | `u32` | `< record_count`; strictly ascending |
+| 4 | first attribute | `u32` | index of this row's first attribute entry |
+| 8 | attribute count | `u32` | attributes on this row; may be `0` (an empty list is distinct from no list) |
+| 12 | list source offset | `u32` | byte offset into the bound book source of the verbatim whole-list attribute source |
+| 16 | list source length | `u32` | length of that span |
+| 20 | flags | `u8` | bit 0 = list source present; other bits reserved and reject when set |
+| 21 | reserved | `[u8; 3]` | zero |
+
+Attribute entries (20 bytes each, `M` of them):
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | key index | `u32` | into the generic string dictionary; the **decoded** key, empty when `is_default` |
+| 4 | value index | `u32` | into the generic string dictionary; the **decoded** value, with escapes resolved |
+| 8 | source offset | `u32` | byte offset into the bound book source of this attribute's verbatim source |
+| 12 | source length | `u32` | length of that span |
+| 16 | flags | `u8` | bit 0 = `is_default`; other bits reserved and reject when set |
+| 17 | reserved | `[u8; 3]` | zero |
+
+Key and value are dictionary strings, not spans, because they are the *decoded* forms: an escaped
+value differs byte-for-byte from its source. The verbatim source is kept as a span alongside them,
+which is what makes the round trip lossless without storing the same text twice.
+
+Validation: row `first attribute` values are contiguous and ascending, together covering exactly
+`0..M` with no gap and no overlap — so the array partitions by row and a decoder needs no per-row
+bounds search. Every source span is range-checked against the section header's `source_len` and must
+fall on UTF-8 character boundaries of the bound source. `is_default` set requires the key string to
+be empty, matching core's own contract for the shorthand form.
+
+### D.6 OWNER-DECISION rows in this framing
+
+1. **Where `nested` lives.** Proposed above: descriptor `flags` bit 0, so the dictionary keys on
+   `(name, nested)`. Alternative: a new per-row token column (field id 13). Descriptor-side costs
+   at most one extra dictionary entry per spelling and no per-token byte; column-side is
+   semantically tidier because `nested` is a property of an occurrence, not of a marker. Note: for
+   *parsed* tokens `nested` currently equals `name.starts_with('+')`, but that is a lexer property,
+   not a format invariant — an `OwnedToken` a caller builds may set the two independently, so
+   deriving it would be an inference rather than a decode. Not decided here.
+2. **Attribute source: spans or dictionary strings.** Proposed above: spans, per §7.4's own wording
+   ("verbatim attribute-source spans"), which also makes recovery zero-copy against the bound
+   source. The cost: a synthetic or edited token whose attribute source is not a substring of the
+   section's source cannot be encoded, and needs a typed refusal
+   (`EncodeError::UnrepresentablePayload`). The alternative — string-dictionary indices — is always
+   representable and four bytes smaller per attribute, but stores text the source already contains.
+   Not decided here.
+3. **Whether an absent attribute source is distinct from an empty one.** Core models it as
+   `Option<Box<str>>`, and the framing above preserves the distinction with a presence flag. Confirm
+   that the `Option` is a real semantic distinction rather than an artifact; if it is not, the flag
+   bit and both span fields can be dropped from the row entry. Not decided here.
+4. **The finding section's `marker_string_idx` has no dictionary to index.** Finding field 4 is a
+   `u32` string index, but the frozen finding-section field table (§4.2) allocates no string
+   dictionary, and a finding section is a separate section from its book's token section. Either a
+   finding-section string dictionary is appended as finding field id 7, or the index is defined as
+   pointing into the *token* section's field 10 for the same book — which makes a finding section
+   undecodable on its own and couples the two sections' validity. Not decided here; unrelated to
+   the token columns above, but it is the same class of gap and blocks the finding column work.
+5. **Directory `element_width` for fields 6 and 7.** Both are now uniform records (16 bytes each),
+   so they could declare fixed width 16 and let the container enforce `count * 16 == byte_len`
+   generically, instead of `element_width = 0` with codec-side extent checks. Mechanical either
+   way; it changes the frozen `FieldSpec` rows, so it is listed here rather than applied silently,
+   and would land with the implementation commit. Field 8 stays variable, since its payload is two
+   arrays of different record sizes.
