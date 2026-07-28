@@ -1403,3 +1403,98 @@ commits, no bless/update env vars, no git reset/clean/checkout. Deliverable:
 - Verification: full workspace green (core 250 passed / 12 ignored; wire 80 passed; wasm 25
   passed; all integration suites green), ignored lint oracle 1 passed, and core Clippy reports only
   the same five pre-existing warnings.
+
+## 2026-07-28 — Phase A: wire layout amendment, framing freeze, SID dictionary
+
+- Three commits: `2e7096c` (layout amendment, code + spec together), `8f2594c` (mixed-payload
+  framing freeze, docs only), `4bfdd2a` (packed SID dictionary column). Base `f000792`.
+
+**Layout amendment (`2e7096c`)** — executes rows 1–3 of the 2026-07-28 adjudication as one commit,
+so no offset ever disagrees between spec and code:
+
+- Container header 32 → 48 bytes: `snapshot_id:u64` at 32, 8 reserved zero bytes at 40. Canonical
+  TOC offset moves 32 → 48 (still 16-aligned). `write_container` now takes `snapshot_id` as its
+  first argument, mirroring `encode_corpus(snapshot_id, sections)`; wire stores it verbatim.
+- Section header 48 → 64 bytes: `source_len:u64` at 48, `catalog_stamp:u64` at 56. Both are per
+  **section**, not per container — one container holds several books, each with its own source
+  bytes and possibly its own stamp, of which only mismatched sections are rejected. 64 stays a
+  multiple of the 16-byte section alignment, preserving "section-relative offset has the same
+  alignment as absolute offset".
+- Token field id 12 appended: packed SID dictionary, required, fixed element width 8. Required even
+  when empty (`count = 0`), so presence is never inferred from index-column contents.
+- Reserved bytes reject when nonzero, mapped to `InvalidSection` for consistency with the existing
+  section-header `reserved[3]` rule rather than inventing a second policy for the same class of
+  violation.
+- Documents amended in the same commit: `phase0-freeze.md` gained normative layout tables (L.1–L.4),
+  token field row 12, and corrected row counts; `braid-epic.md` §7.1/§7.3 tables and the §7.4
+  required-field list now match, each citing the adjudication that authorized the change.
+- Latent bug the growth exposed and fixed: both integrity checksums were stamped through an
+  open-ended slice range (`header[OFFSET..]`), correct only while the checksum happened to be the
+  last header field. It now uses an explicit 8-byte bound. Caught by the suite, not by review.
+
+**Framing freeze (`8f2594c`)** — executes row 4; docs only, so no column is implemented against an
+unadjudicated shape. Specifies the UTF-8 string dictionary (fields 9/10: `[u32; count]` starts plus
+concatenated data, implicit final bound, per-string UTF-8 validation so a split code point cannot
+pass, `count == 0` ⇒ `byte_len == 0`), the marker descriptor dictionary (field 11), and the sparse
+number (field 6, 16-byte records), book-code (field 7, 16-byte records), and attribute (field 8, two
+ascending arrays with a derived second count) records — each with `count` meaning, canonical
+ordering, reserved bytes, sentinels, and validation order.
+
+- Load-bearing finding: **marker metadata does not belong on the wire.** `MarkerMetadata` and
+  `StructuralMarkerInfo` are pure functions of the marker name in core
+  (`token::marker_metadata`, `marker_defs::structural_marker_info`), so a descriptor is a name index
+  plus one flag and the decoder calls core's own functions (§4.3 reuse rule). Consequences: five
+  core enums (`MarkerDefKind`, `MarkerFamily`, `StructuralScopeKind`, `InlineContext`,
+  `SpecContext` — 57 variants) never need stable wire tables in v1; `MarkerMetadata.canonical` is
+  recoverable at all only this way, being an `Option<&'static str>` catalog pointer that cannot be
+  rebuilt from bytes; and the recovery is stamp-gated, trading "sections do not survive a catalog
+  change" for "never carry a stale metadata copy that disagrees with the engine reading it".
+  Unknown markers need no special case — core already returns all-`None` metadata and
+  `scope_kind: Unknown` for a name the catalog does not know.
+- Deliberate exception: book-code `is_valid` is stored, not recomputed, because core's
+  `is_valid_book_code` is `pub(crate)` **and** the canonical book list is not covered by the
+  marker-catalog stamp, so recomputing would let a change to that list silently rewrite an
+  already-encoded token.
+- **Five OWNER-DECISION rows, framed not decided** (freeze appendix §D.6): (1) where `nested`
+  lives — descriptor flag (proposed) vs a new per-row column, noting that `nested ==
+  name.starts_with('+')` holds for parsed tokens but is a lexer property, not a format invariant;
+  (2) attribute source as span (proposed, per §7.4's wording, zero-copy, but a synthetic token whose
+  attribute source is not a substring of the bound source needs a typed encode refusal) vs
+  dictionary string; (3) whether an absent attribute source is semantically distinct from an empty
+  one, as core's `Option<Box<str>>` implies; (4) **the finding section's `marker_string_idx` (finding
+  field 4) has no dictionary allocated to index** — needs either a finding-section string dictionary
+  (field id 7) or a defined cross-section reference to the token section's field 10; this blocks the
+  finding columns; (5) whether fields 6/7 should declare fixed width 16 now that their records are
+  uniform, which would change frozen `FieldSpec` rows and so is listed rather than applied.
+
+**SID dictionary column (`4bfdd2a`)** — encode + validated decode for field 12:
+
+- `SidDictionary` proves the column at construction (count within the index ceiling, every record
+  decodes to a legal book code); `TokenColumns` establishes the row-side invariant once (every
+  `sid_index` is the `0xffff` sentinel or names an existing record). Together those make
+  `TokenColumns::sid(row)` return a plain `Option`, not a `Result`.
+- Ceiling is 65,535 records (highest addressable index 65,534) because the sentinel consumes one
+  value. Checked before walking records, so an inflated count costs one comparison instead of a pass
+  over half a megabyte. `DecodeError::TooManySids` on read, `EncodeError::TooManySids` on write —
+  the writer refuses rather than reusing the sentinel.
+- `SidDictionaryBuilder` interns each distinct `(anchor, fidelity)` pair once, assigning ordinals in
+  first-use order, so output is a function of token order alone; its `BTreeMap` is a lookup index
+  that is never iterated, so no map ordering reaches the bytes. That assignment rule is recorded in
+  the freeze's field-12 table.
+- Tests: dictionary at 0/1/exactly-the-ceiling entries, one past the ceiling, index past the last
+  record, sentinel winning over a non-empty dictionary, an undecodable record rejecting the whole
+  column, builder dedupe/fidelity-sensitivity/order-determinism/ceiling refusal, and a full
+  intern → write → read round trip preserving book, chapter, verse, bridge end, and fidelity.
+
+**Gates, green at each of the three commits, no `BLESS=1`/`UPDATE_GOLDEN=1`, no git
+reset/clean/checkout/stash:** `cargo test --workspace` (core 250 passed / 12 ignored; wire 93
+passed; wasm 25 passed; every integration target green; 0 failed); `cargo test --test lint_oracle --
+--ignored` (1 passed); `npm run check:wasm:web` (wasm32 builds core + wire + wasm crate).
+`cargo clippy -p usfm_onion_wire --all-targets` adds no wire warning (only the five pre-existing
+core ones). `rustfmt` applied to changed wire files only; `src/dto.rs` remains the pre-existing
+non-`cargo fmt`-clean file and was left alone.
+
+- Untouched: the owner's untracked leftovers (`handoff-*.md`, `alloc_sizes.txt`, `lib_sizes.txt`,
+  `bench-remote.sh`, `.claude/`). Every commit used explicit paths.
+- Next: owner review of the §D.6 rows, then the string dictionary, marker descriptor, and sparse
+  record columns. Row 4 (finding `marker_string_idx`) must be settled before any finding column.
