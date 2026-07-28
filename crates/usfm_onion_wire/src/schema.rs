@@ -771,6 +771,205 @@ pub const LINT_CODE_TABLE: [LintCodeTag; 32] = [
     LintCodeTag::BookCodeNotUppercase,
 ];
 
+/// The checked, Rust-owned message-parameter contract.  Field 8 deliberately
+/// stores generic key/value pairs; this table is where those pairs regain their
+/// per-rule meaning.  Keeping it beside the stable code tags also gives the JS
+/// schema generator one source of truth instead of a second handwritten list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParamContract {
+    pub code: LintCodeTag,
+    pub keys: &'static [&'static str],
+    /// `stray-close-marker` is the sole discriminated map: the `form` value
+    /// chooses whether `marker` is required.  Other closed values are checked
+    /// by [`ParamContract::accepts`].
+    pub stray_close_union: bool,
+}
+
+impl ParamContract {
+    pub fn accepts(self, key: &str, value: &str) -> bool {
+        if self.stray_close_union {
+            return match (key, value) {
+                ("form", "milestone-end" | "named") => true,
+                ("marker", _) => true,
+                _ => false,
+            };
+        }
+        match (self.code, key) {
+            (LintCodeTag::ContentBeforeFirstChapter, "kind") => {
+                matches!(value, "paragraph" | "verse")
+            }
+            (LintCodeTag::MetadataOutsideTarget, "target") => matches!(value, "chapter" | "verse"),
+            (LintCodeTag::MarkerNotValidInContext, "context") => matches!(
+                value,
+                "scripture"
+                    | "book-identification"
+                    | "book-headers"
+                    | "book-titles"
+                    | "book-introduction"
+                    | "book-introduction-end-titles"
+                    | "book-chapter-label"
+                    | "chapter-content"
+                    | "peripheral"
+                    | "peripheral-content"
+                    | "peripheral-division"
+                    | "chapter"
+                    | "verse"
+                    | "section"
+                    | "para"
+                    | "list"
+                    | "table"
+                    | "sidebar"
+                    | "footnote"
+                    | "cross-reference"
+            ),
+            (LintCodeTag::UnclosedMarker, "kind") => {
+                matches!(value, "note" | "character" | "other")
+            }
+            (LintCodeTag::UnclosedMarker, "location") => matches!(value, "at-eof" | "at-boundary"),
+            (LintCodeTag::VerseInSectionOrOtherParagraph, "category") => {
+                matches!(value, "section" | "other")
+            }
+            _ => true,
+        }
+    }
+}
+
+/// In tag order. Empty-map codes are absent because field 3 must not be set
+/// for them; callers use [`param_contract`] to distinguish that from a bad map.
+pub const PARAM_CONTRACTS: &[ParamContract] = &[
+    ParamContract {
+        code: LintCodeTag::EmptyParagraph,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::UnknownToken,
+        keys: &["text"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::UnknownMarker,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::UnknownCloseMarker,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::ContentBeforeFirstChapter,
+        keys: &["kind", "marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::NoteSubmarkerOutsideNote,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MetadataOutsideTarget,
+        keys: &["marker", "target"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MarkerNotValidInContext,
+        keys: &["marker", "context"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MissingMilestoneSelfClose,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::StrayCloseMarker,
+        keys: &["form", "marker"],
+        stray_close_union: true,
+    },
+    ParamContract {
+        code: LintCodeTag::MisnestedCloseMarker,
+        keys: &["has_expected", "expected", "marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::ImplicitlyClosedMarker,
+        keys: &["marker", "closer"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::UnclosedMarker,
+        keys: &["kind", "marker", "location"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::DuplicateChapterNumber,
+        keys: &["chapter", "marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::DuplicateVerseNumber,
+        keys: &["verse", "chapter", "marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::InvalidNumberRange,
+        keys: &["found", "verse", "marker", "context"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MissingWhitespaceBeforeMarker,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MissingHorizontalWhitespaceAfterMarkerName,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MissingTagEndDelimiterAfterMarker,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::MissingContentSpaceAfterCloseMarker,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::VerseInSectionOrOtherParagraph,
+        keys: &["category"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::ContentAfterBlankMarker,
+        keys: &["marker"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::InvalidBookCode,
+        keys: &["code"],
+        stray_close_union: false,
+    },
+    ParamContract {
+        code: LintCodeTag::BookCodeNotUppercase,
+        keys: &["code", "uppercase"],
+        stray_close_union: false,
+    },
+];
+
+pub const fn param_contract(code: LintCodeTag) -> Option<&'static ParamContract> {
+    let mut index = 0;
+    while index < PARAM_CONTRACTS.len() {
+        if PARAM_CONTRACTS[index].code as u8 == code as u8 {
+            return Some(&PARAM_CONTRACTS[index]);
+        }
+        index += 1;
+    }
+    None
+}
+
 /// Finding common-row `flags:u8` bits (finding record offset 14).
 pub mod finding_flag {
     /// Set = `AnchorOnly` fidelity; clear = `Exact`.

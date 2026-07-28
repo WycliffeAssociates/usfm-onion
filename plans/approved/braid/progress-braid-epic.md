@@ -2000,3 +2000,18 @@ F.2, then land all fields in one pass with the per-code gate green from the star
 Finding encode/decode, the per-LintCode corpus conformance gate, hand-built fixtures for the three
 token-path-only codes, the corruption battery, and finding golden vectors. All of it is scoped and
 ready to land in one pass once F.2 is adjudicated.
+
+## 2026-07-28 — Phase B Rust codec STOPPED: core message-renderer visibility
+
+- No finding codec or partial wire format was landed. `usfm_onion_wire::schema` now has the
+  Rust-owned `ParamContract` metadata: exact key sets, `stray-close-marker`'s discriminated maps,
+  and all 20 canonical `SpecContext` values.
+- The required Rust `LintResult` decode cannot currently construct the catalog-derived
+  `LintIssue.message`: core's sole `render_template` implementation is `pub(super)` in
+  `src/lint_impl/message.rs` and is not exported by `usfm_onion::lint`. A wire-local renderer would
+  violate the no-parallel-core-logic boundary; storing the English message violates §7.6.
+
+### Required adjudication
+
+Expose the existing core renderer for wire use, or explicitly change the Phase B Rust semantic-decode
+contract. Do not add a wire-local MessageFormat renderer.
