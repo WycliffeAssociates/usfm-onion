@@ -15,8 +15,8 @@ use crate::error::{DecodeError, EncodeError, LayoutRefusal};
 use crate::schema::{
     CONTAINER_HEADER_LEN, SECTION_HEADER_LEN, SectionKind, finding_field, token_field,
 };
-use crate::token_section::TokenColumns;
-use usfm_onion::token::BookId;
+use crate::token_section::{SidDictionaryBuilder, SidFidelity, TokenColumns};
+use usfm_onion::token::{BookId, Sid};
 
 // Two-token payloads for the required token columns. Values are irrelevant to
 // container validation; only their widths and lengths are.
@@ -32,6 +32,9 @@ static FINDING_ROW: [u8; 16] = [0; 16];
 static SID_DICTIONARY: [u8; 16] = [
     b'G', b'E', b'N', 1, 0, 1, 0, 0, b'G', b'E', b'N', 1, 0, 2, 0, 0,
 ];
+
+// Both rows anchored: row 0 -> dictionary entry 0, row 1 -> entry 1.
+static SID_INDEXES_USED: [u8; 4] = [0, 0, 1, 0];
 
 /// Arbitrary but fixed, so a changed snapshot id in an assertion is visible.
 const SNAPSHOT_ID: u64 = 0x0102_0304_0506_0708;
@@ -131,6 +134,18 @@ fn finding_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
             bytes: &FINDING_ROW,
         }],
     }
+}
+
+/// Replaces one field's payload in place, so a case states only its deviation
+/// from the shared fixture.
+fn set_field<'a>(section: &mut SectionPayload<'a>, id: u16, count: u32, bytes: &'a [u8]) {
+    let field = section
+        .fields
+        .iter_mut()
+        .find(|field| field.id == id)
+        .expect("fixture carries the field");
+    field.count = count;
+    field.bytes = bytes;
 }
 
 fn write(sections: &[SectionPayload<'_>]) -> Vec<u8> {
@@ -1068,4 +1083,190 @@ fn writer_refuses_id_columns_alongside_positional_ids() {
             },
         })
     );
+}
+
+// ----------------------------------------------------- packed SID dictionary
+
+#[test]
+fn sid_dictionary_resolves_anchored_rows() {
+    let mut section = token_section("GEN", 1);
+    set_field(&mut section, token_field::SID_INDEX, 2, &SID_INDEXES_USED);
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+
+    assert_eq!(columns.sids().len(), 2);
+    assert!(!columns.sids().is_empty());
+    let (first, fidelity) = columns.sid(0).expect("row 0 is anchored");
+    assert_eq!(first.book.as_str(), "GEN");
+    assert_eq!((first.chapter, first.verse), (1, 1));
+    assert_eq!(fidelity, SidFidelity::Exact);
+    let (second, _) = columns.sid(1).expect("row 1 is anchored");
+    assert_eq!((second.chapter, second.verse), (1, 2));
+    // Past the last row is absence, not a wrapped read.
+    assert_eq!(columns.sid(2), None);
+}
+
+#[test]
+fn sid_sentinel_means_no_anchor_not_entry_65535() {
+    // The shared fixture stores 0xffff in both rows while carrying a two-entry
+    // dictionary, so the sentinel has to win over "index into the dictionary".
+    let bytes = write(&[token_section("GEN", 1)]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+    assert_eq!(columns.sids().len(), 2);
+    assert_eq!(columns.sid(0), None);
+    assert_eq!(columns.sid(1), None);
+}
+
+#[test]
+fn empty_sid_dictionary_is_valid_when_every_row_is_unanchored() {
+    let mut section = token_section("GEN", 1);
+    set_field(&mut section, token_field::PACKED_SID_DICTIONARY, 0, &[]);
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+    assert!(columns.sids().is_empty());
+    assert_eq!(columns.sid(0), None);
+}
+
+#[test]
+fn single_entry_sid_dictionary_resolves() {
+    let mut section = token_section("GEN", 1);
+    set_field(
+        &mut section,
+        token_field::PACKED_SID_DICTIONARY,
+        1,
+        &SID_DICTIONARY[..8],
+    );
+    static BOTH_ROWS_ENTRY_ZERO: [u8; 4] = [0, 0, 0, 0];
+    set_field(
+        &mut section,
+        token_field::SID_INDEX,
+        2,
+        &BOTH_ROWS_ENTRY_ZERO,
+    );
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+    assert_eq!(columns.sids().len(), 1);
+    assert_eq!(columns.sid(0), columns.sid(1));
+}
+
+#[test]
+fn sid_index_past_the_dictionary_rejects() {
+    // Entry 2 does not exist in a two-entry dictionary. Rejecting at column
+    // construction is what makes the per-row accessor infallible.
+    static PAST_END: [u8; 4] = [0, 0, 2, 0];
+    let mut section = token_section("GEN", 1);
+    set_field(&mut section, token_field::SID_INDEX, 2, &PAST_END);
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert_eq!(
+        TokenColumns::from_section(&sections[0]).err(),
+        Some(DecodeError::InvalidSection)
+    );
+}
+
+#[test]
+fn undecodable_sid_record_rejects_the_whole_column() {
+    static BAD_BOOK: [u8; 16] = [
+        b'G', b'E', b'N', 1, 0, 1, 0, 0, b'G', b'-', b'N', 1, 0, 2, 0, 0,
+    ];
+    let mut section = token_section("GEN", 1);
+    set_field(
+        &mut section,
+        token_field::PACKED_SID_DICTIONARY,
+        2,
+        &BAD_BOOK,
+    );
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert_eq!(
+        TokenColumns::from_section(&sections[0]).err(),
+        Some(DecodeError::InvalidSection)
+    );
+}
+
+#[test]
+fn sid_dictionary_above_the_index_ceiling_rejects() {
+    // 65,535 records is the ceiling because the sentinel consumes one index;
+    // 65,536 cannot be addressed and must be refused by count, before the
+    // half-megabyte payload is walked.
+    let ceiling = usize::from(u16::MAX);
+    let mut dictionary = Vec::with_capacity((ceiling + 1) * 8);
+    for _ in 0..=ceiling {
+        dictionary.extend_from_slice(b"GEN   ");
+    }
+    let mut section = token_section("GEN", 1);
+    set_field(
+        &mut section,
+        token_field::PACKED_SID_DICTIONARY,
+        ceiling as u32 + 1,
+        &dictionary,
+    );
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    assert_eq!(
+        TokenColumns::from_section(&sections[0]).err(),
+        Some(DecodeError::TooManySids {
+            found: ceiling as u32 + 1
+        })
+    );
+
+    // One fewer record is exactly at the ceiling and decodes.
+    let mut section = token_section("GEN", 1);
+    set_field(
+        &mut section,
+        token_field::PACKED_SID_DICTIONARY,
+        ceiling as u32,
+        &dictionary[..ceiling * 8],
+    );
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+    assert_eq!(columns.sids().len(), u16::MAX);
+}
+
+#[test]
+fn interned_sids_round_trip_through_a_written_section() {
+    let mut builder = SidDictionaryBuilder::new(book("GEN"));
+    let anchors = [
+        (Sid::new(book("GEN"), 1, 1), SidFidelity::Exact),
+        (
+            Sid::with_range(book("GEN"), 1, 2, 4),
+            SidFidelity::AnchorOnly,
+        ),
+    ];
+    let indices: Vec<u8> = anchors
+        .iter()
+        .flat_map(|(sid, fidelity)| {
+            builder
+                .intern(*sid, *fidelity)
+                .expect("under the ceiling")
+                .to_le_bytes()
+        })
+        .collect();
+    let dictionary = builder.bytes().to_vec();
+
+    let mut section = token_section("GEN", 1);
+    set_field(
+        &mut section,
+        token_field::PACKED_SID_DICTIONARY,
+        builder.len(),
+        &dictionary,
+    );
+    set_field(&mut section, token_field::SID_INDEX, 2, &indices);
+    let bytes = write(&[section]);
+    let (_, sections) = read_all(&bytes).unwrap();
+    let columns = TokenColumns::from_section(&sections[0]).unwrap();
+
+    for (row, (sid, fidelity)) in anchors.iter().enumerate() {
+        let (decoded, decoded_fidelity) = columns.sid(row as u32).expect("anchored row");
+        assert_eq!(decoded.book, sid.book);
+        assert_eq!(decoded.chapter, sid.chapter);
+        assert_eq!(decoded.verse, sid.verse);
+        assert_eq!(decoded.verse_end(), sid.verse_end());
+        assert_eq!(decoded_fidelity, *fidelity);
+    }
 }

@@ -762,6 +762,12 @@ The dictionary is required even when it is empty: a token section with no anchor
 field 12 with `count = 0`, so the presence of the field never has to be inferred from the index
 column's contents.
 
+Assignment order is **first use in token order**: an anchor's ordinal is fixed the first time a row
+references it, so the bytes are a function of the token order alone and need no comparator over
+hashed keys. Duplicate records are permitted by the format and avoided by the encoder, which interns
+each distinct `(anchor, fidelity)` pair once — the fidelity bit is part of the record, so the same
+anchor at two fidelities is two entries.
+
 ---
 
 ## Mixed-payload framing — 2026-07-28 (proposed, pending adjudication)

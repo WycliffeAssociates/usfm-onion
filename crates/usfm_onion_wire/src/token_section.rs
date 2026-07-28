@@ -4,12 +4,15 @@
 //! materialize core tokens. It is the narrow boundary between a structurally
 //! valid generic section and token-specific readers.
 
+use std::collections::BTreeMap;
+
 use usfm_onion::token::{BookId, Sid};
 
 use crate::container::{Section, SectionField};
-use crate::error::DecodeError;
+use crate::error::{DecodeError, EncodeError};
 use crate::schema::{
-    PACKED_SID_LEN, SID_DELTA_MASK, SID_FIDELITY_BIT, SectionKind, TokenKindTag, token_field,
+    INDEX_NONE_U16, MAX_DISTINCT_SIDS, PACKED_SID_LEN, SID_DELTA_MASK, SID_FIDELITY_BIT,
+    SectionKind, TokenKindTag, token_field,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +77,119 @@ impl PackedSid {
     }
 }
 
+/// Validated packed-SID dictionary — token field 12.
+///
+/// Construction proves the whole column: its entry count fits what the `u16`
+/// `sid_index` column can name, and every record decodes. Lookup afterwards is
+/// infallible, so no caller has to re-handle a dictionary error per row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SidDictionary<'wire> {
+    records: &'wire [u8],
+    count: u16,
+}
+
+impl<'wire> SidDictionary<'wire> {
+    fn from_section(section: &Section<'wire>) -> Result<Self, DecodeError> {
+        let field = section
+            .field(token_field::PACKED_SID_DICTIONARY)
+            .ok_or(DecodeError::InvalidSection)?;
+        // The `0xffff` sentinel consumes one index value, so the highest
+        // nameable record is 65,534 and the count ceiling is 65,535. Checked
+        // before the records are walked, so an inflated count costs one compare.
+        if field.count > MAX_DISTINCT_SIDS {
+            return Err(DecodeError::TooManySids { found: field.count });
+        }
+        let count = field.count as u16;
+        // The container already proved `count * 8 == byte_len` for this
+        // fixed-width field; what remains is that each record's book code is a
+        // legal one, which a decoded `Sid` cannot represent otherwise.
+        for record in field.bytes.chunks_exact(PACKED_SID_LEN) {
+            let raw: [u8; PACKED_SID_LEN] =
+                record.try_into().map_err(|_| DecodeError::InvalidSection)?;
+            PackedSid::from_bytes(raw).decode()?;
+        }
+        Ok(Self {
+            records: field.bytes,
+            count,
+        })
+    }
+
+    pub(crate) const fn len(&self) -> u16 {
+        self.count
+    }
+
+    pub(crate) const fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    /// `None` for the "no SID for this token" sentinel. Any other out-of-range
+    /// index was rejected when the columns were built, so a present index always
+    /// resolves.
+    pub(crate) fn get(&self, index: u16) -> Option<(Sid, SidFidelity)> {
+        if index == INDEX_NONE_U16 {
+            return None;
+        }
+        let start = usize::from(index) * PACKED_SID_LEN;
+        let raw: [u8; PACKED_SID_LEN] = self
+            .records
+            .get(start..start.checked_add(PACKED_SID_LEN)?)?
+            .try_into()
+            .ok()?;
+        PackedSid::from_bytes(raw).decode().ok()
+    }
+}
+
+/// Interns SIDs into a packed dictionary, returning the `sid_index` for each.
+///
+/// Ordinals are assigned in first-use order, which makes the output a function
+/// of the token order alone. The `BTreeMap` is a lookup index only — it is never
+/// iterated, so no map ordering reaches the bytes.
+pub(crate) struct SidDictionaryBuilder {
+    book: BookId,
+    records: Vec<u8>,
+    ordinals: BTreeMap<[u8; PACKED_SID_LEN], u16>,
+}
+
+impl SidDictionaryBuilder {
+    pub(crate) fn new(book: BookId) -> Self {
+        Self {
+            book,
+            records: Vec::new(),
+            ordinals: BTreeMap::new(),
+        }
+    }
+
+    /// Returns the index to store in the row's `sid_index`. Refuses rather than
+    /// truncating: a book past the ceiling is structurally legal but not
+    /// scriptural, and silently reusing the sentinel would corrupt every row.
+    pub(crate) fn intern(&mut self, sid: Sid, fidelity: SidFidelity) -> Result<u16, EncodeError> {
+        let packed = PackedSid::encode(sid, fidelity);
+        if let Some(ordinal) = self.ordinals.get(packed.as_bytes()) {
+            return Ok(*ordinal);
+        }
+        let next = self.ordinals.len();
+        if next >= MAX_DISTINCT_SIDS as usize {
+            return Err(EncodeError::TooManySids {
+                book: self.book,
+                found: MAX_DISTINCT_SIDS.saturating_add(1),
+            });
+        }
+        let ordinal = next as u16;
+        self.records.extend_from_slice(packed.as_bytes());
+        self.ordinals.insert(*packed.as_bytes(), ordinal);
+        Ok(ordinal)
+    }
+
+    /// Directory `count` for field 12.
+    pub(crate) fn len(&self) -> u32 {
+        self.ordinals.len() as u32
+    }
+
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.records
+    }
+}
+
 /// Borrowed, token-specific view over per-row columns. Dictionary and sparse
 /// sidecar validation belongs to their codecs; this view guarantees that each
 /// fixed column has exactly one entry per token and every kind tag is known.
@@ -86,6 +202,7 @@ pub(crate) struct TokenColumns<'wire> {
     token_id_indices: Option<&'wire [u8]>,
     sid_indices: &'wire [u8],
     marker_descriptor_indices: &'wire [u8],
+    sids: SidDictionary<'wire>,
 }
 
 impl<'wire> TokenColumns<'wire> {
@@ -105,6 +222,16 @@ impl<'wire> TokenColumns<'wire> {
         let span_starts = per_row(section, token_field::SPAN_START, record_count)?.bytes;
         let span_ends = per_row(section, token_field::SPAN_END, record_count)?.bytes;
         let sid_indices = per_row(section, token_field::SID_INDEX, record_count)?.bytes;
+        let sids = SidDictionary::from_section(section)?;
+        // Establish the index invariant for the whole column once: a row's SID
+        // index is either the sentinel or names a record that exists. Doing it
+        // here is what lets the per-row accessor be infallible.
+        for index in sid_indices.chunks_exact(2) {
+            let index = u16::from_le_bytes([index[0], index[1]]);
+            if index != INDEX_NONE_U16 && index >= sids.len() {
+                return Err(DecodeError::InvalidSection);
+            }
+        }
         let marker_descriptor_indices =
             per_row(section, token_field::MARKER_DESCRIPTOR_INDEX, record_count)?.bytes;
         let token_id_indices = match section.field(token_field::TOKEN_ID_INDEX) {
@@ -127,6 +254,7 @@ impl<'wire> TokenColumns<'wire> {
             token_id_indices,
             sid_indices,
             marker_descriptor_indices,
+            sids,
         })
     }
 
@@ -159,6 +287,15 @@ impl<'wire> TokenColumns<'wire> {
 
     pub(crate) fn marker_descriptor_index(&self, row: u32) -> Option<u16> {
         u16_at(self.marker_descriptor_indices, row)
+    }
+
+    /// The row's anchor, or `None` when the row has no SID or is out of range.
+    pub(crate) fn sid(&self, row: u32) -> Option<(Sid, SidFidelity)> {
+        self.sids.get(self.sid_index(row)?)
+    }
+
+    pub(crate) const fn sids(&self) -> SidDictionary<'wire> {
+        self.sids
     }
 }
 
@@ -225,6 +362,70 @@ mod tests {
         assert_eq!(sid.verse, 1);
         assert_eq!(sid.verse_end(), 1);
         assert_eq!(fidelity, SidFidelity::AnchorOnly);
+    }
+
+    #[test]
+    fn builder_dedupes_and_assigns_ordinals_in_first_use_order() {
+        let mut builder = SidDictionaryBuilder::new(book("GEN"));
+        let first = Sid::new(book("GEN"), 1, 1);
+        let second = Sid::new(book("GEN"), 1, 2);
+        assert_eq!(builder.intern(second, SidFidelity::Exact), Ok(0));
+        assert_eq!(builder.intern(first, SidFidelity::Exact), Ok(1));
+        // Same anchor again is the same ordinal, and adds no record.
+        assert_eq!(builder.intern(second, SidFidelity::Exact), Ok(0));
+        // Same anchor, different fidelity, is a different dictionary entry: the
+        // fidelity bit is part of the record, not metadata beside it.
+        assert_eq!(builder.intern(second, SidFidelity::AnchorOnly), Ok(2));
+        assert_eq!(builder.len(), 3);
+        assert_eq!(builder.bytes().len(), 3 * PACKED_SID_LEN);
+        assert_eq!(
+            PackedSid::from_bytes(builder.bytes()[..PACKED_SID_LEN].try_into().unwrap())
+                .decode()
+                .unwrap(),
+            (second, SidFidelity::Exact)
+        );
+    }
+
+    #[test]
+    fn builder_output_depends_only_on_intern_order() {
+        let build = |verses: &[u16]| {
+            let mut builder = SidDictionaryBuilder::new(book("GEN"));
+            for verse in verses {
+                builder
+                    .intern(Sid::new(book("GEN"), 1, *verse), SidFidelity::Exact)
+                    .unwrap();
+            }
+            builder.bytes().to_vec()
+        };
+        assert_eq!(build(&[3, 1, 2]), build(&[3, 1, 2, 3, 1]));
+        assert_ne!(build(&[3, 1, 2]), build(&[1, 2, 3]));
+    }
+
+    #[test]
+    fn builder_refuses_more_sids_than_the_index_column_can_name() {
+        let mut builder = SidDictionaryBuilder::new(book("GEN"));
+        // Distinct anchors are cheap to generate across chapters; the ceiling is
+        // the sentinel-adjusted count, not a byte budget.
+        let mut interned = 0u32;
+        'fill: for chapter in 1..=u16::MAX {
+            for verse in 1..=u16::MAX {
+                match builder.intern(Sid::new(book("GEN"), chapter, verse), SidFidelity::Exact) {
+                    Ok(_) => interned += 1,
+                    Err(error) => {
+                        assert_eq!(
+                            error,
+                            EncodeError::TooManySids {
+                                book: book("GEN"),
+                                found: MAX_DISTINCT_SIDS + 1,
+                            }
+                        );
+                        break 'fill;
+                    }
+                }
+            }
+        }
+        assert_eq!(interned, MAX_DISTINCT_SIDS);
+        assert_eq!(builder.len(), MAX_DISTINCT_SIDS);
     }
 
     #[test]
