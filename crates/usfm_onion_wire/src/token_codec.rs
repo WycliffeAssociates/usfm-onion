@@ -10,7 +10,8 @@
 use usfm_onion::marker_defs::structural_marker_info;
 use usfm_onion::parse::assign_ids;
 use usfm_onion::token::{
-    AttributeItem, BookId, MarkerAttrs, Sid, Span, Token, TokenData, TokenId, marker_metadata,
+    AttributeItem, BookId, MarkerAttrs, OwnedToken, ReconstructedSpans, Sid, Span, Token,
+    TokenData, TokenId, TokenKind, marker_metadata, tokens_to_usfm_reconstruct_spanned,
 };
 
 use crate::catalog::catalog_stamp;
@@ -268,6 +269,170 @@ pub(crate) fn encode_token_section(
     buffers.descriptor_count = descriptors.len();
     buffers.sparse.seal_attributes();
     Ok(buffers)
+}
+
+/// Encodes one book from spanless owned tokens.
+///
+/// Owned tokens carry no spans, and the wire's span columns are required, so the
+/// source is serialized first and the spans come back from that same emission
+/// pass. Returns the derived source because it — not the caller's original file,
+/// which may not exist — is what the section's spans and hash are bound to, and
+/// what a decoder must be handed back.
+///
+/// This is the cold path: a resident book is encoded once per snapshot, not per
+/// keystroke.
+pub(crate) fn encode_owned_token_section(
+    book: BookId,
+    tokens: &[OwnedToken],
+) -> Result<(String, TokenSectionBuffers), EncodeError> {
+    let (source, spans) = tokens_to_usfm_reconstruct_spanned(tokens);
+    let borrowed = owned_to_borrowed(book, tokens, &spans, &source)?;
+    let buffers = encode_token_section(book, &source, &borrowed)?;
+    Ok((source, buffers))
+}
+
+/// Rebuilds borrowed tokens over the serialized source, so the owned path feeds
+/// the same encoder the parsed path uses instead of a second one.
+///
+/// Marker metadata and structural info are recovered from the name through
+/// core's registry, exactly as decoding does — an owned token's copies are the
+/// same values, and reading them back from core keeps one source of truth.
+pub(crate) fn owned_to_borrowed<'a>(
+    book: BookId,
+    tokens: &'a [OwnedToken],
+    spans: &[ReconstructedSpans],
+    source: &'a str,
+) -> Result<Vec<Token<'a>>, EncodeError> {
+    let unbound = |row: usize| EncodeError::UnboundSpan {
+        book,
+        token_idx: row as u32,
+    };
+    let mut out = Vec::with_capacity(tokens.len());
+    for (row, (token, span)) in tokens.iter().zip(spans).enumerate() {
+        let text = source
+            .get(span.token.as_range())
+            .ok_or_else(|| unbound(row))?;
+        let attrs = owned_attrs(book, token, span, source, row)?;
+        let data = match token.kind() {
+            TokenKind::Newline => TokenData::Newline,
+            TokenKind::OptBreak => TokenData::OptBreak,
+            TokenKind::MilestoneEnd => TokenData::MilestoneEnd,
+            TokenKind::Text => TokenData::Text,
+            TokenKind::BookCode => {
+                let code = token.book_code().ok_or_else(|| unbound(row))?;
+                TokenData::BookCode {
+                    code: code.code.as_ref(),
+                    is_valid: code.is_valid,
+                }
+            }
+            TokenKind::Number => {
+                let number = token.number_info().ok_or_else(|| unbound(row))?;
+                TokenData::Number {
+                    start: number.start,
+                    end: number.end,
+                    kind: number.kind,
+                }
+            }
+            kind @ (TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone) => {
+                let name = token.marker_name().ok_or_else(|| unbound(row))?;
+                let metadata = marker_metadata(name);
+                let structural = structural_marker_info(name, metadata.kind);
+                match kind {
+                    TokenKind::EndMarker => TokenData::EndMarker {
+                        name,
+                        metadata,
+                        structural,
+                        nested: token.nested(),
+                    },
+                    TokenKind::Milestone => TokenData::Milestone {
+                        name,
+                        metadata,
+                        structural,
+                        attrs,
+                    },
+                    _ => TokenData::Marker {
+                        name,
+                        metadata,
+                        structural,
+                        nested: token.nested(),
+                        attrs,
+                    },
+                }
+            }
+        };
+        out.push(Token {
+            id: TokenId::new("", 0),
+            sid: token.parsed_sid(),
+            span: span.token,
+            source: text,
+            data,
+        });
+    }
+    assign_ids(&mut out);
+    Ok(out)
+}
+
+/// Locates an owned token's attribute list and each of its entries inside the
+/// serialized source.
+///
+/// The list span comes from the emitter, which is the only thing that knows where
+/// a deferred list landed. Entry spans are then found within it by a
+/// left-to-right scan, because entries are substrings of a verbatim list. A
+/// synthetically-built token whose entry text is not in its own list has no span
+/// to record and is refused — the guard for the formatter-synthetic edge.
+fn owned_attrs<'a>(
+    book: BookId,
+    token: &'a OwnedToken,
+    span: &ReconstructedSpans,
+    source: &'a str,
+    row: usize,
+) -> Result<Option<Box<MarkerAttrs<'a>>>, EncodeError> {
+    let unbound = EncodeError::UnboundSpan {
+        book,
+        token_idx: row as u32,
+    };
+    // Mirrors the emitter's own condition: with nothing to emit there is nothing
+    // to locate, and a re-parse of the serialized source would report no list
+    // either.
+    if token.attribute_list().is_none() && token.attributes().is_empty() {
+        return Ok(None);
+    }
+    let Some(list) = span.attribute_list else {
+        return Err(unbound);
+    };
+    let list_text = source.get(list.as_range()).ok_or(unbound)?;
+
+    let mut cursor = 0usize;
+    let mut attributes = Vec::with_capacity(token.attributes().len());
+    for attribute in token.attributes() {
+        let offset = list_text
+            .get(cursor..)
+            .and_then(|rest| rest.find(attribute.source.as_ref()))
+            .ok_or(unbound)?;
+        let start = list.start as usize + cursor + offset;
+        let end = start + attribute.source.len();
+        cursor += offset + attribute.source.len();
+        attributes.push(AttributeItem {
+            span: Span::new(start as u32, end as u32),
+            source: source.get(start..end).ok_or(unbound)?,
+            key: attribute.key.as_ref(),
+            value: attribute.value.as_ref(),
+            is_default: attribute.is_default,
+        });
+    }
+    Ok(Some(Box::new(MarkerAttrs {
+        attributes,
+        // The list is read back out of the serialized source rather than off the
+        // input token. After serialization it is genuinely there, so recording it
+        // makes the loop idempotent: decoding yields what a parse of this source
+        // would. A caller who supplied structured attributes with no verbatim
+        // slice therefore gets the serialized spelling back.
+        //
+        // The absent case is still distinct: a token with neither a list nor any
+        // entry returned early above with no attribute row at all, so `None` and
+        // `Some("")` do not collapse — the latter keeps a present, empty span.
+        attribute_source: Some((list, list_text)),
+    })))
 }
 
 /// The attribute payload of a marker or milestone that carries one.

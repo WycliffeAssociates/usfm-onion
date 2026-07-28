@@ -9,12 +9,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use usfm_onion::parse::parse;
-use usfm_onion::token::{BookId, OwnedToken};
+use usfm_onion::token::{
+    BookId, OwnedToken, tokens_to_usfm_reconstruct, tokens_to_usfm_reconstruct_spanned,
+};
 
 use crate::container::{read_container, write_container};
 use crate::error::DecodeError;
 use crate::schema::token_field;
-use crate::token_codec::{decode_token_section, encode_token_section};
+use crate::token_codec::{
+    decode_token_section, encode_owned_token_section, encode_token_section, owned_to_borrowed,
+};
 
 const SNAPSHOT_ID: u64 = 7;
 
@@ -212,6 +216,171 @@ fn sparse_fields_are_omitted_when_unused() {
     assert!(section.field(token_field::TOKEN_ID_INDEX).is_none());
     assert!(section.field(token_field::TOKEN_ID_DICTIONARY).is_none());
     assert!(section.positional_ids());
+}
+
+// ------------------------------------------------------- owned token path
+
+/// The `MarkerAttrs` of a decoded token, when it has one.
+fn marker_attrs<'t, 'a>(
+    tokens: &'t [usfm_onion::token::Token<'a>],
+) -> &'t usfm_onion::token::MarkerAttrs<'a> {
+    tokens
+        .iter()
+        .find_map(|token| match &token.data {
+            usfm_onion::token::TokenData::Marker { attrs, .. }
+            | usfm_onion::token::TokenData::Milestone { attrs, .. } => attrs.as_deref(),
+            _ => None,
+        })
+        .expect("attribute-bearing token")
+}
+
+/// Parse, drop to owned tokens, then serialize-and-encode. Returns the derived
+/// source and the container, so a case can assert on both.
+fn owned_encoded(source: &str) -> (String, Vec<u8>) {
+    let parsed = parse(source);
+    let owned: Vec<_> = parsed.tokens.iter().map(OwnedToken::from_parsed).collect();
+    let (derived, buffers) =
+        encode_owned_token_section(book("GEN"), &owned).expect("owned tokens encode");
+    let bytes = write_container(SNAPSHOT_ID, &[buffers.payload()]).expect("section lays out");
+    (derived, bytes)
+}
+
+/// The owned loop: parse -> owned -> serialize+encode -> decode, with the decoded
+/// tokens compared against a fresh parse of the derived source.
+fn assert_owned_round_trips(source: &str) {
+    let (derived, bytes) = owned_encoded(source);
+    // Byte identity holds for well-formed input. It is *not* a property of the
+    // reconstruct emitter in general: a deferred attribute list is emitted at its
+    // closer, which for malformed input is not where it started. See the corpus
+    // gate's documented divergence set.
+    assert_eq!(derived, source, "derived source must be byte-identical");
+
+    let container = read_container(&bytes).expect("container decodes");
+    let section = container.section(0).unwrap().expect("section decodes");
+    let decoded = decode_token_section(&section, &derived).expect("section decodes");
+
+    let fresh = parse(&derived);
+    assert_eq!(
+        decoded.len(),
+        fresh.tokens.len(),
+        "token count for {source:?}"
+    );
+    for (index, (decoded, expected)) in decoded.iter().zip(&fresh.tokens).enumerate() {
+        assert_eq!(decoded, expected, "token {index} of {source:?}");
+    }
+}
+
+#[test]
+fn owned_round_trips_every_token_kind() {
+    assert_owned_round_trips("\\id GEN Some Book\n\\c 1\n\\p\n\\v 1 In the beginning.\n");
+    assert_owned_round_trips("\\p text // more\n\\qt-s |x=\"y\"\\*inside\\qt-e\\*\n");
+    assert_owned_round_trips("\\c 1\n\\p\n\\v 1-2 bridge\n\\v 3,5 seq\n\\v 7a suffix\n");
+    assert_owned_round_trips("\\zzz unknown marker\n");
+    assert_owned_round_trips("\\id xyz lower case\n");
+    assert_owned_round_trips("");
+    assert_owned_round_trips("\\p Ἐν ἀρχῇ ἦν ὁ λόγος — 起初\n");
+}
+
+#[test]
+fn owned_round_trips_tokens_whose_source_is_not_the_concatenation() {
+    // The case the whole design exists for: a character marker's attribute list
+    // is emitted at its closer, so no running offset over `token.source()` could
+    // have produced these spans.
+    let source = "\\p \\w grace|lemma=\"grace\" x-y=\"z\"\\w* and \\add more\\add*\n";
+    assert_owned_round_trips(source);
+
+    let parsed = parse(source);
+    let owned: Vec<_> = parsed.tokens.iter().map(OwnedToken::from_parsed).collect();
+    let (derived, spans) = tokens_to_usfm_reconstruct_spanned(&owned);
+    let word = owned
+        .iter()
+        .position(|token| token.marker_name() == Some("w"))
+        .expect("character marker");
+    // Proof that the two spans are not adjacent, which is what makes the emitter
+    // the only thing able to report them.
+    let list = spans[word].attribute_list.expect("verbatim list");
+    assert!(list.start > spans[word].token.end);
+    assert_eq!(&derived[list.as_range()], "|lemma=\"grace\" x-y=\"z\"");
+}
+
+#[test]
+fn owned_round_trips_milestone_attribute_lists() {
+    // Milestones close on `\*` rather than a matching end marker, a different
+    // drain rule in the emitter and therefore a different span path.
+    assert_owned_round_trips("\\p \\zaln-s |x-strong=\"H1\"\\*aligned\\zaln-e\\*\n");
+}
+
+#[test]
+fn owned_to_borrowed_reproduces_the_parse_of_the_derived_source() {
+    // The intermediate is asserted directly, not only through the wire: if this
+    // conversion drifted, the encoder would be fed tokens that no parse agrees
+    // with.
+    let source = "\\id GEN\n\\c 1\n\\p \\w a|k=\"v\"\\w* b\n\\v 1-3 text\n";
+    let parsed = parse(source);
+    let owned: Vec<_> = parsed.tokens.iter().map(OwnedToken::from_parsed).collect();
+    let (derived, spans) = tokens_to_usfm_reconstruct_spanned(&owned);
+    let borrowed =
+        owned_to_borrowed(book("GEN"), &owned, &spans, &derived).expect("owned tokens convert");
+    assert_eq!(borrowed, parse(&derived).tokens);
+    // And, for parsed-origin input, the original parse too.
+    assert_eq!(borrowed, parsed.tokens);
+}
+
+#[test]
+fn owned_encoding_is_deterministic() {
+    let source = "\\id GEN\n\\c 1\n\\p \\w a|k=\"v\"\\w* b\n\\v 2 c\n";
+    assert_eq!(owned_encoded(source), owned_encoded(source));
+}
+
+#[test]
+fn absent_attribute_source_is_distinct_from_an_empty_one() {
+    // A parsed `\w` always has a verbatim list, so the present case comes from a
+    // real parse; the empty-but-present case is produced by shortening the stored
+    // span to zero, which is the only difference between the two on the wire.
+    let source = "\\p \\w a|k=\"v\"\\w*\n";
+    let bytes = encoded(source);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    let decoded = decode_token_section(&section, source).unwrap();
+    let list = marker_attrs(&decoded)
+        .attribute_source
+        .expect("present list");
+    assert_eq!(list.1, "|k=\"v\"");
+
+    let empty = decode_after(source, |bytes| {
+        let at = field_payload_offset(bytes, token_field::ATTRIBUTE_RECORDS);
+        bytes[at + 16..at + 20].copy_from_slice(&0u32.to_le_bytes());
+    });
+    assert_eq!(empty, None, "a present empty span is legal");
+    let mut bytes = encoded(source);
+    let at = field_payload_offset(&bytes, token_field::ATTRIBUTE_RECORDS);
+    bytes[at + 16..at + 20].copy_from_slice(&0u32.to_le_bytes());
+    restamp(&mut bytes);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    let decoded = decode_token_section(&section, source).unwrap();
+    assert_eq!(
+        marker_attrs(&decoded)
+            .attribute_source
+            .map(|(_, text)| text),
+        Some(""),
+        "an empty present span decodes to Some(\"\")"
+    );
+
+    // The sentinel offset is the absent case, and it must not read as empty.
+    let mut bytes = encoded(source);
+    let at = field_payload_offset(&bytes, token_field::ATTRIBUTE_RECORDS);
+    bytes[at + 12..at + 16].copy_from_slice(&u32::MAX.to_le_bytes());
+    bytes[at + 16..at + 20].copy_from_slice(&0u32.to_le_bytes());
+    restamp(&mut bytes);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    let decoded = decode_token_section(&section, source).unwrap();
+    assert_eq!(
+        marker_attrs(&decoded).attribute_source,
+        None,
+        "the sentinel means absent"
+    );
 }
 
 // ------------------------------------------- malformed payload rejection
@@ -510,4 +679,154 @@ fn corpus_token_sections_round_trip() {
         "a bridge wider than 127 verses exercises the documented lossy sid path"
     );
     assert!(books > 300, "corpus should cover both fixture sets");
+}
+
+/// Fixtures the reconstruct emitter does not reproduce byte for byte.
+///
+/// All nineteen are the same shape: a deferred attribute list is emitted at its
+/// **closer**, and for these inputs the closer is not where the list started.
+/// `\fig` never closes so its list drains at end of stream; a list belonging to a
+/// nested `\+pn` is closed before the list's original position; a list containing
+/// a newline is split by the parser; and the `oldformat` alignment fixtures put
+/// `\k-s | x-tw="…"` several lines before its `\k-e\*`.
+///
+/// This is **pre-existing** emitter behaviour, not an artifact of the span capture
+/// added for the wire — the gate asserts below that the spanned emitter's bytes
+/// equal the plain emitter's on every file — and core's own doc comment names the
+/// class. The span-based `tokens_to_usfm` reproduces all nineteen exactly.
+///
+/// Listed rather than counted, so a twentieth has to be understood and added
+/// deliberately.
+const EMITTER_DIVERGENCES: [&str; 19] = [
+    "testData/paratextTests/FigureNotClosed/origin.usfm",
+    "testData/paratextTests/WordlistMarkerNestedProperNounWithKeyword_Pass/origin.usfm",
+    "testData/special-cases/newline-attributes/origin.usfm",
+    "testData/synthetic/kitchen-sink.usfm",
+    "testData/usfmjsTests/57-TIT.greek.oldformat/origin.usfm",
+    "testData/usfmjsTests/57-TIT.partial.oldformat/origin.usfm",
+    "testData/usfmjsTests/acts-1-20.aligned.crammed.oldformat/origin.usfm",
+    "testData/usfmjsTests/acts-1-20.aligned.oldformat/origin.usfm",
+    "testData/usfmjsTests/acts_1_11.aligned.oldformat/origin.usfm",
+    "testData/usfmjsTests/acts_1_4.aligned.oldformat/origin.usfm",
+    "testData/usfmjsTests/acts_1_milestone.oldformat/origin.usfm",
+    "testData/usfmjsTests/greek_verse_objects/origin.usfm",
+    "testData/usfmjsTests/heb1-1_multi_alignment.oldformat/origin.usfm",
+    "testData/usfmjsTests/mat-4-6.oldformat/origin.usfm",
+    "testData/usfmjsTests/mat-4-6.whitespace.oldformat/origin.usfm",
+    "testData/usfmjsTests/tit1-1_alignment.oldformat/origin.usfm",
+    "testData/usfmjsTests/tit_1_12.alignment.oldformat/origin.usfm",
+    "testData/usfmjsTests/tit_1_12.alignment.zaln.not.start/origin.usfm",
+    "testData/usfmjsTests/tw_words.oldformat/origin.usfm",
+];
+
+/// The owned-path gate: the same corpus through spanless owned tokens, where the
+/// source and every span come from the reconstruct emitter rather than off a parse.
+#[test]
+#[ignore = "walks the full corpus"]
+fn corpus_owned_token_sections_round_trip() {
+    let mut books = 0usize;
+    let mut tokens = 0usize;
+    let mut attributed = 0usize;
+    let mut diverged = Vec::new();
+
+    for path in corpus_paths() {
+        let source = fs::read_to_string(&path).expect("fixture reads");
+        let owned: Vec<_> = parse(&source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect();
+        attributed += owned
+            .iter()
+            .filter(|token| token.attribute_list().is_some())
+            .count();
+
+        let (derived, spans) = tokens_to_usfm_reconstruct_spanned(&owned);
+        // Recording spans must not change a single byte of the emission. This is
+        // what lets every divergence below be attributed to the pre-existing
+        // emitter rather than to the span capture.
+        assert_eq!(
+            derived,
+            tokens_to_usfm_reconstruct(&owned),
+            "{} spanned emitter changed the bytes",
+            path.display()
+        );
+
+        let borrowed = owned_to_borrowed(book("GEN"), &owned, &spans, &derived)
+            .unwrap_or_else(|error| panic!("{} failed to convert: {error}", path.display()));
+        let (encoded_source, buffers) = encode_owned_token_section(book("GEN"), &owned)
+            .unwrap_or_else(|error| panic!("{} failed to encode: {error}", path.display()));
+        assert_eq!(encoded_source, derived, "{} derived source", path.display());
+
+        let bytes = write_container(SNAPSHOT_ID, &[buffers.payload()])
+            .unwrap_or_else(|error| panic!("{} failed to lay out: {error}", path.display()));
+        let container = read_container(&bytes)
+            .unwrap_or_else(|error| panic!("{} failed to read: {error}", path.display()));
+        let section = container
+            .section(0)
+            .expect("one section")
+            .unwrap_or_else(|error| panic!("{} section invalid: {error}", path.display()));
+        let decoded = decode_token_section(&section, &derived)
+            .unwrap_or_else(|error| panic!("{} failed to decode: {error}", path.display()));
+
+        // Universal: the codec hands back exactly the tokens it was given. True
+        // whether or not the serialization reproduced the file, because the
+        // section describes the derived source, not the file.
+        assert_eq!(
+            decoded.len(),
+            borrowed.len(),
+            "{} token count",
+            path.display()
+        );
+        for (index, (decoded, expected)) in decoded.iter().zip(&borrowed).enumerate() {
+            assert_eq!(decoded, expected, "{} token {index}", path.display());
+        }
+
+        if derived == source {
+            // Where serialization is byte-exact, the stronger claim must hold too:
+            // the wire agrees with a fresh parse of the source it describes.
+            let fresh = parse(&derived);
+            assert_eq!(
+                decoded.len(),
+                fresh.tokens.len(),
+                "{} reparsed token count",
+                path.display()
+            );
+            for (index, (decoded, expected)) in decoded.iter().zip(&fresh.tokens).enumerate() {
+                assert_eq!(
+                    decoded,
+                    expected,
+                    "{} reparsed token {index}",
+                    path.display()
+                );
+            }
+        } else {
+            diverged.push(
+                path.strip_prefix(repo_root())
+                    .expect("corpus paths are under the repo root")
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
+        }
+        books += 1;
+        tokens += decoded.len();
+    }
+
+    diverged.sort();
+    println!(
+        "owned books={books} tokens={tokens} attributed_tokens={attributed} byte_exact={} diverged={}",
+        books - diverged.len(),
+        diverged.len()
+    );
+    assert_eq!(
+        diverged, EMITTER_DIVERGENCES,
+        "the set of fixtures the reconstruct emitter does not reproduce byte-for-byte changed"
+    );
+    assert!(books > 300, "corpus should cover both fixture sets");
+    // The attribute path is the one that cannot use a running offset, so the gate
+    // is only meaningful if the corpus actually exercises it.
+    assert!(
+        attributed > 0,
+        "corpus must contain attribute-bearing tokens"
+    );
 }
