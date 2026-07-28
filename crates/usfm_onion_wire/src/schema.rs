@@ -27,16 +27,18 @@ pub const SECTION_VERSION: u16 = 1;
 /// rule-catalog version instead.
 pub const TOKEN_SECTION_RULES_VERSION: u16 = 0;
 
-/// Container header size. Fixed at 32 in v1, and also written into the header's
+/// Container header size. Fixed at 48 in v1, and also written into the header's
 /// own `header length` field so a future longer header stays self-describing.
-pub const CONTAINER_HEADER_LEN: usize = 32;
+pub const CONTAINER_HEADER_LEN: usize = 48;
 
 /// TOC entry size. Fixed in v1; not self-described, so it can only change with
 /// the format version.
 pub const TOC_ENTRY_LEN: usize = 32;
 
-/// Section header size, excluding the field directory that follows it.
-pub const SECTION_HEADER_LEN: usize = 48;
+/// Section header size, excluding the field directory that follows it. A
+/// multiple of [`SECTION_ALIGN`], which is what lets a section-relative field
+/// offset carry the same alignment as its absolute offset.
+pub const SECTION_HEADER_LEN: usize = 64;
 
 /// Field directory entry size, written into the section header's `directory
 /// entry size` field so a decoder can reject a mismatched producer before
@@ -60,6 +62,12 @@ pub const SECTION_CHECKSUM_OFFSET: usize = 40;
 /// A zero integrity checksum means "omitted", not "hash of zeros" — reserved
 /// for transient output the API explicitly requests unchecked.
 pub const CHECKSUM_OMITTED: u64 = 0;
+
+/// Container-header reserved range (offset 40, 8 bytes). Reserved bytes must be
+/// zero on read: accepting nonzero would let a later version's field pass
+/// silently through a build that cannot honour it.
+pub const CONTAINER_RESERVED_OFFSET: usize = 40;
+pub const CONTAINER_RESERVED_LEN: usize = 8;
 
 /// Container header `flags:u32`. No container-level flag is defined in v1;
 /// every set bit therefore rejects.
@@ -301,6 +309,10 @@ pub mod token_field {
     pub const TOKEN_ID_DICTIONARY: u16 = 9;
     pub const STRING_DICTIONARY: u16 = 10;
     pub const MARKER_DESCRIPTOR_DICTIONARY: u16 = 11;
+    /// Appended by the 2026-07-28 layout amendment: the eight-byte packed-SID
+    /// records that [`SID_INDEX`] points into. Required even when empty, so a
+    /// decoder never has to infer the dictionary's presence from index values.
+    pub const PACKED_SID_DICTIONARY: u16 = 12;
 
     /// Field requirements and any fixed uniform width, in stable id order.
     pub const TABLE: &[FieldSpec] = &[
@@ -362,6 +374,11 @@ pub mod token_field {
         FieldSpec {
             id: MARKER_DESCRIPTOR_DICTIONARY,
             element_width: None,
+            required: true,
+        },
+        FieldSpec {
+            id: PACKED_SID_DICTIONARY,
+            element_width: Some(super::PACKED_SID_LEN as u8),
             required: true,
         },
     ];

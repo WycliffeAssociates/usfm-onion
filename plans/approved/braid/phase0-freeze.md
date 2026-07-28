@@ -187,6 +187,7 @@ unrelated things). Assignment order = the order §7.4/§7.6 list the fields in p
 | 9 | token-id string dictionary (offsets + UTF-8 data) | mixed | **optional** — omitted together with field 3 when `positional_ids` is set |
 | 10 | generic string dictionary (non-catalog strings: attribute keys/values, unknown-marker text, etc.) | mixed | required |
 | 11 | marker descriptor dictionary (catalog-stamped index → recoverable metadata for unknown/known markers) | mixed | required |
+| 12 | packed SID dictionary (the §7.5 eight-byte `PackedSid` records `sid_index` points into) | `8` | required (appended by the 2026-07-28 layout adjudication; count ≤ 65,535, and every non-sentinel `sid_index` must be below the count) |
 
 ### 4.2 Finding section fields
 
@@ -200,7 +201,7 @@ unrelated things). Assignment order = the order §7.4/§7.6 list the fields in p
 | 5 | `patch_id[N]:u32` → snapshot-bound braid patch table | optional — present iff flag bit `fix` is used by any row |
 | 6 | packed patch table (flat, sorted, non-overlapping insert/replace/delete edits incl. replacement token templates) | optional — present iff field 5 is present and non-empty |
 
-Row counts: token section fields **12** (ids 0–11); finding section fields **7** (ids 0–6).
+Row counts: token section fields **13** (ids 0–12); finding section fields **7** (ids 0–6).
 
 ---
 
@@ -555,7 +556,7 @@ Row count: **3 stamp definitions, all 3 flagged OWNER-DECISION** on exact input 
 | 1. `LintCode` → `u8` | 32 |
 | 2. `TokenKind` → `u8` (+ `NumberRangeKind` recorded) | 9 (+4) |
 | 3. Section kinds / flags | section kind ids 2; finding flag bits 8; sentinels 4 (restated) |
-| 4. Field ids | token section 12; finding section 7 |
+| 4. Field ids | token section 13; finding section 7 |
 | 5. Fix/patch/payload discriminants | `TokenFix` 3; `TokenEdit` 3; per-code payload schemas 24/32 |
 | 6. Error freeze | fully-specified variants 36 across 6 enums/unions; **5 OWNER-DECISION error types, 10 proposed variants** |
 | 7. API ledger | retained 97 npm + 43 dto + 423 core (pointer to 0C); deleted 1 crate/0 items; new ~20 wire + ~45 braid + 4 wasm symbol-groups |
@@ -691,3 +692,72 @@ construction; ingest/apply validation remains the collision backstop.
 Implementation note: the layout change must land as ONE commit updating this document's tables,
 `schema.rs` constants, and the readers/writers together — no piecemeal drift against b08b9aa's
 shipped 32/48-byte headers.
+
+---
+
+## Layout tables — 2026-07-28 amendment (normative)
+
+Executes rows 1–3 of the 2026-07-28 adjudication above. These tables are the normative byte layout;
+`braid-epic.md` §7.1/§7.3 are amended to match. Every field is little-endian. Offsets are fixed by
+this version: a v1 producer that writes a different header length is rejected, not accommodated.
+
+### L.1 Container header — 48 bytes (was 32)
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | magic | `[u8; 4]` | ASCII `uson` |
+| 4 | format version | `u16` | `1`; any other value rejects |
+| 6 | header length | `u16` | exactly `48` in v1 |
+| 8 | flags | `u32` | none defined in v1; any set bit rejects |
+| 12 | section count | `u32` | bounds-checked against the buffer before the TOC is allocated |
+| 16 | TOC offset | `u64` | absolute, 16-byte aligned, at or after the header; `48` in canonical v1 output |
+| 24 | integrity checksum | `u64` | xxhash3-64 over the whole container with these 8 bytes read as zero |
+| 32 | snapshot id | `u64` | the `encode_corpus(snapshot_id, …)` argument, stored verbatim; wire never recomputes it |
+| 40 | reserved | `[u8; 8]` | zero in v1; nonzero rejects, on the same "undefined bits reject" policy as flags |
+
+### L.2 TOC entry — 32 bytes (unchanged)
+
+Unchanged by this amendment; restated only so the three layout tables sit together. See
+`braid-epic.md` §7.2.
+
+### L.3 Section header — 64 bytes (was 48)
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | magic | `[u8; 4]` | ASCII `usos` |
+| 4 | format version | `u16` | `1` |
+| 6 | rules version | `u16` | rule-catalog version; exactly `0` for token sections |
+| 8 | kind | `u8` | section-kind discriminant (§3.1); must equal the TOC entry's |
+| 9 | flags | `u8` | kind-specific (§3.2); undefined-for-kind bits reject |
+| 10 | book | `[u8; 3]` | canonical `BookId`; must equal the TOC entry's |
+| 13 | reserved | `[u8; 3]` | zero in v1; nonzero rejects |
+| 16 | record count | `u32` | tokens or findings in this section |
+| 20 | directory count | `u16` | field entries following this header |
+| 22 | directory entry size | `u16` | exactly `16` |
+| 24 | source hash | `u64` | xxhash3-64 of the exact serialized book USFM; must equal the TOC entry's |
+| 32 | section byte length | `u64` | header + directory + payloads; must equal the TOC entry's `byte_len` |
+| 40 | integrity checksum | `u64` | xxhash3-64 over the section with these 8 bytes read as zero |
+| 48 | source byte length | `u64` | exact length of the book's source bytes; `decode_borrowed` binds the caller's `&str` against this **and** the source hash before exposing any span |
+| 56 | marker catalog stamp | `u64` | the §7.7 marker-catalog stamp; a mismatch means packed marker ordinals no longer mean the same thing and returns `DecodeError::CatalogMismatch` |
+
+Both new fields are per **section**, not per container: two books in one container may legitimately
+carry different source lengths, and a container assembled across a catalog change may carry sections
+with different stamps, of which only the mismatched ones are rejected.
+
+64 is a multiple of the 16-byte section alignment, so a section-relative field offset still has the
+same alignment as its absolute offset — the property every field-payload alignment check relies on.
+
+### L.4 Token field 12 — packed SID dictionary
+
+| directory value | value |
+| --- | --- |
+| `field_id` | `12` |
+| `element_width` | `8` (fixed; `count * 8 == byte_len` is enforced generically) |
+| `flags` | `required` bit set |
+| record shape | `braid-epic.md` §7.5: `book[3] | chapter:u16 | verse:u16 | delta_and_fidelity:u8` |
+| count ceiling | `65,535` — the `u16` `sid_index` column minus its `0xffff` sentinel |
+| index rule | every `sid_index[N]` is either `0xffff` (no SID for that token) or strictly less than `count`; anything else rejects |
+
+The dictionary is required even when it is empty: a token section with no anchored token declares
+field 12 with `count = 0`, so the presence of the field never has to be inferred from the index
+column's contents.

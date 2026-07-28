@@ -25,8 +25,8 @@ use crate::primitives::{
 };
 use crate::schema::{
     CHECKSUM_OMITTED, CONTAINER_CHECKSUM_OFFSET, CONTAINER_FLAGS_KNOWN, CONTAINER_HEADER_LEN,
-    CONTAINER_MAGIC, DIRECTORY_ENTRY_LEN, ELEMENT_WIDTH_VARIABLE, FIELD_FLAG_REQUIRED,
-    FIELD_FLAGS_KNOWN, FORMAT_VERSION, SECTION_ALIGN, SECTION_CHECKSUM_OFFSET,
+    CONTAINER_MAGIC, CONTAINER_RESERVED_LEN, DIRECTORY_ENTRY_LEN, ELEMENT_WIDTH_VARIABLE,
+    FIELD_FLAG_REQUIRED, FIELD_FLAGS_KNOWN, FORMAT_VERSION, SECTION_ALIGN, SECTION_CHECKSUM_OFFSET,
     SECTION_FLAG_POSITIONAL_IDS, SECTION_HEADER_LEN, SECTION_MAGIC, SECTION_VERSION, SectionKind,
     TOC_ENTRY_LEN, TOC_FLAGS_KNOWN, TOKEN_SECTION_RULES_VERSION, token_field,
 };
@@ -79,7 +79,7 @@ impl ElementWidth {
     }
 }
 
-/// Validated container header (32 bytes).
+/// Validated container header (48 bytes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContainerHeader {
     pub format_version: u16,
@@ -88,6 +88,9 @@ pub struct ContainerHeader {
     pub toc_offset: u64,
     /// Zero means the producer omitted integrity checking.
     pub checksum: u64,
+    /// The snapshot the corpus was encoded from. Wire stores the caller's value
+    /// verbatim and never derives or re-derives it.
+    pub snapshot_id: u64,
 }
 
 /// Validated TOC entry (32 bytes).
@@ -102,7 +105,7 @@ pub struct TocEntry {
     pub source_hash: u64,
 }
 
-/// Validated section header (48 bytes).
+/// Validated section header (64 bytes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SectionHeader {
     pub format_version: u16,
@@ -115,6 +118,14 @@ pub struct SectionHeader {
     pub source_hash: u64,
     pub section_len: u64,
     pub checksum: u64,
+    /// Exact byte length of the book source this section's spans index into.
+    /// Carried per section, not per container, because one container holds
+    /// several books. Binding external bytes against it is `decode_borrowed`'s
+    /// job — this layer only surfaces the validated value.
+    pub source_len: u64,
+    /// Marker-catalog stamp. A mismatch means packed marker ordinals no longer
+    /// name the same markers.
+    pub catalog_stamp: u64,
 }
 
 /// One validated field payload. The slice is already proved to lie inside the
@@ -269,12 +280,19 @@ fn read_container_header(bytes: &[u8]) -> Result<ContainerHeader, DecodeError> {
     let section_count = cursor.u32()?;
     let toc_offset = cursor.u64()?;
     let checksum = cursor.u64()?;
+    let snapshot_id = cursor.u64()?;
+    // Reserved bytes reject when set for the same reason unknown flag bits do:
+    // a later version's field must not slip past a build that cannot honour it.
+    if cursor.array::<CONTAINER_RESERVED_LEN>()? != [0u8; CONTAINER_RESERVED_LEN] {
+        return Err(DecodeError::InvalidSection);
+    }
     Ok(ContainerHeader {
         format_version,
         flags,
         section_count,
         toc_offset,
         checksum,
+        snapshot_id,
     })
 }
 
@@ -331,8 +349,8 @@ fn read_toc_entry(
     if !offset.is_multiple_of(SECTION_ALIGN) || offset < CONTAINER_HEADER_LEN as u64 {
         return Err(DecodeError::InvalidToc);
     }
-    // Every section carries a 48-byte header, so a shorter declared length can
-    // only come from a producer that never wrote one.
+    // Every section carries a full section header, so a shorter declared length
+    // can only come from a producer that never wrote one.
     if byte_len < SECTION_HEADER_LEN as u64 {
         return Err(DecodeError::InvalidToc);
     }
@@ -456,6 +474,8 @@ fn read_section_header(
     let source_hash = cursor.u64()?;
     let section_len = cursor.u64()?;
     let checksum = cursor.u64()?;
+    let source_len = cursor.u64()?;
+    let catalog_stamp = cursor.u64()?;
 
     // The TOC entry and the section header restate kind, book, source hash, and
     // length. They must agree: a decoder trusting one and indexing with the
@@ -497,6 +517,8 @@ fn read_section_header(
             source_hash,
             section_len,
             checksum,
+            source_len,
+            catalog_stamp,
         },
         directory_count,
     ))
@@ -666,6 +688,11 @@ pub struct SectionPayload<'a> {
     pub variant: SectionVariant,
     pub book: BookId,
     pub source_hash: u64,
+    /// Exact byte length of the book source the spans in this section index
+    /// into. Paired with `source_hash`: length alone is cheap to check first,
+    /// the hash catches same-length different bytes.
+    pub source_len: u64,
+    pub catalog_stamp: u64,
     pub record_count: u32,
     pub fields: Vec<FieldPayload<'a>>,
 }
@@ -673,7 +700,10 @@ pub struct SectionPayload<'a> {
 /// Writes a canonical container: token sections in caller (corpus) order, then
 /// the corresponding finding sections in caller order, each 16-byte aligned,
 /// non-overlapping, and integrity-checksummed.
-pub fn write_container(sections: &[SectionPayload<'_>]) -> Result<Vec<u8>, EncodeError> {
+pub fn write_container(
+    snapshot_id: u64,
+    sections: &[SectionPayload<'_>],
+) -> Result<Vec<u8>, EncodeError> {
     let ordered = canonical_order(sections)?;
     let section_count =
         u32::try_from(ordered.len()).map_err(|_| EncodeError::InvalidSectionLayout {
@@ -717,6 +747,8 @@ pub fn write_container(sections: &[SectionPayload<'_>]) -> Result<Vec<u8>, Encod
     header_fields.u32(section_count);
     header_fields.u64(CONTAINER_HEADER_LEN as u64);
     header_fields.u64(CHECKSUM_OMITTED);
+    header_fields.u64(snapshot_id);
+    header_fields.bytes(&[0u8; CONTAINER_RESERVED_LEN]);
     header.copy_from_slice(&header_fields.finish());
 
     let toc = toc.finish();
@@ -725,7 +757,10 @@ pub fn write_container(sections: &[SectionPayload<'_>]) -> Result<Vec<u8>, Encod
     // Hashed with the checksum field still zero, exactly as a reader re-derives
     // it over the finished buffer.
     let checksum = integrity_checksum_parts(&[&header, &toc, padding, &body]);
-    header[CONTAINER_CHECKSUM_OFFSET..].copy_from_slice(&checksum.to_le_bytes());
+    // Explicit end bound: the checksum is no longer the last header field, so an
+    // open-ended range would try to fill the trailing fields too.
+    header[CONTAINER_CHECKSUM_OFFSET..CONTAINER_CHECKSUM_OFFSET + 8]
+        .copy_from_slice(&checksum.to_le_bytes());
 
     let mut out = Vec::with_capacity(header.len() + toc.len() + toc_padding + body.len());
     out.extend_from_slice(&header);
@@ -872,6 +907,8 @@ fn write_section(section: &SectionPayload<'_>) -> Result<Vec<u8>, EncodeError> {
     header_fields.u64(section.source_hash);
     header_fields.u64(section_len as u64);
     header_fields.u64(CHECKSUM_OMITTED);
+    header_fields.u64(section.source_len);
+    header_fields.u64(section.catalog_stamp);
     header.copy_from_slice(&header_fields.finish());
 
     let required_ids = kind.field_table();
@@ -895,7 +932,8 @@ fn write_section(section: &SectionPayload<'_>) -> Result<Vec<u8>, EncodeError> {
     let body = body.finish();
 
     let checksum = integrity_checksum_parts(&[&header, &body]);
-    header[SECTION_CHECKSUM_OFFSET..].copy_from_slice(&checksum.to_le_bytes());
+    header[SECTION_CHECKSUM_OFFSET..SECTION_CHECKSUM_OFFSET + 8]
+        .copy_from_slice(&checksum.to_le_bytes());
 
     let mut out = Vec::with_capacity(header.len() + body.len());
     out.extend_from_slice(&header);

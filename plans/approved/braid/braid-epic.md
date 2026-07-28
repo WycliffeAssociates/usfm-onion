@@ -1247,17 +1247,23 @@ pub fn decode_borrowed<'wire, 'source>(
 wire writes the id and never recomputes it. Encoders refusing (over-wide SIDs §7.4, unknown
 payload) return typed `EncodeError`, never truncate.
 
-### 7.1 Container header (32 bytes)
+### 7.1 Container header (48 bytes)
+
+Amended from 32 to 48 bytes by the 2026-07-28 layout adjudication in `./phase0-freeze.md`, which
+allocated bytes for `snapshot_id` (previously promised by the `encode_corpus` signature with no
+field to hold it).
 
 | offset | field | type | contract |
 | ---: | --- | --- | --- |
 | 0 | magic | `[u8; 4]` | ASCII `uson` |
 | 4 | format version | `u16` | layout compatibility |
-| 6 | header length | `u16` | exactly 32 in v1 |
+| 6 | header length | `u16` | exactly 48 in v1 |
 | 8 | flags | `u32` | unknown set bits reject |
 | 12 | section count | `u32` | bounds-checked before TOC allocation |
-| 16 | TOC offset | `u64` | absolute; 32 in canonical v1 encoding |
+| 16 | TOC offset | `u64` | absolute; 48 in canonical v1 encoding |
 | 24 | integrity checksum | `u64` | xxhash3-64 over canonical bytes with this field zero; zero means omitted only when the API explicitly requests unchecked transient output |
+| 32 | snapshot id | `u64` | the `encode_corpus` argument, written verbatim and never recomputed |
+| 40 | reserved | `[u8; 8]` = zero | nonzero rejects, like an unknown flag bit |
 
 Top-level sections begin at 16-byte-aligned absolute offsets and may appear in any TOC order.
 Canonical encoders emit ordered token sections followed by corresponding finding sections in
@@ -1284,7 +1290,9 @@ ambiguous complete-corpus assembly. `SourceKey` is not a TOC field.
 
 ### 7.3 Section header and field directory
 
-Every section begins with a 48-byte header:
+Every section begins with a 64-byte header. Amended from 48 to 64 bytes by the 2026-07-28 layout
+adjudication in `./phase0-freeze.md`, which allocated bytes for the exact source length
+`decode_borrowed` binds external bytes against and for the §7.7 marker-catalog stamp.
 
 | offset | field | type |
 | ---: | --- | --- |
@@ -1301,6 +1309,8 @@ Every section begins with a 48-byte header:
 | 24 | source hash | `u64` |
 | 32 | section byte length | `u64` |
 | 40 | integrity checksum | `u64` or zero |
+| 48 | source byte length | `u64` |
+| 56 | marker catalog stamp | `u64` |
 
 Each 16-byte field entry is `{field_id:u16, element_width:u8, flags:u8,
 section_relative_offset:u32, byte_len:u32, count:u32}`. Required fields occur exactly once;
@@ -1333,6 +1343,8 @@ header. A hash match does not replace bounds/UTF-8 validation. Required v1 field
   65,535 distinct SIDs refuses to encode with a typed error and decoders reject the sentinel
   collision via `DecodeError::TooManySids` — real scripture peaks at 2,612/book (Gate 0E), so this
   is a loud-refusal path for structurally legal but non-scriptural inputs, not a width increase;
+- the packed SID dictionary itself (token field 12, fixed 8-byte §7.5 records) that
+  `sid_index` indexes into; every non-sentinel index must be below its entry count;
 - `marker_descriptor_index[N]:u16`, with `0xffff = None`;
 - sparse number records keyed by `token_idx`, with `u32` number fields — raw source numbers reach
   999,999 in adversarial fixtures; core `Sid` saturates at 65,535 but the token payload must not;

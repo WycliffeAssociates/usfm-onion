@@ -28,6 +28,15 @@ static MARKER_INDEXES: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 static STRING_DICTIONARY: [u8; 4] = [0, 0, 0, 0];
 static DESCRIPTOR_DICTIONARY: [u8; 6] = [1, 0, 0, 0, 0, 0];
 static FINDING_ROW: [u8; 16] = [0; 16];
+// Two eight-byte packed-SID records: GEN 1:1 and GEN 1:2, exact fidelity.
+static SID_DICTIONARY: [u8; 16] = [
+    b'G', b'E', b'N', 1, 0, 1, 0, 0, b'G', b'E', b'N', 1, 0, 2, 0, 0,
+];
+
+/// Arbitrary but fixed, so a changed snapshot id in an assertion is visible.
+const SNAPSHOT_ID: u64 = 0x0102_0304_0506_0708;
+const SOURCE_LEN: u64 = 9;
+const CATALOG_STAMP: u64 = 0xfeed_face_dead_beef;
 
 fn book(code: &str) -> BookId {
     BookId::from_str(code).expect("test book code")
@@ -40,6 +49,8 @@ fn token_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
         },
         book: book(code),
         source_hash,
+        source_len: SOURCE_LEN,
+        catalog_stamp: CATALOG_STAMP,
         record_count: 2,
         fields: vec![
             FieldPayload {
@@ -84,6 +95,12 @@ fn token_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
                 count: 1,
                 bytes: &DESCRIPTOR_DICTIONARY,
             },
+            FieldPayload {
+                id: token_field::PACKED_SID_DICTIONARY,
+                width: ElementWidth::Eight,
+                count: 2,
+                bytes: &SID_DICTIONARY,
+            },
         ],
     }
 }
@@ -104,6 +121,8 @@ fn finding_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
         variant: SectionVariant::Finding { rules_version: 7 },
         book: book(code),
         source_hash,
+        source_len: SOURCE_LEN,
+        catalog_stamp: CATALOG_STAMP,
         record_count: 1,
         fields: vec![FieldPayload {
             id: finding_field::COMMON_ROW,
@@ -115,7 +134,7 @@ fn finding_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
 }
 
 fn write(sections: &[SectionPayload<'_>]) -> Vec<u8> {
-    write_container(sections).expect("valid sections encode")
+    write_container(SNAPSHOT_ID, sections).expect("valid sections encode")
 }
 
 fn read_all(bytes: &[u8]) -> Result<(Container<'_>, Vec<Section<'_>>), DecodeError> {
@@ -192,6 +211,7 @@ fn round_trip_preserves_header_toc_and_fields() {
     assert_eq!(container.header().section_count, 3);
     assert_eq!(container.header().toc_offset, CONTAINER_HEADER_LEN as u64);
     assert_ne!(container.header().checksum, 0);
+    assert_eq!(container.header().snapshot_id, SNAPSHOT_ID);
 
     // Canonical order: token sections in corpus order, then finding sections.
     let kinds: Vec<_> = container.toc().iter().map(|entry| entry.kind).collect();
@@ -214,8 +234,10 @@ fn round_trip_preserves_header_toc_and_fields() {
     assert_eq!(genesis.header.book, book("GEN"));
     assert_eq!(genesis.header.record_count, 2);
     assert_eq!(genesis.header.rules_version, 0);
+    assert_eq!(genesis.header.source_len, SOURCE_LEN);
+    assert_eq!(genesis.header.catalog_stamp, CATALOG_STAMP);
     assert!(genesis.positional_ids());
-    assert_eq!(genesis.fields().len(), 7);
+    assert_eq!(genesis.fields().len(), 8);
     assert_eq!(genesis.field(token_field::KIND).unwrap().bytes, &KINDS);
     assert_eq!(
         genesis.field(token_field::SPAN_START).unwrap().bytes,
@@ -248,7 +270,7 @@ fn zero_record_section_is_valid() {
     let bytes = write(&[empty_token_section("GEN", 1)]);
     let (_, sections) = read_all(&bytes).expect("empty section decodes");
     assert_eq!(sections[0].header.record_count, 0);
-    assert_eq!(sections[0].fields().len(), 7);
+    assert_eq!(sections[0].fields().len(), 8);
     assert!(
         sections[0]
             .fields()
@@ -289,7 +311,7 @@ fn unknown_optional_field_is_skipped() {
     let bytes = write(&[section]);
     let (_, sections) = read_all(&bytes).expect("unknown optional field is skipped, not fatal");
     assert!(sections[0].field(4000).is_none());
-    assert_eq!(sections[0].fields().len(), 7);
+    assert_eq!(sections[0].fields().len(), 8);
 }
 
 #[test]
@@ -303,7 +325,7 @@ fn unknown_optional_field_is_structurally_validated_before_skipping() {
     });
     let mut bytes = unchecked(write(&[section]));
     let section_len = read_u64(&bytes, section_offset(&bytes, 0) + 32) as u32;
-    let unknown = directory_entry(&bytes, 0, 7);
+    let unknown = directory_entry(&bytes, 0, 8);
     put_u32(&mut bytes, unknown + 4, section_len);
     assert_eq!(read_all(&bytes), Err(DecodeError::Truncated));
 }
@@ -413,6 +435,34 @@ fn container_header_length_must_match_the_declared_version() {
 }
 
 #[test]
+fn container_reserved_bytes_must_be_zero() {
+    // Reserved bytes carry a later version's meaning; accepting nonzero would
+    // let that meaning pass through a build that cannot honour it.
+    for byte in 0..8 {
+        let mut bytes = unchecked(write(&[]));
+        put_u8(&mut bytes, 40 + byte, 1);
+        assert_eq!(read_container(&bytes), Err(DecodeError::InvalidSection));
+    }
+}
+
+#[test]
+fn packed_sid_dictionary_is_required() {
+    let mut section = token_section("GEN", 1);
+    section
+        .fields
+        .retain(|field| field.id != token_field::PACKED_SID_DICTIONARY);
+    assert_eq!(
+        write_container(SNAPSHOT_ID, &[section]),
+        Err(EncodeError::InvalidSectionLayout {
+            book: book("GEN"),
+            reason: LayoutRefusal::MissingRequiredField {
+                field_id: token_field::PACKED_SID_DICTIONARY
+            },
+        })
+    );
+}
+
+#[test]
 fn unknown_container_flag_rejects() {
     let mut bytes = unchecked(write(&[]));
     put_u32(&mut bytes, 8, 1);
@@ -426,7 +476,7 @@ fn unknown_container_flag_rejects() {
 fn container_checksum_mismatch_rejects() {
     let bytes = write(&[token_section("GEN", 1)]);
     let mut corrupted = bytes.clone();
-    let payload = section_offset(&bytes, 0) + SECTION_HEADER_LEN + 16 * 7;
+    let payload = section_offset(&bytes, 0) + SECTION_HEADER_LEN + 16 * 8;
     corrupted[payload] ^= 0xff;
     assert_eq!(
         read_container(&corrupted),
@@ -527,7 +577,11 @@ fn misaligned_or_header_overlapping_section_rejects() {
 #[test]
 fn section_shorter_than_its_own_header_rejects() {
     let mut bytes = unchecked(write(&[token_section("GEN", 1)]));
-    put_u64(&mut bytes, toc_entry_at(0) + 16, 47);
+    put_u64(
+        &mut bytes,
+        toc_entry_at(0) + 16,
+        SECTION_HEADER_LEN as u64 - 1,
+    );
     assert_eq!(read_container(&bytes), Err(DecodeError::InvalidToc));
 }
 
@@ -726,7 +780,7 @@ fn unknown_required_field_rejects() {
     let mut bytes = unchecked(write(&[section]));
     // The unknown field sorts last; mark it required and the decoder can no
     // longer honestly claim it read the section.
-    let entry = directory_entry(&bytes, 0, 7);
+    let entry = directory_entry(&bytes, 0, 8);
     put_u8(&mut bytes, entry + 3, 1);
     assert_eq!(read_all(&bytes), Err(DecodeError::InvalidSection));
 }
@@ -749,7 +803,7 @@ fn missing_required_field_rejects() {
     // The writer refuses this outright, so the buffer has to be built from a
     // complete section and then have the entry removed from the directory.
     assert_eq!(
-        write_container(&[section]),
+        write_container(SNAPSHOT_ID, &[section]),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::MissingRequiredField {
@@ -764,9 +818,9 @@ fn missing_required_field_rejects() {
     // the rest down; the payload region is untouched, which is legal because
     // offsets are absolute within the section.
     let entry = directory_entry(&bytes, 0, 0);
-    let end = directory_entry(&bytes, 0, 7);
+    let end = directory_entry(&bytes, 0, 8);
     bytes.copy_within(entry + 16..end, entry);
-    put_u16(&mut bytes, offset + 20, 6);
+    put_u16(&mut bytes, offset + 20, 7);
     assert_eq!(read_all(&bytes), Err(DecodeError::InvalidSection));
 }
 
@@ -932,7 +986,7 @@ fn token_columns_reject_unknown_kind_discriminant() {
 fn writer_refuses_duplicate_sections() {
     let sections = [token_section("GEN", 1), token_section("GEN", 2)];
     assert_eq!(
-        write_container(&sections),
+        write_container(SNAPSHOT_ID, &sections),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::DuplicateSection {
@@ -945,7 +999,7 @@ fn writer_refuses_duplicate_sections() {
 #[test]
 fn writer_refuses_an_unpaired_finding_section() {
     assert_eq!(
-        write_container(&[finding_section("GEN", 1)]),
+        write_container(SNAPSHOT_ID, &[finding_section("GEN", 1)]),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::OrphanFindingSection,
@@ -954,7 +1008,10 @@ fn writer_refuses_an_unpaired_finding_section() {
     // Same book, different source hash: the pairing key is both, so this is not
     // a match either.
     assert_eq!(
-        write_container(&[token_section("GEN", 1), finding_section("GEN", 2)]),
+        write_container(
+            SNAPSHOT_ID,
+            &[token_section("GEN", 1), finding_section("GEN", 2)]
+        ),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::OrphanFindingSection,
@@ -967,7 +1024,7 @@ fn writer_refuses_a_field_whose_extent_disagrees_with_its_count() {
     let mut section = token_section("GEN", 1);
     section.fields[1].count = 3;
     assert_eq!(
-        write_container(&[section]),
+        write_container(SNAPSHOT_ID, &[section]),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::FieldExtentMismatch {
@@ -983,7 +1040,7 @@ fn writer_refuses_duplicate_fields() {
     let duplicate = section.fields[0];
     section.fields.push(duplicate);
     assert_eq!(
-        write_container(&[section]),
+        write_container(SNAPSHOT_ID, &[section]),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::DuplicateField {
@@ -1003,7 +1060,7 @@ fn writer_refuses_id_columns_alongside_positional_ids() {
         bytes: &SPAN_STARTS,
     });
     assert_eq!(
-        write_container(&[section]),
+        write_container(SNAPSHOT_ID, &[section]),
         Err(EncodeError::InvalidSectionLayout {
             book: book("GEN"),
             reason: LayoutRefusal::PositionalIdConflict {
