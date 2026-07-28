@@ -52,8 +52,8 @@ itself is fast.
 `braid` is one resident, token-first USFM handle. The caller replaces a complete corpus or
 updates complete books/chapters, explicitly asks it to lint, and receives a complete packed
 snapshot. Rust owns USFM semantics and lifecycle; the wire crate owns bytes and boundary DTOs;
-the wasm crate adapts the same lifecycle synchronously; the official JS helper decodes and
-reconciles object identity.
+the wasm crate synchronously exports the wire-owned checked decode/materialization boundary; pure
+JS only reconciles already-materialized semantic objects for identity reuse.
 
 The runtime model is:
 
@@ -68,7 +68,9 @@ whole-book onion lint for each dirty book → cached native per-book results
         ↓
 canonical complete-corpus result → packed token/finding container
         ↓ transferable ArrayBuffer
-official JS decode/reconcile → stable JS objects for unchanged findings/tokens
+wasm wire decode/materialize → stable JS token/finding DTOs
+        ↓
+pure-JS reconcile of validated findings → stable objects for unchanged findings
 ```
 
 A narrow mutation narrows recomputation. It never narrows the semantic scope of the returned
@@ -250,8 +252,9 @@ identity; they do not choose paths, perform IO, commit artifacts, or coordinate 
     order equals today's span order and the re-key is expected oracle-neutral — verify against the
     lint oracle before adoption; any difference is a stop requiring separate adjudication.
     Token-id strings leave the sort path entirely, removing the Rust-UTF-8 versus JS-UTF-16
-    comparator divergence; packed finding records are stored in canonical order, so JS decoders
-    reproduce order without any comparator. Chapter-grain lint (deferred) stays compatible:
+    comparator divergence; packed finding records are stored in canonical order, so Rust
+    materialization and pure-JS reconciliation preserve order without any comparator.
+    Chapter-grain lint (deferred) stays compatible:
     chapter runs are contiguous token ranges, so chapter-local positions rebase by run start, and
     positions remain snapshot-local addresses, never identity. Reference/canon-order presentation
     is a consumer concern — findings carry SIDs, and the library keeps one source-faithful order.
@@ -282,6 +285,18 @@ identity; they do not choose paths, perform IO, commit artifacts, or coordinate 
     round-trip contract tests in their own suites. The Tauri command host itself remains
     editor-owned app code; braid ships no Tauri dependency, and Phase F parity transcripts run
     against both the web wasm host and the native host.
+19. **Rust is the only production packed decoder.** (Owner correction 2026-07-28.)
+    `usfm_onion_wire` exclusively owns checked packed decode, checksum/source binding, and
+    semantic token/finding materialization. The npm-facing `decodeTokens(packed, book, source)`
+    and `materialize(sources, packed)` are wasm exports backed directly by that Rust wire path,
+    returning ordinary DTOs/`MaterializedSnapshot` or the existing frozen typed errors. JS passes
+    packed bytes and external source bytes into wasm; on a typed failure it falls back to normal
+    Braid USFM ingest/parse. Native hosts call wire directly. Generated `./wire-schema` constants
+    are conformance/debug artifacts only — never a second production parser or a JS XXH3
+    implementation. Pure JS may reconcile already-validated semantic finding objects for identity
+    reuse, but never accepts or parses packed bytes. The previously proposed npm `decodeView` raw
+    buffer surface is narrowed away: `decode_view` remains a public native Rust representation API
+    if Phase 0 retains that exact name, but is not a JS/npm parser.
 
 ## 3. Hard preconditions and Gate 0
 
@@ -582,10 +597,10 @@ pass.
 | Crate/module | Owns | Must not own |
 | --- | --- | --- |
 | `usfm_onion` | borrowed parse tokens; canonical semantic `OwnedToken`; USFM semantics; marker registry; lint/format/diff/vref/USJ/USX/HTML/CST; semantic rule catalog | resident state, JS DTOs, packed offsets, cache IO |
-| `usfm_onion_wire` | boundary `TokenDto`; packed schema/version; token/finding codec; validated borrowed decode; serde/tsify DTOs; generated JS schema data | semantic token ownership, lint execution, dirty state, lifecycle, cache IO |
+| `usfm_onion_wire` | boundary `TokenDto`; packed schema/version; checked packed token/finding decode; checksum/source binding; semantic materialization; serde/tsify DTOs; generated `wire-schema` conformance/debug data | semantic token ownership, lint execution, dirty state, lifecycle, cache IO, a JS decoder/hash implementation |
 | `braid` | complete ordered corpus; validation; current/baseline state; hashes; dirty books; mutation/lint lifecycle; native complete snapshots; feature-gated serde/tsify derives over its own lifecycle types (§2.2#13) | byte layout, JS DTO shapes distinct from its semantics, IO, scheduling, duplicate rule logic |
-| `usfm_onion_wasm` | wasm-bindgen classes/functions; JS input mapping; `Uint8Array` return; core registry re-exports | copied DTO enums, second codec, different lifecycle semantics |
-| official JS helper | validated decode, materialization, reconcile, grouping, TypeScript types | lint rules, invalidation, persistence policy |
+| `usfm_onion_wasm` | wasm-bindgen classes/functions; JS input mapping; wasm exports for wire-owned materialization; `Uint8Array` return; core registry re-exports | copied DTO enums, second codec/parser/hash, different lifecycle semantics |
+| generated `./wire-schema` + pure JS reconcile helper | generated schema conformance/debug constants; identity reuse over validated semantic findings | packed parsing, checksum/hash validation, source binding, token/finding materialization, lint rules, invalidation, persistence policy |
 
 `usfm_onion_dto` is deleted only after all imports move to `usfm_onion_wire` and generated npm
 declarations prove equivalent or intentionally changed. There is no compatibility crate left
@@ -1218,8 +1233,9 @@ expose a core-owned typed seam and prove parity over the full oracle.
 ## 7. Packed container specification
 
 Little-endian. Decoders validate every multiplication, addition, alignment, range, UTF-8 slice,
-count, and discriminant before constructing public views. Rust encoding is authoritative;
-generated schema constants and golden vectors keep JS decoding aligned.
+count, and discriminant before constructing public views. Rust encoding **and decoding** are
+authoritative; generated `wire-schema` constants and golden vectors are conformance/debug
+artifacts, not a JS decoder or hash implementation.
 
 The codec is public **native** API, not wasm plumbing (§2.2#18): a native host composes it exactly
 as the wasm crate does. Normative at the semantic level (exact names frozen in Phase 0 step 3):
@@ -1438,8 +1454,8 @@ The common row remains 16 bytes:
 The `no-anchor` flag is required because `(chapter 0, verse 0)` is a **legal** chapter-scope SID
 (book front matter, produced for `\id` and pre-`\c` tokens), so it cannot double as "finding has no
 SID at all" (e.g. `missing-id-marker`; Gate 0D finding D3). Finding records are stored in canonical
-order — position-keyed per §2.2#15 — so decoders and the JS reconciler reproduce canonical order by
-reading order, without any comparator.
+order — position-keyed per §2.2#15 — so Rust materialization and the pure-JS reconciler preserve
+canonical order by reading/object order, without any comparator.
 
 Record-aligned optional columns use the finding row index, so the common row needs no tiny payload
 pointer:
@@ -1453,13 +1469,13 @@ pointer:
   replacement token templates needed to restore braid state from a persisted sidecar.
 
 Severity, category, issue type, ICU template, and source-dependency metadata come from the
-generated stable rule catalog. Rendered English `message` is recreated by the official helper
-from template plus message parameters as compatibility fallback; applications remain free to
-localize. No JS rule list is handwritten.
+generated stable rule catalog. Rust wire materialization supplies the semantic DTO fields;
+applications may render/localize from the template and message parameters. No JS rule list,
+packed parser, or XXH3 implementation is handwritten.
 
 Every current `LintIssue` must round-trip semantically. If Gate 0 finds a field that cannot be
-derived or encoded by these sidecars, Phase B amends the schema before coding; it does not drop
-the field.
+derived or encoded by these sidecars, the Phase B/C full finding-and-patch gate amends the schema
+before coding; it does not drop the field.
 
 ### 7.7 Stable rule and schema policy
 
@@ -1479,14 +1495,9 @@ the field.
 
 ## 8. Official JS and wasm surfaces
 
-### 8.1 JS helper
+### 8.1 Wasm-backed npm materialization and pure-JS reconciliation
 
 ```ts
-export type DecodedContainer = Readonly<{
-  id: bigint;
-  books: readonly DecodedBook[];
-}>;
-
 export type SourceCorpus = ReadonlyMap<BookCode, Uint8Array>;
 
 export type MaterializedBook = Readonly<{
@@ -1516,86 +1527,68 @@ export type SourceBindingError =
     }>
   | Readonly<{ kind: "sourceHashMismatch"; book: BookCode }>;
 
-export type TokenBindingError =
-  | Readonly<{ kind: "missingTokens"; book: BookCode }>
-  | Readonly<{ kind: "extraTokens"; book: BookCode }>
-  | Readonly<{
-      kind: "tokenCountMismatch";
-      book: BookCode;
-      expected: number;
-      found: number;
-    }>
-  | Readonly<{ kind: "stableTokenIdMismatch"; book: BookCode; index: number }>
-  | Readonly<{ kind: "sourceFingerprintMismatch"; book: BookCode }>
-  | Readonly<{ kind: "snapshotMismatch"; expected: bigint; found: bigint }>;
-
 export type MaterializeError =
   | Readonly<{ kind: "decode"; error: DecodeError }>
   | Readonly<{ kind: "sourceBinding"; error: SourceBindingError }>;
 
-export type ReconcileError =
-  | Readonly<{ kind: "decode"; error: DecodeError }>
-  | Readonly<{ kind: "tokenBinding"; error: TokenBindingError }>;
-
-export function decodeView(
-  packed: Uint8Array,
-): ApiResult<DecodedContainer, DecodeError>;
+/** wasm export backed directly by `usfm_onion_wire`. */
 export function decodeTokens(
   packed: Uint8Array,
   book: BookCode,
   source: Uint8Array,
 ): ApiResult<DecodedTokenBook, MaterializeError>;
+/** wasm export backed directly by `usfm_onion_wire`. */
 export function materialize(
   sources: SourceCorpus,
   packed: Uint8Array,
 ): ApiResult<MaterializedSnapshot, MaterializeError>;
-export function groupByBook(
-  decoded: DecodedContainer,
-): ReadonlyMap<BookCode, DecodedBook>;
+/** Pure JS: both arguments are already-validated semantic finding DTOs. */
 export function reconcileFindings(
   previous: MaterializedFindings | undefined,
-  packed: Uint8Array,
-  tokensByBook: ReadonlyMap<BookCode, readonly Token[]>,
-): ApiResult<MaterializedFindings, ReconcileError>;
+  next: MaterializedFindings,
+): MaterializedFindings;
 ```
 
-`decodeView` is the low-level representation API: it validates the packed header, TOC, section
-headers, checksums, ranges, and discriminants, then exposes read-only typed-array/section views. It
-does not have source bytes, therefore it does not create semantic `Token` objects whose spans must
-slice USFM. Advanced consumers and the official helper may use it; ordinary cold-open callers use
-`materialize`.
+`decodeTokens` and `materialize` are synchronous wasm exports, backed directly by
+`usfm_onion_wire`'s checked Rust decode. Rust alone validates headers, TOC/section ranges,
+checksums, discriminants, exact source length/hash binding, and semantic token/finding
+materialization; no independent production JS binary parser or JS XXH3 exists. The existing frozen
+typed errors cross the same boundary as ordinary DTOs. A typed failure is the deliberate signal for
+the application to use normal Braid USFM ingest/parse instead.
+
+Native hosts call the wire crate directly. If the Phase 0 API ledger retains the promised
+`decode_view` representation API, it remains a public native Rust view over checked bytes; it is
+not an npm/raw-`Uint8Array` parser and is deliberately absent from this TypeScript surface.
 
 `materialize` is the cold-open object API. Its canonical input is one source byte array per unique
 `BookCode`; an ergonomic `Readonly<Partial<Record<BookCode, Uint8Array>>>` overload may normalize
-to the same map after validating every key. It pairs keys directly with the three-byte book ids in
-the packed TOC, verifies exact source length/hash, and creates plain JS token/finding objects
-grouped by `BookCode` without lexing or parsing. Paths are not part of this API or the packed
-format. The application retains its separate `SourceKey/path -> BookCode` manifest association.
+to the same map after validating every key. The wasm wire path pairs keys directly with the
+three-byte book ids in the packed TOC, verifies exact source length/hash, and creates plain JS
+token/finding objects grouped by `BookCode` without lexing or parsing. Paths are not part of this
+API or the packed format. The application retains its separate `SourceKey/path -> BookCode`
+manifest association. On success it uses those regular semantic tokens/findings or seeds Braid
+through `restoreCorpus`; on a typed failure it falls back to normal Braid USFM ingest/parse.
 
-`materialize` must compose the same authoritative `decodeView` validation/views; it must not carry
-a second parser for headers, TOC entries, sections, or columns. Its additional work is only source
-binding, source-slice recovery, DTO/object construction, and grouping. A malformed buffer therefore
-has the same typed decode classification through either entrypoint.
+The generated `./wire-schema` JS constants exist for generated-declaration conformance, debugging,
+and golden-vector inspection. They are never called by a production packed decoder, checksum/hash
+validator, source binder, or materializer.
 
-`reconcileFindings` is the warm-update API for an editor that already owns token objects. It
-validates/decodes the new complete snapshot, verifies each supplied
-book/token set against the buffer's book, token count, stable-id/source fingerprint, and snapshot
-metadata, then keys finding objects by
-book plus stable token/finding identity, reuses objects only when every public field is equal,
-drops removed objects, inserts new objects in canonical order, and never mutates caller-owned
-objects in place unless the returned type explicitly documents that mutability. The recommended
-v1 behavior is immutable object reuse.
+`reconcileFindings` is the pure-JS warm-update API. It receives only already-validated semantic
+finding DTOs from wasm materialization or an equivalent native wire host; it neither accepts nor
+parses packed bytes. It keys findings by book plus stable token/finding identity, reuses objects
+only when every public field is equal, drops removed objects, inserts new objects in canonical
+order, and never mutates caller-owned objects in place. The v1 behavior is immutable object reuse.
 
 Finding identity is a deterministic tuple derived from rule code, primary stable token id or SID
 anchor, token-relative range, related address, and deterministic same-key occurrence. Message
 text and fix payload are excluded from identity but included in equality, matching the editor's
 current finding model.
 
-Malformed input returns one typed `ApiResult` error before returning a partial result. Decode
-errors describe packed corruption/version failures; source/token binding errors name the affected
-book and distinguish invalid/extra/missing input, source length/hash mismatch, token-count/id
-mismatch, and snapshot mismatch. No API accepts a bare `ArrayBuffer` plus unchecked offsets;
-callers pass `Uint8Array`/views and the helper honors their byte offset/length.
+Malformed packed input returns one typed wasm `ApiResult` error before returning a partial result.
+Decode errors describe packed corruption/version failures; source-binding errors name the affected
+book and distinguish invalid/extra/missing input and source length/hash mismatch. No API accepts a
+bare `ArrayBuffer` plus unchecked offsets; callers pass `Uint8Array`/views and Rust honors their
+byte offset/length.
 
 ### 8.2 Wasm `Braid`
 
@@ -1753,20 +1746,27 @@ fields and losslessly serialize to identical supplied source bytes; wrong source
 rejects; serial/parallel decode agree; malformed buffers fail without panic; all existing oracles
 remain byte-identical.
 
-### Phase B — finding codec and official JS reconcile
+### Phase B — finding wire and wasm semantic materialization
 
 1. Freeze stable `LintCode` numbers and generated catalog metadata.
 2. Implement the 16-byte common record and record-aligned sidecars from the Gate 0 payload ledger.
-3. Implement Rust semantic round-trip tests from `LintResult` to bytes to decoded semantic result.
-4. Implement JS checked decode/materialize and cross-language golden vectors.
-5. Implement reconciliation and deterministic finding identity.
-6. Resolve existing core `TokenFix` values into braid-owned flat patch-table entries and test all
-   fix variants plus localized message arguments through real consumer-shaped fixtures.
+3. Implement Rust semantic round-trip tests for finding fields which do not require a resident
+   snapshot-bound patch table.
+4. Export wasm `decodeTokens(packed, book, source)` and `materialize(sources, packed)` backed
+   directly by wire's checked decode, source binding, and semantic materialization. Generate
+   `./wire-schema` constants only as conformance/debug artifacts; do not add a JS decoder or JS
+   XXH3.
+5. Implement pure-JS `reconcileFindings(previous, next)` over already-validated semantic finding
+   DTOs and deterministic finding identity. It never accepts packed bytes.
+6. Keep `TokenFix` resolution and packed snapshot-bound patch records explicitly pending for
+   Phase C, where `SnapshotId`, `PatchId`, residency, and patch storage exist.
 
-Gate: every current lint issue field round-trips; Rust and JS produce equal materialized snapshots;
-unchanged objects are reused; one-of-N changes, insertions, deletions, reorder, token-index rebase,
-same-key duplicates, and overflow spans behave deterministically; malformed-buffer error classes
-match.
+Gate: wire and wasm produce equal materialized snapshots for the implemented no-patch finding
+fields; unchanged JS objects are reused; one-of-N changes, insertions, deletions, reorder,
+token-index rebase, same-key duplicates, and overflow spans behave deterministically; malformed
+buffers return the same frozen typed classes through wasm. This is **not** the final all-fields
+finding gate: Phase B cannot be called complete as a full finding/patch round-trip while fixes are
+absent. The Phase C full finding-and-patch gate below must close before Phase D publication.
 
 ### Phase C — `braid` residency floor
 
@@ -1783,14 +1783,22 @@ match.
    dirty-book stamps.
 6. Implement explicit whole-dirty-book `lint()` and complete native snapshots, passing each
    caller-declared `BookId` into core lint context.
-7. Implement snapshot-bound patch lookup/application with reverse-ordered flat edits.
-8. Implement `to_tokens`, `preview_patch`, and the semantic `restore_corpus` seed path
-   (§2.2#17; wire composition arrives in Phase F).
+7. Resolve every core `TokenFix` against the resident snapshot into Braid-owned flat patch-table
+   entries; implement snapshot-bound patch lookup/application with reverse-ordered flat edits.
+   The wasm composition adapter combines the resulting semantic findings/patches with the wire
+   finding codec, without adding a braid→wire dependency.
+8. Close the full finding-and-patch gate: every current finding field, every `TokenFix` variant,
+   localized message arguments, patch id, and packed patch edit/template round-trip semantically
+   through Rust wire and wasm materialization; stale/unknown/overlap/out-of-bounds patch paths are
+   typed. This gate is required before Phase D; it is not retroactively claimed by Phase B.
+9. Implement `to_tokens`, `preview_patch`, and the semantic `restore_corpus` seed path
+   (§2.2#17; the public wasm `Braid.restoreCorpus` composition arrives in Phase F).
 
 Gate: rejected mutations are atomic; no-ops preserve cache/publication; repeated mutations
 coalesce; resident lint equals stateless whole-book core lint in content and order; duplicate and
 out-of-order chapters are retained; ambiguous chapter operations error; duplicate token ids
-error; retry after injected lint failure is safe.
+error; retry after injected lint failure is safe; the full all-fields finding-and-patch gate above
+has passed.
 
 ### Phase D — packed braid publication
 
@@ -1802,7 +1810,8 @@ error; retry after injected lint failure is safe.
 
 Gate: clean lint performs no core rule work; a one-chapter edit recomputes one whole book and
 reuses untouched book sections/results; decoded complete publication equals the native snapshot;
-corrupt/mismatched cached sections are rejected, not partially adopted.
+corrupt/mismatched cached sections are rejected, not partially adopted. Phase D may not start
+until Phase C has closed the full semantic finding/patch round-trip gate.
 
 ### Phase E — baseline, diff, dirty, and serialization
 
@@ -1825,8 +1834,10 @@ typed; existing diff/revert/merge tests and editor use cases remain equivalent.
 1. Split the wasm module by responsibility and expose the synchronous `Braid` class.
 2. Move/delete DTO duplication only after generated declarations and all stateless exports pass
    the API ledger.
-3. Ship the official JS decoder/reconciler as explicit npm exports for bundler and web builds,
-   and the composed `restoreCorpus(sources, packed)` on the wasm `Braid` (§2.2#17).
+3. Ship the wasm-backed `decodeTokens`/`materialize` exports and pure-JS
+   `reconcileFindings(previous, next)` for bundler and web builds, plus the composed
+   `restoreCorpus(sources, packed)` on wasm `Braid` (§2.2#17). Do not ship a JS packed decoder,
+   JS XXH3, or npm `decodeView` raw-buffer parser.
 4. In the editor, make every token id book-wide unique, including linebreak/synthetic tokens; the
    persistent Lexical NodeState investigation is tracked separately in
    `../candidates/editor-persistent-linebreak-token-id.md`.
@@ -1903,7 +1914,8 @@ host, whose current loader avoids copying book bytes into JS (Gate 0F P3b).
 
 ### 11.4 Finding and reconcile tests
 
-- cold `materialize(sources, packed)` reconstructs tokens and findings without lex/parse;
+- wasm `decodeTokens(packed, book, source)` and cold `materialize(sources, packed)` reconstruct
+  tokens and findings without lex/parse, using Rust wire rather than a JS binary parser;
 - materialization binds portable sections directly from unique `BookCode` keys and preserves
   canonical packed corpus order;
 - another application with different paths but the same `BookCode -> bytes` inputs produces equal
@@ -1911,9 +1923,9 @@ host, whose current loader avoids copying book bytes into JS (Gate 0F P3b).
 - invalid book keys, missing or extra source books, duplicate/non-canonical packed book sections,
   and wrong source length/hash return typed errors without partial objects;
 - every rule code and payload-ledger shape;
-- all three current `TokenFix` variants resolved to flat patch entries;
-- snapshot-bound patch id success, stale rejection, unknown id, reverse application, overlap, and
-  out-of-bounds rejection;
+- the **Phase C full finding-and-patch gate** resolves all three current `TokenFix` variants to
+  flat patch entries, then proves snapshot-bound patch id success, stale rejection, unknown id,
+  reverse application, overlap, and out-of-bounds rejection before Phase D may start;
 - resident format scope `All | Book | Chapter`, unchanged preparation, multi-book atomic apply,
   and no implicit mutation before apply;
 - external stateless format/diff never reads or changes resident Braid state;
@@ -1923,7 +1935,8 @@ host, whose current loader avoids copying book bytes into JS (Gate 0F P3b).
 - no-token SID-only finding;
 - exact and anchor-only SID, bridge 127 and 128 boundary;
 - canonical order and tie preservation;
-- unchanged decode vs unchanged reconcile;
+- unchanged wasm materialization vs unchanged pure-JS reconcile; reconcile accepts only semantic
+  findings and cannot parse packed bytes or validate a checksum/source hash;
 - one-of-1000 change with object identity assertions;
 - insertion/deletion/reorder and token-index rebase;
 - duplicate logical identity deterministic occurrence;
@@ -1988,10 +2001,12 @@ harness and product-shaped editor path.
 - Public types document identity, units, lifetime, error, ordering, and atomicity.
 - Codec comments explain why fields/limits exist and cite the generating schema, never this plan.
 - Generated files contain source/generator instructions and are checked for drift.
-- npm README documents buffer lifetime, sync behavior, `decodeView` vs materialize vs reconcile, cache
-  validation, stable token-id requirement, and error handling — plus that caller-side manifest
-  validation (unique declared books and source keys) is mandatory, because `DuplicateBook`
-  refusal is total by design (Gate 0F §4.4).
+- npm README documents buffer lifetime, sync wasm behavior, wasm-backed `decodeTokens` and
+  `materialize` versus pure-JS `reconcileFindings(previous, next)`, cache validation, stable
+  token-id requirement, typed-error fallback to normal Braid USFM ingest/parse, and that there is
+  no JS packed decoder/XXH3 or npm `decodeView` raw-buffer parser. It also documents that
+  caller-side manifest validation (unique declared books and source keys) is mandatory, because
+  `DuplicateBook` refusal is total by design (Gate 0F §4.4).
 - Editor integration docs identify braid as USFM state and the editor as coordinator.
 - No production comment references phases, Gate 0, or the plan.
 
@@ -2028,6 +2043,9 @@ approaches.
 - **Hash as proof:** treating xxhash equality as semantic equality.
 - **Partial commit:** consuming dirty flags before all dirty-book lint succeeds.
 - **Adapter fork:** wasm/Tauri implementing a second lifecycle or codec.
+- **Decoder fork:** JavaScript parsing packed bytes, computing XXH3, or treating generated
+  `wire-schema` constants as a production decoder instead of entering wire through wasm/native
+  Rust.
 - **Algorithm fork:** reimplementing a core algorithm (e.g. USFM emission) against wire types
   instead of routing both token shapes through one core trait (§4.3).
 - **Accidental formatting:** `to_usfm` changing bytes.
@@ -2060,6 +2078,8 @@ Stop and return to the owner on:
 - No embedded-source/one-read whole-corpus artifact in v1; see the candidate ledger.
 - No threaded wasm, SAB, worker pool, COOP/COEP, or cancellation protocol.
 - No async interactive wasm API.
+- No independent production JS packed parser, JS XXH3, or npm `decodeView` raw-buffer parser;
+  generated `wire-schema` data is conformance/debug-only.
 - No cryptographic hash claim.
 - No whole-Bible resident columnar storage unless a heap profile demonstrates need.
 - No consistency/monotonicity rule reorganization.
