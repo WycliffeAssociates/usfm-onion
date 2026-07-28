@@ -1262,12 +1262,18 @@ pub fn decode_borrowed<'wire, 'source>(
 Respecified by the 2026-07-28 owned-encoding adjudication in `./phase0-freeze.md`. The original
 signature promised that a `&[OwnedToken]` plus a `source` could be encoded directly, which the
 implementation showed is impossible: the token section's span columns are required, `OwnedToken` is
-spanless by design, and the concatenation of `token.source()` is **not** the source — a deferred
-attribute list is emitted at its closer, not next to its marker. The owned path is therefore
+spanless by design, and the concatenation of `token.source()` is **not** the source — an attribute
+list is emitted at a position of its own, not next to its marker. The owned path is therefore
 explicitly serialize → `(source, spans)` → encode, using core's
 `tokens_to_usfm_reconstruct_spanned`; the parsed-borrowed path keeps its spans and needs no
 serialization. Owned tokens stay spanless as a type: spans are a transient encode-time artifact, so
 there is no mid-session span state to go stale.
+
+Serializing a parse-origin owned stream is byte-lossless — an owned token remembers the distance from
+its own end to its attribute list (`./../attribute-position-fidelity.md`), so the derived source
+equals the original file. An `Owned` section is nonetheless bound to the source wire *derived*, which
+for edited tokens is a new document; the returned `sources` are therefore the authoritative pairing,
+not any file on disk.
 
 `snapshot_id` arrives as a plain `u64` — the composing adapter converts braid's `SnapshotId`;
 wire writes the id and never recomputes it. Encoders refusing (over-wide SIDs §7.4, unknown

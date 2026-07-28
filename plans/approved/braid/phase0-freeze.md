@@ -1106,21 +1106,26 @@ present only when some row needs a tag other than 0.
 | `usfm_onion::token::tokens_to_usfm_reconstruct_spanned(&[T]) -> (String, Vec<ReconstructedSpans>)` | core | rust | Row 1 above. One function; both entry points share one implementation so the spanned and plain emitters cannot drift, and the recorder is optional so the plain path pays nothing. |
 | `usfm_onion::token::ReconstructedSpans` | core | rust | The return type of the above. Carries the token span and the attribute-list span separately, because neither is derivable from the other: a list is emitted at its closer, which may be far from its marker. |
 | `usfm_onion::token::OwnedToken::parsed_sid() -> Option<Sid>` | core | rust | The packed wire anchor is eight bytes built from the structured `Sid`. `OwnedToken` held it privately and exposed only the formatted spelling; re-parsing that string would fork core's formatting. |
+| `usfm_onion::token::OwnedToken::attribute_offset() -> Option<BytePos>` | core | rust | Distance from the token's own end to its attribute list, per `attribute-position-fidelity.md`. Backs the placement an owned token remembers; `None` keeps the historical closer rule for positionless ingest. |
+| `usfm_onion::token::SerializableToken::attribute_offset()` (defaulted) | core | rust | Lets the generic emitter read that placement from any token type. Defaulted to `None`, so no implementor outside core changes and every ingest path keeps its current behavior. |
 
-Four new public core items total. Emitted bytes are unchanged by all four.
+Six new public core items total. Emitted bytes are unchanged for the parsed/borrowed path and for any
+token with no remembered position; the reconstruct emitter's output changes only where it was
+previously byte-shifted, which is the point of the fix.
 
-### Emitter losslessness — recorded limit
+### Emitter losslessness — resolved 2026-07-28
 
-The reconstruct emitter is byte-lossless for well-formed input, **not** universally: a deferred
-attribute list is emitted at its closer, which for some inputs is not where the list started. Over
-the 395-book corpus gate, 376 books serialize byte-identically and 19 do not — an unclosed `\fig`, a
-list owned by a nested `\+pn`, a list split by a newline, and 15 `oldformat` alignment fixtures whose
-`\k-s | x-tw="…"` sits lines above its `\k-e\*`. Core's own doc comment names the class; the
-span-based `tokens_to_usfm` reproduces all 19 exactly; and the spanned emitter's bytes equal the
-plain emitter's on every file, so the divergence is pre-existing and not an artifact of span capture.
+Originally recorded as a limit: the reconstruct emitter had one placement rule for an attribute list
+("at the marker's closer"), so 19 of 395 corpus books serialized content-identically but
+byte-shifted. **Fixed** by `plans/approved/attribute-position-fidelity.md`, adjudicated pre-Phase-F on
+conceptual-correctness grounds: an owned token now remembers `attribute_offset`, the distance from its
+own end to its list, and the emitter honours it. Byte identity now holds **395/395**, and the wire
+crate's owned corpus gate asserts its divergence list is empty.
 
-Consequence for the format, stated once: an owned-token section is bound to the **derived** source,
-not to any file on disk. The round trip stays faithful for the 19 — the section describes what was
-serialized — but a caller that persists an owned-encoded section alongside an original file must
-treat the derived source as the authoritative pairing. The 19 fixtures are enumerated in the wire
-crate's owned corpus gate so a twentieth cannot appear silently.
+The format consequence still stands and is unchanged by the fix: an owned-token section is bound to
+the **derived** source, not to any file on disk. For parse-origin tokens the two are now byte-identical,
+but a section encoded from edited tokens describes what was serialized, so a caller persisting one must
+treat the derived source as the authoritative pairing.
+
+Unchanged either way: the span-based `tokens_to_usfm` was and is byte-lossless, and tokens with no
+remembered position (wire DTO and editor ingest) keep the closer rule.
