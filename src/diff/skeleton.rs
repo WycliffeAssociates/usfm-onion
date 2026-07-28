@@ -1065,6 +1065,28 @@ mod tests {
     }
 
     #[test]
+    fn repeated_chapter_cdup_suffix_still_parses_through_pairing_key() {
+        // `derive_canonical_sids` rides its repeated-`\c` `_cdup_N` marker in
+        // the verse segment specifically so `pairing_key`'s strict
+        // `chapter.parse::<u16>()` keeps succeeding. If that ever regressed,
+        // every block from the second chapter occurrence would fall back to
+        // the `BookId::UNKNOWN` bucket and silently pair with unrelated
+        // content instead of just pairing loosely by chapter/verse.
+        let source = wrapped("\\c 1\n\\v 1 first\n\\c 1\n\\v 1 second\n");
+        let parsed = parse(&source);
+        let blocks = super::super::build_sid_blocks_canonical(&parsed.tokens, "GEN");
+        for block in &blocks {
+            let key = pairing_key(&block.semantic_sid);
+            assert_ne!(
+                key.book,
+                crate::token::BookId::UNKNOWN,
+                "sid {:?} must not fall back to the unknown-book bucket",
+                block.semantic_sid
+            );
+        }
+    }
+
+    #[test]
     fn every_baseline_and_current_block_appears_in_exactly_one_bearing_slot() {
         let baseline = wrapped("\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n");
         let current = wrapped("\\c 1\n\\v 1 one\n\\v 3 three\n\\v 2 two\n");

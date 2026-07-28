@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { normalizeTokenSids as normalizePlain } from "usfm-onion-web/token-sids";
+import {
+  normalizeTokenSids as normalizePlain,
+  normalizeTokenSidsMut,
+} from "usfm-onion-web/token-sids";
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const target = process.argv[2] ?? "bundler";
@@ -69,6 +72,20 @@ const fixtures = [
     ],
   },
   {
+    name: "a repeated chapter label gets a positional _cdup_ suffix and resets verse dup counting",
+    bookCode: "GEN",
+    tokens: [
+      marker("c"), number(1),
+      marker("v"), number(1), text("first-a", "a"),
+      marker("v"), number(1), text("first-b", "b"),
+      marker("c"), number(1),
+      marker("v"), number(1), text("second-a", "c"),
+      marker("v"), number(1), text("second-b", "d"),
+      marker("c"), number(1),
+      marker("v"), number(1), text("third-a", "e"),
+    ],
+  },
+  {
     name: "a stream with no chapter or verse structure stays in intro",
     bookCode: "RUT",
     tokens: [
@@ -114,10 +131,64 @@ for (const fixture of fixtures) {
       `${fixture.name}: token ${index} preserves every non-sid field`,
     );
   }
+
+  // Mutable twin: same sids, but mutates the caller's own array in place
+  // rather than allocating a clone.
+  const mutInput = structuredClone(fixture.tokens);
+  const returnValue = normalizeTokenSidsMut(mutInput, fixture.bookCode);
+  assert.equal(
+    returnValue,
+    undefined,
+    `${fixture.name}: normalizeTokenSidsMut returns nothing, it mutates`,
+  );
+  assert.deepEqual(
+    mutInput.map((token) => token.sid),
+    plain.map((token) => token.sid),
+    `${fixture.name}: normalizeTokenSidsMut matches normalizeTokenSids' sids`,
+  );
+  for (const [index, token] of mutInput.entries()) {
+    const { sid: _mutSid, ...mutWithoutSid } = token;
+    const { sid: _beforeSid, ...beforeWithoutSid } = fixture.tokens[index];
+    assert.deepEqual(
+      mutWithoutSid,
+      beforeWithoutSid,
+      `${fixture.name}: normalizeTokenSidsMut token ${index} preserves every non-sid field`,
+    );
+  }
 }
 
+const repeatedChapterFixture = fixtures.find((fixture) =>
+  fixture.name.startsWith("a repeated chapter label")
+);
+const repeatedChapterNormalized = normalizePlain(
+  repeatedChapterFixture.tokens,
+  repeatedChapterFixture.bookCode,
+);
+const sidOfText = (text) =>
+  repeatedChapterNormalized.find((token) => token.source === text)?.sid;
+assert.deepEqual(
+  {
+    a: sidOfText("a"),
+    b: sidOfText("b"),
+    c: sidOfText("c"),
+    d: sidOfText("d"),
+    e: sidOfText("e"),
+  },
+  {
+    a: "GEN 1:1",
+    b: "GEN 1:1_dup_1",
+    c: "GEN 1:1_cdup_1",
+    d: "GEN 1:1_cdup_1_dup_1",
+    e: "GEN 1:1_cdup_2",
+  },
+  "repeated chapter occurrences get positional _cdup_N suffixes and reset verse dup counting",
+);
+
+const noStructureFixture = fixtures.find((fixture) =>
+  fixture.name.startsWith("a stream with no chapter or verse structure")
+);
 assert.ok(
-  normalizePlain(fixtures[2].tokens, fixtures[2].bookCode)
+  normalizePlain(noStructureFixture.tokens, noStructureFixture.bookCode)
     .every((token) => token.sid === "RUT 0:0"),
   "a stream with no chapter or verse structure stays entirely at BOOK 0:0",
 );
