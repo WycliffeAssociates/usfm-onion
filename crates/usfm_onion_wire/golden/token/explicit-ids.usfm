@@ -1,0 +1,4 @@
+\id GEN
+\c 1
+\p \w a|k="v"\w* b
+\v 1-2 text

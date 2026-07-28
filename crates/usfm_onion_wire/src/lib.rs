@@ -32,5 +32,7 @@ mod token_section;
 mod container_tests;
 #[cfg(test)]
 mod token_codec_tests;
+#[cfg(test)]
+mod token_goldens;
 
 pub use error::{DecodeError, EncodeError, LayoutRefusal};

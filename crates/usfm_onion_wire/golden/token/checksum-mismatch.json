@@ -1,0 +1,7 @@
+{
+  "name": "checksum-mismatch",
+  "kind": "malformed",
+  "base": "all-token-kinds",
+  "expectedError": "ChecksumMismatch",
+  "proves": "a content byte changed without updating the integrity checksum rejects"
+}

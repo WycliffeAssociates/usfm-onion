@@ -1,0 +1,5 @@
+{
+  "name": "attributes-none-default-and-empty",
+  "kind": "good",
+  "proves": "three attribute-list shapes on the same marker: absent (no `|` at all), default-attribute shorthand (empty key), and an explicit present-but-empty list"
+}

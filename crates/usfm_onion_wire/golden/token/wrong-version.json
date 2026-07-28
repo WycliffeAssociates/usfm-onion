@@ -1,0 +1,7 @@
+{
+  "name": "wrong-version",
+  "kind": "malformed",
+  "base": "all-token-kinds",
+  "expectedError": "UnsupportedVersion { found: 9999 }",
+  "proves": "a format_version this build does not implement rejects rather than misinterpreting the layout"
+}

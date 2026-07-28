@@ -1,0 +1,5 @@
+{
+  "name": "all-token-kinds",
+  "kind": "good",
+  "proves": "every TokenKind (Newline, OptBreak, Marker, EndMarker, Milestone, MilestoneEnd, BookCode, Number, Text) with legal payloads, encoded with positional ids"
+}

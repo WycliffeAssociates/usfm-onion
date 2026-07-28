@@ -1,0 +1,5 @@
+{
+  "name": "sid-fidelity-overwide-bridge-anchor-only",
+  "kind": "good",
+  "proves": "a bridge wider than the 7 packed-sid delta bits degrades to AnchorOnly in the codec itself"
+}

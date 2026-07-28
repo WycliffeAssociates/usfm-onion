@@ -1,0 +1,5 @@
+{
+  "name": "sid-fidelity-suffix-anchor-only",
+  "kind": "good",
+  "proves": "a suffixed verse is identical to an unsuffixed one in Sid and NumberRangeKind: AnchorOnly fidelity"
+}
