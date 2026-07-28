@@ -1607,3 +1607,92 @@ non-`cargo fmt`-clean file and was left alone.
   derive spans from core's spanless reconstruct emitter, or carry spans on the owned token. Not
   guessed here.
 - Then: finding section columns (`marker_ref` per §M, common row, sidecars, patch table).
+
+## 2026-07-28 — Phase A: emitter-derived spans and the owned-token encode path
+
+- Four commits: `ed6de7c` (core span-capturing emitter), `84ed853` (wire owned encode path + second
+  corpus gate), `504e167` (encode API respec + API ledger), `708403d` (standalone `cargo fmt` of
+  `dto.rs`, now permitted). Base `0384ef6`.
+
+### Core (`ed6de7c`) — four new public items, zero byte changes
+
+- `tokens_to_usfm_reconstruct_spanned(&[T]) -> (String, Vec<ReconstructedSpans>)`,
+  `ReconstructedSpans`, and `OwnedToken::parsed_sid()`. Plus `parse::assign_ids` from the previous
+  packet, recorded in the freeze's API ledger with rationale for all four.
+- `ReconstructedSpans` carries the token span and the attribute-list span **separately** because
+  neither is derivable from the other: a deferred list is emitted at its closer, which may be
+  thousands of bytes after the marker that owns it. That is also why only this emitter can report
+  them and why a caller cannot compute spans from a running offset over `token.source()`.
+- Both entry points share one implementation, so the spanned variant cannot drift from the plain one;
+  the recorder is an `Option`, so the plain (per-keystroke editor) path pays nothing for spans it
+  would discard.
+- `parsed_sid()` exposes the compact anchor the eight-byte packed sid is built from. Deliberately not
+  routed through `DiffableToken::sid_key()`, which also carries a `Sid` but is documented as a
+  partition key — using a hash/compare helper as the canonical accessor would have been exactly the
+  cleverness the adjudication warned against.
+
+### Wire (`84ed853`) — owned encode path
+
+- `encode_owned_token_section` = serialize → take spans from that pass → feed the existing encoder.
+  Returns the derived source, because it (not any file on disk) is what the section's spans and hash
+  are bound to. `owned_to_borrowed` rebuilds borrowed tokens over the serialized source so there is
+  one encoder, not two; metadata comes back from core's registry by name, as decoding does.
+- Attribute entry spans are found by a left-to-right scan inside the emitter-reported list span
+  (entries are substrings of a verbatim list). An entry whose text is not in its own list is refused
+  with `UnboundSpan` — the adjudicated synthetic-token guard.
+- The verbatim list is read back out of the serialized source rather than off the input token: after
+  serialization it is genuinely there, which makes the loop idempotent (decode == parse of that
+  source). Absent stays distinct from empty — a token with neither a list nor an entry produces no
+  attribute row at all — and that distinction is asserted at the byte level, since a parse cannot
+  produce `Some("")`: a present zero-length span decodes to `Some("")`, the sentinel offset to `None`.
+
+### Gates
+
+- `cargo test --workspace`: core 251 passed / 12 ignored, wire **123 passed / 2 ignored**, wasm 25,
+  all integration targets green, 0 failed. `lint_oracle -- --ignored`: 1 passed.
+  `npm run check:wasm:web`: green. `cargo clippy -p usfm_onion_wire --all-targets`: no wire warnings;
+  core still reports only its five pre-existing ones.
+- **Parsed corpus gate**: 395 books, 5,716,969 tokens, zero mismatches, zero wide bridges.
+- **Owned corpus gate** (new): 395 books, 5,716,969 tokens, **1,263,854 attribute-bearing tokens**,
+  376 books byte-identical, 19 divergent. Universal assertions: the codec returns exactly the tokens
+  it was given, and recording spans changes not one byte of the emission.
+
+### STOP / correction — the emitter is not universally lossless
+
+- The packet's premise "for parsed-origin tokens the derived source must be byte-identical (the
+  emitter is lossless)" is **false for 19 of 395 corpus fixtures**, and this is pre-existing, not
+  caused by the span capture:
+  - The spanned emitter's bytes equal the untouched plain `tokens_to_usfm_reconstruct`'s on every one
+    of the 395 (now a permanent gate assertion, which is what attributes the divergence).
+  - The span-based `tokens_to_usfm` reproduces all 19 exactly, and core's own doc comment on
+    `tokens_to_usfm_reconstruct` already names the class: "a malformed/unclosed attribute-bearing
+    marker's attribute list lands at end-of-stream here … instead of at its original byte position".
+- All 19 are one shape — a deferred attribute list emitted at its **closer**, which for these inputs
+  is not where the list started: `FigureNotClosed` (`\fig` never closes), `Wordlist…ProperNoun…` (the
+  list belongs to a nested `\+pn` whose closer precedes it), `newline-attributes` (a list containing a
+  newline is split by the parser), `synthetic/kitchen-sink` (a `\list` milestone of the same shape),
+  and 15 `usfmjsTests/*oldformat*` alignment fixtures whose `\k-s | x-tw="…"` sits lines above its
+  `\k-e\*`.
+- Handled, not papered over: the gate asserts the round trip is faithful for **all** 395 (decoded ==
+  the tokens encoded, because the section describes the derived source), asserts byte-identity for the
+  376, and asserts the divergent set equals an enumerated 19-path constant with each cause documented.
+  Listing rather than counting means a twentieth has to be understood deliberately.
+- **Format consequence recorded in the freeze**: an owned-encoded section is bound to the derived
+  source, not to any file on disk. A caller persisting one alongside an original file must treat the
+  derived source as the authoritative pairing. First noticed because the first gate run stopped at the
+  4th file; the full sweep found 19.
+
+### Process
+
+- `cargo fmt`/clippy cleanups now permitted, kept in their own commit: `708403d` formats `dto.rs`,
+  which had been non-`cargo fmt`-clean since the verbatim crate move and had already cost one
+  accidental reformat. `cargo fmt --check -p usfm_onion_wire` is now clean, so the whole package can
+  be formatted safely. Left alone: `src/diff/text_diff_fixtures.rs` (owner's area, not mentioned) and
+  the five pre-existing core clippy warnings.
+- Owner's untracked leftovers untouched; every commit used explicit paths; zero modified tracked files
+  at the end.
+
+### Next
+
+- Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, and the packed
+  patch table.
