@@ -248,20 +248,20 @@ the codes with non-empty `message_params` and their param shapes:
 | rule code (`u8`) | kebab code | message-param shape |
 | ---: | --- | --- |
 | 3 | `empty-paragraph` | `{ marker: string }` |
-| 7 | `unknown-token` | `{ text: string, marker: string }` |
+| 7 | `unknown-token` | `{ text: string }` — `marker` is the separate `LintIssue.marker` field, not a message parameter |
 | 8 | `unknown-marker` | `{ marker: string }` |
 | 9 | `unknown-close-marker` | `{ marker: string }` |
 | 10 | `content-before-first-chapter` | `{ kind: "paragraph" \| "verse", marker: string }` |
 | 12 | `note-submarker-outside-note` | `{ marker: string }` |
 | 13 | `metadata-outside-target` | `{ marker: string, target: "chapter" \| "verse" }` |
-| 14 | `marker-not-valid-in-context` | `{ marker: string, context: <16-arm select> }` |
+| 14 | `marker-not-valid-in-context` | `{ marker: string, context: <20-value canonical SpecContext domain> }` |
 | 15 | `missing-milestone-self-close` | `{ marker: string }` |
-| 16 | `stray-close-marker` | `{ form: "milestone-end" \| "other", marker: string }` |
+| 16 | `stray-close-marker` | `{ form: "milestone-end" }` \| `{ form: "named", marker: string }` — discriminated exact maps |
 | 17 | `misnested-close-marker` | `{ has_expected: <select>, expected: string, marker: string }` |
 | 18 | `implicitly-closed-marker` | `{ marker: string, closer: string }` |
 | 19 | `unclosed-marker` | `{ kind: "note" \| "character" \| "other", marker: string, location: "at-eof" \| "at-boundary" }` |
-| 20 | `duplicate-chapter-number` | `{ chapter: number }` |
-| 21 | `duplicate-verse-number` | `{ verse: number, chapter: number }` |
+| 20 | `duplicate-chapter-number` | `{ chapter: number, marker: string }` — the producer keeps the redundant marker parameter for public-map fidelity |
+| 21 | `duplicate-verse-number` | `{ verse: number, chapter: number, marker: string }` — the producer keeps the redundant marker parameter for public-map fidelity |
 | 22 | `invalid-number-range` | `{ found: string, verse: string, marker: string, context: string }` |
 | 24 | `missing-whitespace-before-marker` | `{ marker: string }` |
 | 25 | `missing-horizontal-whitespace-after-marker-name` | `{ marker: string }` |
@@ -1166,7 +1166,7 @@ than guessed in code.
 | 4 — `marker_ref` | fully determined by §M.3 (8-byte tagged record; tag 2 producerless by proof) |
 | 1 — `related_token_idx` + related span | determined **up to one mechanical choice**: §7.6 says "`related_token_idx[N]:u32` plus related token-relative span" without giving the span's widths. Taken as `{token_idx:u32, offset:u16, len:u16}` = 8 bytes, width 8 — the related span is the same kind of value as the primary span in the common row and therefore takes the same widths, with the same `overflow` escape available if it ever needs more. Recorded as mechanical, not raised as a decision. |
 
-### F.2 GAP 1 — message payloads have no byte storage (blocking)
+### F.2 Finding message framing — 2026-07-28 owner adjudication
 
 Field 3 is frozen as `message_payload_idx[N]:u32`, an index column of fixed width 4. What it indexes
 has **no field id and no framing**: the finding field table ends at id 6, and §M closed the question of
@@ -1186,7 +1186,11 @@ for that code. 24 of 32 rule codes carry message parameters; without storage for
 cannot round-trip, which §7.6's own closing rule forbids ("Every current `LintIssue` must round-trip
 semantically … Phase B amends the schema before coding; it does not drop the field").
 
-**Proposed amendment (not decided):**
+**Owner decision:** add these two optional fields. Field 7 uses the checked §D.1
+string-dictionary framing verbatim; field 8 stores generic key/value rows. This
+does not create 24 physical payload structs: §5.3 remains the current-rules
+validation contract for the one `MessageParams = BTreeMap<String, String>`
+storage shape.
 
 | `field_id` | name | width | required/optional |
 | ---: | --- | --- | --- |
@@ -1203,10 +1207,29 @@ Field 8 framing, mirroring §D.5's two-array shape so the second count is derive
   reproducible without a comparator at read time.
 
 Note this stores parameters as **key/value data**, not as 24 per-code typed structs. §5.3 assigns a
-schema id per code and lists each code's param shape, which remains the *validation* contract a
-consumer may apply; it is not a reason to fork the storage 24 ways, and a flat pair list round-trips
-`MessageParams` byte-for-byte, which typed structs would only do if every shape were also frozen field
-by field. Raised explicitly because §5.3 could be read either way.
+schema id per code and lists each code's param shape, which remains the *validation* contract the
+checked decoder applies; it is not a reason to fork the storage 24 ways. A flat pair list round-trips
+`MessageParams` byte-for-byte while its `BTreeMap` key order gives the writer canonical bytes.
+
+**Census corrections recorded with this adjudication:** `unknown-token` is exactly
+`{ text }`, because `lint_unknown_token_like` puts its marker in the separate
+`LintIssue.marker` field. `duplicate-chapter-number` is `{ chapter, marker }`
+and `duplicate-verse-number` is `{ verse, chapter, marker }`; their marker
+parameters are public semantic data even though their current English templates
+do not interpolate them. The §5.3 table and Gate 0D matrix are the source of
+truth for all three corrections. `stray-close-marker` is a discriminated union:
+the bare milestone-end producer emits exactly `{ form: "milestone-end" }`,
+while a named close emits exactly `{ form: "named", marker }`. It is not an
+optional-marker shape; checked decode selects and validates one exact branch.
+
+`marker-not-valid-in-context.context` is the closed set of all 20 canonical
+strings returned by `spec_context_name` for `SpecContext`: `scripture`,
+`book-identification`, `book-headers`, `book-titles`, `book-introduction`,
+`book-introduction-end-titles`, `book-chapter-label`, `chapter-content`,
+`peripheral`, `peripheral-content`, `peripheral-division`, `chapter`, `verse`,
+`section`, `para`, `list`, `table`, `sidebar`, `footnote`, and
+`cross-reference`. The ICU template's 16 named branches plus `other` are
+presentation logic, not a narrower semantic domain.
 
 ### F.3 GAP 2 — patch table framing (deferred, not proposed)
 
@@ -1231,12 +1254,7 @@ Their `LintIssue.fix` decodes as `None`. Every other field of those findings rou
 
 ### F.4 What is blocked and what is not
 
-With F.2 unadjudicated, a finding codec can still be built for the common row and fields 1, 2, and 4 —
-the anchor, the flags, the related anchor, the overflow span, and the marker reference. What it cannot
-do is claim per-code conformance: 24 of 32 codes would decode with empty `message_params`, so the
-"every LintCode round-trips" gate would be failing by construction rather than passing. Implementing
-the codec against a field table that F.2 is about to extend also risks a second pass over the same
-directory rows.
-
-Recommended sequence, matching how the token section was landed: adjudicate F.2, then implement all
-six-plus-two fields in one pass with the per-code conformance gate green from the start.
+The framing is now adjudicated. Phase B implements all six-plus-two fields in one
+pass with the per-code conformance gate green from the start. Patch fields 5/6
+remain deliberately deferred under §F.3; that interim omission does not weaken
+the final Phase B all-fields gate.

@@ -28,6 +28,9 @@ pub const SECTION_VERSION: u16 = 1;
 /// rule-catalog version instead.
 pub const TOKEN_SECTION_RULES_VERSION: u16 = 0;
 
+/// Current finding-catalog and message-parameter contract revision.
+pub const FINDING_SECTION_RULES_VERSION: u16 = 1;
+
 /// Container header size. Fixed at 48 in v1, and also written into the header's
 /// own `header length` field so a future longer header stays self-describing.
 pub const CONTAINER_HEADER_LEN: usize = 48;
@@ -449,6 +452,10 @@ pub mod finding_field {
     pub const MARKER_REF: u16 = 4;
     pub const PATCH_ID: u16 = 5;
     pub const PATCH_TABLE: u16 = 6;
+    /// Generic UTF-8 dictionary for message parameter keys and values.
+    pub const STRING_DICTIONARY: u16 = 7;
+    /// Message payload rows followed by their key/value pairs.
+    pub const MESSAGE_PAYLOAD_TABLE: u16 = 8;
 
     /// Field requirements and any fixed uniform width, in stable id order.
     pub const TABLE: &[FieldSpec] = &[
@@ -484,6 +491,16 @@ pub mod finding_field {
         },
         FieldSpec {
             id: PATCH_TABLE,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: STRING_DICTIONARY,
+            element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: MESSAGE_PAYLOAD_TABLE,
             element_width: None,
             required: false,
         },

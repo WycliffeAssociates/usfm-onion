@@ -97,21 +97,21 @@ Anchor legend: **token** = `span` = exactly the anchor token's span and `token_i
 | 5 | `missing-chapter-number` | structure | error | content | — | no | no | token | **synthetic `s12`** (0 in all real sets) |
 | 6 | `missing-verse-number` | structure | error | content | — | no | no | token | testData 2 |
 | 7 | `verse-is-empty` | structure | error | content | — | no | no | token | en_ult 30,077; testData 870 |
-| 8 | `unknown-token` | structure | error | usfm | `text`, `marker` | no | no | token | **probe2 A2 only — token path only** (0 everywhere) |
+| 8 | `unknown-token` | structure | error | usfm | `text` — `marker` is the separate `LintIssue.marker` field | no | no | token | **probe2 A2 only — token path only** (0 everywhere) |
 | 9 | `unknown-marker` | structure | error | usfm | `marker` | no | no | token | en_ulb 13,636; testData 317 |
 | 10 | `unknown-close-marker` | structure | error | usfm | `marker` | no | no | token | **synthetic `s13`** (0 in all real sets) |
 | 11 | `content-before-first-chapter` | document | error | usfm | `kind` (select paragraph/verse), `marker` | no | no | token | testData 17 |
 | 12 | `verse-outside-explicit-paragraph` | context | error | usfm | — | no | no | token | en_ult 614, testData 3, golden 1 |
 | 13 | `note-submarker-outside-note` | context | error | usfm | `marker` | no | no | token | testData 20 |
 | 14 | `metadata-outside-target` | context | error | usfm | `marker`, `target` (select chapter/verse) | no | no | token | testData 7 |
-| 15 | `marker-not-valid-in-context` | context | error | usfm | `marker`, `context` (16-arm select) | no | no | token | en_ult 15,643; testData 76 |
+| 15 | `marker-not-valid-in-context` | context | error | usfm | `marker`, `context` (20-value canonical `SpecContext` domain; template `other` is presentation only) | no | no | token | en_ult 15,643; testData 76 |
 | 16 | `missing-milestone-self-close` | structure | error | usfm | `marker` | no | no | token | testData 354 |
-| 17 | `stray-close-marker` | structure | error | usfm | `form` (select milestone-end/other), `marker` | no | no | token | testData 37; synthetic `s13` |
+| 17 | `stray-close-marker` | structure | error | usfm | exact union: `{ form: "milestone-end" }` \| `{ form: "named", marker }` | no | no | token | testData 37; synthetic `s13` |
 | 18 | `misnested-close-marker` | structure | error | usfm | `has_expected` (select), `expected`, `marker` | yes | no | token | testData 2 |
 | 19 | `implicitly-closed-marker` | structure | error | usfm | `marker`, `closer` | yes | no | token | testData 2 |
 | 20 | `unclosed-marker` | structure | error | usfm | `kind` (note/character/other), `marker`, `location` (at-eof/at-boundary) | yes | no | token | testData 16, en_ulb 2, synthetic `s14` |
-| 21 | `duplicate-chapter-number` | numbering | error | content | `chapter` (number) | yes | no | token | testData 10 |
-| 22 | `duplicate-verse-number` | numbering | error | content | `verse`, `chapter` (number) | yes | no | token | testData 57 |
+| 21 | `duplicate-chapter-number` | numbering | error | content | `chapter` (number), `marker` — producer preserves the public redundant marker param | yes | no | token | testData 10 |
+| 22 | `duplicate-verse-number` | numbering | error | content | `verse`, `chapter` (number), `marker` — producer preserves the public redundant marker param | yes | no | token | testData 57 |
 | 23 | `invalid-number-range` | numbering | error | content | `found`, `verse`, `marker`, `context` | no | no | token | **probe A only — token path only** (0 everywhere) |
 | 24 | `number-range-not-preceded-by-marker-expecting-number` | numbering | error | content | — | no | no | token | **probe A only — token path only** (0 everywhere) |
 | 25 | `missing-whitespace-before-marker` | structure | error | usfm | `marker` | no | **YES** `ReplaceToken` | token | testData 42, en_ult 6 |
