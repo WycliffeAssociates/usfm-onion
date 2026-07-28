@@ -1370,3 +1370,36 @@ commits, no bless/update env vars, no git reset/clean/checkout. Deliverable:
   with `--features wasm` all green. `cargo clippy -p usfm_onion_wire --all-targets` reports only
   the five pre-existing core warnings; the wire crate adds none. A `-D warnings` probe stops on
   those same core warnings before checking wire.
+
+## 2026-07-27 — Phase A layout stop before steps 3b–4
+
+- The semantic contract requires four values for which the frozen byte tables allocate no storage:
+  global `snapshot_id`; per-book exact source length; marker-catalog stamp; and the packed SID
+  dictionary itself (field 4 is only the `u16` index column, while token field ids 0–11 contain no
+  SID-dictionary payload). None can be reconstructed safely from the existing checksum/hash/index.
+- The mixed payloads also still lack exact byte records: string/token-id dictionary framing,
+  marker descriptors, and sparse number/book-code/attribute records. Their semantic names and
+  directory ids do not define an independently implementable decoder.
+- Serial `encode_corpus`/`decode_borrowed` therefore stop here. The next normative amendment must
+  allocate the four missing values (header extension versus explicit metadata fields) and freeze
+  each mixed record's byte shape, count meaning, canonical ordering, reserved bytes, and validation
+  errors. Implementing the historical spike's shapes by implication would create undocumented v1
+  wire law and is explicitly out of bounds.
+
+## 2026-07-27 — Core `OwnedToken` foundation
+
+- Added core-owned `StableTokenId`, `OwnedToken`, `OwnedNumberInfo`, `OwnedBookCode`, and
+  `OwnedAttribute` without serde/tsify/wasm dependencies. A private discriminated payload prevents
+  illegal marker/end-marker/milestone/number/book-code combinations.
+- `OwnedToken::from_parsed` preserves stable positional ids, source, semantic payload, marker
+  metadata, verbatim attribute lists, and both native SID spellings: lint's chapter-scope `GEN 1`
+  and diff's `GEN 1:0`. It implements the existing serialization, walker, lint, and diff traits.
+- Review found and fixed the verse-zero SID mismatch before commit. A second clean-room review found
+  no panic path or illegal-state escape, but correctly marked this as a foundation rather than a
+  resident-ready token: `FormattableToken` remains blocked on how formatter-created synthetic
+  tokens receive nonempty, book-unique stable ids, and resident lint remains blocked on the already
+  approved token-position canonical-sort change. The DTO construction/`TokenInputError` seam is
+  likewise deferred rather than guessed.
+- Verification: full workspace green (core 250 passed / 12 ignored; wire 80 passed; wasm 25
+  passed; all integration suites green), ignored lint oracle 1 passed, and core Clippy reports only
+  the same five pre-existing warnings.

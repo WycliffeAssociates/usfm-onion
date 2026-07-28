@@ -386,6 +386,284 @@ impl<'a> Token<'a> {
     }
 }
 
+/// Opaque identifier supplied by a resident token source.
+///
+/// Identity is stable only within one book. Onion compares it byte-for-byte
+/// but does not assign meaning to its contents.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StableTokenId(Box<str>);
+
+impl StableTokenId {
+    /// Returns `None` for an empty identifier, which cannot address a token.
+    pub fn new(value: impl Into<Box<str>>) -> Option<Self> {
+        let value = value.into();
+        (!value.is_empty()).then_some(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for StableTokenId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Display for StableTokenId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// One USFM attribute entry retained with its source spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedAttribute {
+    pub source: Box<str>,
+    pub key: Box<str>,
+    pub value: Box<str>,
+    pub is_default: bool,
+}
+
+/// Parsed number payload carried by a `TokenKind::Number` token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedNumberInfo {
+    pub start: u32,
+    pub end: Option<u32>,
+    pub kind: NumberRangeKind,
+}
+
+/// Parsed book-code payload carried by a `TokenKind::BookCode` token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedBookCode {
+    pub code: Box<str>,
+    pub is_valid: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OwnedMarkerAttrs {
+    attributes: Box<[OwnedAttribute]>,
+    attribute_source: Option<Box<str>>,
+}
+
+/// The payload variant follows `kind` exactly. Keeping it private prevents a
+/// boundary caller from creating impossible marker/attribute combinations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OwnedTokenPayload {
+    Plain,
+    Marker {
+        marker: Box<str>,
+        metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
+        nested: bool,
+        attrs: Option<OwnedMarkerAttrs>,
+    },
+    EndMarker {
+        marker: Box<str>,
+        metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
+        nested: bool,
+    },
+    Milestone {
+        marker: Box<str>,
+        metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
+        attrs: Option<OwnedMarkerAttrs>,
+    },
+    BookCode(OwnedBookCode),
+    Number(OwnedNumberInfo),
+}
+
+/// Owned semantic token for token streams that outlive their parsed source.
+///
+/// Parsed tokens borrow source text and carry byte spans; this type retains
+/// the semantic payload and any verbatim attribute list needed to emit the
+/// token stream without retaining the original source buffer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedToken {
+    id: StableTokenId,
+    kind: TokenKind,
+    source: Box<str>,
+    sid: Option<Box<str>>,
+    parsed_sid: Option<Sid>,
+    payload: OwnedTokenPayload,
+}
+
+impl OwnedToken {
+    /// Copies one parsed token into the owned semantic representation.
+    pub fn from_parsed(value: &Token<'_>) -> Self {
+        let kind = value.kind();
+        let payload = match &value.data {
+            TokenData::Newline
+            | TokenData::OptBreak
+            | TokenData::MilestoneEnd
+            | TokenData::Text => OwnedTokenPayload::Plain,
+            TokenData::Marker {
+                name,
+                metadata,
+                structural,
+                nested,
+                attrs,
+            } => OwnedTokenPayload::Marker {
+                marker: Box::from(*name),
+                metadata: *metadata,
+                structural: *structural,
+                nested: *nested,
+                attrs: owned_marker_attrs(attrs),
+            },
+            TokenData::EndMarker {
+                name,
+                metadata,
+                structural,
+                nested,
+            } => OwnedTokenPayload::EndMarker {
+                marker: Box::from(*name),
+                metadata: *metadata,
+                structural: *structural,
+                nested: *nested,
+            },
+            TokenData::Milestone {
+                name,
+                metadata,
+                structural,
+                attrs,
+            } => OwnedTokenPayload::Milestone {
+                marker: Box::from(*name),
+                metadata: *metadata,
+                structural: *structural,
+                attrs: owned_marker_attrs(attrs),
+            },
+            TokenData::BookCode { code, is_valid } => OwnedTokenPayload::BookCode(OwnedBookCode {
+                code: Box::from(*code),
+                is_valid: *is_valid,
+            }),
+            TokenData::Number { start, end, kind } => OwnedTokenPayload::Number(OwnedNumberInfo {
+                start: *start,
+                end: *end,
+                kind: *kind,
+            }),
+        };
+
+        Self {
+            id: StableTokenId(Box::from(format!(
+                "{}-{}",
+                value.id.book_code, value.id.index
+            ))),
+            kind,
+            source: Box::from(value.source),
+            sid: value.sid.map(|sid| Box::from(sid.to_string())),
+            parsed_sid: value.sid,
+            payload,
+        }
+    }
+
+    pub fn id(&self) -> &StableTokenId {
+        &self.id
+    }
+
+    pub fn kind(&self) -> TokenKind {
+        self.kind
+    }
+
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    pub fn sid(&self) -> Option<&str> {
+        self.sid.as_deref()
+    }
+
+    pub fn marker_name(&self) -> Option<&str> {
+        match &self.payload {
+            OwnedTokenPayload::Marker { marker, .. }
+            | OwnedTokenPayload::EndMarker { marker, .. }
+            | OwnedTokenPayload::Milestone { marker, .. } => Some(marker),
+            _ => None,
+        }
+    }
+
+    pub fn nested(&self) -> bool {
+        match self.payload {
+            OwnedTokenPayload::Marker { nested, .. }
+            | OwnedTokenPayload::EndMarker { nested, .. } => nested,
+            _ => false,
+        }
+    }
+
+    pub fn number_info(&self) -> Option<&OwnedNumberInfo> {
+        match &self.payload {
+            OwnedTokenPayload::Number(number) => Some(number),
+            _ => None,
+        }
+    }
+
+    pub fn book_code(&self) -> Option<&OwnedBookCode> {
+        match &self.payload {
+            OwnedTokenPayload::BookCode(book_code) => Some(book_code),
+            _ => None,
+        }
+    }
+
+    pub fn attributes(&self) -> &[OwnedAttribute] {
+        match &self.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => &attrs.attributes,
+            _ => &[],
+        }
+    }
+
+    pub fn attribute_list(&self) -> Option<&str> {
+        match &self.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => attrs.attribute_source.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        match self.payload {
+            OwnedTokenPayload::Marker { structural, .. }
+            | OwnedTokenPayload::EndMarker { structural, .. }
+            | OwnedTokenPayload::Milestone { structural, .. } => Some(structural),
+            _ => None,
+        }
+    }
+
+    fn marker_index(&self) -> MarkerIndex {
+        match self.payload {
+            OwnedTokenPayload::Marker { metadata, .. }
+            | OwnedTokenPayload::EndMarker { metadata, .. }
+            | OwnedTokenPayload::Milestone { metadata, .. } => metadata.index,
+            _ => MarkerIndex::UNKNOWN,
+        }
+    }
+}
+
+fn owned_marker_attrs(attrs: &Option<Box<MarkerAttrs<'_>>>) -> Option<OwnedMarkerAttrs> {
+    attrs.as_deref().map(|attrs| OwnedMarkerAttrs {
+        attributes: attrs
+            .attributes
+            .iter()
+            .map(|attribute| OwnedAttribute {
+                source: Box::from(attribute.source),
+                key: Box::from(attribute.key),
+                value: Box::from(attribute.value),
+                is_default: attribute.is_default,
+            })
+            .collect(),
+        attribute_source: attrs.attribute_source.map(|(_, source)| Box::from(source)),
+    })
+}
+
 /// Serialize a token stream back to USFM, lossless byte-for-byte against the
 /// original source.
 ///
@@ -567,6 +845,131 @@ impl<'a> SerializableToken for Token<'a> {
             } => attrs.attribute_source.map(|(_, slice)| slice),
             _ => None,
         }
+    }
+}
+
+impl SerializableAttribute for OwnedAttribute {
+    fn key(&self) -> &str {
+        &self.key
+    }
+
+    fn value(&self) -> &str {
+        &self.value
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+}
+
+impl UsfmToken for OwnedToken {
+    fn kind(&self) -> TokenKind {
+        self.kind()
+    }
+
+    fn source(&self) -> &str {
+        self.source()
+    }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker_name()
+    }
+}
+
+impl SerializableToken for OwnedToken {
+    type Attr = OwnedAttribute;
+
+    fn attributes(&self) -> &[Self::Attr] {
+        self.attributes()
+    }
+
+    fn attribute_list(&self) -> Option<&str> {
+        self.attribute_list()
+    }
+}
+
+impl crate::walker::WalkableToken for OwnedToken {
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        self.structural()
+    }
+}
+
+impl crate::lint::LintableToken for OwnedToken {
+    fn sid(&self) -> Option<String> {
+        self.sid().map(ToOwned::to_owned)
+    }
+
+    fn id(&self) -> Option<String> {
+        Some(self.id().to_string())
+    }
+
+    fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
+        self.number_info()
+            .map(|number| (number.start, number.end, number.kind))
+    }
+
+    fn allows_effective_context(&self, context: crate::marker_defs::SpecContext) -> bool {
+        crate::marker_defs::marker_allows_effective_context_for_index(self.marker_index(), context)
+    }
+}
+
+impl crate::diff::DiffableToken for OwnedToken {
+    fn sid(&self) -> Option<&str> {
+        self.sid()
+    }
+
+    fn sid_string(&self) -> Option<String> {
+        self.parsed_sid
+            .map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator()))
+            .or_else(|| self.sid().map(ToOwned::to_owned))
+    }
+
+    fn sid_key(&self) -> crate::diff::SidKey<'_> {
+        match self.parsed_sid {
+            Some(sid) => crate::diff::SidKey::Compact(sid),
+            None => match self.sid() {
+                Some(sid) => crate::diff::SidKey::Text(sid),
+                None => crate::diff::SidKey::Empty,
+            },
+        }
+    }
+
+    fn text(&self) -> &str {
+        self.source()
+    }
+
+    fn id(&self) -> Option<&str> {
+        Some(self.id().as_str())
+    }
+
+    fn kind_key(&self) -> Option<&str> {
+        Some(owned_token_kind_key(self.kind()))
+    }
+
+    fn marker_key(&self) -> Option<&str> {
+        self.marker_name()
+    }
+
+    fn number_range(&self) -> Option<(u32, Option<u32>)> {
+        self.number_info().map(|number| (number.start, number.end))
+    }
+
+    fn book_code(&self) -> Option<&str> {
+        self.book_code().map(|book_code| book_code.code.as_ref())
+    }
+}
+
+fn owned_token_kind_key(kind: TokenKind) -> &'static str {
+    match kind {
+        TokenKind::Newline => "verticalWhitespace",
+        TokenKind::OptBreak => "optBreak",
+        TokenKind::Marker => "marker",
+        TokenKind::EndMarker => "endMarker",
+        TokenKind::Milestone => "milestone",
+        TokenKind::MilestoneEnd => "milestoneEnd",
+        TokenKind::BookCode => "bookCode",
+        TokenKind::Number => "number",
+        TokenKind::Text => "text",
     }
 }
 
@@ -936,6 +1339,100 @@ mod sid_size_guard {
         let book = BookId::from_str("GEN").unwrap();
         let sid = Sid::with_range(book, 1, 1, 2);
         assert_eq!(sid.to_string(), "GEN 1:1-2");
+    }
+}
+
+#[cfg(test)]
+mod owned_token_tests {
+    use super::{OwnedToken, StableTokenId, TokenKind, tokens_to_usfm_reconstruct};
+    use crate::diff::{DiffableToken, derive_canonical_sids};
+    use crate::lint::{LintOptions, LintScope, LintableToken, lint_tokens};
+    use crate::parse::parse;
+
+    #[test]
+    fn stable_token_id_rejects_an_empty_address() {
+        assert!(StableTokenId::new("").is_none());
+        assert_eq!(
+            StableTokenId::new("editor-42").unwrap().as_str(),
+            "editor-42"
+        );
+    }
+
+    #[test]
+    fn owned_tokens_preserve_semantics_and_verbatim_attributes() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 \\w grace|lemma=\"grace\"\\w*\n";
+        let parsed = parse(source);
+        let expected_word_id = parsed
+            .tokens
+            .iter()
+            .find(|token| token.kind() == TokenKind::Marker && token.marker_name() == Some("w"))
+            .map(|token| format!("{}-{}", token.id.book_code, token.id.index))
+            .expect("parsed character marker");
+        let tokens = parsed
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+
+        let word = tokens
+            .iter()
+            .find(|token| token.kind() == TokenKind::Marker && token.marker_name() == Some("w"))
+            .expect("parsed character marker");
+        assert_eq!(word.id().as_str(), expected_word_id);
+        assert_eq!(word.attributes().len(), 1);
+        assert_eq!(word.attributes()[0].key.as_ref(), "lemma");
+        assert_eq!(word.attribute_list(), Some("|lemma=\"grace\""));
+
+        assert_eq!(tokens_to_usfm_reconstruct(&tokens), source);
+        assert_eq!(
+            derive_canonical_sids(&tokens, "GEN"),
+            derive_canonical_sids(&parsed.tokens, "GEN")
+        );
+        assert_eq!(
+            lint_tokens(&tokens, LintOptions::scoped(LintScope::Book))
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>(),
+            lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book))
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn owned_token_keeps_verse_zero_diff_spelling() {
+        let parsed = parse("\\id GEN\n\\c 1\n\\p\n");
+        let tokens = parsed
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+        let (parsed_token, owned_token) = parsed
+            .tokens
+            .iter()
+            .zip(&tokens)
+            .find(|(parsed_token, _)| {
+                parsed_token
+                    .sid
+                    .is_some_and(|sid| sid.chapter == 1 && sid.verse == 0)
+            })
+            .expect("chapter-scope token");
+
+        assert_eq!(
+            DiffableToken::sid_string(owned_token),
+            DiffableToken::sid_string(parsed_token)
+        );
+        assert_eq!(
+            DiffableToken::sid_string(owned_token).as_deref(),
+            Some("GEN 1:0")
+        );
+        assert_eq!(
+            LintableToken::sid(owned_token),
+            parsed_token.sid.map(|sid| sid.to_string())
+        );
     }
 }
 
