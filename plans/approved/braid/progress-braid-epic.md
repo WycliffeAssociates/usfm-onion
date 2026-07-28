@@ -1845,3 +1845,95 @@ non-`cargo fmt`-clean file and was left alone.
 
 - Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, the packed patch
   table.
+
+## 2026-07-28 — Phase A tail: doc nits, JS schema constants, token goldens, decode_par deferral
+
+- Four commits: `d4c4af3` (doc nits), `411d28a` (JS/TS wire-schema constants), `47a52c2` (token
+  golden vectors). Base `01fb2cd`. Executes the packet spanning `braid-epic.md` §10 Phase A steps
+  5–6 and `gate0-0g-dependency-ledger.md` §7.2.
+
+### Doc nits (`d4c4af3`)
+
+- `src/token.rs`'s `ReconstructedSpans` doc and the freeze API ledger's rationale for it (§ API
+  ledger addition, row 3) still said an attribute list is always emitted at its closer/
+  end-of-stream. Since `1143ac1` a parse-origin token remembers its list's offset and the emitter
+  honours it; only a positionless token falls back to the closer rule. Both fixed; doc-only.
+
+### Generated JS/TS wire-schema constants (`411d28a`) — step 6a
+
+- Added `LintCodeTag` to `schema.rs`: the frozen `u8` ↔ kebab-string table from
+  `phase0-freeze.md` §1, in `LintCode`'s declaration order, with an exhaustive
+  `From<LintCode> for LintCodeTag` (a new core variant fails to compile until mirrored — the same
+  drift guard `dto.rs` documents for its own conversions) and a `lint_code_tags_match_the_frozen_table`
+  test. This is the discriminant table only, not the finding-record codec (Phase B); it exists now so
+  the eventual codec and the generated JS module read one frozen mapping rather than two.
+- `usfm_onion_wire::js_schema::render()` reads `schema.rs`'s compiled constants — magics, format/
+  section versions, section-kind ids, all flag bits, field tables (id/name/elementWidth/required),
+  sentinels, `TokenKind`/`NumberRangeKind` discriminants, the `LintCode` table — and renders
+  `js/wire-schema.{js,d.ts}`. Field *names* are the one thing the module supplies rather than reads
+  (Rust identifiers aren't reflectable at runtime); every value, width, and requiredness comes from
+  the compiled tables.
+- Generator: `cargo run --example generate_js_schema -p usfm_onion_wire` (thin binary calling
+  `render()`). Drift check: `js_schema::tests::wire_schema_matches_generator`, runs on every
+  `cargo test`, fails if the checked-in files differ from a fresh `render()`.
+- Wired into npm via a new `"./wire-schema"` export (same shape as the existing `"./token-sids"`
+  export) — target-agnostic, no wasm dependency, so **no wasm-pack rebuild was needed or performed**;
+  `pkg-bundler`/`pkg-web` were not touched. `test:wire-schema:import` smoke-tests resolution from both
+  the bundler and web package names via the shared export map.
+
+### Token-section golden vectors (`47a52c2`) — step 6b
+
+- `usfm_onion_wire::token_goldens`: 10 good vectors (full one-section container `.bin` + exact
+  `.usfm` source + a `.json` manifest naming what it proves) and 5 malformed vectors (`.bin` +
+  manifest naming the exact `DecodeError`). Coverage: every `TokenKind` with legal payloads
+  (`all-token-kinds`); positional ids (same vector) and explicit opaque ids (`explicit-ids`); SID
+  fidelity — exact bare, exact simple bridge, sequence/suffix/over-wide-bridge anchor-only
+  degradation (5 vectors); attributes — absent vs. default-shorthand vs. explicit-empty list on one
+  marker, and an owned token's remembered attribute offset reproducing a parse-origin source
+  byte-identically (2 vectors); an unknown marker. Malformed: truncated (below the 48-byte header),
+  bad magic, unsupported version, checksum mismatch (content edited without restamping), and an
+  out-of-range `sid_index` (rejects `InvalidSection`, confirmed empirically from `decode_sid`/
+  `TokenColumns::get`, not assumed).
+- Generator: `cargo test -p usfm_onion_wire --lib token_goldens::generate_token_goldens --
+  --ignored`, matching this crate's existing corpus-gate convention (`#[ignore]`d, never implicitly
+  run). Two always-on tests: `token_goldens_decode_and_match_parse` decodes every good vector and
+  asserts semantic equality against `parse(source)` (with one documented, intentional exception —
+  the over-wide-bridge vector's `sid.verse_end()` is dropped by design under `AnchorOnly` fidelity,
+  which the test asserts explicitly rather than silently loosening equality);
+  `malformed_token_goldens_reject_with_the_recorded_error` asserts each malformed vector's exact
+  `DecodeError`. Both also fail if the checked-in fixtures drift from what the encoder currently
+  produces (the same "compare, never silently accept" shape as the wasm golden suite).
+- Layout and the manifest schema (`name`/`kind`/`proves`, plus `base`/`expectedError` for malformed
+  vectors) anticipate a Phase B JS decoder conformance harness reading the same files.
+
+### `decode_par` deferral (step 5) — no code change
+
+- Plan gates native parallel decode on evidence still supporting it (§10 Phase A step 5). Current
+  evidence, from this packet's own release-mode corpus gates: `corpus_token_sections_round_trip`
+  and `corpus_owned_token_sections_round_trip` each decode+verify the full 395-book, 5,716,969-token
+  corpus in low single-digit seconds combined (well under the `cargo test --release` wall time
+  reported above), i.e. per-book decode is on the order of milliseconds. That does not justify a
+  second (parallel) decode path and its own correctness surface for v1. Deferred; revisit with
+  native-host (Tauri) latency/heap measurements in Phase F, per the plan's own gating language —
+  not implemented.
+
+### Gates
+
+- `cargo test --workspace`: 255 core / 0 dto (deleted) / 141 wire / 25 wasm, 0 failed, matching
+  pre-packet ignored counts plus the new golden tests. `cargo test --test lint_oracle -- --ignored`:
+  1 passed. `npm run check:wasm:web`: green. `npm run test:wire-schema:import`: passed (both
+  package-name resolutions). `cargo clippy -p usfm_onion_wire --all-targets`: no wire warnings
+  (two `#[allow(clippy::ptr_arg)]` on golden-corruption helper fns that intentionally share a
+  `fn(&mut Vec<u8>)` pointer type with a `Vec::truncate`-using sibling). `cargo fmt --check -p
+  usfm_onion_wire`: clean. Both ignored wire corpus gates in release:
+  `corpus_token_sections_round_trip` and `corpus_owned_token_sections_round_trip`, 395 books /
+  5,716,969 tokens, 0 mismatches.
+- No `BLESS=1`/`UPDATE_GOLDEN=1`; no git reset/clean/checkout/stash; every commit staged explicit
+  paths; owner's untracked leftovers (`.claude/`, `alloc_sizes.txt`, `lib_sizes.txt`,
+  `bench-remote.sh`, `plans/approved/braid/handoff-*.md`) untouched.
+- No deviation from the plan requiring adjudication.
+
+### Next
+
+- Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, the packed
+  patch table (Phase B).
