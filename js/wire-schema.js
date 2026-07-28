@@ -8,6 +8,7 @@ export const FORMAT_VERSION = 1;
 export const SECTION_VERSION = 1;
 export const TOKEN_SECTION_RULES_VERSION = 0;
 export const FINDING_SECTION_RULES_VERSION = 1;
+export const MARKER_CATALOG_STAMP = 11438527644260983257n;
 export const CONTAINER_HEADER_LEN = 48;
 export const TOC_ENTRY_LEN = 32;
 export const SECTION_HEADER_LEN = 64;
@@ -142,28 +143,143 @@ export const LINT_CODES = [
 ];
 
 export const PARAM_CONTRACTS = [
-  { code: 3, keys: ["marker"], strayCloseUnion: false },
-  { code: 7, keys: ["text"], strayCloseUnion: false },
-  { code: 8, keys: ["marker"], strayCloseUnion: false },
-  { code: 9, keys: ["marker"], strayCloseUnion: false },
-  { code: 10, keys: ["kind", "marker"], strayCloseUnion: false },
-  { code: 12, keys: ["marker"], strayCloseUnion: false },
-  { code: 13, keys: ["marker", "target"], strayCloseUnion: false },
-  { code: 14, keys: ["marker", "context"], strayCloseUnion: false },
-  { code: 15, keys: ["marker"], strayCloseUnion: false },
-  { code: 16, keys: ["form", "marker"], strayCloseUnion: true },
-  { code: 17, keys: ["has_expected", "expected", "marker"], strayCloseUnion: false },
-  { code: 18, keys: ["marker", "closer"], strayCloseUnion: false },
-  { code: 19, keys: ["kind", "marker", "location"], strayCloseUnion: false },
-  { code: 20, keys: ["chapter", "marker"], strayCloseUnion: false },
-  { code: 21, keys: ["verse", "chapter", "marker"], strayCloseUnion: false },
-  { code: 22, keys: ["found", "verse", "marker", "context"], strayCloseUnion: false },
-  { code: 24, keys: ["marker"], strayCloseUnion: false },
-  { code: 25, keys: ["marker"], strayCloseUnion: false },
-  { code: 26, keys: ["marker"], strayCloseUnion: false },
-  { code: 27, keys: ["marker"], strayCloseUnion: false },
-  { code: 28, keys: ["category"], strayCloseUnion: false },
-  { code: 29, keys: ["marker"], strayCloseUnion: false },
-  { code: 30, keys: ["code"], strayCloseUnion: false },
-  { code: 31, keys: ["code", "uppercase"], strayCloseUnion: false },
+  { code: 3, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 7, variants: [
+    { params: [
+      { key: "text", allowedValues: [] },
+    ] },
+  ] },
+  { code: 8, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 9, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 10, variants: [
+    { params: [
+      { key: "kind", allowedValues: ["paragraph", "verse"] },
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 12, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 13, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+      { key: "target", allowedValues: ["chapter", "verse"] },
+    ] },
+  ] },
+  { code: 14, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+      { key: "context", allowedValues: ["scripture", "book-identification", "book-headers", "book-titles", "book-introduction", "book-introduction-end-titles", "book-chapter-label", "chapter-content", "peripheral", "peripheral-content", "peripheral-division", "chapter", "verse", "section", "para", "list", "table", "sidebar", "footnote", "cross-reference"] },
+    ] },
+  ] },
+  { code: 15, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 16, variants: [
+    { params: [
+      { key: "form", allowedValues: ["milestone-end"] },
+    ] },
+    { params: [
+      { key: "form", allowedValues: ["named"] },
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 17, variants: [
+    { params: [
+      { key: "has_expected", allowedValues: ["true"] },
+      { key: "expected", allowedValues: [] },
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 18, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+      { key: "closer", allowedValues: [] },
+    ] },
+  ] },
+  { code: 19, variants: [
+    { params: [
+      { key: "kind", allowedValues: ["note", "character", "other"] },
+      { key: "marker", allowedValues: [] },
+      { key: "location", allowedValues: ["at-eof", "at-boundary"] },
+    ] },
+  ] },
+  { code: 20, variants: [
+    { params: [
+      { key: "chapter", allowedValues: [] },
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 21, variants: [
+    { params: [
+      { key: "verse", allowedValues: [] },
+      { key: "chapter", allowedValues: [] },
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 22, variants: [
+    { params: [
+      { key: "found", allowedValues: [] },
+      { key: "verse", allowedValues: [] },
+      { key: "marker", allowedValues: [] },
+      { key: "context", allowedValues: [] },
+    ] },
+  ] },
+  { code: 24, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 25, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 26, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 27, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 28, variants: [
+    { params: [
+      { key: "category", allowedValues: ["section", "other"] },
+    ] },
+  ] },
+  { code: 29, variants: [
+    { params: [
+      { key: "marker", allowedValues: [] },
+    ] },
+  ] },
+  { code: 30, variants: [
+    { params: [
+      { key: "code", allowedValues: [] },
+    ] },
+  ] },
+  { code: 31, variants: [
+    { params: [
+      { key: "code", allowedValues: [] },
+      { key: "uppercase", allowedValues: [] },
+    ] },
+  ] },
 ];

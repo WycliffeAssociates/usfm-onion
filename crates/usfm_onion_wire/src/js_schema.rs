@@ -19,6 +19,7 @@
 
 use std::fmt::Write as _;
 
+use crate::catalog::catalog_stamp;
 use crate::schema::{
     self, ATTRIBUTE_ENTRY_LEN, ATTRIBUTE_FLAG_DEFAULT, ATTRIBUTE_ROW_LEN, BOOK_CODE_FLAG_VALID,
     BOOK_CODE_RECORD_LEN, CHECKSUM_OMITTED, CONTAINER_CHECKSUM_OFFSET, CONTAINER_FLAGS_KNOWN,
@@ -95,6 +96,12 @@ pub fn render() -> (String, String) {
             writeln!(dts, "export declare const {}: string;", stringify!($name)).unwrap();
         };
     }
+    macro_rules! konst_bigint {
+        ($name:ident = $value:expr) => {
+            writeln!(js, "export const {} = {}n;", stringify!($name), $value).unwrap();
+            writeln!(dts, "export declare const {}: bigint;", stringify!($name)).unwrap();
+        };
+    }
 
     konst_str!(CONTAINER_MAGIC = std::str::from_utf8(&CONTAINER_MAGIC).unwrap());
     konst_str!(SECTION_MAGIC = std::str::from_utf8(&SECTION_MAGIC).unwrap());
@@ -102,6 +109,7 @@ pub fn render() -> (String, String) {
     konst!(SECTION_VERSION: number = SECTION_VERSION);
     konst!(TOKEN_SECTION_RULES_VERSION: number = TOKEN_SECTION_RULES_VERSION);
     konst!(FINDING_SECTION_RULES_VERSION: number = FINDING_SECTION_RULES_VERSION);
+    konst_bigint!(MARKER_CATALOG_STAMP = catalog_stamp());
     konst!(CONTAINER_HEADER_LEN: number = CONTAINER_HEADER_LEN);
     konst!(TOC_ENTRY_LEN: number = TOC_ENTRY_LEN);
     konst!(SECTION_HEADER_LEN: number = SECTION_HEADER_LEN);
@@ -238,19 +246,25 @@ pub fn render() -> (String, String) {
 
     writeln!(js, "\nexport const PARAM_CONTRACTS = [").unwrap();
     for contract in PARAM_CONTRACTS {
-        writeln!(
-            js,
-            "  {{ code: {}, keys: {:?}, strayCloseUnion: {} }},",
-            contract.code.as_u8(),
-            contract.keys,
-            contract.stray_close_union,
-        )
-        .unwrap();
+        writeln!(js, "  {{ code: {}, variants: [", contract.code.as_u8()).unwrap();
+        for variant in contract.variants {
+            writeln!(js, "    {{ params: [").unwrap();
+            for param in variant.params {
+                writeln!(
+                    js,
+                    "      {{ key: {:?}, allowedValues: {:?} }},",
+                    param.key, param.allowed_values,
+                )
+                .unwrap();
+            }
+            writeln!(js, "    ] }},").unwrap();
+        }
+        writeln!(js, "  ] }},").unwrap();
     }
     writeln!(js, "];").unwrap();
     writeln!(
         dts,
-        "\nexport declare const PARAM_CONTRACTS: readonly Readonly<{{ code: number; keys: readonly string[]; strayCloseUnion: boolean }}>[];"
+        "\nexport declare const PARAM_CONTRACTS: readonly Readonly<{{ code: number; variants: readonly Readonly<{{ params: readonly Readonly<{{ key: string; allowedValues: readonly string[] }}>[] }}>[] }}>[];"
     )
     .unwrap();
 
@@ -294,6 +308,8 @@ fn render_field_table(
 mod tests {
     use std::path::Path;
 
+    use crate::catalog::catalog_stamp;
+
     use super::render;
 
     /// Fails if `js/wire-schema.{js,d.ts}` on disk differ from what
@@ -328,5 +344,14 @@ mod tests {
             "js/wire-schema.d.ts is stale — regenerate with `{}`",
             super::GENERATOR_COMMAND
         );
+    }
+
+    #[test]
+    fn wire_schema_emits_the_runtime_marker_catalog_stamp() {
+        let (js, _) = render();
+        assert!(js.contains(&format!(
+            "export const MARKER_CATALOG_STAMP = {}n;",
+            catalog_stamp()
+        )));
     }
 }

@@ -8,6 +8,7 @@ export declare const FORMAT_VERSION: number;
 export declare const SECTION_VERSION: number;
 export declare const TOKEN_SECTION_RULES_VERSION: number;
 export declare const FINDING_SECTION_RULES_VERSION: number;
+export declare const MARKER_CATALOG_STAMP: bigint;
 export declare const CONTAINER_HEADER_LEN: number;
 export declare const TOC_ENTRY_LEN: number;
 export declare const SECTION_HEADER_LEN: number;
@@ -81,4 +82,4 @@ export declare const FINDING_FIELD: readonly Readonly<{ id: number; name: string
 
 export declare const LINT_CODES: readonly Readonly<{ code: number; kebab: string }>[];
 
-export declare const PARAM_CONTRACTS: readonly Readonly<{ code: number; keys: readonly string[]; strayCloseUnion: boolean }>[];
+export declare const PARAM_CONTRACTS: readonly Readonly<{ code: number; variants: readonly Readonly<{ params: readonly Readonly<{ key: string; allowedValues: readonly string[] }>[] }>[] }>[];
