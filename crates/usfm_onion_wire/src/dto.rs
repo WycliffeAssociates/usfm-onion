@@ -30,19 +30,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use usfm_onion::marker_defs::{
-    BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
-    InlineContext as NativeInlineContext, MarkerDefKind as NativeMarkerDefKind,
-    MarkerFamily as NativeMarkerFamily, MarkerFamilyRole as NativeMarkerFamilyRole,
-    MarkerPayload as NativeMarkerPayload, NoteFamily as NativeNoteFamily,
-    NoteSubkind as NativeNoteSubkind, ParagraphCategory as NativeParagraphCategory,
-    SpecContext as NativeSpecContext, StructuralMarkerInfo as NativeStructuralMarkerInfo,
-    StructuralScopeKind as NativeStructuralScopeKind,
-};
-use usfm_onion::markers::{
-    MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
-    UsfmMarkerInfo as NativeUsfmMarkerInfo,
-};
 use usfm_onion::diff::{
     CoveredSide as NativeCoveredSide, DecisionStatus as NativeDecisionStatus,
     DecisionUnitKind as NativeDecisionUnitKind, MergeSide as NativeMergeSide,
@@ -57,6 +44,19 @@ use usfm_onion::html::{
 use usfm_onion::lint::{
     LintCategory as NativeLintCategory, LintCode as NativeLintCode,
     LintIssueType as NativeLintIssueType, LintSeverity as NativeLintSeverity,
+};
+use usfm_onion::marker_defs::{
+    BlockBehavior as NativeBlockBehavior, ClosingBehavior as NativeClosingBehavior,
+    InlineContext as NativeInlineContext, MarkerDefKind as NativeMarkerDefKind,
+    MarkerFamily as NativeMarkerFamily, MarkerFamilyRole as NativeMarkerFamilyRole,
+    MarkerPayload as NativeMarkerPayload, NoteFamily as NativeNoteFamily,
+    NoteSubkind as NativeNoteSubkind, ParagraphCategory as NativeParagraphCategory,
+    SpecContext as NativeSpecContext, StructuralMarkerInfo as NativeStructuralMarkerInfo,
+    StructuralScopeKind as NativeStructuralScopeKind,
+};
+use usfm_onion::markers::{
+    MarkerCategory as NativeMarkerCategory, MarkerKind as NativeMarkerKind,
+    UsfmMarkerInfo as NativeUsfmMarkerInfo,
 };
 use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
@@ -1616,8 +1616,14 @@ mod tests {
         };
 
         // Lint: kebab-case.
-        assert_eq!(serde_json::to_value(LintCategory::Numbering).unwrap(), json!("numbering"));
-        assert_eq!(serde_json::to_value(LintSeverity::Warning).unwrap(), json!("warning"));
+        assert_eq!(
+            serde_json::to_value(LintCategory::Numbering).unwrap(),
+            json!("numbering")
+        );
+        assert_eq!(
+            serde_json::to_value(LintSeverity::Warning).unwrap(),
+            json!("warning")
+        );
         assert_eq!(
             serde_json::to_value(LintCode::IdMarkerNotAtFileStart).unwrap(),
             json!("id-marker-not-at-file-start")
@@ -1632,15 +1638,36 @@ mod tests {
         );
 
         // Diff: camelCase wire (native serializes these PascalCase — different form).
-        assert_eq!(serde_json::to_value(SlotRole::BaselineOnly).unwrap(), json!("baselineOnly"));
-        assert_eq!(serde_json::to_value(DecisionUnitKind::Coalesced).unwrap(), json!("coalesced"));
-        assert_eq!(serde_json::to_value(DecisionStatus::Moved).unwrap(), json!("moved"));
-        assert_eq!(serde_json::to_value(MergeSide::Baseline).unwrap(), json!("baseline"));
-        assert_eq!(serde_json::to_value(CoveredSide::Current).unwrap(), json!("current"));
+        assert_eq!(
+            serde_json::to_value(SlotRole::BaselineOnly).unwrap(),
+            json!("baselineOnly")
+        );
+        assert_eq!(
+            serde_json::to_value(DecisionUnitKind::Coalesced).unwrap(),
+            json!("coalesced")
+        );
+        assert_eq!(
+            serde_json::to_value(DecisionStatus::Moved).unwrap(),
+            json!("moved")
+        );
+        assert_eq!(
+            serde_json::to_value(MergeSide::Baseline).unwrap(),
+            json!("baseline")
+        );
+        assert_eq!(
+            serde_json::to_value(CoveredSide::Current).unwrap(),
+            json!("current")
+        );
 
         // Html input config.
-        assert_eq!(serde_json::to_value(HtmlNoteMode::Extracted).unwrap(), json!("extracted"));
-        assert_eq!(serde_json::to_value(HtmlCallerStyle::AlphaLower).unwrap(), json!("alphaLower"));
+        assert_eq!(
+            serde_json::to_value(HtmlNoteMode::Extracted).unwrap(),
+            json!("extracted")
+        );
+        assert_eq!(
+            serde_json::to_value(HtmlCallerStyle::AlphaLower).unwrap(),
+            json!("alphaLower")
+        );
         assert_eq!(
             serde_json::to_value(HtmlCallerScope::VerseSequential).unwrap(),
             json!("verseSequential")
@@ -1656,10 +1683,16 @@ mod tests {
         use usfm_onion::lint::LintCode as NativeLintCode;
 
         let mode: HtmlNoteMode = serde_json::from_value(json!("inline")).unwrap();
-        assert!(matches!(NativeHtmlNoteMode::from(mode), NativeHtmlNoteMode::Inline));
+        assert!(matches!(
+            NativeHtmlNoteMode::from(mode),
+            NativeHtmlNoteMode::Inline
+        ));
 
         let code: LintCode = serde_json::from_value(json!("unclosed-marker")).unwrap();
-        assert!(matches!(NativeLintCode::from(code), NativeLintCode::UnclosedMarker));
+        assert!(matches!(
+            NativeLintCode::from(code),
+            NativeLintCode::UnclosedMarker
+        ));
 
         let side: MergeSide = serde_json::from_value(json!("current")).unwrap();
         assert!(matches!(
@@ -1675,16 +1708,31 @@ mod tests {
     fn text_diff_enums_serialize_the_js_wire_strings() {
         use super::{TextDiffMode, TextDiffRunKind};
 
-        assert_eq!(serde_json::to_value(TextDiffMode::None).unwrap(), json!("none"));
-        assert_eq!(serde_json::to_value(TextDiffMode::Words).unwrap(), json!("words"));
-        assert_eq!(serde_json::to_value(TextDiffMode::Chars).unwrap(), json!("chars"));
+        assert_eq!(
+            serde_json::to_value(TextDiffMode::None).unwrap(),
+            json!("none")
+        );
+        assert_eq!(
+            serde_json::to_value(TextDiffMode::Words).unwrap(),
+            json!("words")
+        );
+        assert_eq!(
+            serde_json::to_value(TextDiffMode::Chars).unwrap(),
+            json!("chars")
+        );
 
         assert_eq!(
             serde_json::to_value(TextDiffRunKind::Unchanged).unwrap(),
             json!("unchanged")
         );
-        assert_eq!(serde_json::to_value(TextDiffRunKind::Added).unwrap(), json!("added"));
-        assert_eq!(serde_json::to_value(TextDiffRunKind::Removed).unwrap(), json!("removed"));
+        assert_eq!(
+            serde_json::to_value(TextDiffRunKind::Added).unwrap(),
+            json!("added")
+        );
+        assert_eq!(
+            serde_json::to_value(TextDiffRunKind::Removed).unwrap(),
+            json!("removed")
+        );
     }
 
     /// `TextDiffMode` is an input (the caller picks a granularity), so it must
@@ -1696,13 +1744,22 @@ mod tests {
         use usfm_onion::diff::TextDiffMode as NativeTextDiffMode;
 
         let mode: TextDiffMode = serde_json::from_value(json!("words")).unwrap();
-        assert!(matches!(NativeTextDiffMode::from(mode), NativeTextDiffMode::Words));
+        assert!(matches!(
+            NativeTextDiffMode::from(mode),
+            NativeTextDiffMode::Words
+        ));
 
         let mode: TextDiffMode = serde_json::from_value(json!("chars")).unwrap();
-        assert!(matches!(NativeTextDiffMode::from(mode), NativeTextDiffMode::Chars));
+        assert!(matches!(
+            NativeTextDiffMode::from(mode),
+            NativeTextDiffMode::Chars
+        ));
 
         let mode: TextDiffMode = serde_json::from_value(json!("none")).unwrap();
-        assert!(matches!(NativeTextDiffMode::from(mode), NativeTextDiffMode::None));
+        assert!(matches!(
+            NativeTextDiffMode::from(mode),
+            NativeTextDiffMode::None
+        ));
     }
 
     /// `DiffOptions` omitted entirely (empty object) must resolve to `"none"`
@@ -1714,7 +1771,10 @@ mod tests {
         use usfm_onion::diff::TextDiffMode as NativeTextDiffMode;
 
         let options: DiffOptions = serde_json::from_value(json!({})).unwrap();
-        assert!(matches!(NativeTextDiffMode::from(options), NativeTextDiffMode::None));
+        assert!(matches!(
+            NativeTextDiffMode::from(options),
+            NativeTextDiffMode::None
+        ));
         assert!(matches!(
             NativeTextDiffMode::from(DiffOptions::default()),
             NativeTextDiffMode::None
