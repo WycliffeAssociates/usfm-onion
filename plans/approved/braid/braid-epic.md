@@ -1225,17 +1225,33 @@ The codec is public **native** API, not wasm plumbing (§2.2#18): a native host 
 as the wasm crate does. Normative at the semantic level (exact names frozen in Phase 0 step 3):
 
 ```rust
+pub enum CorpusSectionTokens<'a> {
+    /// Parsed tokens, which carry their own spans into `source`.
+    Parsed { source: &'a str, tokens: &'a [Token<'a>] },
+    /// Spanless owned tokens. Wire serializes them and derives spans from that
+    /// same emission pass; the derived source is returned alongside the bytes,
+    /// because it — not any file on disk — is what the section is bound to.
+    Owned { tokens: &'a [OwnedToken] },
+}
+
 pub struct CorpusSectionInput<'a> {
     pub book: BookId,
-    pub source: &'a str,
-    pub tokens: &'a [OwnedToken],
+    pub tokens: CorpusSectionTokens<'a>,
     pub findings: Option<&'a LintResult>,
 }
 
 pub fn encode_corpus(
     snapshot_id: u64,
     sections: &[CorpusSectionInput<'_>],
-) -> Result<Vec<u8>, EncodeError>;
+) -> Result<EncodedCorpus, EncodeError>;
+
+/// The bytes plus, per book, the exact source the section's spans and hash are
+/// bound to. For a `Parsed` section this is the caller's own `source`; for an
+/// `Owned` section it is the serialization wire produced.
+pub struct EncodedCorpus {
+    pub bytes: Vec<u8>,
+    pub sources: Vec<(BookId, String)>,
+}
 
 pub fn decode_borrowed<'wire, 'source>(
     wire: &'wire [u8],
@@ -1243,9 +1259,20 @@ pub fn decode_borrowed<'wire, 'source>(
 ) -> Result<DecodedTokens<'wire, 'source>, DecodeError>;
 ```
 
+Respecified by the 2026-07-28 owned-encoding adjudication in `./phase0-freeze.md`. The original
+signature promised that a `&[OwnedToken]` plus a `source` could be encoded directly, which the
+implementation showed is impossible: the token section's span columns are required, `OwnedToken` is
+spanless by design, and the concatenation of `token.source()` is **not** the source — a deferred
+attribute list is emitted at its closer, not next to its marker. The owned path is therefore
+explicitly serialize → `(source, spans)` → encode, using core's
+`tokens_to_usfm_reconstruct_spanned`; the parsed-borrowed path keeps its spans and needs no
+serialization. Owned tokens stay spanless as a type: spans are a transient encode-time artifact, so
+there is no mid-session span state to go stale.
+
 `snapshot_id` arrives as a plain `u64` — the composing adapter converts braid's `SnapshotId`;
 wire writes the id and never recomputes it. Encoders refusing (over-wide SIDs §7.4, unknown
-payload) return typed `EncodeError`, never truncate.
+payload, a span that cannot bind to the section's source) return typed `EncodeError`, never
+truncate.
 
 ### 7.1 Container header (48 bytes)
 

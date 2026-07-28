@@ -1079,3 +1079,48 @@ present only when some row needs a tag other than 0.
   anyway so that a future rule naming a non-catalog marker not on its anchored token is encodable
   without a format version bump.
 - **No finding-section string dictionary is added.** Finding field id 7 stays unassigned.
+
+---
+
+## Adjudication — 2026-07-28 (owner): owned-token encoding and core exports
+
+1. **Owned/live token encoding is serialize-then-encode with emitter-derived spans.** The generic
+   `SerializableToken` reconstruct emitter gains a variant returning the serialized source **and**
+   per-token spans as a by-product of the single emission pass it already makes — it is the only code
+   that knows where a deferred attribute list lands. `OwnedToken` stays spanless as a type; spans are
+   a transient encode-time artifact, so there is no mid-session span state and nothing to go stale.
+   This is a cold path (once per snapshot, not per keystroke): clarity over cleverness.
+2. **§7's encode API is respecified** to match. The original `CorpusSectionInput<'a>` promised a
+   span-free `&[OwnedToken]` plus a `source` could be encoded directly; the token section's span
+   columns are required and the concatenation of `token.source()` is not the source, so it could not.
+   `braid-epic.md` §7 now models the two paths explicitly and returns the per-book source each
+   section is bound to. Parsed-borrowed encoding is unchanged.
+3. **`assign_ids` made public — accepted.** See the API ledger addition below.
+4. **Field 11's fixed width 8 — accepted**, already applied.
+
+### API ledger addition — new public core exports
+
+| name | crate | surface | rationale |
+| --- | --- | --- | --- |
+| `usfm_onion::parse::assign_ids(&mut [Token])` | core | rust | The wire omits the token-id column for parsed books (Gate 0E measured the dictionary at 31–41% of section bytes, fully redundant for positional ids) and reproduces the ids by calling the same function parsing used. The alternatives were storing the column the layout deliberately omits, or reimplementing the rule in the wire crate — the §15 "adapter fork" footgun. |
+| `usfm_onion::token::tokens_to_usfm_reconstruct_spanned(&[T]) -> (String, Vec<ReconstructedSpans>)` | core | rust | Row 1 above. One function; both entry points share one implementation so the spanned and plain emitters cannot drift, and the recorder is optional so the plain path pays nothing. |
+| `usfm_onion::token::ReconstructedSpans` | core | rust | The return type of the above. Carries the token span and the attribute-list span separately, because neither is derivable from the other: a list is emitted at its closer, which may be far from its marker. |
+| `usfm_onion::token::OwnedToken::parsed_sid() -> Option<Sid>` | core | rust | The packed wire anchor is eight bytes built from the structured `Sid`. `OwnedToken` held it privately and exposed only the formatted spelling; re-parsing that string would fork core's formatting. |
+
+Four new public core items total. Emitted bytes are unchanged by all four.
+
+### Emitter losslessness — recorded limit
+
+The reconstruct emitter is byte-lossless for well-formed input, **not** universally: a deferred
+attribute list is emitted at its closer, which for some inputs is not where the list started. Over
+the 395-book corpus gate, 376 books serialize byte-identically and 19 do not — an unclosed `\fig`, a
+list owned by a nested `\+pn`, a list split by a newline, and 15 `oldformat` alignment fixtures whose
+`\k-s | x-tw="…"` sits lines above its `\k-e\*`. Core's own doc comment names the class; the
+span-based `tokens_to_usfm` reproduces all 19 exactly; and the spanned emitter's bytes equal the
+plain emitter's on every file, so the divergence is pre-existing and not an artifact of span capture.
+
+Consequence for the format, stated once: an owned-token section is bound to the **derived** source,
+not to any file on disk. The round trip stays faithful for the 19 — the section describes what was
+serialized — but a caller that persists an owned-encoded section alongside an original file must
+treat the derived source as the authoritative pairing. The 19 fixtures are enumerated in the wire
+crate's owned corpus gate so a twentieth cannot appear silently.
