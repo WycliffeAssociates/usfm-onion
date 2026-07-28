@@ -13,6 +13,7 @@ use crate::container::{ElementWidth, FieldPayload, Section, SectionPayload, Sect
 use crate::error::{DecodeError, EncodeError};
 use crate::schema::{
     FINDING_SECTION_RULES_VERSION, LintCodeTag, SectionKind, finding_field, finding_flag,
+    param_contract,
 };
 use crate::token_payload::{StringDictionary, StringDictionaryBuilder};
 
@@ -155,6 +156,9 @@ impl<'wire> FindingColumns<'wire> {
             let related_flag = flags & finding_flag::RELATED != 0;
             let related_value = match (related_flag, related) {
                 (false, None) => None,
+                (false, Some(bytes)) if record_at(bytes, row, RELATED_LEN)? == [0; RELATED_LEN] => {
+                    None
+                }
                 (true, Some(bytes)) => {
                     any_related = true;
                     let related = record_at(bytes, row, RELATED_LEN)?;
@@ -170,6 +174,11 @@ impl<'wire> FindingColumns<'wire> {
             let overflow_flag = flags & finding_flag::OVERFLOW != 0;
             let (offset, len) = match (overflow_flag, overflow) {
                 (false, None) => (u32::from(short_offset), u32::from(short_len)),
+                (false, Some(bytes))
+                    if record_at(bytes, row, OVERFLOW_LEN)? == [0; OVERFLOW_LEN] =>
+                {
+                    (u32::from(short_offset), u32::from(short_len))
+                }
                 (true, Some(bytes)) => {
                     any_overflow = true;
                     let span = record_at(bytes, row, OVERFLOW_LEN)?;
@@ -180,10 +189,13 @@ impl<'wire> FindingColumns<'wire> {
 
             let payload_flag = flags & finding_flag::PAYLOAD != 0;
             let params = match (payload_flag, payloads.as_ref()) {
-                (false, None) => None,
+                (false, None) => checked_params(code, None)?,
+                (false, Some(payloads)) if payloads.is_zero_filler(row)? => {
+                    checked_params(code, None)?
+                }
                 (true, Some(payloads)) => {
                     any_payload = true;
-                    Some(payloads.params(row)?)
+                    checked_params(code, Some(payloads.params(row)?))?
                 }
                 _ => return Err(DecodeError::InvalidSection),
             };
@@ -325,8 +337,13 @@ impl FindingSectionBuffers {
                 has_related = true;
             }
             if row.params.is_some() {
+                if !params_are_representable(row.code, row.params.as_ref()) {
+                    return Err(unrepresentable(book, row.code));
+                }
                 flags |= finding_flag::PAYLOAD;
                 has_payload = true;
+            } else if param_contract(row.code).is_some() {
+                return Err(unrepresentable(book, row.code));
             }
             if row.offset > u32::from(u16::MAX) || row.len > u32::from(u16::MAX) {
                 flags |= finding_flag::OVERFLOW;
@@ -597,6 +614,48 @@ fn encode_marker_ref(
     Ok(bytes)
 }
 
+/// The generic payload table is shared by all rules, but each code owns one
+/// exact argument contract. Keeping that validation beside the structural
+/// reader prevents a later semantic layer from accepting bytes this codec did
+/// not promise to preserve.
+fn checked_params<'wire>(
+    code: LintCodeTag,
+    params: Option<Vec<(&'wire str, &'wire str)>>,
+) -> Result<Option<Vec<(&'wire str, &'wire str)>>, DecodeError> {
+    match (param_contract(code), params) {
+        (None, None) => Ok(None),
+        (Some(contract), Some(params)) if decoded_params_match_contract(contract, &params) => {
+            Ok(Some(params))
+        }
+        _ => Err(DecodeError::InvalidSection),
+    }
+}
+
+fn params_are_representable(code: LintCodeTag, params: Option<&BTreeMap<String, String>>) -> bool {
+    match (param_contract(code), params) {
+        (None, None) => true,
+        (Some(contract), Some(params)) => contract.accepts(params),
+        _ => false,
+    }
+}
+
+fn decoded_params_match_contract(
+    contract: &crate::schema::ParamContract,
+    params: &[(&str, &str)],
+) -> bool {
+    contract.variants.iter().any(|variant| {
+        params.len() == variant.params.len()
+            && variant.params.iter().all(|spec| {
+                params
+                    .iter()
+                    .find(|(key, _)| *key == spec.key)
+                    .is_some_and(|(_, value)| {
+                        spec.allowed_values.is_empty() || spec.allowed_values.contains(value)
+                    })
+            })
+    })
+}
+
 struct PayloadTable<'wire> {
     indices: &'wire [u8],
     strings: StringDictionary<'wire>,
@@ -704,12 +763,24 @@ impl<'wire> PayloadTable<'wire> {
         }
         Ok(out)
     }
+
+    fn is_zero_filler(&self, row: u32) -> Result<bool, DecodeError> {
+        let offset = usize::try_from(row)
+            .map_err(|_| DecodeError::OffsetOverflow)?
+            .checked_mul(4)
+            .ok_or(DecodeError::OffsetOverflow)?;
+        Ok(u32_at(self.indices, offset)? == 0)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::container::{read_container, write_container};
+    use crate::container::{read_container, read_container_unchecked, write_container};
+    use crate::schema::{
+        CONTAINER_CHECKSUM_OFFSET, LINT_CODE_TABLE, PARAM_CONTRACTS, SECTION_CHECKSUM_OFFSET,
+        SECTION_MAGIC,
+    };
 
     fn book() -> BookId {
         BookId::from_str("GEN").unwrap()
@@ -722,7 +793,7 @@ mod tests {
             chapter: Some(1),
             verse: Some(1),
             range_end: None,
-            code: LintCodeTag::EmptyParagraph,
+            code: LintCodeTag::MissingIdMarker,
             anchor_only: false,
             related: None,
             marker: MarkerRef::AnchoredToken,
@@ -803,6 +874,73 @@ mod tests {
         FindingColumns::from_section(&section, FindingDecodeInputs { token_count: 1 })
     }
 
+    fn decoded_unchecked(bytes: &[u8]) -> Result<FindingColumns<'_>, DecodeError> {
+        let container = read_container_unchecked(bytes)?;
+        let section = container.section(1).unwrap()?;
+        FindingColumns::from_section(&section, FindingDecodeInputs { token_count: 1 })
+    }
+
+    fn omit_checksums(bytes: &mut [u8]) {
+        bytes[CONTAINER_CHECKSUM_OFFSET..CONTAINER_CHECKSUM_OFFSET + 8].fill(0);
+        let section_starts: Vec<_> = bytes
+            .windows(SECTION_MAGIC.len())
+            .enumerate()
+            .filter_map(|(start, window)| (window == SECTION_MAGIC).then_some(start))
+            .collect();
+        for start in section_starts {
+            bytes[start + SECTION_CHECKSUM_OFFSET..start + SECTION_CHECKSUM_OFFSET + 8].fill(0);
+        }
+    }
+
+    fn corrupt_first_filler(bytes: &mut [u8], field_id: u16) {
+        let filler_offset = {
+            let container = read_container(bytes).unwrap();
+            let section = container.section(1).unwrap().unwrap();
+            section.field(field_id).unwrap().bytes.as_ptr() as usize - bytes.as_ptr() as usize
+        };
+        bytes[filler_offset] = 1;
+        omit_checksums(bytes);
+    }
+
+    fn replace_first_code(bytes: &mut [u8], code: LintCodeTag) {
+        let row_offset = {
+            let container = read_container(bytes).unwrap();
+            let section = container.section(1).unwrap().unwrap();
+            section
+                .field(finding_field::COMMON_ROW)
+                .unwrap()
+                .bytes
+                .as_ptr() as usize
+                - bytes.as_ptr() as usize
+        };
+        bytes[row_offset + 13] = code as u8;
+        omit_checksums(bytes);
+    }
+
+    fn params_for(variant: &crate::schema::ParamVariant) -> BTreeMap<String, String> {
+        variant
+            .params
+            .iter()
+            .map(|spec| {
+                (
+                    spec.key.into(),
+                    spec.allowed_values
+                        .first()
+                        .copied()
+                        .unwrap_or("value")
+                        .into(),
+                )
+            })
+            .collect()
+    }
+
+    fn decoded_pairs(params: &BTreeMap<String, String>) -> Vec<(&str, &str)> {
+        params
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect()
+    }
+
     #[test]
     fn zero_rows_and_deterministic_bytes_decode() {
         let first = encoded(&[]);
@@ -817,19 +955,172 @@ mod tests {
         row.len = 80_000;
         row.related = Some((0, 2, 3));
         row.marker = MarkerRef::CatalogOrdinal(4);
-        row.params = Some(BTreeMap::from([
-            ("empty".into(), "".into()),
-            ("é".into(), "日本語".into()),
-        ]));
+        row.code = LintCodeTag::UnknownToken;
+        row.params = Some(BTreeMap::from([("text".into(), "日本語".into())]));
         let bytes = encoded(&[row]);
         let decoded = decoded(&bytes).unwrap();
         assert_eq!(decoded.rows()[0].offset, 70_000);
         assert_eq!(decoded.rows()[0].related, Some((0, 2, 3)));
         assert_eq!(decoded.rows()[0].marker, MarkerRef::CatalogOrdinal(4));
         assert_eq!(
-            decoded.rows()[0].params.as_ref().unwrap()[1],
-            ("é", "日本語")
+            decoded.rows()[0].params.as_ref().unwrap()[0],
+            ("text", "日本語")
         );
+    }
+
+    #[test]
+    fn section_wide_sidecars_zero_fill_clear_rows() {
+        let base = input();
+
+        let mut related = input();
+        related.related = Some((0, 2, 3));
+        let bytes = encoded(&[base.clone(), related]);
+        let views = decoded(&bytes).unwrap();
+        assert_eq!(views.rows()[0].related, None);
+        assert_eq!(views.rows()[1].related, Some((0, 2, 3)));
+
+        let mut overflow = input();
+        overflow.offset = 70_000;
+        let bytes = encoded(&[base.clone(), overflow]);
+        let views = decoded(&bytes).unwrap();
+        assert_eq!(views.rows()[0].offset, 0);
+        assert_eq!(views.rows()[1].offset, 70_000);
+
+        let mut payload = input();
+        payload.code = LintCodeTag::EmptyParagraph;
+        payload.params = Some(BTreeMap::from([("marker".into(), "p".into())]));
+        let bytes = encoded(&[base, payload]);
+        let views = decoded(&bytes).unwrap();
+        assert_eq!(views.rows()[0].params, None);
+        assert_eq!(views.rows()[1].params.as_ref().unwrap(), &[("marker", "p")]);
+    }
+
+    #[test]
+    fn decoder_rejects_nonzero_sidecar_fillers() {
+        let base = input();
+
+        let mut related = input();
+        related.related = Some((0, 2, 3));
+        let mut bytes = encoded(&[base.clone(), related]);
+        corrupt_first_filler(&mut bytes, finding_field::RELATED_TOKEN_IDX);
+        assert!(matches!(
+            decoded_unchecked(&bytes),
+            Err(DecodeError::InvalidSection)
+        ));
+
+        let mut overflow = input();
+        overflow.offset = 70_000;
+        let mut bytes = encoded(&[base.clone(), overflow]);
+        corrupt_first_filler(&mut bytes, finding_field::OVERFLOW_SPAN);
+        assert!(matches!(
+            decoded_unchecked(&bytes),
+            Err(DecodeError::InvalidSection)
+        ));
+
+        let mut payload = input();
+        payload.code = LintCodeTag::EmptyParagraph;
+        payload.params = Some(BTreeMap::from([("marker".into(), "p".into())]));
+        let mut bytes = encoded(&[base, payload]);
+        corrupt_first_filler(&mut bytes, finding_field::MESSAGE_PAYLOAD_IDX);
+        assert!(matches!(
+            decoded_unchecked(&bytes),
+            Err(DecodeError::InvalidSection)
+        ));
+    }
+
+    #[test]
+    fn generated_param_contracts_gate_encode_and_decode() {
+        for contract in PARAM_CONTRACTS {
+            for variant in contract.variants {
+                let params = params_for(variant);
+                let mut row = input();
+                row.code = contract.code;
+                row.params = Some(params.clone());
+                let bytes = encoded(&[row]);
+                let views = decoded(&bytes).unwrap();
+                assert_eq!(
+                    views.rows()[0].params.as_ref().unwrap(),
+                    &decoded_pairs(&params)
+                );
+                assert!(checked_params(contract.code, Some(decoded_pairs(&params))).is_ok());
+            }
+        }
+    }
+
+    #[test]
+    fn generated_param_contracts_refuse_wrong_missing_extra_and_closed_values() {
+        for contract in PARAM_CONTRACTS {
+            let variant = &contract.variants[0];
+            let valid = params_for(variant);
+            let first_key = variant.params[0].key;
+
+            let mut missing = valid.clone();
+            missing.remove(first_key);
+            assert!(!params_are_representable(contract.code, Some(&missing)));
+            assert!(checked_params(contract.code, Some(decoded_pairs(&missing))).is_err());
+
+            let mut extra = valid.clone();
+            extra.insert("unexpected".into(), "value".into());
+            assert!(!params_are_representable(contract.code, Some(&extra)));
+            assert!(checked_params(contract.code, Some(decoded_pairs(&extra))).is_err());
+
+            let mut wrong = valid.clone();
+            let value = wrong.remove(first_key).unwrap();
+            wrong.insert("wrong".into(), value);
+            assert!(!params_are_representable(contract.code, Some(&wrong)));
+            assert!(checked_params(contract.code, Some(decoded_pairs(&wrong))).is_err());
+
+            for variant in contract.variants {
+                for spec in variant
+                    .params
+                    .iter()
+                    .filter(|spec| !spec.allowed_values.is_empty())
+                {
+                    let mut closed = params_for(variant);
+                    closed.insert(spec.key.into(), "not-a-contract-value".into());
+                    assert!(!params_are_representable(contract.code, Some(&closed)));
+                    assert!(checked_params(contract.code, Some(decoded_pairs(&closed))).is_err());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn zero_param_codes_refuse_payloads() {
+        for code in LINT_CODE_TABLE {
+            if param_contract(code).is_some() {
+                continue;
+            }
+            let mut row = input();
+            row.code = code;
+            row.params = Some(BTreeMap::new());
+            assert!(matches!(
+                FindingSectionBuffers::new(book(), 7, 99, 11, &[row]),
+                Err(EncodeError::UnrepresentablePayload { .. })
+            ));
+            assert!(checked_params(code, Some(Vec::new())).is_err());
+        }
+    }
+
+    #[test]
+    fn decoder_rechecks_payload_contract_after_structural_decode() {
+        let mut row = input();
+        row.code = LintCodeTag::UnknownToken;
+        row.params = Some(BTreeMap::from([("text".into(), "x".into())]));
+
+        let mut wrong_key = encoded(&[row.clone()]);
+        replace_first_code(&mut wrong_key, LintCodeTag::UnknownMarker);
+        assert!(matches!(
+            decoded_unchecked(&wrong_key),
+            Err(DecodeError::InvalidSection)
+        ));
+
+        let mut zero_param = encoded(&[row]);
+        replace_first_code(&mut zero_param, LintCodeTag::MissingIdMarker);
+        assert!(matches!(
+            decoded_unchecked(&zero_param),
+            Err(DecodeError::InvalidSection)
+        ));
     }
 
     #[test]
@@ -860,7 +1151,8 @@ mod tests {
     #[test]
     fn all_truncations_and_single_byte_corruption_are_survivable() {
         let mut row = input();
-        row.params = Some(BTreeMap::from([("a".into(), "b".into())]));
+        row.code = LintCodeTag::EmptyParagraph;
+        row.params = Some(BTreeMap::from([("marker".into(), "p".into())]));
         let bytes = encoded(&[row]);
         for end in 0..bytes.len() {
             assert!(decoded(&bytes[..end]).is_err());

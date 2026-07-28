@@ -1463,7 +1463,8 @@ pointer:
 - `related_token_idx[N]:u32` plus related token-relative span where present;
 - `overflow_span[N]:{offset:u32,len:u32}` for values that do not fit `u16`;
 - `message_payload_idx[N]:u32` into typed per-code argument payloads;
-- `marker_string_idx[N]:u32` when marker cannot be recovered unambiguously;
+- `marker_ref[N]` as the tagged 8-byte reference `{tag:u8, span_len:u8, ordinal:u16,
+  span_offset:u32}` when marker cannot be recovered unambiguously (freeze §M.3);
 - `patch_id[N]:u32` into the snapshot-bound braid patch table; `u32::MAX` means no patch;
 - a packed patch table of flat, sorted, non-overlapping insert/replace/delete edits, including
   replacement token templates needed to restore braid state from a persisted sidecar.

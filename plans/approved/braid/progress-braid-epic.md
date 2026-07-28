@@ -2022,3 +2022,13 @@ The core exposes only `LintCode::render_message(&MessageParams)`, which delegate
 private renderer for that code's own frozen template. This preserves semantic decode without exposing
 arbitrary-template rendering or creating a wire-local renderer. The Phase 0 API ledger records the
 append-only public addition.
+
+## 2026-07-28 — Phase B: finding-column structural corrections
+
+- Finding encode/decode now applies the generated `ParamContract` table: every payload is one exact
+  code-specific map arm, closed domains reject, and zero-parameter codes reject payloads. The generic
+  key/value table remains the only physical payload storage; no semantic `LintIssue` codec landed.
+- Record-aligned related, overflow, and payload-index columns are section-wide: clear-flag rows use
+  checked zero fillers, while their columns are present iff some row uses the corresponding flag.
+- Verified focused wire tests and schema-drift generation checks; patch/fix framing remains deferred
+  under freeze §F.3.

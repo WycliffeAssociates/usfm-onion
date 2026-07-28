@@ -200,8 +200,10 @@ unrelated things). Assignment order = the order §7.4/§7.6 list the fields in p
 | 4 | `marker_ref[N]` — tagged 8-byte marker reference (§M.3; formerly named `marker_string_idx`, redefined 2026-07-28 before implementation) | optional — present iff some row's marker cannot be recovered from the anchored token |
 | 5 | `patch_id[N]:u32` → snapshot-bound braid patch table | optional — present iff flag bit `fix` is used by any row |
 | 6 | packed patch table (flat, sorted, non-overlapping insert/replace/delete edits incl. replacement token templates) | optional — present iff field 5 is present and non-empty |
+| 7 | finding-section string dictionary | optional — adopted by the §F.2 owner adjudication; present iff a payload-indexed field needs key/value strings |
+| 8 | message payload table | optional — adopted by the §F.2 owner adjudication; present iff field 3 is present |
 
-Row counts: token section fields **13** (ids 0–12); finding section fields **7** (ids 0–6), with two more proposed in §F.2 (ids 7–8) after Phase B found message parameters have no byte storage.
+Row counts: token section fields **13** (ids 0–12); finding section fields **9** (ids 0–8). Fields 7–8 were adopted by the §F.2 owner adjudication after Phase B found message parameters have no byte storage.
 
 ---
 
