@@ -9,6 +9,7 @@
 //! heuristic: a big-endian producer fails the magic/version checks, which is
 //! the intended rejection path.
 
+use usfm_onion::lint::LintCode;
 use usfm_onion::token::{NumberRangeKind, TokenKind};
 
 /// Container magic, ASCII `uson` (container header offset 0).
@@ -489,6 +490,270 @@ pub mod finding_field {
     ];
 }
 
+/// Stable `LintCode` → `u8` discriminant, frozen by the Phase 0 freeze
+/// (`phase0-freeze.md` §1) in `LintCode`'s current declaration order
+/// (`src/lint_impl.rs`), starting at 0. Append-only, exactly like
+/// [`TokenKindTag`]: a removed rule tombstones its integer rather than
+/// reusing it. This is the discriminant table only — the finding-record codec
+/// that reads/writes it is Phase B — but it lives here, not in a future
+/// finding-codec module or a hand-copied list, so the eventual codec and the
+/// generated JS/TS schema constants both read the one frozen mapping and
+/// cannot drift from each other or from the freeze.
+///
+/// The kebab string, not the `u8`, is the canonical sort key (§2.2#15): a
+/// decoder that sorted by `u8` would silently reorder findings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum LintCodeTag {
+    MissingIdMarker = 0,
+    DuplicateIdMarker = 1,
+    IdMarkerNotAtFileStart = 2,
+    EmptyParagraph = 3,
+    MissingChapterNumber = 4,
+    MissingVerseNumber = 5,
+    VerseIsEmpty = 6,
+    UnknownToken = 7,
+    UnknownMarker = 8,
+    UnknownCloseMarker = 9,
+    ContentBeforeFirstChapter = 10,
+    VerseOutsideExplicitParagraph = 11,
+    NoteSubmarkerOutsideNote = 12,
+    MetadataOutsideTarget = 13,
+    MarkerNotValidInContext = 14,
+    MissingMilestoneSelfClose = 15,
+    StrayCloseMarker = 16,
+    MisnestedCloseMarker = 17,
+    ImplicitlyClosedMarker = 18,
+    UnclosedMarker = 19,
+    DuplicateChapterNumber = 20,
+    DuplicateVerseNumber = 21,
+    InvalidNumberRange = 22,
+    NumberRangeNotPrecededByMarkerExpectingNumber = 23,
+    MissingWhitespaceBeforeMarker = 24,
+    MissingHorizontalWhitespaceAfterMarkerName = 25,
+    MissingTagEndDelimiterAfterMarker = 26,
+    MissingContentSpaceAfterCloseMarker = 27,
+    VerseInSectionOrOtherParagraph = 28,
+    ContentAfterBlankMarker = 29,
+    InvalidBookCode = 30,
+    BookCodeNotUppercase = 31,
+}
+
+impl LintCodeTag {
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::MissingIdMarker),
+            1 => Some(Self::DuplicateIdMarker),
+            2 => Some(Self::IdMarkerNotAtFileStart),
+            3 => Some(Self::EmptyParagraph),
+            4 => Some(Self::MissingChapterNumber),
+            5 => Some(Self::MissingVerseNumber),
+            6 => Some(Self::VerseIsEmpty),
+            7 => Some(Self::UnknownToken),
+            8 => Some(Self::UnknownMarker),
+            9 => Some(Self::UnknownCloseMarker),
+            10 => Some(Self::ContentBeforeFirstChapter),
+            11 => Some(Self::VerseOutsideExplicitParagraph),
+            12 => Some(Self::NoteSubmarkerOutsideNote),
+            13 => Some(Self::MetadataOutsideTarget),
+            14 => Some(Self::MarkerNotValidInContext),
+            15 => Some(Self::MissingMilestoneSelfClose),
+            16 => Some(Self::StrayCloseMarker),
+            17 => Some(Self::MisnestedCloseMarker),
+            18 => Some(Self::ImplicitlyClosedMarker),
+            19 => Some(Self::UnclosedMarker),
+            20 => Some(Self::DuplicateChapterNumber),
+            21 => Some(Self::DuplicateVerseNumber),
+            22 => Some(Self::InvalidNumberRange),
+            23 => Some(Self::NumberRangeNotPrecededByMarkerExpectingNumber),
+            24 => Some(Self::MissingWhitespaceBeforeMarker),
+            25 => Some(Self::MissingHorizontalWhitespaceAfterMarkerName),
+            26 => Some(Self::MissingTagEndDelimiterAfterMarker),
+            27 => Some(Self::MissingContentSpaceAfterCloseMarker),
+            28 => Some(Self::VerseInSectionOrOtherParagraph),
+            29 => Some(Self::ContentAfterBlankMarker),
+            30 => Some(Self::InvalidBookCode),
+            31 => Some(Self::BookCodeNotUppercase),
+            _ => None,
+        }
+    }
+
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// The kebab-case wire/JS code string, e.g. `"missing-id-marker"`.
+    pub const fn kebab(self) -> &'static str {
+        match self {
+            Self::MissingIdMarker => "missing-id-marker",
+            Self::DuplicateIdMarker => "duplicate-id-marker",
+            Self::IdMarkerNotAtFileStart => "id-marker-not-at-file-start",
+            Self::EmptyParagraph => "empty-paragraph",
+            Self::MissingChapterNumber => "missing-chapter-number",
+            Self::MissingVerseNumber => "missing-verse-number",
+            Self::VerseIsEmpty => "verse-is-empty",
+            Self::UnknownToken => "unknown-token",
+            Self::UnknownMarker => "unknown-marker",
+            Self::UnknownCloseMarker => "unknown-close-marker",
+            Self::ContentBeforeFirstChapter => "content-before-first-chapter",
+            Self::VerseOutsideExplicitParagraph => "verse-outside-explicit-paragraph",
+            Self::NoteSubmarkerOutsideNote => "note-submarker-outside-note",
+            Self::MetadataOutsideTarget => "metadata-outside-target",
+            Self::MarkerNotValidInContext => "marker-not-valid-in-context",
+            Self::MissingMilestoneSelfClose => "missing-milestone-self-close",
+            Self::StrayCloseMarker => "stray-close-marker",
+            Self::MisnestedCloseMarker => "misnested-close-marker",
+            Self::ImplicitlyClosedMarker => "implicitly-closed-marker",
+            Self::UnclosedMarker => "unclosed-marker",
+            Self::DuplicateChapterNumber => "duplicate-chapter-number",
+            Self::DuplicateVerseNumber => "duplicate-verse-number",
+            Self::InvalidNumberRange => "invalid-number-range",
+            Self::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                "number-range-not-preceded-by-marker-expecting-number"
+            }
+            Self::MissingWhitespaceBeforeMarker => "missing-whitespace-before-marker",
+            Self::MissingHorizontalWhitespaceAfterMarkerName => {
+                "missing-horizontal-whitespace-after-marker-name"
+            }
+            Self::MissingTagEndDelimiterAfterMarker => "missing-tag-end-delimiter-after-marker",
+            Self::MissingContentSpaceAfterCloseMarker => "missing-content-space-after-close-marker",
+            Self::VerseInSectionOrOtherParagraph => "verse-in-section-or-other-paragraph",
+            Self::ContentAfterBlankMarker => "content-after-blank-marker",
+            Self::InvalidBookCode => "invalid-book-code",
+            Self::BookCodeNotUppercase => "book-code-not-uppercase",
+        }
+    }
+}
+
+impl From<LintCode> for LintCodeTag {
+    fn from(value: LintCode) -> Self {
+        match value {
+            LintCode::MissingIdMarker => Self::MissingIdMarker,
+            LintCode::DuplicateIdMarker => Self::DuplicateIdMarker,
+            LintCode::IdMarkerNotAtFileStart => Self::IdMarkerNotAtFileStart,
+            LintCode::EmptyParagraph => Self::EmptyParagraph,
+            LintCode::MissingChapterNumber => Self::MissingChapterNumber,
+            LintCode::MissingVerseNumber => Self::MissingVerseNumber,
+            LintCode::VerseIsEmpty => Self::VerseIsEmpty,
+            LintCode::UnknownToken => Self::UnknownToken,
+            LintCode::UnknownMarker => Self::UnknownMarker,
+            LintCode::UnknownCloseMarker => Self::UnknownCloseMarker,
+            LintCode::ContentBeforeFirstChapter => Self::ContentBeforeFirstChapter,
+            LintCode::VerseOutsideExplicitParagraph => Self::VerseOutsideExplicitParagraph,
+            LintCode::NoteSubmarkerOutsideNote => Self::NoteSubmarkerOutsideNote,
+            LintCode::MetadataOutsideTarget => Self::MetadataOutsideTarget,
+            LintCode::MarkerNotValidInContext => Self::MarkerNotValidInContext,
+            LintCode::MissingMilestoneSelfClose => Self::MissingMilestoneSelfClose,
+            LintCode::StrayCloseMarker => Self::StrayCloseMarker,
+            LintCode::MisnestedCloseMarker => Self::MisnestedCloseMarker,
+            LintCode::ImplicitlyClosedMarker => Self::ImplicitlyClosedMarker,
+            LintCode::UnclosedMarker => Self::UnclosedMarker,
+            LintCode::DuplicateChapterNumber => Self::DuplicateChapterNumber,
+            LintCode::DuplicateVerseNumber => Self::DuplicateVerseNumber,
+            LintCode::InvalidNumberRange => Self::InvalidNumberRange,
+            LintCode::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                Self::NumberRangeNotPrecededByMarkerExpectingNumber
+            }
+            LintCode::MissingWhitespaceBeforeMarker => Self::MissingWhitespaceBeforeMarker,
+            LintCode::MissingHorizontalWhitespaceAfterMarkerName => {
+                Self::MissingHorizontalWhitespaceAfterMarkerName
+            }
+            LintCode::MissingTagEndDelimiterAfterMarker => Self::MissingTagEndDelimiterAfterMarker,
+            LintCode::MissingContentSpaceAfterCloseMarker => {
+                Self::MissingContentSpaceAfterCloseMarker
+            }
+            LintCode::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
+            LintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
+            LintCode::InvalidBookCode => Self::InvalidBookCode,
+            LintCode::BookCodeNotUppercase => Self::BookCodeNotUppercase,
+        }
+    }
+}
+
+impl From<LintCodeTag> for LintCode {
+    fn from(value: LintCodeTag) -> Self {
+        match value {
+            LintCodeTag::MissingIdMarker => Self::MissingIdMarker,
+            LintCodeTag::DuplicateIdMarker => Self::DuplicateIdMarker,
+            LintCodeTag::IdMarkerNotAtFileStart => Self::IdMarkerNotAtFileStart,
+            LintCodeTag::EmptyParagraph => Self::EmptyParagraph,
+            LintCodeTag::MissingChapterNumber => Self::MissingChapterNumber,
+            LintCodeTag::MissingVerseNumber => Self::MissingVerseNumber,
+            LintCodeTag::VerseIsEmpty => Self::VerseIsEmpty,
+            LintCodeTag::UnknownToken => Self::UnknownToken,
+            LintCodeTag::UnknownMarker => Self::UnknownMarker,
+            LintCodeTag::UnknownCloseMarker => Self::UnknownCloseMarker,
+            LintCodeTag::ContentBeforeFirstChapter => Self::ContentBeforeFirstChapter,
+            LintCodeTag::VerseOutsideExplicitParagraph => Self::VerseOutsideExplicitParagraph,
+            LintCodeTag::NoteSubmarkerOutsideNote => Self::NoteSubmarkerOutsideNote,
+            LintCodeTag::MetadataOutsideTarget => Self::MetadataOutsideTarget,
+            LintCodeTag::MarkerNotValidInContext => Self::MarkerNotValidInContext,
+            LintCodeTag::MissingMilestoneSelfClose => Self::MissingMilestoneSelfClose,
+            LintCodeTag::StrayCloseMarker => Self::StrayCloseMarker,
+            LintCodeTag::MisnestedCloseMarker => Self::MisnestedCloseMarker,
+            LintCodeTag::ImplicitlyClosedMarker => Self::ImplicitlyClosedMarker,
+            LintCodeTag::UnclosedMarker => Self::UnclosedMarker,
+            LintCodeTag::DuplicateChapterNumber => Self::DuplicateChapterNumber,
+            LintCodeTag::DuplicateVerseNumber => Self::DuplicateVerseNumber,
+            LintCodeTag::InvalidNumberRange => Self::InvalidNumberRange,
+            LintCodeTag::NumberRangeNotPrecededByMarkerExpectingNumber => {
+                Self::NumberRangeNotPrecededByMarkerExpectingNumber
+            }
+            LintCodeTag::MissingWhitespaceBeforeMarker => Self::MissingWhitespaceBeforeMarker,
+            LintCodeTag::MissingHorizontalWhitespaceAfterMarkerName => {
+                Self::MissingHorizontalWhitespaceAfterMarkerName
+            }
+            LintCodeTag::MissingTagEndDelimiterAfterMarker => {
+                Self::MissingTagEndDelimiterAfterMarker
+            }
+            LintCodeTag::MissingContentSpaceAfterCloseMarker => {
+                Self::MissingContentSpaceAfterCloseMarker
+            }
+            LintCodeTag::VerseInSectionOrOtherParagraph => Self::VerseInSectionOrOtherParagraph,
+            LintCodeTag::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
+            LintCodeTag::InvalidBookCode => Self::InvalidBookCode,
+            LintCodeTag::BookCodeNotUppercase => Self::BookCodeNotUppercase,
+        }
+    }
+}
+
+/// All 32 `LintCode` variants in frozen `u8` order — the table the generated
+/// JS/TS schema constants and any future finding catalog both iterate.
+pub const LINT_CODE_TABLE: [LintCodeTag; 32] = [
+    LintCodeTag::MissingIdMarker,
+    LintCodeTag::DuplicateIdMarker,
+    LintCodeTag::IdMarkerNotAtFileStart,
+    LintCodeTag::EmptyParagraph,
+    LintCodeTag::MissingChapterNumber,
+    LintCodeTag::MissingVerseNumber,
+    LintCodeTag::VerseIsEmpty,
+    LintCodeTag::UnknownToken,
+    LintCodeTag::UnknownMarker,
+    LintCodeTag::UnknownCloseMarker,
+    LintCodeTag::ContentBeforeFirstChapter,
+    LintCodeTag::VerseOutsideExplicitParagraph,
+    LintCodeTag::NoteSubmarkerOutsideNote,
+    LintCodeTag::MetadataOutsideTarget,
+    LintCodeTag::MarkerNotValidInContext,
+    LintCodeTag::MissingMilestoneSelfClose,
+    LintCodeTag::StrayCloseMarker,
+    LintCodeTag::MisnestedCloseMarker,
+    LintCodeTag::ImplicitlyClosedMarker,
+    LintCodeTag::UnclosedMarker,
+    LintCodeTag::DuplicateChapterNumber,
+    LintCodeTag::DuplicateVerseNumber,
+    LintCodeTag::InvalidNumberRange,
+    LintCodeTag::NumberRangeNotPrecededByMarkerExpectingNumber,
+    LintCodeTag::MissingWhitespaceBeforeMarker,
+    LintCodeTag::MissingHorizontalWhitespaceAfterMarkerName,
+    LintCodeTag::MissingTagEndDelimiterAfterMarker,
+    LintCodeTag::MissingContentSpaceAfterCloseMarker,
+    LintCodeTag::VerseInSectionOrOtherParagraph,
+    LintCodeTag::ContentAfterBlankMarker,
+    LintCodeTag::InvalidBookCode,
+    LintCodeTag::BookCodeNotUppercase,
+];
+
 /// Finding common-row `flags:u8` bits (finding record offset 14).
 pub mod finding_flag {
     /// Set = `AnchorOnly` fidelity; clear = `Exact`.
@@ -580,5 +845,69 @@ mod tests {
             );
         }
         assert_eq!(NumberRangeKindTag::from_u8(4), None);
+    }
+
+    #[test]
+    fn lint_code_tags_match_the_frozen_table() {
+        // `From<LintCode> for LintCodeTag` is an exhaustive match, so a new
+        // core `LintCode` variant fails to compile here until mirrored — the
+        // same drift guard `dto.rs` documents for its own conversions. This
+        // test additionally proves the declaration order the freeze assigned
+        // (`phase0-freeze.md` §1) and that `LINT_CODE_TABLE` walks it in
+        // ascending `u8` order.
+        let codes = [
+            LintCode::MissingIdMarker,
+            LintCode::DuplicateIdMarker,
+            LintCode::IdMarkerNotAtFileStart,
+            LintCode::EmptyParagraph,
+            LintCode::MissingChapterNumber,
+            LintCode::MissingVerseNumber,
+            LintCode::VerseIsEmpty,
+            LintCode::UnknownToken,
+            LintCode::UnknownMarker,
+            LintCode::UnknownCloseMarker,
+            LintCode::ContentBeforeFirstChapter,
+            LintCode::VerseOutsideExplicitParagraph,
+            LintCode::NoteSubmarkerOutsideNote,
+            LintCode::MetadataOutsideTarget,
+            LintCode::MarkerNotValidInContext,
+            LintCode::MissingMilestoneSelfClose,
+            LintCode::StrayCloseMarker,
+            LintCode::MisnestedCloseMarker,
+            LintCode::ImplicitlyClosedMarker,
+            LintCode::UnclosedMarker,
+            LintCode::DuplicateChapterNumber,
+            LintCode::DuplicateVerseNumber,
+            LintCode::InvalidNumberRange,
+            LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
+            LintCode::MissingWhitespaceBeforeMarker,
+            LintCode::MissingHorizontalWhitespaceAfterMarkerName,
+            LintCode::MissingTagEndDelimiterAfterMarker,
+            LintCode::MissingContentSpaceAfterCloseMarker,
+            LintCode::VerseInSectionOrOtherParagraph,
+            LintCode::ContentAfterBlankMarker,
+            LintCode::InvalidBookCode,
+            LintCode::BookCodeNotUppercase,
+        ];
+        assert_eq!(codes.len(), 32);
+        assert_eq!(LINT_CODE_TABLE.len(), 32);
+
+        let mut seen_kebab = Vec::new();
+        for (value, code) in codes.into_iter().enumerate() {
+            let tag = LintCodeTag::from(code);
+            assert_eq!(usize::from(tag.as_u8()), value);
+            assert_eq!(LintCodeTag::from_u8(tag.as_u8()), Some(tag));
+            assert_eq!(LintCode::from(tag), code);
+            assert_eq!(LINT_CODE_TABLE[value], tag);
+            assert!(!tag.kebab().is_empty());
+            assert!(!seen_kebab.contains(&tag.kebab()));
+            seen_kebab.push(tag.kebab());
+        }
+        assert_eq!(LintCodeTag::from_u8(32), None);
+        assert_eq!(LintCodeTag::MissingIdMarker.kebab(), "missing-id-marker");
+        assert_eq!(
+            LintCodeTag::BookCodeNotUppercase.kebab(),
+            "book-code-not-uppercase"
+        );
     }
 }
