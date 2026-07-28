@@ -665,3 +665,29 @@ Checksum omission is not an implicit disk-decoder mode: the normal persistent re
 zero container or section checksum. A zero checksum is accepted only through an explicitly named
 unchecked/transient internal path, which still performs every structural validation and verifies
 any checksum that is present.
+
+---
+
+## Adjudication — 2026-07-28 (owner): wire layout amendment and formatter id-minting
+
+Accepted from the Phase A serial-encoding stop (spec promised four values with no allocated bytes):
+
+1. Container header grows 32 → **48 bytes**: `snapshot_id: u64` at offset 32, 8 reserved zero
+   bytes at 40.
+2. Section header grows 48 → **64 bytes**: `source_len: u64` at offset 48 (the field
+   `decode_borrowed` binds external bytes against), `catalog_stamp: u64` at offset 56 (the §7.7
+   marker-catalog stamp).
+3. Token field **12 = packed SID dictionary** appended: required, fixed element width 8, the
+   §7.5 `PackedSid` records that `sid_index` points into.
+4. Exact framing for string dictionaries, marker descriptors, and sparse number/book/attribute
+   records must be frozen here (appendix or table amendment) BEFORE their columns are implemented.
+
+Also accepted: **formatter id-minting context.** Core's formatter gains a caller-supplied minting
+context for synthetic tokens (trait/closure yielding fresh `StableTokenId`s); core never invents
+ids (address-agnostic, §2.1#7) and never uses randomness (std has none; determinism is a format
+invariant). Braid supplies a deterministic minter (e.g. `{book}-p{patch}-{n}`), unique per book by
+construction; ingest/apply validation remains the collision backstop.
+
+Implementation note: the layout change must land as ONE commit updating this document's tables,
+`schema.rs` constants, and the readers/writers together — no piecemeal drift against b08b9aa's
+shipped 32/48-byte headers.
