@@ -197,7 +197,7 @@ unrelated things). Assignment order = the order §7.4/§7.6 list the fields in p
 | 1 | `related_token_idx[N]:u32` + related token-relative span | optional — present iff flag bit `related` is used by any row in the section |
 | 2 | `overflow_span[N]:{offset:u32,len:u32}` | optional — present iff flag bit `overflow` is used by any row |
 | 3 | `message_payload_idx[N]:u32` → typed per-code argument payloads | optional — present iff flag bit `payload` is used by any row |
-| 4 | `marker_string_idx[N]:u32` | optional — present iff marker cannot be recovered unambiguously from the code + token |
+| 4 | `marker_ref[N]` — tagged 8-byte marker reference (§M.3; formerly named `marker_string_idx`, redefined 2026-07-28 before implementation) | optional — present iff some row's marker cannot be recovered from the anchored token |
 | 5 | `patch_id[N]:u32` → snapshot-bound braid patch table | optional — present iff flag bit `fix` is used by any row |
 | 6 | packed patch table (flat, sorted, non-overlapping insert/replace/delete edits incl. replacement token templates) | optional — present iff field 5 is present and non-empty |
 
@@ -835,7 +835,8 @@ marker", so the dictionary holds at most **65,535** entries and an encoder needi
 | 4 | flags | `u8` | bit 0 = `nested`; other bits reserved and reject when set |
 | 5 | reserved | `[u8; 3]` | zero |
 
-Record size 8; `count` = number of distinct descriptors.
+Record size 8, declared as directory `element_width = 8`; `count` = number of distinct
+descriptors.
 
 **The wire stores no marker metadata fields at all.** `MarkerMetadata` and `StructuralMarkerInfo`
 are pure functions of the marker name in `src/`: a decoder recovers them by calling
@@ -913,9 +914,9 @@ Row entries (24 bytes each, `count` of them):
 | 0 | token index | `u32` | `< record_count`; strictly ascending |
 | 4 | first attribute | `u32` | index of this row's first attribute entry |
 | 8 | attribute count | `u32` | attributes on this row; may be `0` (an empty list is distinct from no list) |
-| 12 | list source offset | `u32` | byte offset into the bound book source of the verbatim whole-list attribute source |
-| 16 | list source length | `u32` | length of that span |
-| 20 | flags | `u8` | bit 0 = list source present; other bits reserved and reject when set |
+| 12 | list source offset | `u32` | byte offset into the bound book source of the verbatim whole-list attribute source; `0xffff_ffff` means **absent**, which is distinct from a present empty span (see the 2026-07-28 adjudication) |
+| 16 | list source length | `u32` | length of that span; zero when the offset is the absent sentinel |
+| 20 | flags | `u8` | no bit defined; reserved and rejects when set |
 | 21 | reserved | `[u8; 3]` | zero |
 
 Attribute entries (20 bytes each, `M` of them):
@@ -972,3 +973,109 @@ be empty, matching core's own contract for the shorthand form.
    way; it changes the frozen `FieldSpec` rows, so it is listed here rather than applied silently,
    and would land with the implementation commit. Field 8 stays variable, since its payload is two
    arrays of different record sizes.
+
+---
+
+## Adjudication — 2026-07-28 (owner): mixed-payload framing rows
+
+Resolves the §D.6 rows. Rows 1, 2, 3, and 5 are decided; row 4's premise was rejected and replaced by
+the evidence-backed freeze in §M below.
+
+1. **`nested` location — ACCEPTED as proposed.** It is a flag on the marker descriptor record, so the
+   dictionary keys on `(name, nested)`. It is not a per-token column.
+2. **Attribute source — ACCEPTED as proposed:** a span into the bound source, per §7.4. An encoder
+   that meets a token whose attribute source cannot bind to the section's source refuses with a
+   typed `EncodeError`. That guards the formatter-synthetic edge and is expected to be unreachable
+   through braid's serialize-then-encode path, where the source is generated from the tokens.
+3. **Absent vs empty attribute source — ACCEPTED as distinct.** `None` and `Some("")` are different
+   values and must round-trip as different values (lossless principle). Encoded as a **sentinel
+   offset** (`0xffff_ffff`) rather than a presence flag bit; §D.5's row-entry table is amended above
+   and its `flags` byte now defines no bit.
+4. **Finding `marker_string_idx` — premise rejected, no string dictionary.** See §M.
+5. **Fields 6 and 7 element width → 16 — ACCEPTED.** Freezing before implementing exists precisely so
+   a not-yet-implemented row can be corrected. Applied to `FieldSpec`, so `count * 16 == byte_len` is
+   now enforced by the generic container rather than by each codec.
+
+**Extension applied under ruling 5's own argument:** token field **11** (marker descriptors) is also
+a uniform array once §D.2 fixed its record at 8 bytes, so it likewise declares
+`element_width = 8` instead of `0`. Only the string dictionaries (fields 9/10, an offset array
+followed by character data) and the attribute records (field 8, two arrays of different record sizes)
+remain genuinely mixed. Flagged rather than applied silently, on the same basis as the two rows the
+owner named.
+
+---
+
+## M. Finding marker representation — 2026-07-28 (frozen, evidence-backed)
+
+The §D.6 row 4 claim was that finding field 4 needs a string dictionary. That is **false**. A string
+table would be needed only for a `LintIssue.marker` value that is simultaneously (a) not the anchored
+token's own marker, (b) not a canonical catalog marker, and (c) not present in the bound source. No
+such value exists.
+
+### M.1 Producer census (static — `src/lint_impl.rs`)
+
+`LintIssue.marker` is written in exactly **three** places, so the producer set is closed:
+
+| site | how `marker` is set | producers | covered by |
+| --- | --- | --- | --- |
+| `issue()` `:2356` | `token.marker()` — the anchored token's own marker | every rule that does not override it | **anchored token** (zero bytes; the row's own descriptor already names it) |
+| `simple_issue_with_marker()` `:2427` | caller-supplied `&str` | 5 call sites, below | **catalog ordinal** |
+| `LintIssue { .. }` `:1437` | literal `"id"` | `missing-id-marker` (anchor-only) | **catalog ordinal** |
+
+The five override call sites and what they pass:
+
+| site | code | value | why it is a catalog marker |
+| --- | --- | --- | --- |
+| `:1518` | `duplicate-chapter-number` | literal `"c"` | catalog |
+| `:1572` | `invalid-number-range` | literal `"v"` | catalog |
+| `:1599` | `duplicate-verse-number` | literal `"v"` | catalog |
+| `:1613` | `verse-is-empty` | literal `"v"` | catalog |
+| `:1900` | `unknown-token` | a `[a-z0-9-]+` slice of the anchored token's **own source** | guarded by `lookup_marker(marker).kind != MarkerKind::Unknown` immediately above, so it is catalog by construction — and, being a source slice, a span would cover it too |
+
+All four literals (`id`, `c`, `v`) are asserted to remain catalog markers by an unignored test, so a
+future edit that swapped one for a non-catalog spelling fails loudly instead of silently needing a
+string table.
+
+### M.2 Corpus evidence
+
+`cargo test -p usfm_onion_wire --test corpus -- --ignored`, over all 262 `testData/**/*.usfm`
+fixtures plus `example-corpora/en_ult` and `en_ulb` (133 files): **62,948 findings, 62,945 carrying a
+marker, zero requiring a representation outside the frozen three.**
+
+| representation | findings | codes |
+| --- | ---: | --- |
+| anchored token | 31,928 | 21 codes, led by `unknown-marker` 13,953 and `marker-not-valid-in-context` 15,719 |
+| catalog ordinal | 31,017 | `verse-is-empty` 30,947; `duplicate-verse-number` 57; `duplicate-chapter-number` 10; `missing-id-marker` 3 |
+| source span | 0 | no producer today |
+| fell through all three | **0** | — |
+
+`unknown-token` and `invalid-number-range` have zero corpus occurrences — both are reachable only
+through `lint_tokens(caller_tokens)`, per the 0D ledger §2.1 — so they are covered by the static
+argument above rather than by a count. Note that `unknown-marker`'s 13,953 findings *are* non-catalog
+marker names, and they cost nothing: they arrive through the anchored-token arm, whose name the token
+row's own descriptor already carries.
+
+### M.3 Frozen encoding — token field 4 is a tagged marker reference
+
+Finding field id **4**, previously named `marker_string_idx`, is redefined (not renumbered) as
+`marker_ref`: an optional per-row column, fixed `element_width = 8`, one record per finding row,
+present only when some row needs a tag other than 0.
+
+| offset | field | type | contract |
+| ---: | --- | --- | --- |
+| 0 | tag | `u8` | `0` = take the anchored token's marker; `1` = catalog ordinal; `2` = span into the bound source; `3` = explicitly absent. Any other value is `InvalidDiscriminant` |
+| 1 | span length | `u8` | tag 2 only; zero otherwise. A marker name longer than 255 bytes refuses to encode rather than truncating |
+| 2 | catalog ordinal | `u16` | tag 1 only; zero otherwise. Resolved through the marker catalog and therefore gated by the section header's `catalog_stamp` |
+| 4 | span offset | `u32` | tag 2 only; zero otherwise. Range- and character-boundary-checked against `source_len` |
+
+- Tag 0 is the common case and costs nothing beyond the byte itself; when *every* row is tag 0 the
+  column is omitted entirely, which is what "present iff marker cannot be recovered unambiguously
+  from the code + token" already meant.
+- Tag 3 exists so "the finding has no marker while its anchored token does have one" stays
+  encodable. Core cannot currently produce that combination — `issue()` copies the token's marker, so
+  the two are absent together — but the distinction is one tag value and its absence would make the
+  format lossy for a caller-supplied finding.
+- Tag 2 has **no current producer**, exactly like the finding row's `overflow` flag bit. It is frozen
+  anyway so that a future rule naming a non-catalog marker not on its anchored token is encodable
+  without a format version bump.
+- **No finding-section string dictionary is added.** Finding field id 7 stays unassigned.

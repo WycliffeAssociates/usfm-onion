@@ -110,6 +110,12 @@ pub const ELEMENT_WIDTHS: [u8; 5] = [1, 2, 4, 8, 16];
 /// One known field-directory entry. `element_width = None` means the semantic
 /// field codec owns its mixed record shape; the generic container still checks
 /// its declared width, extent, range, alignment, and overlap.
+///
+/// A field whose frozen record shape is a uniform array declares that width
+/// here, so `count * width == byte_len` is enforced generically instead of once
+/// per codec. Only genuinely mixed payloads — the string dictionaries, whose
+/// bytes are an offset array followed by character data, and the attribute
+/// records, which are two arrays of different record sizes — are `None`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldSpec {
     pub id: u16,
@@ -348,12 +354,12 @@ pub mod token_field {
         },
         FieldSpec {
             id: NUMBER_RECORDS,
-            element_width: None,
+            element_width: Some(16),
             required: false,
         },
         FieldSpec {
             id: BOOK_CODE_RECORDS,
-            element_width: None,
+            element_width: Some(16),
             required: false,
         },
         FieldSpec {
@@ -373,7 +379,7 @@ pub mod token_field {
         },
         FieldSpec {
             id: MARKER_DESCRIPTOR_DICTIONARY,
-            element_width: None,
+            element_width: Some(8),
             required: true,
         },
         FieldSpec {

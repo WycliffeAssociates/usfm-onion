@@ -25,8 +25,10 @@ static SPAN_STARTS: [u8; 8] = [0, 0, 0, 0, 5, 0, 0, 0];
 static SPAN_ENDS: [u8; 8] = [5, 0, 0, 0, 9, 0, 0, 0];
 static SID_INDEXES: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 static MARKER_INDEXES: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
-static STRING_DICTIONARY: [u8; 4] = [0, 0, 0, 0];
-static DESCRIPTOR_DICTIONARY: [u8; 6] = [1, 0, 0, 0, 0, 0];
+// One string, "add": a single `u32` start offset followed by the data.
+static STRING_DICTIONARY: [u8; 7] = [0, 0, 0, 0, b'a', b'd', b'd'];
+// One descriptor: name index 0, not nested.
+static DESCRIPTOR_DICTIONARY: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 static FINDING_ROW: [u8; 16] = [0; 16];
 // Two eight-byte packed-SID records: GEN 1:1 and GEN 1:2, exact fidelity.
 static SID_DICTIONARY: [u8; 16] = [
@@ -89,12 +91,12 @@ fn token_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
             FieldPayload {
                 id: token_field::STRING_DICTIONARY,
                 width: ElementWidth::Variable,
-                count: 0,
+                count: 1,
                 bytes: &STRING_DICTIONARY,
             },
             FieldPayload {
                 id: token_field::MARKER_DESCRIPTOR_DICTIONARY,
-                width: ElementWidth::Variable,
+                width: ElementWidth::Eight,
                 count: 1,
                 bytes: &DESCRIPTOR_DICTIONARY,
             },
