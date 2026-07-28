@@ -558,7 +558,7 @@ Row count: **3 stamp definitions, all 3 flagged OWNER-DECISION** on exact input 
 | 1. `LintCode` → `u8` | 32 |
 | 2. `TokenKind` → `u8` (+ `NumberRangeKind` recorded) | 9 (+4) |
 | 3. Section kinds / flags | section kind ids 2; finding flag bits 8; sentinels 4 (restated) |
-| 4. Field ids | token section 13; finding section 7 |
+| 4. Field ids | token section 13; finding section 9 |
 | 5. Fix/patch/payload discriminants | `TokenFix` 3; `TokenEdit` 3; per-code payload schemas 24/32 |
 | 6. Error freeze | fully-specified variants 36 across 6 enums/unions; **5 OWNER-DECISION error types, 10 proposed variants** |
 | 7. API ledger | retained 97 npm + 43 dto + 423 core (pointer to 0C); deleted 1 crate/0 items; new ~20 wire + ~45 braid + 4 wasm symbol-groups |
