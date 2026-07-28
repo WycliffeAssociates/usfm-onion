@@ -7,6 +7,7 @@ export const SECTION_MAGIC = "usos";
 export const FORMAT_VERSION = 1;
 export const SECTION_VERSION = 1;
 export const TOKEN_SECTION_RULES_VERSION = 0;
+export const FINDING_SECTION_RULES_VERSION = 1;
 export const CONTAINER_HEADER_LEN = 48;
 export const TOC_ENTRY_LEN = 32;
 export const SECTION_HEADER_LEN = 64;
@@ -101,6 +102,8 @@ export const FINDING_FIELD = [
   { id: 4, name: "markerRef", elementWidth: 8, required: false },
   { id: 5, name: "patchId", elementWidth: 4, required: false },
   { id: 6, name: "patchTable", elementWidth: null, required: false },
+  { id: 7, name: "stringDictionary", elementWidth: null, required: false },
+  { id: 8, name: "messagePayloadTable", elementWidth: null, required: false },
 ];
 
 export const LINT_CODES = [
@@ -136,4 +139,31 @@ export const LINT_CODES = [
   { code: 29, kebab: "content-after-blank-marker" },
   { code: 30, kebab: "invalid-book-code" },
   { code: 31, kebab: "book-code-not-uppercase" },
+];
+
+export const PARAM_CONTRACTS = [
+  { code: 3, keys: ["marker"], strayCloseUnion: false },
+  { code: 7, keys: ["text"], strayCloseUnion: false },
+  { code: 8, keys: ["marker"], strayCloseUnion: false },
+  { code: 9, keys: ["marker"], strayCloseUnion: false },
+  { code: 10, keys: ["kind", "marker"], strayCloseUnion: false },
+  { code: 12, keys: ["marker"], strayCloseUnion: false },
+  { code: 13, keys: ["marker", "target"], strayCloseUnion: false },
+  { code: 14, keys: ["marker", "context"], strayCloseUnion: false },
+  { code: 15, keys: ["marker"], strayCloseUnion: false },
+  { code: 16, keys: ["form", "marker"], strayCloseUnion: true },
+  { code: 17, keys: ["has_expected", "expected", "marker"], strayCloseUnion: false },
+  { code: 18, keys: ["marker", "closer"], strayCloseUnion: false },
+  { code: 19, keys: ["kind", "marker", "location"], strayCloseUnion: false },
+  { code: 20, keys: ["chapter", "marker"], strayCloseUnion: false },
+  { code: 21, keys: ["verse", "chapter", "marker"], strayCloseUnion: false },
+  { code: 22, keys: ["found", "verse", "marker", "context"], strayCloseUnion: false },
+  { code: 24, keys: ["marker"], strayCloseUnion: false },
+  { code: 25, keys: ["marker"], strayCloseUnion: false },
+  { code: 26, keys: ["marker"], strayCloseUnion: false },
+  { code: 27, keys: ["marker"], strayCloseUnion: false },
+  { code: 28, keys: ["category"], strayCloseUnion: false },
+  { code: 29, keys: ["marker"], strayCloseUnion: false },
+  { code: 30, keys: ["code"], strayCloseUnion: false },
+  { code: 31, keys: ["code", "uppercase"], strayCloseUnion: false },
 ];

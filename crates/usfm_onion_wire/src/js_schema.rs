@@ -24,9 +24,10 @@ use crate::schema::{
     BOOK_CODE_RECORD_LEN, CHECKSUM_OMITTED, CONTAINER_CHECKSUM_OFFSET, CONTAINER_FLAGS_KNOWN,
     CONTAINER_HEADER_LEN, CONTAINER_MAGIC, CONTAINER_RESERVED_LEN, CONTAINER_RESERVED_OFFSET,
     DESCRIPTOR_FLAG_NESTED, DESCRIPTOR_RECORD_LEN, DIRECTORY_ENTRY_LEN, ELEMENT_WIDTH_VARIABLE,
-    ELEMENT_WIDTHS, FIELD_FLAG_REQUIRED, FINDING_SECTION_FLAGS_KNOWN, FORMAT_VERSION,
-    INDEX_NONE_U16, INDEX_NONE_U32, LINT_CODE_TABLE, MAX_DISTINCT_SIDS, MAX_MARKER_DESCRIPTORS,
-    NUMBER_FLAG_HAS_END, NUMBER_RECORD_LEN, PACKED_SID_LEN, SECTION_ALIGN, SECTION_CHECKSUM_OFFSET,
+    ELEMENT_WIDTHS, FIELD_FLAG_REQUIRED, FINDING_SECTION_FLAGS_KNOWN,
+    FINDING_SECTION_RULES_VERSION, FORMAT_VERSION, INDEX_NONE_U16, INDEX_NONE_U32, LINT_CODE_TABLE,
+    MAX_DISTINCT_SIDS, MAX_MARKER_DESCRIPTORS, NUMBER_FLAG_HAS_END, NUMBER_RECORD_LEN,
+    PACKED_SID_LEN, PARAM_CONTRACTS, SECTION_ALIGN, SECTION_CHECKSUM_OFFSET,
     SECTION_FLAG_POSITIONAL_IDS, SECTION_HEADER_LEN, SECTION_MAGIC, SECTION_VERSION,
     SID_DELTA_MASK, SID_FIDELITY_BIT, SPAN_ABSENT, TOC_ENTRY_LEN, TOC_FLAGS_KNOWN,
     TOKEN_SECTION_FLAGS_KNOWN, TOKEN_SECTION_RULES_VERSION, finding_field, finding_flag,
@@ -55,7 +56,7 @@ const TOKEN_FIELD_NAMES: [&str; 13] = [
 ];
 
 /// Display names for `finding_field::TABLE`, in the same dense id order.
-const FINDING_FIELD_NAMES: [&str; 7] = [
+const FINDING_FIELD_NAMES: [&str; 9] = [
     "commonRow",
     "relatedTokenIdx",
     "overflowSpan",
@@ -63,6 +64,8 @@ const FINDING_FIELD_NAMES: [&str; 7] = [
     "markerRef",
     "patchId",
     "patchTable",
+    "stringDictionary",
+    "messagePayloadTable",
 ];
 
 /// Renders `(wire-schema.js, wire-schema.d.ts)` from the compiled schema
@@ -98,6 +101,7 @@ pub fn render() -> (String, String) {
     konst!(FORMAT_VERSION: number = FORMAT_VERSION);
     konst!(SECTION_VERSION: number = SECTION_VERSION);
     konst!(TOKEN_SECTION_RULES_VERSION: number = TOKEN_SECTION_RULES_VERSION);
+    konst!(FINDING_SECTION_RULES_VERSION: number = FINDING_SECTION_RULES_VERSION);
     konst!(CONTAINER_HEADER_LEN: number = CONTAINER_HEADER_LEN);
     konst!(TOC_ENTRY_LEN: number = TOC_ENTRY_LEN);
     konst!(SECTION_HEADER_LEN: number = SECTION_HEADER_LEN);
@@ -229,6 +233,24 @@ pub fn render() -> (String, String) {
     writeln!(
         dts,
         "\nexport declare const LINT_CODES: readonly Readonly<{{ code: number; kebab: string }}>[];"
+    )
+    .unwrap();
+
+    writeln!(js, "\nexport const PARAM_CONTRACTS = [").unwrap();
+    for contract in PARAM_CONTRACTS {
+        writeln!(
+            js,
+            "  {{ code: {}, keys: {:?}, strayCloseUnion: {} }},",
+            contract.code.as_u8(),
+            contract.keys,
+            contract.stray_close_union,
+        )
+        .unwrap();
+    }
+    writeln!(js, "];").unwrap();
+    writeln!(
+        dts,
+        "\nexport declare const PARAM_CONTRACTS: readonly Readonly<{{ code: number; keys: readonly string[]; strayCloseUnion: boolean }}>[];"
     )
     .unwrap();
 
