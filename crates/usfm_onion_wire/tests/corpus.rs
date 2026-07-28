@@ -104,7 +104,7 @@ fn every_finding_marker_uses_a_frozen_representation() {
 
         // Anchored-token lookup is by id, so index once per file rather than
         // scanning the token list per finding.
-        let by_id: std::collections::HashMap<String, usize> = parsed
+        let by_id: std::collections::BTreeMap<String, usize> = parsed
             .tokens
             .iter()
             .enumerate()

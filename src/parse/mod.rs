@@ -703,7 +703,12 @@ fn push_token<'a>(source: &'a str, tokens: &mut Vec<Token<'a>>, token: Token<'a>
     tokens.push(token);
 }
 
-fn assign_ids<'a>(tokens: &mut [Token<'a>]) {
+/// Assign positional `TokenId`s over a token stream.
+///
+/// Public because the wire codec omits the id column for parsed books and
+/// reproduces the ids by calling this function — the same one parsing used —
+/// rather than reimplementing the rule and risking a silent fork.
+pub fn assign_ids<'a>(tokens: &mut [Token<'a>]) {
     let default_book: &'a str = tokens
         .iter()
         .find_map(|token| match token.data {

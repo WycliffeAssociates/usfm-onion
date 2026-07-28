@@ -65,6 +65,13 @@ pub(crate) fn integrity_checksum(bytes: &[u8], hole: usize) -> u64 {
     }
 }
 
+/// xxhash3-64 of a book's exact source bytes. Paired with the source length in
+/// the section header: the length is one compare and catches the common mistake,
+/// the hash catches a same-length different-bytes source.
+pub(crate) fn source_hash(source: &str) -> u64 {
+    integrity_checksum_parts(&[source.as_bytes()])
+}
+
 /// Sequential little-endian reader over a validated byte window.
 pub(crate) struct Cursor<'a> {
     bytes: &'a [u8],

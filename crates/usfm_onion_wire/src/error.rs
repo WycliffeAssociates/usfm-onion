@@ -102,6 +102,15 @@ pub enum EncodeError {
     TooManySids { book: BookId, found: u32 },
     /// A finding payload or token shape this schema version cannot express.
     UnrepresentablePayload { book: BookId, code: u8 },
+    /// More distinct marker descriptors in one book than the `u16` index column
+    /// can name.
+    TooManyDescriptors { book: BookId, found: u32 },
+    /// A token whose recorded span does not name its own text in the supplied
+    /// source, or an attribute whose verbatim source does not bind there. Writing
+    /// it would produce a section that decodes to different bytes than it was
+    /// built from, so the encoder refuses. Reachable only for
+    /// synthetically-built tokens; a serialize-then-encode path cannot hit it.
+    UnboundSpan { book: BookId, token_idx: u32 },
     /// A section set this writer refuses to lay out, because the result would
     /// be a container its own reader rejects as non-canonical.
     ///
@@ -149,6 +158,18 @@ impl std::fmt::Display for EncodeError {
                 write!(
                     f,
                     "book {book} declares {found} distinct sids, above the index ceiling"
+                )
+            }
+            Self::TooManyDescriptors { book, found } => {
+                write!(
+                    f,
+                    "book {book} declares {found} marker descriptors, above the index ceiling"
+                )
+            }
+            Self::UnboundSpan { book, token_idx } => {
+                write!(
+                    f,
+                    "book {book} token {token_idx} has a span that does not bind to the supplied source"
                 )
             }
             Self::UnrepresentablePayload { book, code } => {

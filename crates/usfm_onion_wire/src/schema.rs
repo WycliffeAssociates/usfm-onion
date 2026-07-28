@@ -137,6 +137,44 @@ pub const INDEX_NONE_U32: u32 = u32::MAX;
 /// than a reason to widen the column.
 pub const MAX_DISTINCT_SIDS: u32 = INDEX_NONE_U16 as u32;
 
+/// Fixed record widths and flag bits for the mixed and sparse token payloads.
+/// Every value is frozen by the framing specification; a change here silently
+/// reinterprets already-encoded sections.
+pub const DESCRIPTOR_RECORD_LEN: usize = 8;
+pub const NUMBER_RECORD_LEN: usize = 16;
+pub const BOOK_CODE_RECORD_LEN: usize = 16;
+pub const ATTRIBUTE_ROW_LEN: usize = 24;
+pub const ATTRIBUTE_ENTRY_LEN: usize = 20;
+
+/// Marker descriptor `flags:u8` bit 0 — the occurrence was written nested
+/// (`\+add`). Carried on the descriptor, so the dictionary keys on
+/// `(name, nested)`.
+pub const DESCRIPTOR_FLAG_NESTED: u8 = 1 << 0;
+pub const DESCRIPTOR_FLAGS_KNOWN: u8 = DESCRIPTOR_FLAG_NESTED;
+
+/// Number record `flags:u8` bit 0 — the range end is meaningful. When clear the
+/// end field must be zero, so an absent end has exactly one encoding.
+pub const NUMBER_FLAG_HAS_END: u8 = 1 << 0;
+pub const NUMBER_FLAGS_KNOWN: u8 = NUMBER_FLAG_HAS_END;
+
+/// Book-code record `flags:u8` bit 0. Stored rather than recomputed: the
+/// canonical book list is not covered by the marker-catalog stamp, so deriving
+/// it on decode could silently rewrite an already-encoded token.
+pub const BOOK_CODE_FLAG_VALID: u8 = 1 << 0;
+
+/// Attribute entry `flags:u8` bit 0 — USFM 3.1 default-attribute shorthand. The
+/// key is empty whenever it is set.
+pub const ATTRIBUTE_FLAG_DEFAULT: u8 = 1 << 0;
+
+/// Sentinel offset meaning "this span is absent", distinct from a present empty
+/// span. Used by the attribute row's whole-list source, which core models as an
+/// `Option` and which must round-trip as one.
+pub const SPAN_ABSENT: u32 = u32::MAX;
+
+/// Marker descriptors a single section may hold, capped by the `u16`
+/// `marker_descriptor_index` column minus its sentinel.
+pub const MAX_MARKER_DESCRIPTORS: u32 = INDEX_NONE_U16 as u32;
+
 /// Packed SID dictionary record width and final-byte bit allocation.
 pub const PACKED_SID_LEN: usize = 8;
 pub const SID_FIDELITY_BIT: u8 = 1 << 7;
