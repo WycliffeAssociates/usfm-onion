@@ -835,16 +835,18 @@ impl<'a> SerializableAttribute for AttributeItem<'a> {
 /// list means the entire list is reconstructed, not just the changed entry.
 /// An editor that never touches attributes never has to think about this.
 ///
-/// # The one sanctioned divergence between the two emitters
+/// # Where the list lands
 ///
 /// [`tokens_to_usfm`] (native, span-based) and [`tokens_to_usfm_reconstruct`]
-/// (this trait, spanless) agree on every well-formed input, but not on
-/// malformed ones: a marker with an attribute list that is never closed (a
-/// parser-recovery scenario) keeps its exact byte offset under span-drain,
-/// while the spanless/closer-shape emitter — having no matching closer to
-/// trigger the drain — pushes it to the end of the token stream instead.
-/// Native callers get byte-exact recovery; owned/wire tokens do not, because
-/// they have no span to recover a position from.
+/// (this trait, spanless) agree byte for byte whenever the token remembers where
+/// its list sat — see [`SerializableToken::attribute_offset`]. That covers every
+/// parse-origin stream, including the malformed shapes an unclosed marker
+/// produces: the list is placed at its recorded distance from the owning token
+/// rather than at a closer that never arrives.
+///
+/// A token with no remembered position — editor- or DTO-authored, which never had
+/// one — falls back to the closer rule: the list is emitted at the marker's
+/// closer, or at end of stream if none arrives.
 /// Base contract every token shape satisfies, regardless of which
 /// higher-level trait (`SerializableToken`, `WalkableToken`, …) a consumer
 /// needs on top. `marker()` is `None` for non-marker kinds (Text, Number,
@@ -1187,12 +1189,11 @@ fn emit_pending<T: SerializableToken>(output: &mut String, attrs: PendingAttrs<'
 /// verbatim `attribute_list()` slice when present, else reconstructs from
 /// `attributes()`.
 ///
-/// Agrees with [`tokens_to_usfm`] on every well-formed input (see the
-/// `tokens_to_usfm_reconstruct_parity` test). The one sanctioned divergence:
-/// a malformed/unclosed attribute-bearing marker's attribute list lands at
-/// end-of-stream here (no closer ever arrives to trigger the drain) instead
-/// of at its original byte position — a real difference from `tokens_to_usfm`,
-/// but the same recovery behavior the previous wasm-side emitter already had.
+/// A token that remembers where its list sat ([`SerializableToken::attribute_offset`],
+/// which every parse-origin token carries) has the list placed at that distance
+/// instead, which is what makes this agree with [`tokens_to_usfm`] byte for byte —
+/// including for unclosed markers, where the closer rule alone had to fall back to
+/// end-of-stream. See the `tokens_to_usfm_reconstruct_parity` tests.
 pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String {
     reconstruct(tokens, None)
 }

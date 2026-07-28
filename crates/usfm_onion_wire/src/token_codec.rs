@@ -7,6 +7,8 @@
 //! marker-catalog stamp: the recovery is only sound while the registry the
 //! encoder saw and the registry the decoder calls agree.
 
+use std::collections::BTreeMap;
+
 use usfm_onion::marker_defs::structural_marker_info;
 use usfm_onion::parse::assign_ids;
 use usfm_onion::token::{
@@ -47,6 +49,11 @@ pub(crate) struct TokenSectionBuffers {
     descriptors: Vec<u8>,
     descriptor_count: u32,
     sparse: SparseBuilders,
+    /// Present only for a section whose ids are opaque. Omitted together with the
+    /// dictionary when ids are positional, which is what the section flag asserts.
+    token_id_indices: Vec<u8>,
+    token_ids: Vec<u8>,
+    token_id_count: u32,
 }
 
 impl TokenSectionBuffers {
@@ -119,6 +126,20 @@ impl TokenSectionBuffers {
                 bytes: &self.sparse.book_codes,
             });
         }
+        if !self.token_id_indices.is_empty() {
+            fields.push(FieldPayload {
+                id: token_field::TOKEN_ID_INDEX,
+                width: ElementWidth::Four,
+                count: self.record_count,
+                bytes: &self.token_id_indices,
+            });
+            fields.push(FieldPayload {
+                id: token_field::TOKEN_ID_DICTIONARY,
+                width: ElementWidth::Variable,
+                count: self.token_id_count,
+                bytes: &self.token_ids,
+            });
+        }
         if self.sparse.attribute_row_count() > 0 {
             fields.push(FieldPayload {
                 id: token_field::ATTRIBUTE_RECORDS,
@@ -128,11 +149,11 @@ impl TokenSectionBuffers {
             });
         }
         SectionPayload {
-            // Parsed tokens always carry positional ids, so the explicit id
-            // column and its dictionary are omitted; the decoder rebuilds them
-            // with core's own assignment pass.
+            // The flag and the two id fields are one decision: set means the ids
+            // are `{book}-{index}` and both fields are absent, clear means they are
+            // opaque and both are present.
             variant: SectionVariant::Token {
-                positional_ids: true,
+                positional_ids: self.token_id_indices.is_empty(),
             },
             book: self.book,
             source_hash: self.source_hash,
@@ -153,6 +174,21 @@ pub(crate) fn encode_token_section(
     book: BookId,
     source: &str,
     tokens: &[Token<'_>],
+) -> Result<TokenSectionBuffers, EncodeError> {
+    encode_token_section_with_ids(book, source, tokens, None)
+}
+
+/// [`encode_token_section`], with opaque stable ids to carry.
+///
+/// `stable_ids` is `Some` only when the ids are not the positional
+/// `{book_code}-{index}` form the decoder can synthesize; passing them otherwise
+/// would store a dictionary that is 100% redundant, which is exactly what the
+/// `positional_ids` flag exists to avoid.
+pub(crate) fn encode_token_section_with_ids(
+    book: BookId,
+    source: &str,
+    tokens: &[Token<'_>],
+    stable_ids: Option<&[&str]>,
 ) -> Result<TokenSectionBuffers, EncodeError> {
     let unbound = |token_idx: usize| EncodeError::UnboundSpan {
         book,
@@ -179,10 +215,14 @@ pub(crate) fn encode_token_section(
         descriptors: Vec::new(),
         descriptor_count: 0,
         sparse: SparseBuilders::default(),
+        token_id_indices: Vec::new(),
+        token_ids: Vec::new(),
+        token_id_count: 0,
     };
     let mut sids = SidDictionaryBuilder::new(book);
     let mut strings = StringDictionaryBuilder::default();
     let mut descriptors = MarkerDescriptorBuilder::default();
+    let fidelity = anchor_fidelity(tokens);
 
     for (row, token) in tokens.iter().enumerate() {
         let index = row as u32;
@@ -196,12 +236,14 @@ pub(crate) fn encode_token_section(
             .extend_from_slice(&(span.start + span.len).to_le_bytes());
 
         let sid_index = match token.sid {
-            // Token anchors are the canonical sid core computed, so they are
-            // interned as exact; the packed codec still degrades a bridge wider
-            // than its seven delta bits on its own. Sequence/suffix fidelity is
-            // a finding-level concern, derived there from the number token's
-            // source text.
-            Some(sid) => sids.intern(sid, SidFidelity::Exact)?,
+            // Fidelity comes from the designator that established this anchor, not
+            // from the anchor itself — see `anchor_fidelity`. An anchor no number
+            // token established (front matter, chapter scope before any verse) is
+            // exact by construction: there is no designator to have spelled wrong.
+            Some(sid) => sids.intern(
+                sid,
+                fidelity.get(&sid).copied().unwrap_or(SidFidelity::Exact),
+            )?,
             None => INDEX_NONE_U16,
         };
         buffers
@@ -267,8 +309,77 @@ pub(crate) fn encode_token_section(
     buffers.string_count = strings.len();
     buffers.descriptors = descriptors.bytes().to_vec();
     buffers.descriptor_count = descriptors.len();
+    if let Some(ids) = stable_ids {
+        if ids.len() != tokens.len() {
+            return Err(unbound(tokens.len()));
+        }
+        let mut dictionary = StringDictionaryBuilder::default();
+        for (row, id) in ids.iter().enumerate() {
+            // An empty id is not identity: it cannot be told apart from a missing
+            // one, and core's `StableTokenId` refuses to hold it.
+            if id.is_empty() {
+                return Err(unbound(row));
+            }
+            let index = dictionary.intern(id).map_err(|_| unbound(row))?;
+            buffers
+                .token_id_indices
+                .extend_from_slice(&index.to_le_bytes());
+        }
+        buffers.token_ids = dictionary.bytes();
+        buffers.token_id_count = dictionary.len();
+    }
     buffers.sparse.seal_attributes();
     Ok(buffers)
+}
+
+/// Fidelity of one number token's anchor, derived from its **source text**.
+///
+/// Required by the frozen rule: a sequence (`\v 1,3`) is byte-identical to a
+/// single verse in core `Sid`, and a suffixed verse (`\v 1a`) is identical to an
+/// unsuffixed one in both `Sid` and `NumberRangeKind`, so an encoder reading only
+/// the semantic payload would mark both `Exact`. Only the source distinguishes
+/// them.
+///
+/// `Exact` is therefore the narrow case: a bare number, or two bare numbers around
+/// a single `-`. A comma (sequence), a letter (suffix), or anything else that does
+/// not parse that way is `AnchorOnly` — the anchor is still the correct first
+/// canonical reference, but it does not spell the whole designator. A bridge wider
+/// than the seven delta bits also degrades, which `PackedSid::encode` applies on
+/// its own.
+fn source_fidelity(text: &str) -> SidFidelity {
+    let trimmed = text.trim();
+    let mut parts = trimmed.split('-');
+    let first = parts.next().unwrap_or_default();
+    let second = parts.next();
+    let bare = |value: &str| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit());
+    if parts.next().is_some() || !bare(first) || second.is_some_and(|value| !bare(value)) {
+        return SidFidelity::AnchorOnly;
+    }
+    SidFidelity::Exact
+}
+
+/// Fidelity per anchor, keyed by the anchor the establishing number token carries.
+///
+/// A number token carries the anchor it establishes, and every token after it
+/// shares that anchor, so one lookup by `Sid` gives each row the fidelity of the
+/// designator it came from. `AnchorOnly` wins a collision: two number tokens can
+/// legitimately resolve to the same anchor (a duplicate verse number is a lint
+/// finding, not a parse failure), and the inexact reading is the safe one.
+fn anchor_fidelity(tokens: &[Token<'_>]) -> BTreeMap<Sid, SidFidelity> {
+    let mut table = BTreeMap::new();
+    for token in tokens {
+        if token.kind() != TokenKind::Number {
+            continue;
+        }
+        if let Some(sid) = token.sid {
+            let derived = source_fidelity(token.source);
+            let slot = table.entry(sid).or_insert(derived);
+            if derived == SidFidelity::AnchorOnly {
+                *slot = SidFidelity::AnchorOnly;
+            }
+        }
+    }
+    table
 }
 
 /// Encodes one book from spanless owned tokens.
@@ -287,7 +398,15 @@ pub(crate) fn encode_owned_token_section(
 ) -> Result<(String, TokenSectionBuffers), EncodeError> {
     let (source, spans) = tokens_to_usfm_reconstruct_spanned(tokens);
     let borrowed = owned_to_borrowed(book, tokens, &spans, &source)?;
-    let buffers = encode_token_section(book, &source, &borrowed)?;
+    // Opaque ids are carried; positional ones are omitted and re-synthesized. The
+    // test is what the flag actually claims — that every id is the positional form
+    // this stream's own `assign_ids` pass produced — rather than a caller promise.
+    let positional = tokens.iter().zip(&borrowed).all(|(owned, token)| {
+        owned.id().as_str() == format!("{}-{}", token.id.book_code, token.id.index)
+    });
+    let stable_ids: Option<Vec<&str>> =
+        (!positional).then(|| tokens.iter().map(|token| token.id().as_str()).collect());
+    let buffers = encode_token_section_with_ids(book, &source, &borrowed, stable_ids.as_deref())?;
     Ok((source, buffers))
 }
 
@@ -467,6 +586,21 @@ fn bind_span(source: &str, span: Span, text: &str) -> Option<SourceSpan> {
     })
 }
 
+/// One decoded token section.
+///
+/// `stable_ids` is `Some` exactly when the section carried explicit ids, and holds
+/// one per token in row order. They are returned alongside rather than inside the
+/// tokens because core's `TokenId` is a structured positional label
+/// (`{book_code}, {index}`) and cannot hold an opaque caller id — and dropping them
+/// would break the identity-keyed reconciliation they exist for. `Token::id` is
+/// still filled with that positional label in both cases; for an explicit-id
+/// section it is a derived convenience, not the identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DecodedTokens<'a> {
+    pub(crate) tokens: Vec<Token<'a>>,
+    pub(crate) stable_ids: Option<Vec<&'a str>>,
+}
+
 /// Decodes one token section against the exact source it was encoded from.
 ///
 /// The returned tokens borrow from **both** buffers — marker names and attribute
@@ -481,7 +615,7 @@ fn bind_span(source: &str, span: Span, text: &str) -> Option<SourceSpan> {
 pub(crate) fn decode_token_section<'a>(
     section: &Section<'a>,
     source: &'a str,
-) -> Result<Vec<Token<'a>>, DecodeError> {
+) -> Result<DecodedTokens<'a>, DecodeError> {
     if section.header.kind != SectionKind::Token {
         return Err(DecodeError::InvalidSection);
     }
@@ -508,17 +642,21 @@ pub(crate) fn decode_token_section<'a>(
     };
     let record_count = section.header.record_count;
     let numbers = match section.field(token_field::NUMBER_RECORDS) {
-        Some(field) => NumberRecords::from_field(field, record_count)?,
+        Some(field) => NumberRecords::from_field(field, record_count, columns.kinds())?,
         None => NumberRecords::default(),
     };
     let book_codes = match section.field(token_field::BOOK_CODE_RECORDS) {
-        Some(field) => BookCodeRecords::from_field(field, record_count, strings)?,
+        Some(field) => BookCodeRecords::from_field(field, record_count, columns.kinds(), strings)?,
         None => BookCodeRecords::default(),
     };
     let attributes = match section.field(token_field::ATTRIBUTE_RECORDS) {
-        Some(field) => {
-            AttributeRecords::from_field(field, record_count, section.header.source_len, strings)?
-        }
+        Some(field) => AttributeRecords::from_field(
+            field,
+            record_count,
+            columns.kinds(),
+            section.header.source_len,
+            strings,
+        )?,
         None => AttributeRecords::default(),
     };
 
@@ -551,9 +689,21 @@ pub(crate) fn decode_token_section<'a>(
         });
     }
     // Positional ids are reproduced by the same core function that assigned them
-    // during parsing, so the wire stores none of them and cannot drift from it.
+    // during parsing, so a positional section stores none of them and cannot drift
+    // from it. An explicit-id section also gets the positional label — it is the
+    // only thing `TokenId` can hold — but its opaque ids are returned separately
+    // and are the identity.
     assign_ids(&mut tokens);
-    Ok(tokens)
+    let stable_ids = if columns.has_explicit_ids() {
+        Some(
+            (0..record_count)
+                .map(|row| columns.token_id(row).ok_or(DecodeError::InvalidSection))
+                .collect::<Result<Vec<_>, _>>()?,
+        )
+    } else {
+        None
+    };
+    Ok(DecodedTokens { tokens, stable_ids })
 }
 
 fn decode_sid(columns: &TokenColumns<'_>, row: u32) -> Result<Option<Sid>, DecodeError> {

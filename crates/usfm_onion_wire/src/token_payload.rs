@@ -19,8 +19,31 @@ use crate::schema::{
     ATTRIBUTE_ENTRY_LEN, ATTRIBUTE_FLAG_DEFAULT, ATTRIBUTE_ROW_LEN, BOOK_CODE_FLAG_VALID,
     BOOK_CODE_RECORD_LEN, DESCRIPTOR_FLAG_NESTED, DESCRIPTOR_FLAGS_KNOWN, DESCRIPTOR_RECORD_LEN,
     MAX_MARKER_DESCRIPTORS, NUMBER_FLAG_HAS_END, NUMBER_FLAGS_KNOWN, NUMBER_RECORD_LEN,
-    NumberRangeKindTag, SPAN_ABSENT,
+    NumberRangeKindTag, SPAN_ABSENT, TokenKindTag,
 };
+
+/// Validates that a sparse record's target row is of the kind that record
+/// describes.
+///
+/// A record aimed at a wrong-kind row would be accepted and then never read,
+/// because the decoder only consults a sparse column for rows whose kind calls for
+/// it — a silent discard of data the producer said was load-bearing. The frozen
+/// framing requires the kinds to agree, so the mismatch rejects here.
+fn require_row_kind(
+    kinds: &[u8],
+    token_idx: u32,
+    expected: TokenKindTag,
+) -> Result<(), DecodeError> {
+    let tag = kinds
+        .get(usize::try_from(token_idx).map_err(|_| DecodeError::OffsetOverflow)?)
+        .copied()
+        .ok_or(DecodeError::InvalidSection)?;
+    let tag = TokenKindTag::from_u8(tag).ok_or(DecodeError::InvalidDiscriminant)?;
+    if tag != expected {
+        return Err(DecodeError::InvalidSection);
+    }
+    Ok(())
+}
 
 fn u16_at(bytes: &[u8], at: usize) -> Option<u16> {
     let raw: [u8; 2] = bytes.get(at..at.checked_add(2)?)?.try_into().ok()?;
@@ -278,6 +301,7 @@ impl<'wire> NumberRecords<'wire> {
     pub(crate) fn from_field(
         field: &SectionField<'wire>,
         record_count: u32,
+        kinds: &[u8],
     ) -> Result<Self, DecodeError> {
         let mut previous: Option<u32> = None;
         for record in field.bytes.chunks_exact(NUMBER_RECORD_LEN) {
@@ -288,6 +312,7 @@ impl<'wire> NumberRecords<'wire> {
             if previous.is_some_and(|last| token_idx <= last) {
                 return Err(DecodeError::InvalidSection);
             }
+            require_row_kind(kinds, token_idx, TokenKindTag::Number)?;
             previous = Some(token_idx);
             NumberRangeKindTag::from_u8(record[12]).ok_or(DecodeError::InvalidDiscriminant)?;
             let flags = record[13];
@@ -333,6 +358,7 @@ impl<'wire> BookCodeRecords<'wire> {
     pub(crate) fn from_field(
         field: &SectionField<'wire>,
         record_count: u32,
+        kinds: &[u8],
         strings: StringDictionary<'wire>,
     ) -> Result<Self, DecodeError> {
         let mut previous: Option<u32> = None;
@@ -341,6 +367,7 @@ impl<'wire> BookCodeRecords<'wire> {
             if token_idx >= record_count || previous.is_some_and(|last| token_idx <= last) {
                 return Err(DecodeError::InvalidSection);
             }
+            require_row_kind(kinds, token_idx, TokenKindTag::BookCode)?;
             previous = Some(token_idx);
             strings.require(u32_at(record, 4).ok_or(DecodeError::Truncated)?)?;
             if record[8] & !BOOK_CODE_FLAG_VALID != 0 {
@@ -399,6 +426,7 @@ impl<'wire> AttributeRecords<'wire> {
     pub(crate) fn from_field(
         field: &SectionField<'wire>,
         record_count: u32,
+        kinds: &[u8],
         source_len: u64,
         strings: StringDictionary<'wire>,
     ) -> Result<Self, DecodeError> {
@@ -425,6 +453,16 @@ impl<'wire> AttributeRecords<'wire> {
         for row in rows.chunks_exact(ATTRIBUTE_ROW_LEN) {
             let token_idx = u32_at(row, 0).ok_or(DecodeError::Truncated)?;
             if token_idx >= record_count || previous.is_some_and(|last| token_idx <= last) {
+                return Err(DecodeError::InvalidSection);
+            }
+            // Only an opener can carry an attribute list; the payload table gives
+            // no other kind an attribute shape at all.
+            let tag = kinds
+                .get(usize::try_from(token_idx).map_err(|_| DecodeError::OffsetOverflow)?)
+                .copied()
+                .and_then(TokenKindTag::from_u8)
+                .ok_or(DecodeError::InvalidSection)?;
+            if !matches!(tag, TokenKindTag::Marker | TokenKindTag::Milestone) {
                 return Err(DecodeError::InvalidSection);
             }
             previous = Some(token_idx);

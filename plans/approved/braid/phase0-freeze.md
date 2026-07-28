@@ -178,7 +178,7 @@ unrelated things). Assignment order = the order §7.4/§7.6 list the fields in p
 | 0 | `kind` | `u8` | required |
 | 1 | `span_start` | `u32` | required |
 | 2 | `span_end` | `u32` | required |
-| 3 | `token_id_index` | `u32` | **optional** — present only when the section's `positional_ids` flag is clear (§3.2); absent for cold-parsed books |
+| 3 | `token_id_index` | `u32` | **optional** — present only when the section's `positional_ids` flag is clear (§3.2); absent for cold-parsed books. Indexes field 9; every index must resolve to a **non-empty** string, because an empty id cannot be distinguished from a missing one and core's `StableTokenId` refuses to hold it |
 | 4 | `sid_index` | `u16` | required (per-row column; `0xffff` sentinel encodes the per-token `None`) |
 | 5 | `marker_descriptor_index` | `u16` | required (`0xffff` sentinel = no marker) |
 | 6 | number records (sparse, keyed by `token_idx`: `start:u32`, `end:Option<u32>` via presence, `kind` discriminant) | `u32` fields | optional (sparse — present only for `Number`-kind rows) |
@@ -1129,3 +1129,20 @@ treat the derived source as the authoritative pairing.
 
 Unchanged either way: the span-based `tokens_to_usfm` was and is byte-lossless, and tokens with no
 remembered position (wire DTO and editor ingest) keep the closer rule.
+
+---
+
+## Recorded implementation note — decoded stable ids (2026-07-28)
+
+Core's `TokenId` is a structured positional label (`{book_code}, {index}`) and cannot hold an opaque
+caller id. A decoded token section therefore returns explicit ids **alongside** the tokens rather than
+inside them: `stable_ids` is `Some` exactly when the section's `positional_ids` flag is clear, holding
+one validated non-empty id per row in row order. `Token::id` is filled with the positional label in
+both cases; for an explicit-id section it is a derived convenience and the opaque id is the identity
+that reconciliation keys on (§5.1's "reconciliation keys are `(BookId, StableTokenId)`, never
+`token_idx`").
+
+The encoder decides between the two forms by proof, not by a caller flag: it emits the id column and
+dictionary only when some id differs from the positional form that stream's own `assign_ids` pass
+produces. Emitting them otherwise would store a dictionary Gate 0E measured at 31–41% of section bytes
+and 100% redundant.

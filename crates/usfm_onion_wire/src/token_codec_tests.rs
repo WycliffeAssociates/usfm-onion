@@ -17,10 +17,18 @@ use crate::container::{read_container, write_container};
 use crate::error::DecodeError;
 use crate::schema::token_field;
 use crate::token_codec::{
-    decode_token_section, encode_owned_token_section, encode_token_section, owned_to_borrowed,
+    decode_token_section, encode_owned_token_section, encode_token_section,
+    encode_token_section_with_ids, owned_to_borrowed,
 };
+use crate::token_section::{SidFidelity, TokenColumns};
 
 const SNAPSHOT_ID: u64 = 7;
+
+/// Books the corpus gates walk: every `testData/**/*.usfm` fixture plus
+/// `example-corpora/en_ult` and `en_ulb`. Pinned exactly rather than as a lower
+/// bound, so adding or removing a fixture is a deliberate edit here and a silently
+/// shrinking corpus cannot make a gate vacuous.
+const CORPUS_BOOKS: usize = 395;
 
 fn book(code: &str) -> BookId {
     BookId::from_str(code).expect("test book code")
@@ -44,7 +52,9 @@ fn assert_round_trips(source: &str) {
         .section(0)
         .expect("one section")
         .expect("section decodes");
-    let decoded = decode_token_section(&section, source).expect("token section decodes");
+    let decoded = decode_token_section(&section, source)
+        .expect("token section decodes")
+        .tokens;
     assert_eq!(
         decoded.len(),
         parsed.tokens.len(),
@@ -256,7 +266,9 @@ fn assert_owned_round_trips(source: &str) {
 
     let container = read_container(&bytes).expect("container decodes");
     let section = container.section(0).unwrap().expect("section decodes");
-    let decoded = decode_token_section(&section, &derived).expect("section decodes");
+    let decoded = decode_token_section(&section, &derived)
+        .expect("section decodes")
+        .tokens;
 
     let fresh = parse(&derived);
     assert_eq!(
@@ -340,7 +352,7 @@ fn absent_attribute_source_is_distinct_from_an_empty_one() {
     let bytes = encoded(source);
     let container = read_container(&bytes).unwrap();
     let section = container.section(0).unwrap().unwrap();
-    let decoded = decode_token_section(&section, source).unwrap();
+    let decoded = decode_token_section(&section, source).unwrap().tokens;
     let list = marker_attrs(&decoded)
         .attribute_source
         .expect("present list");
@@ -357,7 +369,7 @@ fn absent_attribute_source_is_distinct_from_an_empty_one() {
     restamp(&mut bytes);
     let container = read_container(&bytes).unwrap();
     let section = container.section(0).unwrap().unwrap();
-    let decoded = decode_token_section(&section, source).unwrap();
+    let decoded = decode_token_section(&section, source).unwrap().tokens;
     assert_eq!(
         marker_attrs(&decoded)
             .attribute_source
@@ -374,7 +386,7 @@ fn absent_attribute_source_is_distinct_from_an_empty_one() {
     restamp(&mut bytes);
     let container = read_container(&bytes).unwrap();
     let section = container.section(0).unwrap().unwrap();
-    let decoded = decode_token_section(&section, source).unwrap();
+    let decoded = decode_token_section(&section, source).unwrap().tokens;
     assert_eq!(
         marker_attrs(&decoded).attribute_source,
         None,
@@ -382,18 +394,308 @@ fn absent_attribute_source_is_distinct_from_an_empty_one() {
     );
 }
 
+// ----------------------------------------------------- explicit stable ids
+
+/// GUID-ish ids, the shape a live editor supplies: opaque, non-positional, and the
+/// key identity-based reconciliation depends on.
+fn guid_ids(count: usize) -> Vec<String> {
+    (0..count)
+        .map(|index| format!("7f3c9a{index:04x}-b21e-4d0f-9c8a-{index:012x}"))
+        .collect()
+}
+
+/// Encodes with explicit ids and lays out the container.
+fn encoded_with_ids(source: &str, ids: &[String]) -> Vec<u8> {
+    let parsed = parse(source);
+    let borrowed: Vec<&str> = ids.iter().map(String::as_str).collect();
+    let buffers =
+        encode_token_section_with_ids(book("GEN"), source, &parsed.tokens, Some(&borrowed))
+            .expect("explicit ids encode");
+    write_container(SNAPSHOT_ID, &[buffers.payload()]).expect("section lays out")
+}
+
+#[test]
+fn explicit_stable_ids_round_trip_byte_for_byte() {
+    let source = "\\id GEN\n\\c 1\n\\p \\w a|k=\"v\"\\w* b\n\\v 1-2 text\n";
+    let ids = guid_ids(parse(source).tokens.len());
+    let bytes = encoded_with_ids(source, &ids);
+
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    // Opaque ids mean the flag is clear and both id fields are present — one
+    // decision, not two independent ones.
+    assert!(!section.positional_ids());
+    assert!(section.field(token_field::TOKEN_ID_INDEX).is_some());
+    assert!(section.field(token_field::TOKEN_ID_DICTIONARY).is_some());
+
+    let decoded = decode_token_section(&section, source).expect("section decodes");
+    let stable = decoded.stable_ids.expect("explicit ids are returned");
+    assert_eq!(stable, ids.iter().map(String::as_str).collect::<Vec<_>>());
+    // And the tokens themselves still round-trip.
+    assert_eq!(decoded.tokens, parse(source).tokens);
+}
+
+#[test]
+fn positional_sections_report_no_stable_ids() {
+    let source = "\\id GEN\n\\c 1\n\\p text\n";
+    let bytes = encoded(source);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    assert!(section.positional_ids());
+    let decoded = decode_token_section(&section, source).unwrap();
+    assert_eq!(decoded.stable_ids, None);
+}
+
+#[test]
+fn owned_tokens_with_positional_ids_omit_the_id_columns() {
+    // Parse-origin owned tokens carry exactly `{book}-{index}`, so storing them
+    // would be a fully redundant dictionary. The encoder proves it rather than
+    // trusting a flag.
+    let source = "\\id GEN\n\\c 1\n\\p text\n";
+    let (_, bytes) = owned_encoded(source);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    assert!(section.positional_ids());
+    assert!(section.field(token_field::TOKEN_ID_INDEX).is_none());
+    assert!(section.field(token_field::TOKEN_ID_DICTIONARY).is_none());
+}
+
+/// Encode with explicit ids, edit the bytes, re-stamp, decode.
+fn decode_ids_after(
+    source: &str,
+    ids: &[String],
+    edit: impl FnOnce(&mut Vec<u8>),
+) -> Option<DecodeError> {
+    let mut bytes = encoded_with_ids(source, ids);
+    edit(&mut bytes);
+    restamp(&mut bytes);
+    let container = read_container(&bytes).expect("container stays well formed");
+    let section = container.section(0).unwrap().expect("section stays valid");
+    decode_token_section(&section, source).err()
+}
+
+#[test]
+fn explicit_id_index_out_of_range_rejects() {
+    let source = "\\p text\n";
+    let ids = guid_ids(parse(source).tokens.len());
+    let error = decode_ids_after(source, &ids, |bytes| {
+        let at = field_payload_offset(bytes, token_field::TOKEN_ID_INDEX);
+        bytes[at..at + 4].copy_from_slice(&9999u32.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+#[test]
+fn empty_explicit_id_rejects() {
+    // An empty id is not identity: it cannot be distinguished from a missing one,
+    // and core's `StableTokenId` refuses to hold it.
+    let source = "\\p text\n";
+    let ids = guid_ids(parse(source).tokens.len());
+    let error = decode_ids_after(source, &ids, |bytes| {
+        // Collapse the first dictionary string to zero length by moving the second
+        // offset back onto the first.
+        let at = field_payload_offset(bytes, token_field::TOKEN_ID_DICTIONARY);
+        bytes[at + 4..at + 8].copy_from_slice(&0u32.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+#[test]
+fn malformed_explicit_id_dictionary_rejects() {
+    let source = "\\p text\n";
+    let ids = guid_ids(parse(source).tokens.len());
+    // Descending offsets are a shape violation, not a UTF-8 one.
+    let error = decode_ids_after(source, &ids, |bytes| {
+        let at = field_payload_offset(bytes, token_field::TOKEN_ID_DICTIONARY);
+        bytes[at..at + 4].copy_from_slice(&64u32.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+
+    // A start past the data region is likewise a shape violation.
+    let error = decode_ids_after(source, &ids, |bytes| {
+        let at = field_payload_offset(bytes, token_field::TOKEN_ID_DICTIONARY);
+        bytes[at + 4..at + 8].copy_from_slice(&u32::MAX.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+#[test]
+fn explicit_id_dictionary_splitting_a_code_point_rejects() {
+    let source = "\\p text\n";
+    let count = parse(source).tokens.len();
+    // Ids ending in a two-byte character, so nudging the next start back by one
+    // lands between that character's bytes.
+    let ids: Vec<String> = (0..count).map(|index| format!("id{index}-λ")).collect();
+    let error = decode_ids_after(source, &ids, |bytes| {
+        let at = field_payload_offset(bytes, token_field::TOKEN_ID_DICTIONARY);
+        let second = u32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap());
+        bytes[at + 4..at + 8].copy_from_slice(&(second - 1).to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidUtf8));
+}
+
+#[test]
+fn explicit_id_column_without_its_dictionary_rejects() {
+    let source = "\\p text\n";
+    let ids = guid_ids(parse(source).tokens.len());
+    // Relabel the dictionary as an unknown optional field: it is then skipped, and
+    // the index column is left naming a dictionary that is not there.
+    let error = decode_ids_after(source, &ids, |bytes| {
+        let at = field_entry_offset(bytes, token_field::TOKEN_ID_DICTIONARY);
+        bytes[at..at + 2].copy_from_slice(&4000u16.to_le_bytes());
+        // An unknown field cannot claim to be required.
+        bytes[at + 3] = 0;
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+#[test]
+fn positional_flag_with_present_id_fields_rejects() {
+    // The flag asserts both id fields are absent, so a section carrying either one
+    // is self-contradictory. Rejected at the container layer, before any column is
+    // interpreted.
+    let source = "\\p text\n";
+    let ids = guid_ids(parse(source).tokens.len());
+    let mut bytes = encoded_with_ids(source, &ids);
+    let section = section_start(&bytes);
+    bytes[section + 9] = 1;
+    restamp(&mut bytes);
+    let container = read_container(&bytes).expect("container stays well formed");
+    assert_eq!(
+        container.section(0).unwrap().err(),
+        Some(DecodeError::InvalidSection)
+    );
+}
+
+// ------------------------------------------------- sparse record row kinds
+
+#[test]
+fn a_number_record_on_a_non_number_row_rejects() {
+    // Accepted-and-ignored was the bug: the decoder only reads a sparse column for
+    // rows whose kind calls for it, so a misaimed record silently vanished.
+    let error = decode_after(ATTRIBUTED, |bytes| {
+        let at = field_payload_offset(bytes, token_field::NUMBER_RECORDS);
+        // Row 0 is the `\id` marker, not a number.
+        bytes[at..at + 4].copy_from_slice(&0u32.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+#[test]
+fn a_book_code_record_on_a_non_book_code_row_rejects() {
+    let error = decode_after(ATTRIBUTED, |bytes| {
+        let at = field_payload_offset(bytes, token_field::BOOK_CODE_RECORDS);
+        bytes[at..at + 4].copy_from_slice(&0u32.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+#[test]
+fn an_attribute_row_on_a_row_that_cannot_carry_one_rejects() {
+    let error = decode_after(ATTRIBUTED, |bytes| {
+        let at = field_payload_offset(bytes, token_field::ATTRIBUTE_RECORDS);
+        // The book-code row has no attribute shape at all.
+        bytes[at..at + 4].copy_from_slice(&1u32.to_le_bytes());
+    });
+    assert_eq!(error, Some(DecodeError::InvalidSection));
+}
+
+// -------------------------------------------------------- packed sid fidelity
+
+/// Fidelity of the anchor on the row whose source is `needle`.
+fn fidelity_of(source: &str, needle: &str) -> Option<SidFidelity> {
+    let bytes = encoded(source);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    let columns = TokenColumns::from_section(&section).unwrap();
+    let row = parse(source)
+        .tokens
+        .iter()
+        .position(|token| token.source == needle)?;
+    columns.sid(row as u32).map(|(_, fidelity)| fidelity)
+}
+
+#[test]
+fn fidelity_comes_from_the_designator_not_the_anchor() {
+    // A bare verse and a simple bridge spell their whole designator.
+    assert_eq!(
+        fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 1 a\n", "a"),
+        Some(SidFidelity::Exact)
+    );
+    assert_eq!(
+        fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 1-2 a\n", "a"),
+        Some(SidFidelity::Exact)
+    );
+    // A sequence does not: its anchor is verse 1, but the designator names 1 and 3.
+    // Indistinguishable from a single verse in `Sid` alone, which is why the rule
+    // reads the source.
+    assert_eq!(
+        fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 1,3 a\n", "a"),
+        Some(SidFidelity::AnchorOnly)
+    );
+    // A suffixed verse is identical to an unsuffixed one in both `Sid` *and*
+    // `NumberRangeKind`.
+    assert_eq!(
+        fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 1a a\n", "a"),
+        Some(SidFidelity::AnchorOnly)
+    );
+    // Suffix on the far side of a bridge.
+    assert_eq!(
+        fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 6b-11 a\n", "a"),
+        Some(SidFidelity::AnchorOnly)
+    );
+    // A bridge wider than the seven delta bits degrades in the codec itself.
+    assert_eq!(
+        fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 1-200 a\n", "a"),
+        Some(SidFidelity::AnchorOnly)
+    );
+}
+
+#[test]
+fn an_inexact_designator_marks_every_token_sharing_its_anchor() {
+    // The bit lives on the dictionary entry, so it must be right for the whole run
+    // of tokens the anchor covers, not just the number token.
+    let source = "\\id GEN\n\\c 1\n\\p\n\\v 1a first\n\\v 2 second\n";
+    let bytes = encoded(source);
+    let container = read_container(&bytes).unwrap();
+    let section = container.section(0).unwrap().unwrap();
+    let columns = TokenColumns::from_section(&section).unwrap();
+    let tokens = parse(source).tokens;
+    for (row, token) in tokens.iter().enumerate() {
+        let Some((_, fidelity)) = columns.sid(row as u32) else {
+            continue;
+        };
+        let expected = match token.sid.map(|sid| sid.verse) {
+            Some(1) => SidFidelity::AnchorOnly,
+            _ => SidFidelity::Exact,
+        };
+        assert_eq!(fidelity, expected, "row {row} ({:?})", token.source);
+    }
+}
+
 // ------------------------------------------- malformed payload rejection
 
 /// Absolute offset of one field's payload inside the single-section container,
 /// read out of the section's own directory.
 fn field_payload_offset(bytes: &[u8], field_id: u16) -> usize {
-    let section = u64::from_le_bytes(bytes[56..64].try_into().unwrap()) as usize;
+    let section = section_start(bytes);
+    let at = field_entry_offset(bytes, field_id);
+    section + u32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize
+}
+
+/// Absolute offset of the single section in a one-section container.
+fn section_start(bytes: &[u8]) -> usize {
+    u64::from_le_bytes(bytes[56..64].try_into().unwrap()) as usize
+}
+
+/// Absolute offset of one field's 16-byte directory entry.
+fn field_entry_offset(bytes: &[u8], field_id: u16) -> usize {
+    let section = section_start(bytes);
     let directory_count = u16::from_le_bytes(bytes[section + 20..section + 22].try_into().unwrap());
     for entry in 0..usize::from(directory_count) {
         let at = section + 64 + entry * 16;
         if u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap()) == field_id {
-            let relative = u32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize;
-            return section + relative;
+            return at;
         }
     }
     panic!("field {field_id} is not in the directory");
@@ -627,6 +929,7 @@ fn corpus_token_sections_round_trip() {
     let mut books = 0usize;
     let mut tokens = 0usize;
     let mut wide_bridges = 0usize;
+    let mut anchor_only = 0usize;
 
     for path in corpus_paths() {
         let source = fs::read_to_string(&path).expect("fixture reads");
@@ -657,7 +960,21 @@ fn corpus_token_sections_round_trip() {
             .expect("one section")
             .unwrap_or_else(|error| panic!("{} section invalid: {error}", path.display()));
         let decoded = decode_token_section(&section, &source)
-            .unwrap_or_else(|error| panic!("{} failed to decode: {error}", path.display()));
+            .unwrap_or_else(|error| panic!("{} failed to decode: {error}", path.display()))
+            .tokens;
+
+        // The fidelity bit never reaches a decoded `Token`, so the round-trip
+        // assertions below are blind to it. Read it off the dictionary directly and
+        // count it, or an encoder that marked everything `Exact` would pass.
+        let columns = TokenColumns::from_section(&section)
+            .unwrap_or_else(|error| panic!("{} columns invalid: {error}", path.display()));
+        anchor_only += (0..columns.len())
+            .filter(|row| {
+                columns
+                    .sid(*row)
+                    .is_some_and(|(_, fidelity)| fidelity == SidFidelity::AnchorOnly)
+            })
+            .count();
 
         assert_eq!(
             decoded.len(),
@@ -672,12 +989,19 @@ fn corpus_token_sections_round_trip() {
         tokens += decoded.len();
     }
 
-    println!("books={books} tokens={tokens} wide_bridges={wide_bridges}");
+    println!("books={books} tokens={tokens} wide_bridges={wide_bridges} anchor_only={anchor_only}");
     assert_eq!(
         wide_bridges, 0,
         "a bridge wider than 127 verses exercises the documented lossy sid path"
     );
-    assert!(books > 300, "corpus should cover both fixture sets");
+    // The corpus contains a suffixed bridge (`\v 6b-11`), so a nonzero count is the
+    // proof that source-derived fidelity is actually reaching the wire. The narrow
+    // tests cover each inexact class; this proves the rule fires on real text.
+    assert!(
+        anchor_only > 0,
+        "corpus must exercise an anchor-only designator"
+    );
+    assert_eq!(books, CORPUS_BOOKS, "corpus book count changed");
 }
 
 /// Fixtures the reconstruct emitter does not reproduce byte for byte.
@@ -743,7 +1067,8 @@ fn corpus_owned_token_sections_round_trip() {
             .expect("one section")
             .unwrap_or_else(|error| panic!("{} section invalid: {error}", path.display()));
         let decoded = decode_token_section(&section, &derived)
-            .unwrap_or_else(|error| panic!("{} failed to decode: {error}", path.display()));
+            .unwrap_or_else(|error| panic!("{} failed to decode: {error}", path.display()))
+            .tokens;
 
         // Universal: the codec hands back exactly the tokens it was given. True
         // whether or not the serialization reproduced the file, because the
@@ -802,7 +1127,7 @@ fn corpus_owned_token_sections_round_trip() {
         "a fixture stopped round-tripping byte-for-byte through the reconstruct emitter"
     );
     assert_eq!(diverged.len(), 0, "byte identity must hold for every book");
-    assert!(books > 300, "corpus should cover both fixture sets");
+    assert_eq!(books, CORPUS_BOOKS, "corpus book count changed");
     // The attribute path is the one that cannot use a running offset, so the gate
     // is only meaningful if the corpus actually exercises it.
     assert!(

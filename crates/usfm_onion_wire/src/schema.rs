@@ -441,7 +441,11 @@ pub mod finding_field {
     pub const RELATED_TOKEN_IDX: u16 = 1;
     pub const OVERFLOW_SPAN: u16 = 2;
     pub const MESSAGE_PAYLOAD_IDX: u16 = 3;
-    pub const MARKER_STRING_IDX: u16 = 4;
+    /// Tagged 8-byte marker reference: `{tag:u8, span_len:u8, ordinal:u16,
+    /// span_offset:u32}` over anchored-token / catalog-ordinal / source-span /
+    /// explicitly-absent. Renamed from the original `u32` string-index field when
+    /// the evidence showed no finding-section string dictionary is needed.
+    pub const MARKER_REF: u16 = 4;
     pub const PATCH_ID: u16 = 5;
     pub const PATCH_TABLE: u16 = 6;
 
@@ -468,8 +472,8 @@ pub mod finding_field {
             required: false,
         },
         FieldSpec {
-            id: MARKER_STRING_IDX,
-            element_width: Some(4),
+            id: MARKER_REF,
+            element_width: Some(8),
             required: false,
         },
         FieldSpec {

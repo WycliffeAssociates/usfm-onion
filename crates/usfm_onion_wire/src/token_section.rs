@@ -14,6 +14,7 @@ use crate::schema::{
     INDEX_NONE_U16, MAX_DISTINCT_SIDS, PACKED_SID_LEN, SID_DELTA_MASK, SID_FIDELITY_BIT,
     SectionKind, TokenKindTag, token_field,
 };
+use crate::token_payload::StringDictionary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SidFidelity {
@@ -200,6 +201,7 @@ pub(crate) struct TokenColumns<'wire> {
     span_starts: &'wire [u8],
     span_ends: &'wire [u8],
     token_id_indices: Option<&'wire [u8]>,
+    token_ids: Option<StringDictionary<'wire>>,
     sid_indices: &'wire [u8],
     marker_descriptor_indices: &'wire [u8],
     sids: SidDictionary<'wire>,
@@ -234,15 +236,30 @@ impl<'wire> TokenColumns<'wire> {
         }
         let marker_descriptor_indices =
             per_row(section, token_field::MARKER_DESCRIPTOR_INDEX, record_count)?.bytes;
-        let token_id_indices = match section.field(token_field::TOKEN_ID_INDEX) {
+        let (token_id_indices, token_ids) = match section.field(token_field::TOKEN_ID_INDEX) {
             Some(field) => {
                 require_count(field, record_count)?;
-                if section.field(token_field::TOKEN_ID_DICTIONARY).is_none() {
-                    return Err(DecodeError::InvalidSection);
+                let dictionary = section
+                    .field(token_field::TOKEN_ID_DICTIONARY)
+                    .ok_or(DecodeError::InvalidSection)?;
+                // The id dictionary carries opaque caller identity, so it earns the
+                // same scrutiny as every other dictionary: UTF-8 per string,
+                // ascending in-range offsets, and every index resolving. Accepting
+                // it unvalidated would hand out a view over unchecked bytes.
+                let dictionary = StringDictionary::from_field(dictionary)?;
+                for index in field.bytes.chunks_exact(4) {
+                    let index = u32::from_le_bytes([index[0], index[1], index[2], index[3]]);
+                    // Non-empty because a stable token id is identity: an empty one
+                    // cannot be told apart from a missing one, and core's
+                    // `StableTokenId` refuses to hold it.
+                    match dictionary.get(index) {
+                        Some(id) if !id.is_empty() => {}
+                        _ => return Err(DecodeError::InvalidSection),
+                    }
                 }
-                Some(field.bytes)
+                (Some(field.bytes), Some(dictionary))
             }
-            None if section.positional_ids() => None,
+            None if section.positional_ids() => (None, None),
             None => return Err(DecodeError::InvalidSection),
         };
 
@@ -252,6 +269,7 @@ impl<'wire> TokenColumns<'wire> {
             span_starts,
             span_ends,
             token_id_indices,
+            token_ids,
             sid_indices,
             marker_descriptor_indices,
             sids,
@@ -264,6 +282,12 @@ impl<'wire> TokenColumns<'wire> {
 
     pub(crate) const fn is_empty(&self) -> bool {
         self.record_count == 0
+    }
+
+    /// The raw kind column, for the sparse codecs that must check a record's
+    /// target row against it.
+    pub(crate) const fn kinds(&self) -> &'wire [u8] {
+        self.kinds
     }
 
     pub(crate) fn kind(&self, row: u32) -> Option<TokenKindTag> {
@@ -279,6 +303,19 @@ impl<'wire> TokenColumns<'wire> {
 
     pub(crate) fn token_id_index(&self, row: u32) -> Option<u32> {
         u32_at(self.token_id_indices?, row)
+    }
+
+    /// The row's explicit stable id, for a section that carries opaque ids.
+    /// `None` for a positional-id section, where ids are synthesized instead.
+    /// Validated at construction, so a present column always resolves.
+    pub(crate) fn token_id(&self, row: u32) -> Option<&'wire str> {
+        self.token_ids?.get(self.token_id_index(row)?)
+    }
+
+    /// True when this section carries opaque caller ids rather than positional
+    /// ones.
+    pub(crate) const fn has_explicit_ids(&self) -> bool {
+        self.token_ids.is_some()
     }
 
     pub(crate) fn sid_index(&self, row: u32) -> Option<u16> {
