@@ -1767,3 +1767,81 @@ non-`cargo fmt`-clean file and was left alone.
 
 - Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, the packed patch
   table.
+
+## 2026-07-28 — Phase A: clean-room review findings resolved
+
+- One commit: `5a0345f` (all five findings plus the doc fix), amended once immediately after creation
+  because the first attempt's P2-2 edit had silently not applied — see the process note. Base `a7fc15b`.
+
+### Per-finding resolution
+
+- **P1-1 — explicit stable ids accepted but never validated or decoded.** `TokenColumns::from_section`
+  now validates the id dictionary with the same rigor as every other one (UTF-8 per string, ascending
+  in-range offsets, every index resolving) plus **non-empty**, since an empty id cannot be
+  distinguished from a missing one and core's `StableTokenId` refuses to hold it.
+  `decode_token_section` returns `DecodedTokens { tokens, stable_ids }`, `stable_ids` present exactly
+  when the `positional_ids` flag is clear. **Deviation from the finding's wording, reported:** "use
+  explicit ids and call `assign_ids` ONLY when the flag is set" is not implementable as written — core's
+  `TokenId` is a structured positional label (`{book_code}, {index}`) and cannot hold an opaque id. So
+  the opaque ids are returned *alongside* the tokens (the substance: they are validated, preserved, and
+  available to identity-keyed reconciliation), and the positional label is still filled and documented
+  as a derived convenience, not the identity. Recorded as an implementation note in the freeze.
+  Encode side round-trips them and decides the form **by proof** — it emits the columns only when some
+  id differs from the positional form that stream's own `assign_ids` produces — so the flag can never
+  disagree with the bytes.
+- **P1-2 — sparse records on wrong-kind rows silently discarded.** Row kind is now validated at
+  construction for number, book-code, and attribute records (`require_row_kind`), so a record the
+  decoder would never read is rejected instead of accepted.
+- **P2-1 — fidelity bit wrong for sequences and suffixes.** Fidelity is now derived from the number
+  token's **source text** per the frozen rule: `Exact` only for a bare number or two bare numbers
+  around a single `-`; a comma (sequence), a letter (suffix), or anything else is `AnchorOnly`, and an
+  over-wide bridge still degrades inside `PackedSid::encode`. A number token carries the anchor it
+  establishes, so one `BTreeMap<Sid, SidFidelity>` gives every row the fidelity of its own designator;
+  `AnchorOnly` wins a collision because a duplicate verse number is a lint finding, not a parse
+  failure. The reviewer's blindness point was correct and is fixed at the test level: the bit never
+  reaches a decoded `Token`, so the gate now reads it off the dictionary — **`anchor_only=100`** rows in
+  the corpus (from `\v 6b-11`), asserted `> 0`, plus narrow tests for bare / bridge / sequence / suffix
+  / suffixed-bridge / over-wide-bridge and one asserting the bit is right for *every* row sharing an
+  inexact anchor, not just the number token.
+- **P2-2 — schema still named finding field 4 `MARKER_STRING_IDX` width 4.** Now `MARKER_REF`, fixed
+  width 8, matching freeze §M.
+- **P3 — gates asserted `books > 300`.** Both gates now assert `books == CORPUS_BOOKS` (395), a named
+  constant whose comment says corpus additions bump it deliberately.
+- **DOC — two stale `src/token.rs` comments.** Both now describe the remembered-offset behavior; the
+  "one sanctioned divergence" section is replaced by "where the list lands", covering the
+  remembered-position case and the closer-rule fallback for positionless tokens.
+
+### Gates
+
+- `cargo test --workspace`: core 255 passed / 12 ignored, wire **137 passed / 2 ignored** (14 new
+  tests), wasm 25, all integration targets green, 0 failed. `lint_oracle -- --ignored`: 1 passed.
+  `npm run check:wasm:web`: green. Wire clippy clean; `cargo fmt --check -p usfm_onion_wire` clean.
+- Both ignored corpus gates in release: parsed **books=395 tokens=5,716,969 wide_bridges=0
+  anchor_only=100**; owned **books=395 tokens=5,716,969 attributed_tokens=1,263,854 byte_exact=395
+  diverged=0**.
+
+### New test evidence
+
+- Explicit ids: GUID-like ids round-trip byte-for-byte with the flag clear and both fields present;
+  positional sections report `stable_ids == None`; parse-origin owned tokens omit both id fields.
+  Rejections: index out of range, empty id, descending dictionary offset, out-of-range offset, an
+  offset splitting a code point (`InvalidUtf8`), an id column whose dictionary is relabelled to an
+  unknown optional field, and the positional flag set with the fields present (caught at the container
+  layer).
+- Sparse kinds: number, book-code, and attribute records aimed at wrong-kind rows each reject.
+- Fidelity: the six designator classes above, plus per-row correctness across an inexact anchor's run.
+
+### Process note
+
+- The P2-2 edit initially did not apply: its guard assertion caught an incomplete pattern match and
+  wrote nothing, but I did not notice before committing, so the commit message claimed a fix that was
+  not in the tree. Caught by re-grepping the symbol immediately afterwards; applied properly and
+  amended the same commit rather than leaving a false claim in history. The second attempt's guard also
+  fired — this time because the new doc comment legitimately contains the old identifier as prose — and
+  was narrowed to a word-boundary regex on code use.
+- Owner's untracked leftovers untouched; explicit paths only; zero modified tracked files at the end.
+
+### Next
+
+- Finding section columns: `marker_ref` per freeze §M, the common row, the sidecars, the packed patch
+  table.
