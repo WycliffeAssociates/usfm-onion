@@ -28,6 +28,10 @@
       "types": "./js/token-sids.d.ts",
       "default": "./js/token-sids.js"
     },
+    "./packed": {
+      "types": "./js/packed.d.ts",
+      "default": "./js/packed.js"
+    },
     "./wire-schema": {
       "types": "./js/wire-schema.d.ts",
       "default": "./js/wire-schema.js"
@@ -44,6 +48,9 @@
     "check:wasm:web": "cargo check --manifest-path crates/usfm_onion_wasm/Cargo.toml --target wasm32-unknown-unknown",
     "test:token-sids:import": "node --input-type=module --eval \"import { normalizeTokenSids } from 'usfm-onion-web/token-sids'; if (typeof normalizeTokenSids !== 'function') process.exit(1)\"",
     "test:wire-schema:import": "node scripts/test-wire-schema-import.mjs",
+    "build:equivalence-emitter": "cargo build --release --example emit_token_equivalence -p usfm_onion_wire",
+    "test:packed": "npm run build:wasm:bundler:dev && npm run build:equivalence-emitter && node --experimental-wasm-modules scripts/test-packed-equivalence.mjs bundler",
+    "test:packed:web": "npm run build:wasm:web:dev && npm run build:equivalence-emitter && node scripts/test-packed-equivalence.mjs web",
     "test:wasm:bundler": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-web-package.mjs bundler && node --experimental-wasm-modules scripts/test-token-sids.mjs bundler",
     "test:wasm:web": "npm run build:wasm:web:dev && node scripts/test-web-package.mjs web && node scripts/test-token-sids.mjs web",
     "test:wasm": "npm run test:wasm:bundler && npm run test:wasm:web",
