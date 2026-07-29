@@ -704,4 +704,36 @@ mod tests {
         assert_eq!(decoded.len(), 1);
         assert!(issue_round_trips(issue, &decoded[0]));
     }
+
+    /// Corruption battery, part 1: every prefix of a real encoded book must
+    /// either fail to decode or decode to something — never panic.
+    #[test]
+    fn truncating_the_wire_never_panics() {
+        let source = "\\id gen Genesis\n\\c 1\n\\p\n\\v 1 In the beginning\n\\v 1 duplicate\n";
+        let parsed = parse(source);
+        let result = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+        let bytes = encode_book(book("GEN"), source, &parsed.tokens, &result.issues).unwrap();
+        for len in 0..bytes.len() {
+            let _ = decode_book(&bytes[..len], source);
+        }
+    }
+
+    /// Corruption battery, part 2: flipping any single byte to any of a few
+    /// representative values must never panic, only ever return a typed error
+    /// or (rarely, for a mutation the checksum cannot see) a still-valid
+    /// decode.
+    #[test]
+    fn corrupting_any_wire_byte_never_panics() {
+        let source = "\\id gen Genesis\n\\c 1\n\\p\n\\v 1 In the beginning\n\\v 1 duplicate\n";
+        let parsed = parse(source);
+        let result = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+        let base = encode_book(book("GEN"), source, &parsed.tokens, &result.issues).unwrap();
+        for index in 0..base.len() {
+            for value in [0x00u8, 0x01, 0x7f, 0xff] {
+                let mut bytes = base.clone();
+                bytes[index] = value;
+                let _ = decode_book(&bytes, source);
+            }
+        }
+    }
 }
