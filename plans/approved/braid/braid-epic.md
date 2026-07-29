@@ -1655,11 +1655,19 @@ error. Nothing else in this surface validates anything. There is no JS XXH3, no 
 JS source binding, in this release or any later one.
 
 `verifyPackedCorpus` is the thin npm-side glue: it walks the records, calls the wasm export per
-record, and is the only minter of the `VerifiedPacked` brand — pairing each receipt with the
-caller's *own* `Uint8Array`s, which it never copies. The first rejected record short-circuits the
-whole result and names the offending `path`, because a partially-restored corpus is not a state the
-application asked for. A typed failure is the deliberate signal to fall back to normal USFM
-ingest/parse.
+record, and is the only minter of the `VerifiedPacked` brand — pairing each receipt with a private
+copy of the caller's `packed`/`source` bytes, taken at mint time. The first rejected record
+short-circuits the whole result and names the offending `path`, because a partially-restored corpus
+is not a state the application asked for. A typed failure is the deliberate signal to fall back to
+normal USFM ingest/parse.
+
+**Correction — 2026-07-29 (clean-room review):** the line above previously read "which it never
+copies." That was wrong: if the brand carried the caller's own mutable `Uint8Array`s, mutating them
+after minting would pair a still-valid certification with changed bytes, and `materialize`/
+`decodeTokens` would read the mutated bytes as if they were the certified ones. The handle copies
+both buffers (`Uint8Array#slice`, never an `ArrayBuffer` transfer/detach) at/before verification, so
+certification outlives any caller-side mutation. This is a copy of two buffers per book, not per
+token — the §H boundary win (avoiding per-token marshalling) is unaffected.
 
 **`materialize` is pure JS and produces tokens only** (freeze §I.5, option (c)). It reads the
 certified buffer with the generated `./wire-schema` layout constants — load-bearing production schema
