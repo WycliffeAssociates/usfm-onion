@@ -1,11 +1,11 @@
 // Packed-corpus verification glue and the official pure-JS token materializer.
 //
-// The split this module implements (freeze §H, adjudicated §I): Rust/wasm is the
-// only trust boundary — container structure, XXH3 integrity checksums, exact
-// source binding, marker-catalog stamp — and also materializes findings, so
-// `LintIssue.message` keeps a single renderer in a single language. JS
-// materializes tokens directly out of the certified buffer, which is where the
-// volume is (190k-280k tokens for a large book against ~159 findings).
+// Rust/wasm is the only trust boundary — container structure, XXH3 integrity
+// checksums, exact source binding, marker-catalog stamp — and also
+// materializes findings, so `LintIssue.message` keeps a single renderer in a
+// single language. JS materializes tokens directly out of the certified
+// buffer, which is where the volume is (190k-280k tokens for a large book
+// against ~159 findings).
 //
 // There is no hash, checksum, or source-binding code in this file, and there
 // never will be: `verifyPackedBook` already certified the bytes. What the
@@ -16,14 +16,19 @@
 
 import {
   ATTRIBUTE_ENTRY_LEN,
+  ATTRIBUTE_ENTRY_OFFSET,
   ATTRIBUTE_FLAG_DEFAULT,
   ATTRIBUTE_ROW_LEN,
+  ATTRIBUTE_ROW_OFFSET,
   BOOK_CODE_FLAG_VALID,
   BOOK_CODE_RECORD_LEN,
+  BOOK_CODE_RECORD_OFFSET,
   CONTAINER_FLAGS_KNOWN,
   CONTAINER_HEADER_LEN,
+  CONTAINER_HEADER_OFFSET,
   CONTAINER_MAGIC,
   DIRECTORY_ENTRY_LEN,
+  DIRECTORY_ENTRY_OFFSET,
   ELEMENT_WIDTH_VARIABLE,
   ELEMENT_WIDTHS,
   FORMAT_VERSION,
@@ -31,15 +36,20 @@ import {
   NUMBER_FLAG_HAS_END,
   NUMBER_RANGE_KIND_WIRE,
   NUMBER_RECORD_LEN,
+  NUMBER_RECORD_OFFSET,
   PACKED_SID_LEN,
+  PACKED_SID_OFFSET,
   SECTION_FLAG_POSITIONAL_IDS,
   SECTION_HEADER_LEN,
+  SECTION_HEADER_OFFSET,
   SECTION_KIND,
   SECTION_MAGIC,
   SECTION_VERSION,
   SID_DELTA_MASK,
   SPAN_ABSENT,
+  STRING_DICTIONARY_ENTRY_LEN,
   TOC_ENTRY_LEN,
+  TOC_ENTRY_OFFSET,
   TOC_FLAGS_KNOWN,
   TOKEN_FIELD,
   TOKEN_KIND,
@@ -56,7 +66,12 @@ const FIELD_WIDTH = Object.fromEntries(
 const MARKER_BEARING = new Set([TOKEN_KIND.Marker, TOKEN_KIND.EndMarker, TOKEN_KIND.Milestone]);
 const ATTRIBUTE_BEARING = new Set([TOKEN_KIND.Marker, TOKEN_KIND.Milestone]);
 
-const VERIFIED = Symbol.for("usfm-onion.verifiedPacked");
+// A module-private symbol, not `Symbol.for`: the latter interns in a
+// realm-wide registry, so any other code in the same process could mint
+// `{ [Symbol.for("usfm-onion.verifiedPacked")]: true, books: new Map() }` and
+// pass a forged handle through `requireVerified`'s brand check. This binding
+// never leaves the module, so only `verifyPackedCorpus` can produce it.
+const VERIFIED = Symbol("usfm-onion.verifiedPacked");
 
 // `fatal` is load-bearing: Rust resolves a token's text with `str::get`, which
 // refuses a span that splits a character. A lenient decoder would substitute
@@ -110,27 +125,29 @@ function requireRange(bytes, offset, length) {
 function readContainer(packed) {
   if (packed.byteLength < CONTAINER_HEADER_LEN) fail("truncated");
   const view = viewOf(packed);
-  if (ascii(packed, 0, 4) !== CONTAINER_MAGIC) fail("badMagic");
-  if (view.getUint16(4, true) !== FORMAT_VERSION) fail("unsupportedVersion");
-  if (view.getUint16(6, true) !== CONTAINER_HEADER_LEN) fail("invalidSection");
-  if ((view.getUint32(8, true) & ~CONTAINER_FLAGS_KNOWN) !== 0) fail("unsupportedFlags");
-  const sectionCount = view.getUint32(12, true);
-  const tocOffset = u64(view, 16);
+  const H = CONTAINER_HEADER_OFFSET;
+  if (ascii(packed, H.magic, 4) !== CONTAINER_MAGIC) fail("badMagic");
+  if (view.getUint16(H.formatVersion, true) !== FORMAT_VERSION) fail("unsupportedVersion");
+  if (view.getUint16(H.headerLen, true) !== CONTAINER_HEADER_LEN) fail("invalidSection");
+  if ((view.getUint32(H.flags, true) & ~CONTAINER_FLAGS_KNOWN) !== 0) fail("unsupportedFlags");
+  const sectionCount = view.getUint32(H.sectionCount, true);
+  const tocOffset = u64(view, H.tocOffset);
   const tocLength = sectionCount * TOC_ENTRY_LEN;
   requireRange(packed, tocOffset, tocLength);
 
+  const T = TOC_ENTRY_OFFSET;
   const toc = [];
   for (let index = 0; index < sectionCount; index += 1) {
     const at = tocOffset + index * TOC_ENTRY_LEN;
-    const kind = view.getUint8(at);
+    const kind = view.getUint8(at + T.kind);
     if (kind !== SECTION_KIND.Token && kind !== SECTION_KIND.Finding) fail("invalidDiscriminant");
-    if (view.getUint16(at + 4, true) !== SECTION_VERSION) fail("unsupportedVersion");
-    if ((view.getUint16(at + 6, true) & ~TOC_FLAGS_KNOWN) !== 0) fail("unsupportedFlags");
-    const offset = u64(view, at + 8);
-    const byteLen = u64(view, at + 16);
+    if (view.getUint16(at + T.sectionVersion, true) !== SECTION_VERSION) fail("unsupportedVersion");
+    if ((view.getUint16(at + T.flags, true) & ~TOC_FLAGS_KNOWN) !== 0) fail("unsupportedFlags");
+    const offset = u64(view, at + T.offset);
+    const byteLen = u64(view, at + T.byteLen);
     if (byteLen < SECTION_HEADER_LEN) fail("invalidToc");
     requireRange(packed, offset, byteLen);
-    toc.push({ kind, book: ascii(packed, at + 1, 3), offset, byteLen });
+    toc.push({ kind, book: ascii(packed, at + T.book, 3), offset, byteLen });
   }
   return toc;
 }
@@ -138,27 +155,29 @@ function readContainer(packed) {
 function readSection(packed, entry) {
   const bytes = packed.subarray(entry.offset, entry.offset + entry.byteLen);
   const view = viewOf(bytes);
-  if (ascii(bytes, 0, 4) !== SECTION_MAGIC) fail("badMagic");
-  if (view.getUint16(4, true) !== FORMAT_VERSION) fail("unsupportedVersion");
-  if (view.getUint8(8) !== entry.kind) fail("invalidSection");
-  const flags = view.getUint8(9);
-  if (ascii(bytes, 10, 3) !== entry.book) fail("invalidSection");
-  const recordCount = view.getUint32(16, true);
-  const directoryCount = view.getUint16(20, true);
-  if (view.getUint16(22, true) !== DIRECTORY_ENTRY_LEN) fail("invalidSection");
-  if (u64(view, 32) !== bytes.byteLength) fail("invalidSection");
+  const S = SECTION_HEADER_OFFSET;
+  if (ascii(bytes, S.magic, 4) !== SECTION_MAGIC) fail("badMagic");
+  if (view.getUint16(S.formatVersion, true) !== FORMAT_VERSION) fail("unsupportedVersion");
+  if (view.getUint8(S.kind) !== entry.kind) fail("invalidSection");
+  const flags = view.getUint8(S.flags);
+  if (ascii(bytes, S.book, 3) !== entry.book) fail("invalidSection");
+  const recordCount = view.getUint32(S.recordCount, true);
+  const directoryCount = view.getUint16(S.directoryCount, true);
+  if (view.getUint16(S.directoryEntrySize, true) !== DIRECTORY_ENTRY_LEN) fail("invalidSection");
+  if (u64(view, S.sectionLen) !== bytes.byteLength) fail("invalidSection");
 
   const payloadStart = SECTION_HEADER_LEN + directoryCount * DIRECTORY_ENTRY_LEN;
   if (payloadStart > bytes.byteLength) fail("truncated");
+  const D = DIRECTORY_ENTRY_OFFSET;
   const fields = new Map();
   for (let index = 0; index < directoryCount; index += 1) {
     const at = SECTION_HEADER_LEN + index * DIRECTORY_ENTRY_LEN;
-    const id = view.getUint16(at, true);
-    const width = view.getUint8(at + 2);
+    const id = view.getUint16(at + D.fieldId, true);
+    const width = view.getUint8(at + D.elementWidth);
     if (width !== ELEMENT_WIDTH_VARIABLE && !ELEMENT_WIDTHS.includes(width)) fail("invalidSection");
-    const offset = view.getUint32(at + 4, true);
-    const byteLen = view.getUint32(at + 8, true);
-    const count = view.getUint32(at + 12, true);
+    const offset = view.getUint32(at + D.offset, true);
+    const byteLen = view.getUint32(at + D.byteLen, true);
+    const count = view.getUint32(at + D.count, true);
     if (offset < payloadStart) fail("invalidSection");
     requireRange(bytes, offset, byteLen);
     if (width !== ELEMENT_WIDTH_VARIABLE && count * width !== byteLen) fail("invalidSection");
@@ -193,14 +212,14 @@ function readStringDictionary(field) {
     if (field && field.byteLen !== 0) fail("invalidSection");
     return [];
   }
-  const offsetsLen = field.count * 4;
+  const offsetsLen = field.count * STRING_DICTIONARY_ENTRY_LEN;
   if (field.byteLen < offsetsLen) fail("truncated");
   const view = viewOf(field.bytes);
   const data = field.bytes.subarray(offsetsLen);
   const starts = new Array(field.count);
   let previous = 0;
   for (let index = 0; index < field.count; index += 1) {
-    const start = view.getUint32(index * 4, true);
+    const start = view.getUint32(index * STRING_DICTIONARY_ENTRY_LEN, true);
     if (start < previous || start > data.byteLength) fail("invalidSection");
     starts[index] = start;
     previous = start;
@@ -342,7 +361,7 @@ function tokenReader(book) {
   // book-code token's own text, defaulting to the first one in the stream (or
   // "unknown" when the book has none at all).
   const bookCodeText = (index) => {
-    const at = index * BOOK_CODE_RECORD_LEN + 4;
+    const at = index * BOOK_CODE_RECORD_LEN + BOOK_CODE_RECORD_OFFSET.codeIndex;
     const text = strings[bookCodes.view.getUint32(at, true)];
     if (text === undefined) fail("invalidSection");
     return text;
@@ -359,17 +378,17 @@ function tokenReader(book) {
     const cached = sidCache[index];
     if (cached !== null) return cached;
     const at = index * PACKED_SID_LEN;
-    const chapter = sidView.getUint16(at + 3, true);
-    const verse = sidView.getUint16(at + 5, true);
-    const delta = sidView.getUint8(at + 7) & SID_DELTA_MASK;
+    const chapter = sidView.getUint16(at + PACKED_SID_OFFSET.chapter, true);
+    const verse = sidView.getUint16(at + PACKED_SID_OFFSET.verse, true);
+    const delta = sidView.getUint8(at + PACKED_SID_OFFSET.delta) & SID_DELTA_MASK;
     const locator = delta === 0 ? `${verse}` : `${verse}-${verse + delta}`;
-    const text = `${ascii(sids.bytes, at, 3)} ${chapter}:${locator}`;
+    const text = `${ascii(sids.bytes, at + PACKED_SID_OFFSET.book, 3)} ${chapter}:${locator}`;
     sidCache[index] = text;
     return text;
   };
   const sidChapterAt = (index) => {
     if (index >= sidCount) fail("invalidSection");
-    return sidView.getUint16(index * PACKED_SID_LEN + 3, true);
+    return sidView.getUint16(index * PACKED_SID_LEN + PACKED_SID_OFFSET.chapter, true);
   };
 
   const sourceText = (start, end) => {
@@ -411,11 +430,11 @@ function tokenReader(book) {
       const index = numbers.lowerBound(row);
       if (index >= numbers.count || numbers.tokenIdxAt(index) !== row) fail("invalidSection");
       const at = index * NUMBER_RECORD_LEN;
-      const kind = NUMBER_RANGE_KIND_WIRE[numbers.view.getUint8(at + 12)];
+      const kind = NUMBER_RANGE_KIND_WIRE[numbers.view.getUint8(at + NUMBER_RECORD_OFFSET.kind)];
       if (kind === undefined) fail("invalidDiscriminant");
-      const info = { start: numbers.view.getUint32(at + 4, true), kind };
-      if ((numbers.view.getUint8(at + 13) & NUMBER_FLAG_HAS_END) !== 0) {
-        info.end = numbers.view.getUint32(at + 8, true);
+      const info = { start: numbers.view.getUint32(at + NUMBER_RECORD_OFFSET.start, true), kind };
+      if ((numbers.view.getUint8(at + NUMBER_RECORD_OFFSET.flags) & NUMBER_FLAG_HAS_END) !== 0) {
+        info.end = numbers.view.getUint32(at + NUMBER_RECORD_OFFSET.end, true);
       }
       token.numberInfo = info;
     } else if (tag === TOKEN_KIND.BookCode) {
@@ -423,7 +442,9 @@ function tokenReader(book) {
       if (index >= bookCodes.count || bookCodes.tokenIdxAt(index) !== row) fail("invalidSection");
       token.bookCode = bookCodeText(index);
       token.bookCodeValid =
-        (bookCodes.view.getUint8(index * BOOK_CODE_RECORD_LEN + 8) & BOOK_CODE_FLAG_VALID) !== 0;
+        (bookCodes.view.getUint8(index * BOOK_CODE_RECORD_LEN + BOOK_CODE_RECORD_OFFSET.flags) &
+          BOOK_CODE_FLAG_VALID) !==
+        0;
     }
 
     if (attributes) {
@@ -471,10 +492,10 @@ function tokenReader(book) {
 function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
   const view = attributes.rows.view;
   const at = rowIndex * ATTRIBUTE_ROW_LEN;
-  const first = view.getUint32(at + 4, true);
-  const count = view.getUint32(at + 8, true);
-  const listStart = view.getUint32(at + 12, true);
-  const listLen = view.getUint32(at + 16, true);
+  const first = view.getUint32(at + ATTRIBUTE_ROW_OFFSET.firstEntry, true);
+  const count = view.getUint32(at + ATTRIBUTE_ROW_OFFSET.entryCount, true);
+  const listStart = view.getUint32(at + ATTRIBUTE_ROW_OFFSET.listStart, true);
+  const listLen = view.getUint32(at + ATTRIBUTE_ROW_OFFSET.listLen, true);
   if (first + count > attributes.entryCount) fail("invalidSection");
   if (listStart !== SPAN_ABSENT) {
     token.attributeSource = sourceText(listStart, listStart + listLen);
@@ -485,18 +506,18 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
   const items = new Array(count);
   for (let offset = 0; offset < count; offset += 1) {
     const entry = (first + offset) * ATTRIBUTE_ENTRY_LEN;
-    const key = strings[attributes.entryView.getUint32(entry, true)];
-    const value = strings[attributes.entryView.getUint32(entry + 4, true)];
+    const key = strings[attributes.entryView.getUint32(entry + ATTRIBUTE_ENTRY_OFFSET.keyIndex, true)];
+    const value = strings[attributes.entryView.getUint32(entry + ATTRIBUTE_ENTRY_OFFSET.valueIndex, true)];
     if (key === undefined || value === undefined) fail("invalidSection");
-    const start = attributes.entryView.getUint32(entry + 8, true);
-    const length = attributes.entryView.getUint32(entry + 12, true);
+    const start = attributes.entryView.getUint32(entry + ATTRIBUTE_ENTRY_OFFSET.spanStart, true);
+    const length = attributes.entryView.getUint32(entry + ATTRIBUTE_ENTRY_OFFSET.spanLen, true);
     items[offset] = {
       span: { start, end: start + length },
       text: sourceText(start, start + length),
       key,
       value: decodeAttributeValue(value),
       isDefault:
-        (attributes.entryView.getUint8(entry + 16) & ATTRIBUTE_FLAG_DEFAULT) !== 0,
+        (attributes.entryView.getUint8(entry + ATTRIBUTE_ENTRY_OFFSET.flags) & ATTRIBUTE_FLAG_DEFAULT) !== 0,
     };
   }
   token.attributes = items;
@@ -510,8 +531,13 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
  *
  * The first rejected record short-circuits the whole corpus: a partially
  * restored corpus is not a state the caller asked for, and a typed rejection is
- * the signal to fall back to normal USFM ingest/parse. The caller's own
- * `Uint8Array`s are carried through, never copied.
+ * the signal to fall back to normal USFM ingest/parse.
+ *
+ * The caller's `packed`/`source` bytes are copied (`Uint8Array#slice`, never an
+ * `ArrayBuffer` transfer/detach) into handle-private buffers before they are
+ * verified, and the handle holds only those copies. Without this, a caller
+ * could mutate its own array after minting and pair a still-valid
+ * certification with changed bytes.
  *
  * @param {{ verifyPackedBook: (packed: Uint8Array, source: Uint8Array) => any }} wasm
  * @param {readonly { path: string, packed: Uint8Array, source: Uint8Array }[]} records
@@ -520,7 +546,9 @@ export function verifyPackedCorpus(wasm, records) {
   const books = new Map();
   const findings = new Map();
   for (const record of records) {
-    const outcome = wasm.verifyPackedBook(record.packed, record.source);
+    const packed = record.packed.slice();
+    const source = record.source.slice();
+    const outcome = wasm.verifyPackedBook(packed, source);
     if (outcome.status !== "verified") {
       return { ok: false, path: record.path, error: outcome.error };
     }
@@ -533,8 +561,8 @@ export function verifyPackedCorpus(wasm, records) {
     }
     books.set(record.path, {
       path: record.path,
-      packed: record.packed,
-      source: record.source,
+      packed,
+      source,
       receipt: outcome.receipt,
     });
     findings.set(record.path, outcome.findings);
@@ -583,7 +611,6 @@ function materializeBook(book, chapter) {
     }
     out.stableIds = ids;
   }
-  if (chapter !== undefined) out.range = range;
   return out;
 }
 
