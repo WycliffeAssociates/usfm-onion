@@ -1,6 +1,25 @@
 // GENERATED FILE — DO NOT EDIT.
 // Regenerate with: cargo run --example generate_js_schema -p usfm_onion_wire
 // Source of truth: crates/usfm_onion_wire/src/schema.rs
+//
+// Why codegen: single-source from the compiled Rust schema constants so
+// JS never hand-mirrors the contract; a drift test fails if this file
+// diverges from schema.rs.
+//
+// Why not wasm-bindgen: these are a static description of the wire
+// contract, not a decoder. Reading them through wasm would mean
+// instantiating the module and crossing a runtime boundary just for
+// constants.
+//
+// Two tiers of consumers:
+//   - Semantic catalog (LINT_CODES, PARAM_CONTRACTS, rules version):
+//     read by runtime JS regardless of the decode boundary — e.g. a
+//     message-localization layer needs each code's parameter keys.
+//     Not about bytes.
+//   - Byte-layout tables (field ids/widths, magics): tooling-only —
+//     package-export contract tests, golden/conformance tooling, human
+//     inspection. No production JS path parses packed bytes; wasm is
+//     the sole parser and returns semantic objects or a typed error.
 
 export declare const CONTAINER_MAGIC: string;
 export declare const SECTION_MAGIC: string;

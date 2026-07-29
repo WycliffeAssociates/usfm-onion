@@ -9,6 +9,17 @@
 //! [`tests::wire_schema_matches_generator`] fails if the files on disk drift
 //! from what [`render`] currently produces.
 //!
+//! This is codegen rather than a `wasm-bindgen` export because these values
+//! are a static description of the wire contract, not a decoder — reading
+//! them through wasm would mean instantiating the module and crossing a
+//! runtime boundary just for constants. The semantic catalog (lint codes,
+//! param contracts) is read by runtime JS regardless of the decode boundary
+//! (e.g. message localization needs each code's parameter keys); the
+//! byte-layout tables (field ids/widths, magics) are tooling-only — no
+//! production JS path parses packed bytes, since wasm is the sole parser and
+//! returns semantic objects or a typed error. See the generated header for
+//! the full rationale.
+//!
 //! Field names below (`TOKEN_FIELD_NAMES`/`FINDING_FIELD_NAMES`) are the one
 //! thing this module supplies rather than reads: Rust constant identifiers
 //! aren't reflectable at runtime, so a human-readable JS name has to be
@@ -79,7 +90,26 @@ pub fn render() -> (String, String) {
     let header = format!(
         "// GENERATED FILE — DO NOT EDIT.\n\
          // Regenerate with: {GENERATOR_COMMAND}\n\
-         // Source of truth: crates/usfm_onion_wire/src/schema.rs\n\n"
+         // Source of truth: crates/usfm_onion_wire/src/schema.rs\n\
+         //\n\
+         // Why codegen: single-source from the compiled Rust schema constants so\n\
+         // JS never hand-mirrors the contract; a drift test fails if this file\n\
+         // diverges from schema.rs.\n\
+         //\n\
+         // Why not wasm-bindgen: these are a static description of the wire\n\
+         // contract, not a decoder. Reading them through wasm would mean\n\
+         // instantiating the module and crossing a runtime boundary just for\n\
+         // constants.\n\
+         //\n\
+         // Two tiers of consumers:\n\
+         //   - Semantic catalog (LINT_CODES, PARAM_CONTRACTS, rules version):\n\
+         //     read by runtime JS regardless of the decode boundary — e.g. a\n\
+         //     message-localization layer needs each code's parameter keys.\n\
+         //     Not about bytes.\n\
+         //   - Byte-layout tables (field ids/widths, magics): tooling-only —\n\
+         //     package-export contract tests, golden/conformance tooling, human\n\
+         //     inspection. No production JS path parses packed bytes; wasm is\n\
+         //     the sole parser and returns semantic objects or a typed error.\n\n"
     );
     js.push_str(&header);
     dts.push_str(&header);

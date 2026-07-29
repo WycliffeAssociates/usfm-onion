@@ -18,7 +18,7 @@ use crate::schema::{
 use crate::token_payload::{StringDictionary, StringDictionaryBuilder};
 
 const ROW_LEN: usize = 16;
-const RELATED_LEN: usize = 8;
+const RELATED_LEN: usize = 16;
 const OVERFLOW_LEN: usize = 8;
 const MARKER_REF_LEN: usize = 8;
 const PAYLOAD_ROW_LEN: usize = 8;
@@ -53,7 +53,7 @@ pub(crate) struct FindingRow<'wire> {
     pub range_end: Option<u8>,
     pub code: LintCodeTag,
     pub anchor_only: bool,
-    pub related: Option<(u32, u16, u16)>,
+    pub related: Option<(u32, u32, u32)>,
     pub marker: MarkerRef,
     pub params: Option<Vec<(&'wire str, &'wire str)>>,
 }
@@ -166,7 +166,12 @@ impl<'wire> FindingColumns<'wire> {
                     if related_idx >= inputs.token_count {
                         return Err(DecodeError::InvalidSection);
                     }
-                    Some((related_idx, u16_at(related, 4)?, u16_at(related, 6)?))
+                    // `reserved` (offset 12) must be zero: a nonzero value would
+                    // be a future producer's field this build cannot honour.
+                    if u32_at(related, 12)? != 0 {
+                        return Err(DecodeError::InvalidSection);
+                    }
+                    Some((related_idx, u32_at(related, 4)?, u32_at(related, 8)?))
                 }
                 _ => return Err(DecodeError::InvalidSection),
             };
@@ -259,7 +264,7 @@ pub(crate) struct FindingRowInput {
     pub range_end: Option<u8>,
     pub code: LintCodeTag,
     pub anchor_only: bool,
-    pub related: Option<(u32, u16, u16)>,
+    pub related: Option<(u32, u32, u32)>,
     pub marker: MarkerRef,
     pub params: Option<BTreeMap<String, String>>,
 }
@@ -363,10 +368,11 @@ impl FindingSectionBuffers {
             if let Some((token_idx, offset, len)) = row.related {
                 related[row_index * RELATED_LEN..row_index * RELATED_LEN + 4]
                     .copy_from_slice(&token_idx.to_le_bytes());
-                related[row_index * RELATED_LEN + 4..row_index * RELATED_LEN + 6]
+                related[row_index * RELATED_LEN + 4..row_index * RELATED_LEN + 8]
                     .copy_from_slice(&offset.to_le_bytes());
-                related[row_index * RELATED_LEN + 6..row_index * RELATED_LEN + 8]
+                related[row_index * RELATED_LEN + 8..row_index * RELATED_LEN + 12]
                     .copy_from_slice(&len.to_le_bytes());
+                // Bytes [12..16] stay zero: `reserved` per §G.1.
             }
             if flags & finding_flag::OVERFLOW != 0 {
                 overflow[row_index * OVERFLOW_LEN..row_index * OVERFLOW_LEN + 4]
@@ -445,7 +451,7 @@ impl FindingSectionBuffers {
         if let Some(bytes) = &self.related {
             fields.push(FieldPayload {
                 id: finding_field::RELATED_TOKEN_IDX,
-                width: ElementWidth::Eight,
+                width: ElementWidth::Sixteen,
                 count: self.record_count,
                 bytes,
             });
@@ -953,14 +959,16 @@ mod tests {
         let mut row = input();
         row.offset = 70_000;
         row.len = 80_000;
-        row.related = Some((0, 2, 3));
+        // Exercises the widened §G.1 related record: offset/len above `u16::MAX`,
+        // which the old 8-byte shape could not have stored at all.
+        row.related = Some((0, 70_002, 80_003));
         row.marker = MarkerRef::CatalogOrdinal(4);
         row.code = LintCodeTag::UnknownToken;
         row.params = Some(BTreeMap::from([("text".into(), "日本語".into())]));
         let bytes = encoded(&[row]);
         let decoded = decoded(&bytes).unwrap();
         assert_eq!(decoded.rows()[0].offset, 70_000);
-        assert_eq!(decoded.rows()[0].related, Some((0, 2, 3)));
+        assert_eq!(decoded.rows()[0].related, Some((0, 70_002, 80_003)));
         assert_eq!(decoded.rows()[0].marker, MarkerRef::CatalogOrdinal(4));
         assert_eq!(
             decoded.rows()[0].params.as_ref().unwrap()[0],
@@ -1022,6 +1030,33 @@ mod tests {
         payload.params = Some(BTreeMap::from([("marker".into(), "p".into())]));
         let mut bytes = encoded(&[base, payload]);
         corrupt_first_filler(&mut bytes, finding_field::MESSAGE_PAYLOAD_IDX);
+        assert!(matches!(
+            decoded_unchecked(&bytes),
+            Err(DecodeError::InvalidSection)
+        ));
+    }
+
+    #[test]
+    fn decoder_rejects_nonzero_related_reserved_word() {
+        // §G.1: the related record's trailing `reserved:u32` must be zero on
+        // encode and rejected non-zero on decode, independent of every other
+        // sidecar-filler check above (which only cover the *unused* rows).
+        let mut related = input();
+        related.related = Some((0, 2, 3));
+        let mut bytes = encoded(&[related]);
+        let reserved_offset = {
+            let container = read_container(&bytes).unwrap();
+            let section = container.section(1).unwrap().unwrap();
+            section
+                .field(finding_field::RELATED_TOKEN_IDX)
+                .unwrap()
+                .bytes
+                .as_ptr() as usize
+                - bytes.as_ptr() as usize
+                + 12
+        };
+        bytes[reserved_offset] = 1;
+        omit_checksums(&mut bytes);
         assert!(matches!(
             decoded_unchecked(&bytes),
             Err(DecodeError::InvalidSection)
