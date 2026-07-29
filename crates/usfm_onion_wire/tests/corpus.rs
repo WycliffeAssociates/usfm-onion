@@ -256,7 +256,7 @@ fn corpus_findings_round_trip_per_lint_code() {
             .unwrap_or_else(|error| panic!("{}: decode failed: {error:?}", path.display()));
 
         let mut original = result.issues.clone();
-        usfm_onion_wire::finding_codec::canonical_order(&mut original);
+        usfm_onion_wire::finding_codec::canonical_order_for_tokens(&mut original, &parsed.tokens);
         assert_eq!(
             original.len(),
             decoded.len(),

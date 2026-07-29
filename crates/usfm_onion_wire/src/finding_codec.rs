@@ -8,19 +8,19 @@
 //! `token_id`/span/SID/marker) and the rule catalog (to rebuild `message` and
 //! validate `message_params`). This module is that seam.
 //!
-//! Governing documents: `plans/approved/braid/phase0-freeze.md` §F (finding
-//! framing), §G (related-span width, materialize boundary), and
-//! `plans/approved/braid/gate0-0d-payload-ledger.md` §2 (the per-code payload
-//! census this codec must round-trip).
-//!
-//! Scope, per the frozen §F.3 deferral: `LintIssue.fix` is never encoded.
-//! Common-row flag bit 5 (`fix`) always stays clear, and decode always
-//! produces `fix: None` — codes 24/25/26 lose their `TokenFix` on a wire round
-//! trip, every other field round-trips.
+//! Scope: `LintIssue.fix` is never encoded. Common-row flag bit 5 (`fix`)
+//! always stays clear, and decode always produces `fix: None` — codes with a
+//! `TokenFix` lose it on a wire round trip, every other field round-trips.
 //!
 //! `message` is rebuilt **only** via [`LintCode::render_message`] — never a
 //! wire-local template renderer — so the English text a decoder produces can
 //! never drift from core's own rendering of the same code and params.
+//! `encode_book` conversely refuses (rather than silently overwrites) a
+//! caller-supplied `LintIssue` whose derived fields (`category`, `severity`,
+//! `issue_type`, `template`, `message`) do not match what the catalog would
+//! produce for that code and its own `message_params` — the wire format has
+//! no storage for a divergent value, so accepting one and rewriting it on
+//! decode would silently change the caller's data.
 
 use std::collections::BTreeMap;
 
@@ -41,7 +41,7 @@ use crate::token_codec::{DecodedTokens, anchor_fidelity, decode_token_section, e
 ///
 /// `issues` need not already be in canonical order: this function sorts a
 /// local copy before building rows, so the container's finding order is
-/// always the §2.2#15 canonical order regardless of the caller's order.
+/// always canonical order regardless of the caller's order.
 pub fn encode_book(
     book: BookId,
     source: &str,
@@ -56,28 +56,35 @@ pub fn encode_book(
 /// Decodes a container written by [`encode_book`] (or any producer of the
 /// same paired token+finding section shape) back into `LintIssue` values,
 /// against the exact source the container was bound to.
+///
+/// The container must carry exactly one token section and exactly one
+/// finding section, naming the same book — a multi-book container, a
+/// container missing either section kind, or one whose token/finding
+/// sections disagree about which book they belong to, all reject rather than
+/// silently pairing sections that do not actually belong together.
 pub fn decode_book<'a>(bytes: &'a [u8], source: &'a str) -> Result<Vec<LintIssue>, DecodeError> {
     let container = read_container(bytes)?;
     let toc = container.toc();
     let mut token_index = None;
     let mut finding_index = None;
-    let mut book = None;
     for (index, entry) in toc.iter().enumerate() {
-        match entry.kind {
-            SectionKind::Token => {
-                token_index = Some(index);
-                book = Some(entry.book);
-            }
-            SectionKind::Finding => finding_index = Some(index),
+        let slot = match entry.kind {
+            SectionKind::Token => &mut token_index,
+            SectionKind::Finding => &mut finding_index,
+        };
+        if slot.is_some() {
+            return Err(DecodeError::InvalidToc);
         }
+        *slot = Some(index);
     }
-    let token_section = container
-        .section(token_index.ok_or(DecodeError::InvalidToc)?)
-        .ok_or(DecodeError::InvalidToc)??;
-    let finding_section = container
-        .section(finding_index.ok_or(DecodeError::InvalidToc)?)
-        .ok_or(DecodeError::InvalidToc)??;
-    let book = book.ok_or(DecodeError::InvalidToc)?;
+    let token_index = token_index.ok_or(DecodeError::InvalidToc)?;
+    let finding_index = finding_index.ok_or(DecodeError::InvalidToc)?;
+    if toc[token_index].book != toc[finding_index].book {
+        return Err(DecodeError::InvalidToc);
+    }
+    let book = toc[token_index].book;
+    let token_section = container.section(token_index).ok_or(DecodeError::InvalidToc)??;
+    let finding_section = container.section(finding_index).ok_or(DecodeError::InvalidToc)??;
 
     let decoded_tokens = decode_token_section(&token_section, source)?;
     let token_ids = resolve_token_ids(&decoded_tokens);
@@ -86,6 +93,19 @@ pub fn decode_book<'a>(bytes: &'a [u8], source: &'a str) -> Result<Vec<LintIssue
             .map_err(|_| DecodeError::OffsetOverflow)?,
     };
     let columns = FindingColumns::from_section(&finding_section, inputs)?;
+    // The finding section carries its own copy of the exact facts the token
+    // section already bound to (source length/hash, marker-catalog stamp);
+    // both must be checked against the live source and registry before any
+    // catalog-derived value (e.g. a marker looked up by ordinal) is trusted.
+    if columns.source_len != source.len() as u64 {
+        return Err(DecodeError::SourceLengthMismatch);
+    }
+    if columns.source_hash != crate::primitives::source_hash(source) {
+        return Err(DecodeError::SourceHashMismatch);
+    }
+    if columns.catalog_stamp != crate::catalog::catalog_stamp() {
+        return Err(DecodeError::CatalogMismatch);
+    }
     decode_findings(book, source, &decoded_tokens.tokens, &token_ids, &columns)
 }
 
@@ -105,30 +125,44 @@ fn resolve_token_ids(decoded: &DecodedTokens<'_>) -> Vec<String> {
     }
 }
 
-/// The exact key core's own (private) `canonical_sort` uses (`lint_impl.rs`):
-/// span first (spanless last), then the rule's kebab string (not its
-/// discriminant), then related span, token id, marker, and finally message.
-fn span_key(span: Option<Span>) -> (u8, u32, u32) {
-    match span {
-        Some(span) => (0, span.start, span.end),
-        None => (1, u32::MAX, u32::MAX),
-    }
+/// Sorts `issues` into canonical finding order: the primary anchor token's
+/// row position (a finding with no anchor token sorts last), then the rule's
+/// kebab code string (not its numeric discriminant), then the related anchor
+/// token's row position (a finding with no related token sorts last).
+///
+/// `resolve_row` maps a finding's own `token_id`/`related_token_id` string to
+/// the row index that identifies its position in the token stream; it
+/// returns `None` for an absent id or one that names no token. This is the
+/// key the packed finding section's rows are physically stored in, so a
+/// caller comparing an unsorted `LintResult` against a decoded one needs the
+/// same key — [`encode_book`]/[`encode_findings`] always apply it before
+/// building rows.
+pub fn canonical_order(issues: &mut [LintIssue], resolve_row: impl Fn(Option<&str>) -> Option<u32>) {
+    let key = |issue: &LintIssue| -> (u32, &str, u32) {
+        (
+            resolve_row(issue.token_id.as_deref()).unwrap_or(u32::MAX),
+            issue.code.code(),
+            resolve_row(issue.related_token_id.as_deref()).unwrap_or(u32::MAX),
+        )
+    };
+    issues.sort_by(|a, b| key(a).cmp(&key(b)));
 }
 
-/// Sorts `issues` into the §2.2#15 canonical finding order — the same key
-/// core's own (private) `canonical_sort` uses. [`encode_book`]/[`encode_findings`]
-/// always apply this before building rows, so a caller comparing an
-/// unsorted `LintResult` against a decoded one needs it too.
-pub fn canonical_order(issues: &mut [LintIssue]) {
-    issues.sort_by(|a, b| {
-        span_key(a.span)
-            .cmp(&span_key(b.span))
-            .then_with(|| a.code.code().cmp(b.code.code()))
-            .then_with(|| span_key(a.related_span).cmp(&span_key(b.related_span)))
-            .then_with(|| a.token_id.cmp(&b.token_id))
-            .then_with(|| a.marker.cmp(&b.marker))
-            .then_with(|| a.message.cmp(&b.message))
-    });
+/// Convenience wrapper over [`canonical_order`] for a caller that has the
+/// same token slice [`encode_book`] would encode against: builds the
+/// `token_id -> row` lookup the same way the encoder does, then sorts by it.
+/// Intended for tests and callers reproducing the encoder's order externally,
+/// not for the encoder itself (which needs the same lookup for row
+/// resolution too, and builds it once for both uses).
+pub fn canonical_order_for_tokens(issues: &mut [LintIssue], tokens: &[Token<'_>]) {
+    use usfm_onion::lint::LintableToken;
+    let mut rows: BTreeMap<String, u32> = BTreeMap::new();
+    for (row, token) in tokens.iter().enumerate() {
+        if let Some(id) = token.id() {
+            rows.insert(id, row as u32);
+        }
+    }
+    canonical_order(issues, |id| id.and_then(|id| rows.get(id).copied()));
 }
 
 /// Builds the finding-section buffers for one book's issues, in canonical
@@ -141,12 +175,10 @@ pub(crate) fn encode_findings(
 ) -> Result<FindingSectionBuffers, EncodeError> {
     use usfm_onion::lint::LintableToken;
 
-    let mut sorted: Vec<LintIssue> = issues.to_vec();
-    canonical_order(&mut sorted);
-
     // A finding's `token_id`/`related_token_id` are opaque strings (positional
     // or caller-supplied); the only general way back to a row index is a
-    // reverse lookup built from each token's own `id()`.
+    // reverse lookup built from each token's own `id()`. Built before sorting
+    // because canonical order is itself keyed on these row positions.
     let mut ids: Vec<String> = Vec::with_capacity(tokens.len());
     for token in tokens {
         ids.push(token.id().ok_or(EncodeError::UnboundSpan {
@@ -158,6 +190,9 @@ pub(crate) fn encode_findings(
     for (row, id) in ids.iter().enumerate() {
         resolver.insert(id.as_str(), row as u32);
     }
+
+    let mut sorted: Vec<LintIssue> = issues.to_vec();
+    canonical_order(&mut sorted, |id| id.and_then(|id| resolver.get(id).copied()));
 
     let fidelity = anchor_fidelity(tokens);
     let mut rows = Vec::with_capacity(sorted.len());
@@ -181,8 +216,9 @@ fn unrepresentable(book: BookId, code: LintCode) -> EncodeError {
 }
 
 /// Resolves an anchor's whole-token span vs. a sub-range within it into the
-/// row's `(offset, len)` pair. `len == 0` is the frozen "whole token" sentinel
-/// (Gate 0D §2.3): every real corpus finding uses it today.
+/// row's `(offset, len)` pair. `len == 0` is the "whole token" sentinel: every
+/// real corpus finding uses it today, since a finding's span is always
+/// exactly its anchor token's own span.
 fn span_within_token(
     book: BookId,
     code: LintCode,
@@ -209,6 +245,20 @@ fn issue_to_row(
     let code = issue.code;
     let err = || unrepresentable(book, code);
 
+    // The wire format has no storage for a caller-supplied `category`/
+    // `severity`/`issue_type`/`template`/`message` that disagrees with what
+    // the catalog derives for this code — decode always recomputes them from
+    // `code`, so accepting a divergent value here would silently discard it
+    // rather than round-trip it.
+    if issue.category != code.category()
+        || issue.severity != code.severity()
+        || issue.issue_type != code.issue_type()
+        || issue.template != code.template()
+        || issue.message != code.render_message(&issue.message_params)
+    {
+        return Err(err());
+    }
+
     if issue.token_id.is_some() != issue.span.is_some() {
         return Err(err());
     }
@@ -224,14 +274,14 @@ fn issue_to_row(
         _ => return Err(err()),
     };
 
-    // `sid.is_some()` is independent of whether the finding is token-anchored:
-    // a token-anchored finding can still have no SID at all (e.g.
-    // `content-before-first-chapter`, which fires on real content tokens
-    // before any `\c` establishes an anchor) — that is exactly what the
-    // `no-anchor` flag exists to distinguish from a legitimate `(0, 0)`
-    // front-matter SID (freeze §3.3). What *is* required is a token to read
-    // the raw `Sid` from whenever one is present, since `LintIssue.sid` is
-    // only a formatted display string.
+    // Whether a finding has an SID is independent of whether it is
+    // token-anchored: a token-anchored finding can still have no SID at all
+    // (e.g. content fired on before any chapter marker establishes an
+    // anchor) — that is exactly what distinguishes "no SID" from a
+    // legitimate chapter-0/verse-0 front-matter SID. What *is* required is a
+    // token to read the raw `Sid` from whenever one is present, since
+    // `LintIssue.sid` is only a formatted display string, not a structured
+    // value this codec could otherwise reconstruct.
     let (chapter, verse, range_end, anchor_only) = match issue.sid.as_deref() {
         None => (None, None, None, false),
         Some(text) => {
@@ -244,23 +294,28 @@ fn issue_to_row(
                 return Err(err());
             }
             let delta = sid.verse_end().saturating_sub(sid.verse);
+            if delta > u16::from(u8::MAX) {
+                // The row's range-end column is one byte; a bridge wider than
+                // that has no storage at all, and unlike a token's packed SID
+                // (which still keeps the verbatim source text to fall back
+                // on) a finding's SID is semantic data with no backup
+                // representation, so refuse rather than silently drop the
+                // range. In practice `Sid::verse_end()` itself saturates at
+                // `verse + 255` (a stated contract of `Sid::with_range`), so
+                // `delta` can never actually exceed 255 for any real `Sid`
+                // value — this branch is unreachable today and exists only so
+                // a future widening of that ceiling could not silently start
+                // losing data here instead of refusing.
+                return Err(err());
+            }
             let source_anchor_only =
                 fidelity.get(&sid).copied() == Some(crate::token_section::SidFidelity::AnchorOnly);
-            if delta > u16::from(u8::MAX) {
-                // Degrade exactly like the token codec's packed SID dictionary:
-                // a bridge wider than one byte cannot be stored, so the range
-                // is dropped and the row is marked anchor-only. Unreached by
-                // any real corpus finding (Gate 0D: max chapter length is far
-                // below 255 verses).
-                (Some(sid.chapter), Some(sid.verse), None, true)
-            } else {
-                (
-                    Some(sid.chapter),
-                    Some(sid.verse),
-                    (delta != 0).then_some(delta as u8),
-                    source_anchor_only,
-                )
-            }
+            (
+                Some(sid.chapter),
+                Some(sid.verse),
+                (delta != 0).then_some(delta as u8),
+                source_anchor_only,
+            )
         }
     };
 
@@ -349,7 +404,9 @@ pub(crate) fn decode_findings(
                     .ok_or(DecodeError::InvalidSection)
             })
             .transpose()?;
-        let span = token.map(|t| resolve_span(t.span, row.offset, row.len));
+        let span = token
+            .map(|t| resolve_span(t.span, row.offset, row.len))
+            .transpose()?;
 
         let related_token_id = row
             .related
@@ -364,7 +421,7 @@ pub(crate) fn decode_findings(
             .related
             .map(|(idx, offset, len)| -> Result<Span, DecodeError> {
                 let related_token = tokens.get(idx as usize).ok_or(DecodeError::InvalidSection)?;
-                Ok(resolve_span(related_token.span, offset, len))
+                resolve_span(related_token.span, offset, len)
             })
             .transpose()?;
 
@@ -375,11 +432,10 @@ pub(crate) fn decode_findings(
                 let delta = u16::from(row.range_end.unwrap_or(0));
                 // The row stores chapter/verse/range only; a finding's SID
                 // book is whatever its anchor token's own SID carries (which
-                // need not be the section's canonical book — e.g. an
-                // unmodified lowercase `\id` book code). The section's `book`
-                // is only a fallback for an anchor-only finding that somehow
-                // still carries an SID, a combination no current rule
-                // produces.
+                // need not be the section's own book — e.g. an unmodified
+                // lowercase book code, still a legal anchor). The section's
+                // `book` is only a fallback for a finding that carries an SID
+                // but has no anchor token to read one from.
                 let row_book = token
                     .and_then(|t| t.sid)
                     .map(|sid| sid.book)
@@ -437,26 +493,49 @@ pub(crate) fn decode_findings(
             related_token_id,
             sid,
             marker,
-            // §F.3: patch framing is deferred; a v1 section never carries one
-            // (`FindingColumns::from_section` rejects fields 5/6 outright), so
-            // every decoded issue's fix is unconditionally absent.
+            // Patch/fix framing is not encoded at all — a section carrying
+            // either the patch-id or patch-table field is rejected outright
+            // by the structural decoder before rows are even read — so every
+            // decoded issue's fix is unconditionally absent.
             fix: None,
         });
     }
     Ok(issues)
 }
 
-fn resolve_span(token_span: Span, offset: u32, len: u32) -> Span {
+/// Resolves a stored `(offset, len)` pair against the token span it is
+/// relative to. `len == 0` is the "whole token" sentinel (the token's own
+/// span, verbatim); otherwise the pair names a byte range that must fit
+/// entirely inside the token's own span — an offset or length wide enough to
+/// escape it names bytes this finding was never bound to, so it is rejected
+/// rather than silently read.
+fn resolve_span(token_span: Span, offset: u32, len: u32) -> Result<Span, DecodeError> {
     if len == 0 {
-        token_span
-    } else {
-        Span::new(token_span.start + offset, token_span.start + offset + len)
+        return Ok(token_span);
     }
+    let token_len = token_span
+        .end
+        .checked_sub(token_span.start)
+        .ok_or(DecodeError::InvalidSection)?;
+    let end_offset = offset.checked_add(len).ok_or(DecodeError::OffsetOverflow)?;
+    if end_offset > token_len {
+        return Err(DecodeError::InvalidSection);
+    }
+    let start = token_span
+        .start
+        .checked_add(offset)
+        .ok_or(DecodeError::OffsetOverflow)?;
+    let end = token_span
+        .start
+        .checked_add(end_offset)
+        .ok_or(DecodeError::OffsetOverflow)?;
+    Ok(Span::new(start, end))
 }
 
-/// Whether `decoded` is what a semantic round trip of `original` must produce:
-/// every `LintIssue` field equal except `fix`, which the §F.3 deferral always
-/// drops (`decoded.fix` must be `None` regardless of what `original` carried).
+/// Whether `decoded` is what a semantic round trip of `original` must
+/// produce: every `LintIssue` field equal except `fix`, which is never
+/// encoded (`decoded.fix` must be `None` regardless of what `original`
+/// carried).
 pub fn issue_round_trips(original: &LintIssue, decoded: &LintIssue) -> bool {
     decoded.fix.is_none()
         && original.code == decoded.code
@@ -477,6 +556,7 @@ pub fn issue_round_trips(original: &LintIssue, decoded: &LintIssue) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::finding_goldens::{restamp_container, restamp_section};
     use usfm_onion::LintableToken;
     use usfm_onion::lint::{LintOptions, LintScope, lint_tokens};
     use usfm_onion::parse::parse;
@@ -497,7 +577,7 @@ mod tests {
         let decoded = decode_book(&bytes, source).unwrap();
 
         let mut original = result.issues.clone();
-        canonical_order(&mut original);
+        canonical_order_for_tokens(&mut original, &parsed.tokens);
         assert_eq!(original.len(), decoded.len());
         for (original, decoded) in original.iter().zip(&decoded) {
             assert!(
@@ -557,11 +637,10 @@ mod tests {
         }
     }
 
-    /// Hand-built fixtures for the three codes Gate 0D found reachable only
-    /// from `lint_tokens(caller_tokens)`, never from `lint_usfm(source)` — no
+    /// Hand-built fixtures for codes reachable only from
+    /// `lint_tokens(caller_tokens)`, never from `lint_usfm(source)` — no
     /// `.usfm` fixture can produce them, so the corpus gate cannot cover them.
-    /// Token shapes mirror the Gate 0D probe (`gate0-0d-payload-ledger.md`
-    /// §2.1): a lexer never emits these shapes, but a caller-supplied token
+    /// A lexer never emits these token shapes, but a caller-supplied token
     /// stream can.
     #[test]
     fn hand_built_unknown_token_round_trips() {
@@ -605,12 +684,11 @@ mod tests {
         // parse as a range and which carries no `number_info` at all. That is
         // not just corpus-unreachable, it is unreachable from *any*
         // `Token<'a>`: `TokenData::Number` always carries a parsed
-        // `(start, end, kind)` (Gate 0D §1.1 — "number tokens require
-        // `number`" is unconditionally true for this type), so the wire token
-        // section could not even encode the anchor a `Token<'a>`-based lint
-        // pass would need to fire this rule. Gate 0D's own probe needed the
-        // more permissive `FormatToken` (a caller-token editor shape, not
-        // `Token<'a>`) to reach it.
+        // `(start, end, kind)` — there is no variant shape for "not actually
+        // parsed" — so the wire token section could not even encode the
+        // anchor a `Token<'a>`-based lint pass would need to fire this rule.
+        // Reaching it at all requires a more permissive caller-token editor
+        // shape than `Token<'a>`.
         //
         // What this codec owns is the *finding* payload shape, not core's
         // rule-firing logic, so this fixture builds the `LintIssue` directly
@@ -734,6 +812,202 @@ mod tests {
                 bytes[index] = value;
                 let _ = decode_book(&bytes, source);
             }
+        }
+    }
+
+    #[test]
+    fn derived_fields_that_disagree_with_the_catalog_refuse_to_encode() {
+        let source = "\\id gen Genesis\n\\c 1\n\\p\n\\v 1 a\n";
+        let parsed = parse(source);
+        let result = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+        let mut issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::BookCodeNotUppercase)
+            .expect("lower-case book code is flagged")
+            .clone();
+
+        let mut wrong_message = issue.clone();
+        wrong_message.message = "not what the catalog would render".to_string();
+        assert!(matches!(
+            encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&wrong_message)),
+            Err(EncodeError::UnrepresentablePayload { .. })
+        ));
+
+        issue.severity = usfm_onion::lint::LintSeverity::Error;
+        assert_ne!(issue.severity, LintCode::BookCodeNotUppercase.severity());
+        assert!(matches!(
+            encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&issue)),
+            Err(EncodeError::UnrepresentablePayload { .. })
+        ));
+    }
+
+    /// A container naming two books, each with its own valid token+finding
+    /// pair, is a perfectly legal *corpus* container — nothing in the
+    /// container format itself is single-book. `decode_book` names one book,
+    /// so it must refuse such a container rather than pick a token section
+    /// from one book and a finding section from another. Building the
+    /// sections in "crossed" order — token A, finding B, token B, finding A —
+    /// reproduces exactly the scenario a last-one-wins TOC walk would get
+    /// wrong (pairing token B with finding A), while still passing every
+    /// container-level structural check (no duplicate (kind, book) pair, and
+    /// every finding has a same-book, same-hash token to pair with).
+    #[test]
+    fn decode_book_rejects_a_two_book_container() {
+        let source_a = "\\id gen Genesis\n\\c 1\n\\p\n\\v 1 a\n";
+        let source_b = "\\id exo Exodus\n\\c 1\n\\p\n\\v 1 b\n";
+        let parsed_a = parse(source_a);
+        let parsed_b = parse(source_b);
+        let issues_a = lint_tokens(&parsed_a.tokens, LintOptions::scoped(LintScope::Book)).issues;
+        let issues_b = lint_tokens(&parsed_b.tokens, LintOptions::scoped(LintScope::Book)).issues;
+        let token_a = encode_token_section(book("GEN"), source_a, &parsed_a.tokens).unwrap();
+        let token_b = encode_token_section(book("EXO"), source_b, &parsed_b.tokens).unwrap();
+        let finding_a = encode_findings(book("GEN"), source_a, &parsed_a.tokens, &issues_a).unwrap();
+        let finding_b = encode_findings(book("EXO"), source_b, &parsed_b.tokens, &issues_b).unwrap();
+        let bytes = write_container(
+            0,
+            &[
+                token_a.payload(),
+                finding_b.payload(),
+                token_b.payload(),
+                finding_a.payload(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(decode_book(&bytes, source_a), Err(DecodeError::InvalidToc));
+        assert_eq!(decode_book(&bytes, source_b), Err(DecodeError::InvalidToc));
+    }
+
+    /// Locates the one finding section's absolute byte offset and its
+    /// common-row field's absolute byte offset in a two-section container
+    /// `encode_book` produced.
+    fn locate_finding_section(bytes: &[u8]) -> (usize, usize) {
+        let finding_offset = crate::finding_goldens::section_bounds(bytes)[1].0;
+        let common_row_offset = {
+            let container = read_container(bytes).unwrap();
+            let section = container.section(1).unwrap().unwrap();
+            let field = section.field(crate::schema::finding_field::COMMON_ROW).unwrap();
+            field.bytes.as_ptr() as usize - bytes.as_ptr() as usize
+        };
+        (finding_offset, common_row_offset)
+    }
+
+    /// Semantic (not merely bit-flip) mutations, each followed by recomputing
+    /// both integrity checksums, so what is actually exercised is the trust
+    /// checks *downstream* of the checksum rather than the checksum itself.
+    /// Every case must yield its named typed error — never a panic, never a
+    /// silently different `LintIssue`.
+    #[test]
+    fn restamped_hostile_mutations_yield_typed_errors() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 4 body\n";
+        let parsed = parse(source);
+        let anchor = parsed
+            .tokens
+            .iter()
+            .find(|token| token.kind() == usfm_onion::token::TokenKind::Number)
+            .unwrap();
+        let params = MessageParams::from([
+            ("found".to_string(), "4-2x".to_string()),
+            ("verse".to_string(), "4".to_string()),
+            ("marker".to_string(), "v".to_string()),
+            ("context".to_string(), "numbering".to_string()),
+        ]);
+        let issue = LintIssue {
+            code: LintCode::InvalidNumberRange,
+            category: LintCode::InvalidNumberRange.category(),
+            severity: LintCode::InvalidNumberRange.severity(),
+            issue_type: LintCode::InvalidNumberRange.issue_type(),
+            template: LintCode::InvalidNumberRange.template(),
+            message: LintCode::InvalidNumberRange.render_message(&params),
+            message_params: params,
+            span: Some(anchor.span),
+            related_span: None,
+            token_id: anchor.id(),
+            related_token_id: None,
+            sid: anchor.sid.map(|sid| sid.to_string()),
+            marker: Some("v".to_string()),
+            fix: None,
+        };
+        let base = encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&issue))
+            .unwrap();
+
+        // (a) primary span offset/len escape the anchor token's own span.
+        {
+            let mut bytes = base.clone();
+            let (finding_offset, row_offset) = locate_finding_section(&bytes);
+            bytes[row_offset + 6..row_offset + 8].copy_from_slice(&60_000u16.to_le_bytes());
+            restamp_section(&mut bytes, finding_offset);
+            restamp_container(&mut bytes);
+            assert_eq!(decode_book(&bytes, source), Err(DecodeError::InvalidSection));
+        }
+
+        // (b) stale source_len: the finding section's own recorded source
+        // length disagrees with the real source it is decoded against. This
+        // field has no container-level cross-check (unlike source_hash, which
+        // the container's token/finding pairing rule already forces to agree
+        // with the token section's own — itself already checked against the
+        // real source before the finding section is ever reached), so this
+        // is the one of the three finding-section trust fields a bad
+        // producer could get wrong independently of everything else already
+        // validated.
+        {
+            let mut bytes = base.clone();
+            let (finding_offset, _) = locate_finding_section(&bytes);
+            bytes[finding_offset + 48..finding_offset + 56]
+                .copy_from_slice(&(source.len() as u64 + 1).to_le_bytes());
+            restamp_section(&mut bytes, finding_offset);
+            restamp_container(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::SourceLengthMismatch)
+            );
+        }
+
+        // (c) stale catalog_stamp: the finding section claims a registry
+        // version other than the one this build actually has.
+        {
+            let mut bytes = base.clone();
+            let (finding_offset, _) = locate_finding_section(&bytes);
+            bytes[finding_offset + 56..finding_offset + 64]
+                .copy_from_slice(&0xdead_beef_dead_beefu64.to_le_bytes());
+            restamp_section(&mut bytes, finding_offset);
+            restamp_container(&mut bytes);
+            assert_eq!(decode_book(&bytes, source), Err(DecodeError::CatalogMismatch));
+        }
+
+        // (d) contradictory flags: force ANCHOR_ONLY on top of a row whose
+        // NO_ANCHOR bit is already set, starting from a real no-SID finding
+        // (missing-id-marker) so every *other* no-anchor invariant already
+        // holds and only the new contradiction is under test.
+        {
+            let no_sid_issue = LintIssue {
+                code: LintCode::MissingIdMarker,
+                category: LintCode::MissingIdMarker.category(),
+                severity: LintCode::MissingIdMarker.severity(),
+                issue_type: LintCode::MissingIdMarker.issue_type(),
+                template: LintCode::MissingIdMarker.template(),
+                message: LintCode::MissingIdMarker.render_message(&MessageParams::default()),
+                message_params: MessageParams::default(),
+                span: None,
+                related_span: None,
+                token_id: None,
+                related_token_id: None,
+                sid: None,
+                marker: Some("id".to_string()),
+                fix: None,
+            };
+            let mut bytes = encode_book(
+                book("GEN"),
+                source,
+                &parsed.tokens,
+                std::slice::from_ref(&no_sid_issue),
+            )
+            .unwrap();
+            let (finding_offset, row_offset) = locate_finding_section(&bytes);
+            bytes[row_offset + 14] |= 0x01; // ANCHOR_ONLY, on top of the existing NO_ANCHOR bit
+            restamp_section(&mut bytes, finding_offset);
+            restamp_container(&mut bytes);
+            assert_eq!(decode_book(&bytes, source), Err(DecodeError::InvalidSection));
         }
     }
 }

@@ -137,11 +137,17 @@ impl<'wire> FindingColumns<'wire> {
             }
 
             let no_anchor = flags & finding_flag::NO_ANCHOR != 0;
+            let anchor_only = flags & finding_flag::ANCHOR_ONLY != 0;
             let range = flags & finding_flag::RANGE != 0;
             if (range && range_end == 0) || (!range && range_end != 0) {
                 return Err(DecodeError::InvalidSection);
             }
             if no_anchor && (chapter != 0 || verse != 0 || range_end != 0 || range) {
+                return Err(DecodeError::InvalidSection);
+            }
+            // `no_anchor` means no SID exists at all; `anchor_only` describes
+            // the fidelity of an *existing* SID. A row cannot claim both.
+            if no_anchor && anchor_only {
                 return Err(DecodeError::InvalidSection);
             }
             let token_idx = if token_raw == TOKEN_NONE {
@@ -225,7 +231,7 @@ impl<'wire> FindingColumns<'wire> {
                 verse: (!no_anchor).then_some(verse),
                 range_end: range.then_some(range_end),
                 code,
-                anchor_only: flags & finding_flag::ANCHOR_ONLY != 0,
+                anchor_only,
                 related: related_value,
                 marker,
                 params,
@@ -327,6 +333,12 @@ impl FindingSectionBuffers {
                 _ => return Err(unrepresentable(book, row.code)),
             };
             if row.anchor_only {
+                // `anchor_only` describes the fidelity of an *existing* SID;
+                // a row with no SID at all (`chapter: None`) cannot also
+                // claim one.
+                if row.chapter.is_none() {
+                    return Err(unrepresentable(book, row.code));
+                }
                 flags |= finding_flag::ANCHOR_ONLY;
             }
             let range_end = match row.range_end {
@@ -372,7 +384,7 @@ impl FindingSectionBuffers {
                     .copy_from_slice(&offset.to_le_bytes());
                 related[row_index * RELATED_LEN + 8..row_index * RELATED_LEN + 12]
                     .copy_from_slice(&len.to_le_bytes());
-                // Bytes [12..16] stay zero: `reserved` per §G.1.
+                // Bytes [12..16] stay zero: `reserved`.
             }
             if flags & finding_flag::OVERFLOW != 0 {
                 overflow[row_index * OVERFLOW_LEN..row_index * OVERFLOW_LEN + 4]
@@ -959,7 +971,7 @@ mod tests {
         let mut row = input();
         row.offset = 70_000;
         row.len = 80_000;
-        // Exercises the widened §G.1 related record: offset/len above `u16::MAX`,
+        // Exercises the widened related record: offset/len above `u16::MAX`,
         // which the old 8-byte shape could not have stored at all.
         row.related = Some((0, 70_002, 80_003));
         row.marker = MarkerRef::CatalogOrdinal(4);
@@ -1038,8 +1050,8 @@ mod tests {
 
     #[test]
     fn decoder_rejects_nonzero_related_reserved_word() {
-        // §G.1: the related record's trailing `reserved:u32` must be zero on
-        // encode and rejected non-zero on decode, independent of every other
+        // The related record's trailing `reserved:u32` must be zero on encode
+        // and rejected non-zero on decode, independent of every other
         // sidecar-filler check above (which only cover the *unused* rows).
         let mut related = input();
         related.related = Some((0, 2, 3));

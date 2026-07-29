@@ -2112,3 +2112,73 @@ append-only public addition.
   `related_span` producer) for the related-span golden instead.
 - Scope not in this packet, per its own boundary: no JS/wasm decode or `materialize` work — that
   is the next packet, gated on clean-room review of this one.
+
+## 2026-07-29 — Phase B Rust packet: clean-room review fix round
+
+Clean-room review of the finding codec above returned FAIL with 8 findings (5 P1, 3 P2). All
+fixed in place, same files, same gates.
+
+- **Checked-span arithmetic.** `resolve_span` (span/related-span reconstruction on decode) now
+  returns a typed error instead of doing unchecked `u32` arithmetic on untrusted wire offsets, and
+  additionally requires the resolved sub-range to fit entirely inside the anchor token's own span
+  — an offset/length pair naming bytes outside that span rejects rather than being silently
+  accepted or wrapping.
+- **Finding-section trust binding.** `decode_book` now verifies the finding section's own
+  `source_len`, `source_hash`, and `catalog_stamp` against the live source and the current marker
+  registry before any catalog-derived value (e.g. a marker resolved by ordinal) is trusted —
+  mirroring the check the token section already had. Each mismatch is its own typed error.
+- **TOC walk.** `decode_book` no longer takes "the last Token entry" and "the last Finding entry";
+  it now requires exactly one of each and that they name the same book, rejecting a container with
+  more than one Token or Finding section, zero of either, or a book mismatch between the pair. A
+  container naming two books (each internally valid, each independently passing the crate's own
+  structural checks) is otherwise legal — nothing forces one book per container — so this had to be
+  decode_book's own responsibility, not something upstream validation already covered.
+- **Wide SID bridge.** The silent "degrade to anchor-only" path for a bridge wider than the row's
+  one-byte range-end column is now a typed encode refusal. Investigating for a real test case
+  found this branch is actually unreachable today: core's `Sid::with_range` unconditionally
+  saturates at `verse + 255` (a stated contract, not a bug), so no real `Sid` value — nor any value
+  reachable through this codec's public API — can ever produce a delta above 255. The refusal is
+  kept as defense-in-depth against a future widening of that ceiling; no test proves it fires,
+  because it structurally cannot be made to. Recorded here rather than silently omitted per the
+  reviewer's own instruction on this exact point.
+- **Derived-field normalization.** `encode_book` now refuses (typed error) a caller-supplied
+  `LintIssue` whose `category`/`severity`/`issue_type`/`template`/`message` disagree with what the
+  catalog derives for its own code and params — the wire format has no storage for a divergent
+  value, so silently overwriting it on decode (which is still what decode does, by design) would
+  have discarded the caller's data without telling them.
+- **Canonical order.** Re-keyed from core's legacy span-based sort to primary anchor token's row
+  position (token-less last) → kebab code → related anchor token's row position (related-less
+  last), matching the row order the packed section is actually meant to store. `canonical_order`'s
+  signature changed to take a `token_id -> row` resolver (encode already builds one); a new
+  `canonical_order_for_tokens` convenience wraps it for tests/callers holding a token slice. Checked
+  explicitly: this did not change any golden's bytes or the corpus gate's totals — order is
+  identical to the old span-based key for every real parsed stream, since token row order and span
+  offset order are both monotonic along the stream.
+- **Contradictory flags.** `finding_section.rs` now rejects the `NO_ANCHOR | ANCHOR_ONLY` bit
+  combination on both the encode and decode paths — `NO_ANCHOR` means no SID exists at all,
+  `ANCHOR_ONLY` describes the fidelity of an *existing* SID, and the two cannot both be true of the
+  same row.
+- **Comment style.** Stripped plan/`§`/Gate-0D citations from `finding_codec.rs`,
+  `finding_goldens.rs`, and this packet's additions to `finding_section.rs`/`schema.rs`; comments
+  now state the invariant itself rather than which document froze it.
+- **Named offsets.** `finding_goldens.rs`'s checksum-recomputation helpers now use
+  `SECTION_CHECKSUM_OFFSET`/`CONTAINER_CHECKSUM_OFFSET` from `schema.rs` instead of the literals 40
+  and 24; both helpers are `pub(crate)` so `finding_codec.rs`'s own tests reuse them rather than a
+  third copy.
+- **New test coverage:** `derived_fields_that_disagree_with_the_catalog_refuse_to_encode`;
+  `decode_book_rejects_a_two_book_container` (crossed token/finding order across two books — the
+  exact shape a last-one-wins TOC walk would mis-pair); `restamped_hostile_mutations_yield_typed_errors`,
+  a battery of *semantic* mutations (hostile span offset/length, stale `source_len`, stale
+  `catalog_stamp`, contradictory flags) each followed by recomputing both integrity checksums, so
+  what is actually exercised is the trust checks downstream of the checksum rather than the
+  checksum itself — every case asserts its exact named typed error. A stale-`source_hash` variant
+  was attempted and dropped: the container's own token/finding pairing rule (same `(book,
+  source_hash)` required) makes an independently-wrong finding-section `source_hash` structurally
+  unreachable without also breaking token decode (which already checks the real source first), so
+  `source_len` (uncross-checked at the container level) is what actually isolates the new
+  finding-specific check.
+- Gates rerun and green after every fix: full workspace suite (0 failed), lint oracle
+  (`--ignored`), both 395-book corpus gates in release, and the per-`LintCode` corpus gate in
+  release — byte-identical totals (62,948 findings, same 26 per-code counts) before and after the
+  canonical-order rekey, confirming it is not an observable behavior change for any current corpus
+  fixture.

@@ -443,12 +443,10 @@ pub mod finding_field {
 
     pub const COMMON_ROW: u16 = 0;
     /// 16-byte record: `{token_idx: u32, offset: u32, len: u32, reserved: u32}`.
-    /// Widened from the original 8-byte `{token_idx:u32, offset:u16, len:u16}`
-    /// by the 2026-07-29 owner adjudication (freeze §G.1): the primary span's
-    /// `overflow` sidecar cannot also cover a related span above 65,535, so the
-    /// related record takes full `u32` width for offset and length instead of
-    /// sharing the primary row's overflow escape. `reserved` MUST be zero on
-    /// encode and MUST be rejected non-zero on decode.
+    /// Full `u32` width for offset and length, independent of the primary
+    /// row's own `overflow` sidecar (which covers only the primary span, not
+    /// this one). `reserved` MUST be zero on encode and MUST be rejected
+    /// non-zero on decode.
     pub const RELATED_TOKEN_IDX: u16 = 1;
     pub const OVERFLOW_SPAN: u16 = 2;
     pub const MESSAGE_PAYLOAD_IDX: u16 = 3;

@@ -87,7 +87,7 @@ fn good_vectors() -> Vec<GoodVector> {
         GoodVector {
             name: "related-span-unclosed-marker",
             source: "\\id GEN\n\\c 1\n\\p\n\\v 1 \\f + text\n",
-            proves: "an unclosed \\f carries a related span pointing back at the opening marker, exercising the 16-byte §G.1 related record",
+            proves: "an unclosed \\f carries a related span pointing back at the opening marker, exercising the 16-byte related record",
         },
         GoodVector {
             name: "unknown-marker-anchored",
@@ -128,7 +128,7 @@ fn wrong_version(bytes: &mut Vec<u8>) {
 
 /// Every TOC entry's `(offset, byte_len)`, read before any corruption so a
 /// later edit can still locate section boundaries.
-fn section_bounds(bytes: &[u8]) -> Vec<(usize, usize)> {
+pub(crate) fn section_bounds(bytes: &[u8]) -> Vec<(usize, usize)> {
     let container =
         crate::container::read_container_unchecked(bytes).expect("base vector is well-formed");
     container
@@ -176,26 +176,35 @@ fn nonzero_related_reserved(bytes: &mut Vec<u8>) {
 }
 
 /// Recomputes one section's own integrity checksum in place.
-fn restamp_section(bytes: &mut [u8], section_offset: usize) {
+pub(crate) fn restamp_section(bytes: &mut [u8], section_offset: usize) {
+    use crate::schema::SECTION_CHECKSUM_OFFSET;
     // Section header layout (64 bytes): magic(4) format_version(2)
     // rules_version(2) kind(1) flags(1) book(3) reserved(3) record_count(4)
     // directory_count(2) directory_entry_len(2) source_hash(8) = 32 bytes in,
-    // then section_len:u64 at [32..40), checksum:u64 at [40..48)
-    // (`SECTION_CHECKSUM_OFFSET`).
-    let section_len =
-        u64::from_le_bytes(bytes[section_offset + 32..section_offset + 40].try_into().unwrap())
-            as usize;
+    // then section_len:u64 at [32..40), checksum:u64 at
+    // [SECTION_CHECKSUM_OFFSET..SECTION_CHECKSUM_OFFSET+8).
+    let section_len = u64::from_le_bytes(
+        bytes[section_offset + 32..section_offset + SECTION_CHECKSUM_OFFSET]
+            .try_into()
+            .unwrap(),
+    ) as usize;
     let section_end = section_offset + section_len;
-    bytes[section_offset + 40..section_offset + 48].copy_from_slice(&[0u8; 8]);
-    let checksum = crate::primitives::integrity_checksum(&bytes[section_offset..section_end], 40);
-    bytes[section_offset + 40..section_offset + 48].copy_from_slice(&checksum.to_le_bytes());
+    let checksum_start = section_offset + SECTION_CHECKSUM_OFFSET;
+    bytes[checksum_start..checksum_start + 8].copy_from_slice(&[0u8; 8]);
+    let checksum = crate::primitives::integrity_checksum(
+        &bytes[section_offset..section_end],
+        SECTION_CHECKSUM_OFFSET,
+    );
+    bytes[checksum_start..checksum_start + 8].copy_from_slice(&checksum.to_le_bytes());
 }
 
 /// Recomputes the container-wide integrity checksum in place.
-fn restamp_container(bytes: &mut [u8]) {
-    bytes[24..32].copy_from_slice(&[0u8; 8]);
-    let checksum = crate::primitives::integrity_checksum(bytes, 24);
-    bytes[24..32].copy_from_slice(&checksum.to_le_bytes());
+pub(crate) fn restamp_container(bytes: &mut [u8]) {
+    use crate::schema::CONTAINER_CHECKSUM_OFFSET;
+    bytes[CONTAINER_CHECKSUM_OFFSET..CONTAINER_CHECKSUM_OFFSET + 8].copy_from_slice(&[0u8; 8]);
+    let checksum = crate::primitives::integrity_checksum(bytes, CONTAINER_CHECKSUM_OFFSET);
+    bytes[CONTAINER_CHECKSUM_OFFSET..CONTAINER_CHECKSUM_OFFSET + 8]
+        .copy_from_slice(&checksum.to_le_bytes());
 }
 
 fn malformed_vectors() -> Vec<MalformedVector> {
@@ -240,7 +249,7 @@ fn malformed_vectors() -> Vec<MalformedVector> {
             base: "related-span-unclosed-marker",
             corrupt: nonzero_related_reserved,
             expected: DecodeError::InvalidSection,
-            proves: "§G.1: the 16-byte related record's trailing reserved word must be zero; a nonzero value rejects",
+            proves: "the 16-byte related record's trailing reserved word must be zero; a nonzero value rejects",
         },
     ]
 }
@@ -352,7 +361,7 @@ fn finding_goldens_decode_and_match_lint() {
         if vector.name == "several-codes" {
             original.push(hand_built_invalid_number_range(&committed_source));
         }
-        crate::finding_codec::canonical_order(&mut original);
+        crate::finding_codec::canonical_order_for_tokens(&mut original, &parsed.tokens);
 
         let decoded = decode_book(&bytes, &committed_source)
             .unwrap_or_else(|e| panic!("{} decodes: {e:?}", vector.name));
