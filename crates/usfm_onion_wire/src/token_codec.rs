@@ -346,7 +346,7 @@ pub(crate) fn encode_token_section_with_ids(
 /// canonical reference, but it does not spell the whole designator. A bridge wider
 /// than the seven delta bits also degrades, which `PackedSid::encode` applies on
 /// its own.
-fn source_fidelity(text: &str) -> SidFidelity {
+pub(crate) fn source_fidelity(text: &str) -> SidFidelity {
     let trimmed = text.trim();
     let mut parts = trimmed.split('-');
     let first = parts.next().unwrap_or_default();
@@ -365,7 +365,7 @@ fn source_fidelity(text: &str) -> SidFidelity {
 /// designator it came from. `AnchorOnly` wins a collision: two number tokens can
 /// legitimately resolve to the same anchor (a duplicate verse number is a lint
 /// finding, not a parse failure), and the inexact reading is the safe one.
-fn anchor_fidelity(tokens: &[Token<'_>]) -> BTreeMap<Sid, SidFidelity> {
+pub(crate) fn anchor_fidelity(tokens: &[Token<'_>]) -> BTreeMap<Sid, SidFidelity> {
     let mut table = BTreeMap::new();
     for token in tokens {
         if token.kind() != TokenKind::Number {

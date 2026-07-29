@@ -13,6 +13,7 @@ mod catalog;
 mod container;
 pub mod dto;
 pub mod error;
+pub mod finding_codec;
 #[allow(dead_code)]
 mod finding_section;
 // Not part of the wire boundary contract — used by the `generate_js_schema`

@@ -6,20 +6,19 @@
 // JS never hand-mirrors the contract; a drift test fails if this file
 // diverges from schema.rs.
 //
-// Why not wasm-bindgen: these are a static description of the wire
-// contract, not a decoder. Reading them through wasm would mean
-// instantiating the module and crossing a runtime boundary just for
-// constants.
+// Why not wasm-bindgen: this is static schema data, not a decoder.
+// Reading it through wasm would mean instantiating the module and
+// crossing a runtime boundary just for constants.
 //
-// Two tiers of consumers:
-//   - Semantic catalog (LINT_CODES, PARAM_CONTRACTS, rules version):
-//     read by runtime JS regardless of the decode boundary — e.g. a
-//     message-localization layer needs each code's parameter keys.
-//     Not about bytes.
-//   - Byte-layout tables (field ids/widths, magics): tooling-only —
-//     package-export contract tests, golden/conformance tooling, human
-//     inspection. No production JS path parses packed bytes; wasm is
-//     the sole parser and returns semantic objects or a typed error.
+// Consumers: the byte-layout tables (field ids/widths, magics) are
+// load-bearing production data for the official pure-JS `materialize`
+// decoder, which decodes wasm-certified packed buffers directly in the
+// JS engine (Rust/wasm remains the sole trust boundary — validation,
+// XXH3 checksums, source binding; there is never a JS hash
+// implementation). The semantic catalog (LINT_CODES, PARAM_CONTRACTS,
+// rules version) additionally serves runtime JS like message
+// localization. Both decoders are held identical by golden vectors and
+// a serde-JSON equivalence gate.
 
 export const CONTAINER_MAGIC = "uson";
 export const SECTION_MAGIC = "usos";

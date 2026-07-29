@@ -43,6 +43,25 @@ fn push_str(bytes: &mut Vec<u8>, value: &str) {
     bytes.extend_from_slice(value.as_bytes());
 }
 
+/// The stamp-gated ordinal for a catalog marker, in the same enumeration order
+/// [`catalog_stamp`] hashes over. `None` for a marker the catalog does not
+/// know — the finding codec's caller falls back to a source span for those.
+pub(crate) fn catalog_ordinal(name: &str) -> Option<u16> {
+    let catalog = marker_catalog();
+    let entry = catalog.get(name)?;
+    let index = catalog.all().iter().position(|candidate| std::ptr::eq(candidate, entry))?;
+    u16::try_from(index).ok()
+}
+
+/// The inverse of [`catalog_ordinal`]: the marker name a stamp-gated ordinal
+/// names, or `None` if it is out of range for the current catalog.
+pub(crate) fn catalog_marker_name(ordinal: u16) -> Option<&'static str> {
+    marker_catalog()
+        .all()
+        .get(usize::from(ordinal))
+        .map(|entry| entry.marker.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

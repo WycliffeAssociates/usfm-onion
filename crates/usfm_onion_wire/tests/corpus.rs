@@ -7,10 +7,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use usfm_onion::LintableToken;
-use usfm_onion::lint::{LintOptions, LintScope, lint_tokens};
+use usfm_onion::lint::{LintCode, LintOptions, LintScope, lint_tokens};
 use usfm_onion::markers::{MarkerKind, lookup_marker};
 use usfm_onion::parse::parse;
-use usfm_onion::token::UsfmToken;
+use usfm_onion::token::{BookId, UsfmToken};
+use usfm_onion_wire::finding_codec::{decode_book, encode_book, issue_round_trips};
 
 /// Repo root, reachable from this crate's manifest directory.
 fn repo_root() -> PathBuf {
@@ -174,4 +175,125 @@ fn message_params_can_carry_values_absent_from_the_source() {
     // ordinal cannot either.
     assert!(!source.contains(uppercase.as_str()));
     assert_eq!(lookup_marker(uppercase).kind, MarkerKind::Unknown);
+}
+
+/// The six codes Gate 0D §2.1 found no *real* corpus fixture produces: three
+/// reachable only from `lint_tokens(caller_tokens)` (never from
+/// `lint_usfm(source)`, so no `.usfm` file can trigger them), and three that
+/// are structurally reachable from source but happen not to occur in
+/// `testData`/`en_ult`/`en_ulb` today. Hand-built fixtures for the first three
+/// live in `usfm_onion_wire::finding_codec::tests`; this gate does not expect
+/// any of the six to appear from a corpus walk.
+const CORPUS_UNREACHABLE_CODES: [LintCode; 6] = [
+    LintCode::MissingChapterNumber,
+    LintCode::UnknownCloseMarker,
+    LintCode::InvalidBookCode,
+    LintCode::UnknownToken,
+    LintCode::InvalidNumberRange,
+    LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
+];
+
+/// Every `LintCode` the corpus conformance gate below expects to actually
+/// fire at least once (the 26 codes not in [`CORPUS_UNREACHABLE_CODES`]).
+fn corpus_producible_codes() -> Vec<LintCode> {
+    [
+        LintCode::MissingIdMarker,
+        LintCode::DuplicateIdMarker,
+        LintCode::IdMarkerNotAtFileStart,
+        LintCode::EmptyParagraph,
+        LintCode::MissingVerseNumber,
+        LintCode::VerseIsEmpty,
+        LintCode::UnknownMarker,
+        LintCode::ContentBeforeFirstChapter,
+        LintCode::VerseOutsideExplicitParagraph,
+        LintCode::NoteSubmarkerOutsideNote,
+        LintCode::MetadataOutsideTarget,
+        LintCode::MarkerNotValidInContext,
+        LintCode::MissingMilestoneSelfClose,
+        LintCode::StrayCloseMarker,
+        LintCode::MisnestedCloseMarker,
+        LintCode::ImplicitlyClosedMarker,
+        LintCode::UnclosedMarker,
+        LintCode::DuplicateChapterNumber,
+        LintCode::DuplicateVerseNumber,
+        LintCode::MissingWhitespaceBeforeMarker,
+        LintCode::MissingHorizontalWhitespaceAfterMarkerName,
+        LintCode::MissingTagEndDelimiterAfterMarker,
+        LintCode::MissingContentSpaceAfterCloseMarker,
+        LintCode::VerseInSectionOrOtherParagraph,
+        LintCode::ContentAfterBlankMarker,
+        LintCode::BookCodeNotUppercase,
+    ]
+    .to_vec()
+}
+
+/// Gate 0D §2's per-`LintCode` semantic conformance gate: every finding the
+/// full corpus (`testData` + `en_ult` + `en_ulb`) produces must round-trip
+/// through [`encode_book`]/[`decode_book`] byte-for-byte-equivalent to
+/// `LintIssue` (every field but `fix`, which §F.3 defers). Counts are
+/// per-code, not just a total, so a code that silently stopped round-tripping
+/// (while others kept the total non-zero) cannot hide.
+#[test]
+#[ignore = "walks the full corpus"]
+fn corpus_findings_round_trip_per_lint_code() {
+    let book = BookId::from_str("GEN").expect("test book code");
+    let mut seen = std::collections::BTreeMap::<LintCode, usize>::new();
+    let mut round_tripped = std::collections::BTreeMap::<LintCode, usize>::new();
+    let mut total = 0usize;
+
+    for path in corpus_paths() {
+        let source = fs::read_to_string(&path).expect("fixture reads");
+        let parsed = parse(&source);
+        let result = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+        if result.issues.is_empty() {
+            continue;
+        }
+        total += result.issues.len();
+
+        let bytes = encode_book(book, &source, &parsed.tokens, &result.issues)
+            .unwrap_or_else(|error| panic!("{}: encode failed: {error:?}", path.display()));
+        let decoded = decode_book(&bytes, &source)
+            .unwrap_or_else(|error| panic!("{}: decode failed: {error:?}", path.display()));
+
+        let mut original = result.issues.clone();
+        usfm_onion_wire::finding_codec::canonical_order(&mut original);
+        assert_eq!(
+            original.len(),
+            decoded.len(),
+            "{}: finding count changed across the wire",
+            path.display()
+        );
+        for (original, decoded) in original.iter().zip(&decoded) {
+            *seen.entry(original.code).or_default() += 1;
+            if issue_round_trips(original, decoded) {
+                *round_tripped.entry(original.code).or_default() += 1;
+            } else {
+                panic!(
+                    "{}: {:?} did not round-trip:\n  original: {original:?}\n  decoded:  {decoded:?}",
+                    path.display(),
+                    original.code
+                );
+            }
+        }
+    }
+
+    // Printed so the ledger's evidence table can be regenerated from a run.
+    for (code, count) in &seen {
+        println!("{code:?}: {count} (round-tripped {})", round_tripped[code]);
+    }
+    println!("total findings={total}");
+
+    assert!(total > 0, "corpus must exercise the finding codec");
+    for code in corpus_producible_codes() {
+        assert!(
+            seen.get(&code).copied().unwrap_or(0) > 0,
+            "expected {code:?} to appear at least once in the corpus"
+        );
+    }
+    for code in CORPUS_UNREACHABLE_CODES {
+        assert!(
+            !corpus_producible_codes().contains(&code),
+            "{code:?} must not double as both producible and unreachable"
+        );
+    }
 }

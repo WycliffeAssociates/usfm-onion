@@ -10,14 +10,16 @@
 //! from what [`render`] currently produces.
 //!
 //! This is codegen rather than a `wasm-bindgen` export because these values
-//! are a static description of the wire contract, not a decoder — reading
-//! them through wasm would mean instantiating the module and crossing a
-//! runtime boundary just for constants. The semantic catalog (lint codes,
-//! param contracts) is read by runtime JS regardless of the decode boundary
-//! (e.g. message localization needs each code's parameter keys); the
-//! byte-layout tables (field ids/widths, magics) are tooling-only — no
-//! production JS path parses packed bytes, since wasm is the sole parser and
-//! returns semantic objects or a typed error. See the generated header for
+//! are static schema data, not a decoder — reading them through wasm would
+//! mean instantiating the module and crossing a runtime boundary just for
+//! constants. The byte-layout tables (field ids/widths, magics) are
+//! load-bearing production data for the official pure-JS `materialize`
+//! decoder, which decodes wasm-certified packed buffers directly in the JS
+//! engine (Rust/wasm remains the sole trust boundary — validation, XXH3
+//! checksums, source binding; there is never a JS hash implementation). The
+//! semantic catalog (lint codes, param contracts) additionally serves runtime
+//! JS like message localization. Both decoders are held identical by golden
+//! vectors and a serde-JSON equivalence gate. See the generated header for
 //! the full rationale.
 //!
 //! Field names below (`TOKEN_FIELD_NAMES`/`FINDING_FIELD_NAMES`) are the one
@@ -96,20 +98,19 @@ pub fn render() -> (String, String) {
          // JS never hand-mirrors the contract; a drift test fails if this file\n\
          // diverges from schema.rs.\n\
          //\n\
-         // Why not wasm-bindgen: these are a static description of the wire\n\
-         // contract, not a decoder. Reading them through wasm would mean\n\
-         // instantiating the module and crossing a runtime boundary just for\n\
-         // constants.\n\
+         // Why not wasm-bindgen: this is static schema data, not a decoder.\n\
+         // Reading it through wasm would mean instantiating the module and\n\
+         // crossing a runtime boundary just for constants.\n\
          //\n\
-         // Two tiers of consumers:\n\
-         //   - Semantic catalog (LINT_CODES, PARAM_CONTRACTS, rules version):\n\
-         //     read by runtime JS regardless of the decode boundary — e.g. a\n\
-         //     message-localization layer needs each code's parameter keys.\n\
-         //     Not about bytes.\n\
-         //   - Byte-layout tables (field ids/widths, magics): tooling-only —\n\
-         //     package-export contract tests, golden/conformance tooling, human\n\
-         //     inspection. No production JS path parses packed bytes; wasm is\n\
-         //     the sole parser and returns semantic objects or a typed error.\n\n"
+         // Consumers: the byte-layout tables (field ids/widths, magics) are\n\
+         // load-bearing production data for the official pure-JS `materialize`\n\
+         // decoder, which decodes wasm-certified packed buffers directly in the\n\
+         // JS engine (Rust/wasm remains the sole trust boundary — validation,\n\
+         // XXH3 checksums, source binding; there is never a JS hash\n\
+         // implementation). The semantic catalog (LINT_CODES, PARAM_CONTRACTS,\n\
+         // rules version) additionally serves runtime JS like message\n\
+         // localization. Both decoders are held identical by golden vectors and\n\
+         // a serde-JSON equivalence gate.\n\n"
     );
     js.push_str(&header);
     dts.push_str(&header);
