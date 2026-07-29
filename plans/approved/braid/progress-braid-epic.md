@@ -2387,3 +2387,63 @@ stripped a `§G.1` citation from the Rust strings but not the committed JSON). C
 **Not done:** no new production code beyond the seven findings; the 238-entry ordinal→name marker
 array §I.3 mentions but the prior packet deferred (dead until a catalog-ordinal `marker` producer
 exists) is still not added — out of scope for this fix round.
+
+## 2026-07-29 — Phase B part 2 clean-room round 3: posture ruling + remaining findings
+
+Owner posture ruling recorded first (governs future review of this surface): the packed verify/
+materialize surface protects HONEST use — certification, typed errors, copy-at-mint — not deliberate
+subversion of its own in-process state. The brand/opacity is footgun elimination, not a security
+boundary. Added as a dated note in epic §8.1.
+
+Five findings from round 3, landed in seven commits (`349cf9b`, `b90cd06`, `225de05`, `67540c9`,
+`a13e4f2`, `f788b83`; the sixth commit slot is this ledger entry):
+
+- **P1 (opaque handle).** `VerifiedPacked` is now `Object.freeze({})` with zero own properties,
+  genuine or forged. All decoder state (byte copies, receipt, resolved descriptors) moved into a
+  module-private `WeakMap` keyed by the handle's identity; WeakMap membership is the mint check and
+  subsumes the prior round's `Symbol()` brand, which is dropped. Added `receiptFor(verified, path)`
+  — a `structuredClone` snapshot the decode path never reads back from — for the one legitimate
+  external need (receipt inspection by tests/callers). Epic §8.1's `VerifiedPacked`/`VerifiedBook`
+  block is corrected in place, dated, to match.
+- **P1 (mutable generated exports).** `js_schema::render()` now emits a generated recursive
+  `deepFreeze` helper and wraps every load-bearing exported table in it (layout offsets, field
+  tables, `TOKEN_KIND`/`NUMBER_RANGE_KIND`/`SECTION_KIND`, `PARAM_CONTRACTS`, etc.). Verified at
+  runtime that nested objects are frozen, not just top-level arrays, and that the generator's own
+  "frozen object" doc comment is now true.
+- **P2 (forged-brand regression).** Rewritten for the opaque handle: builds a look-alike from the
+  genuine handle's own property *and* symbol keys (both empty sets, since the handle is
+  `Object.freeze({})`) and asserts it is still rejected — proving the check is real identity
+  membership, not anything shape-inspectable.
+- **P2 (no-\c selective coverage).** The equivalence script now captures the first corpus book found
+  with zero chapters during the main loop and explicitly asserts `{chapter: 1}` on it is a typed
+  `unknownChapter` error (falls back to a tiny synthetic fixture if the corpus has none — this run
+  found a real one, `example-corpora/en_ult/A0-FRT.usfm`-class front matter, so the fallback path
+  did not execute).
+- **P3.** Dropped the stale `range?` from `materialize`'s JSDoc.
+
+**Standards items:** removed the reintroduced `§8.1`/freeze-`§I.3`/`P1-*`/`P2-*` citations from
+`packed-consumer.fixture.ts` and `test-packed-equivalence.mjs` — self-contained rationale only.
+`packed.js`'s remaining hand-written strides (`~403-414`, `~467`, `~480` in the round-3 report) are
+now each column's own directory-reported `width`, read once per book alongside the field, rather
+than a hardcoded 2/4; the line-14 header comment is scoped to name the one true exception (`u64()`'s
+inherent high/low split — 4 bytes forward by definition of a 64-bit value's two 32-bit halves, not a
+schema position), correcting this round's own ledger-writing standard for exactness. `npm pack
+--dry-run` was shipping `js/packed-consumer.fixture.ts`; `package.json`'s `"files"` entry narrowed
+from `"js"` to `"js/*.js"`/`"js/*.d.ts"`, which still ships every runtime file and now excludes the
+fixture, without touching how `test:packed:types` finds it (straight from the working tree via
+`tsconfig.packed-fixture.json`).
+
+**Gates, exact counts:** `cargo test --workspace` 0 failed (256 core + 176 wire + others, matching
+prior packet shape); `cargo test --test lint_oracle -- --ignored` green; `cargo test --release -p
+usfm_onion_wire -- --ignored` green (both golden generators, both corpus round-trip gates, the
+per-code finding corpus gate); `tsc --noEmit -p tsconfig.packed-fixture.json` green; `npm run
+test:packed` (bundler) and `test:packed:web` — both **409 cases / 5,717,137 tokens** (14 good
+goldens, 11 malformed goldens refused, 395 corpus books, 715 chapter-selective slices, 1
+duplicate-book ambiguity check), plus the new forged-handle and no-\c assertions passing silently
+within the same run (they are `assert.throws`/`assert.equal` checks, not separately counted stats).
+
+**Not committed:** `pkg-bundler`/`pkg-web`, restored via `git checkout --` after every dev build, as
+in every prior packet.
+
+**Not done:** nothing outstanding from the round-3 list; reviewer-confirmed items (pkg-bundler type
+import packaging safety, first/middle/final/front-matter selective coverage) required no action.
