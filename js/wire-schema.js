@@ -61,6 +61,7 @@ export const MAX_MARKER_DESCRIPTORS = 65535;
 export const PACKED_SID_LEN = 8;
 export const SID_FIDELITY_BIT = 128;
 export const SID_DELTA_MASK = 127;
+export const STRING_DICTIONARY_ENTRY_LEN = 4;
 export const ELEMENT_WIDTHS = [1, 2, 4, 8, 16];
 
 export const FINDING_FLAG = {
@@ -90,6 +91,97 @@ export const NUMBER_RANGE_KIND = {
   Range: 1,
   Sequence: 2,
   SequenceWithRange: 3,
+};
+
+export const CONTAINER_HEADER_OFFSET = {
+  magic: 0,
+  formatVersion: 4,
+  headerLen: 6,
+  flags: 8,
+  sectionCount: 12,
+  tocOffset: 16,
+  checksum: 24,
+  snapshotId: 32,
+  reserved: 40,
+};
+
+export const TOC_ENTRY_OFFSET = {
+  kind: 0,
+  book: 1,
+  sectionVersion: 4,
+  flags: 6,
+  offset: 8,
+  byteLen: 16,
+  sourceHash: 24,
+};
+
+export const SECTION_HEADER_OFFSET = {
+  magic: 0,
+  formatVersion: 4,
+  rulesVersion: 6,
+  kind: 8,
+  flags: 9,
+  book: 10,
+  reserved: 13,
+  recordCount: 16,
+  directoryCount: 20,
+  directoryEntrySize: 22,
+  sourceHash: 24,
+  sectionLen: 32,
+  checksum: 40,
+  sourceLen: 48,
+  catalogStamp: 56,
+};
+
+export const DIRECTORY_ENTRY_OFFSET = {
+  fieldId: 0,
+  elementWidth: 2,
+  flags: 3,
+  offset: 4,
+  byteLen: 8,
+  count: 12,
+};
+
+export const PACKED_SID_OFFSET = {
+  book: 0,
+  chapter: 3,
+  verse: 5,
+  delta: 7,
+};
+
+export const DESCRIPTOR_RECORD_OFFSET = {
+  nameIndex: 0,
+  flags: 4,
+};
+
+export const NUMBER_RECORD_OFFSET = {
+  tokenIdx: 0,
+  start: 4,
+  end: 8,
+  kind: 12,
+  flags: 13,
+};
+
+export const BOOK_CODE_RECORD_OFFSET = {
+  tokenIdx: 0,
+  codeIndex: 4,
+  flags: 8,
+};
+
+export const ATTRIBUTE_ROW_OFFSET = {
+  tokenIdx: 0,
+  firstEntry: 4,
+  entryCount: 8,
+  listStart: 12,
+  listLen: 16,
+};
+
+export const ATTRIBUTE_ENTRY_OFFSET = {
+  keyIndex: 0,
+  valueIndex: 4,
+  spanStart: 8,
+  spanLen: 12,
+  flags: 16,
 };
 
 export const TOKEN_KIND_WIRE = ["newline", "optBreak", "marker", "endMarker", "milestone", "milestoneEnd", "bookCode", "number", "text"];

@@ -61,6 +61,7 @@ export declare const MAX_MARKER_DESCRIPTORS: number;
 export declare const PACKED_SID_LEN: number;
 export declare const SID_FIDELITY_BIT: number;
 export declare const SID_DELTA_MASK: number;
+export declare const STRING_DICTIONARY_ENTRY_LEN: number;
 export declare const ELEMENT_WIDTHS: readonly number[];
 
 export declare const FINDING_FLAG: Readonly<{
@@ -90,6 +91,97 @@ export declare const NUMBER_RANGE_KIND: Readonly<{
   Range: 1;
   Sequence: 2;
   SequenceWithRange: 3;
+}>;
+
+export declare const CONTAINER_HEADER_OFFSET: Readonly<{
+  magic: number;
+  formatVersion: number;
+  headerLen: number;
+  flags: number;
+  sectionCount: number;
+  tocOffset: number;
+  checksum: number;
+  snapshotId: number;
+  reserved: number;
+}>;
+
+export declare const TOC_ENTRY_OFFSET: Readonly<{
+  kind: number;
+  book: number;
+  sectionVersion: number;
+  flags: number;
+  offset: number;
+  byteLen: number;
+  sourceHash: number;
+}>;
+
+export declare const SECTION_HEADER_OFFSET: Readonly<{
+  magic: number;
+  formatVersion: number;
+  rulesVersion: number;
+  kind: number;
+  flags: number;
+  book: number;
+  reserved: number;
+  recordCount: number;
+  directoryCount: number;
+  directoryEntrySize: number;
+  sourceHash: number;
+  sectionLen: number;
+  checksum: number;
+  sourceLen: number;
+  catalogStamp: number;
+}>;
+
+export declare const DIRECTORY_ENTRY_OFFSET: Readonly<{
+  fieldId: number;
+  elementWidth: number;
+  flags: number;
+  offset: number;
+  byteLen: number;
+  count: number;
+}>;
+
+export declare const PACKED_SID_OFFSET: Readonly<{
+  book: number;
+  chapter: number;
+  verse: number;
+  delta: number;
+}>;
+
+export declare const DESCRIPTOR_RECORD_OFFSET: Readonly<{
+  nameIndex: number;
+  flags: number;
+}>;
+
+export declare const NUMBER_RECORD_OFFSET: Readonly<{
+  tokenIdx: number;
+  start: number;
+  end: number;
+  kind: number;
+  flags: number;
+}>;
+
+export declare const BOOK_CODE_RECORD_OFFSET: Readonly<{
+  tokenIdx: number;
+  codeIndex: number;
+  flags: number;
+}>;
+
+export declare const ATTRIBUTE_ROW_OFFSET: Readonly<{
+  tokenIdx: number;
+  firstEntry: number;
+  entryCount: number;
+  listStart: number;
+  listLen: number;
+}>;
+
+export declare const ATTRIBUTE_ENTRY_OFFSET: Readonly<{
+  keyIndex: number;
+  valueIndex: number;
+  spanStart: number;
+  spanLen: number;
+  flags: number;
 }>;
 
 export declare const TOKEN_KIND_WIRE: readonly string[];

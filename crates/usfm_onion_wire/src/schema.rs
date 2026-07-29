@@ -55,13 +55,132 @@ pub const DIRECTORY_ENTRY_LEN: usize = 16;
 /// absolute placement.
 pub const SECTION_ALIGN: u64 = 16;
 
+/// Field offsets inside the fixed headers, TOC entries, field directory, and
+/// the fixed record shapes.
+///
+/// The Rust codec reads these structures with a sequential cursor, so it does
+/// not consult the tables below; they exist because a *random-access* decoder
+/// (the pure-JS materializer, which the generated `js/wire-schema` module feeds)
+/// needs the same offsets, and a second hand-written copy of them is exactly the
+/// drift this crate's single-source rule forbids.
+///
+/// `tests::layout_offsets_name_the_fields_the_codec_writes` pins every constant
+/// below against a really-encoded container, so a cursor reorder in
+/// [`crate::container`] cannot leave these silently describing the old layout.
+pub mod layout {
+    /// Container header (48 bytes).
+    pub mod container_header {
+        pub const MAGIC: usize = 0;
+        pub const FORMAT_VERSION: usize = 4;
+        pub const HEADER_LEN: usize = 6;
+        pub const FLAGS: usize = 8;
+        pub const SECTION_COUNT: usize = 12;
+        pub const TOC_OFFSET: usize = 16;
+        pub const CHECKSUM: usize = 24;
+        pub const SNAPSHOT_ID: usize = 32;
+        pub const RESERVED: usize = 40;
+    }
+
+    /// TOC entry (32 bytes).
+    pub mod toc_entry {
+        pub const KIND: usize = 0;
+        pub const BOOK: usize = 1;
+        pub const SECTION_VERSION: usize = 4;
+        pub const FLAGS: usize = 6;
+        pub const OFFSET: usize = 8;
+        pub const BYTE_LEN: usize = 16;
+        pub const SOURCE_HASH: usize = 24;
+    }
+
+    /// Section header (64 bytes), relative to the section start.
+    pub mod section_header {
+        pub const MAGIC: usize = 0;
+        pub const FORMAT_VERSION: usize = 4;
+        pub const RULES_VERSION: usize = 6;
+        pub const KIND: usize = 8;
+        pub const FLAGS: usize = 9;
+        pub const BOOK: usize = 10;
+        pub const RESERVED: usize = 13;
+        pub const RECORD_COUNT: usize = 16;
+        pub const DIRECTORY_COUNT: usize = 20;
+        pub const DIRECTORY_ENTRY_SIZE: usize = 22;
+        pub const SOURCE_HASH: usize = 24;
+        pub const SECTION_LEN: usize = 32;
+        pub const CHECKSUM: usize = 40;
+        pub const SOURCE_LEN: usize = 48;
+        pub const CATALOG_STAMP: usize = 56;
+    }
+
+    /// Field directory entry (16 bytes).
+    pub mod directory_entry {
+        pub const FIELD_ID: usize = 0;
+        pub const ELEMENT_WIDTH: usize = 2;
+        pub const FLAGS: usize = 3;
+        pub const OFFSET: usize = 4;
+        pub const BYTE_LEN: usize = 8;
+        pub const COUNT: usize = 12;
+    }
+
+    /// Packed SID record (8 bytes).
+    pub mod packed_sid {
+        pub const BOOK: usize = 0;
+        pub const CHAPTER: usize = 3;
+        pub const VERSE: usize = 5;
+        /// Range delta in the low seven bits, fidelity in the top bit.
+        pub const DELTA: usize = 7;
+    }
+
+    /// Marker descriptor record (8 bytes).
+    pub mod descriptor_record {
+        pub const NAME_INDEX: usize = 0;
+        pub const FLAGS: usize = 4;
+    }
+
+    /// Sparse number record (16 bytes).
+    pub mod number_record {
+        pub const TOKEN_IDX: usize = 0;
+        pub const START: usize = 4;
+        pub const END: usize = 8;
+        pub const KIND: usize = 12;
+        pub const FLAGS: usize = 13;
+    }
+
+    /// Sparse book-code record (16 bytes).
+    pub mod book_code_record {
+        pub const TOKEN_IDX: usize = 0;
+        pub const CODE_INDEX: usize = 4;
+        pub const FLAGS: usize = 8;
+    }
+
+    /// Attribute row (24 bytes).
+    pub mod attribute_row {
+        pub const TOKEN_IDX: usize = 0;
+        pub const FIRST_ENTRY: usize = 4;
+        pub const ENTRY_COUNT: usize = 8;
+        pub const LIST_START: usize = 12;
+        pub const LIST_LEN: usize = 16;
+    }
+
+    /// Attribute entry (20 bytes).
+    pub mod attribute_entry {
+        pub const KEY_INDEX: usize = 0;
+        pub const VALUE_INDEX: usize = 4;
+        pub const SPAN_START: usize = 8;
+        pub const SPAN_LEN: usize = 12;
+        pub const FLAGS: usize = 16;
+    }
+
+    /// One start offset in a string dictionary's leading `[u32; count]` array.
+    pub const STRING_DICTIONARY_ENTRY_LEN: usize = 4;
+}
+
 /// Byte offset of the container integrity checksum inside the container
 /// header. The checksum is computed with these 8 bytes read as zero.
-pub const CONTAINER_CHECKSUM_OFFSET: usize = 24;
+pub const CONTAINER_CHECKSUM_OFFSET: usize = layout::container_header::CHECKSUM;
 
 /// Byte offset of the section integrity checksum inside a section header,
 /// relative to the section start. Same zero-the-hole rule as the container.
-pub const SECTION_CHECKSUM_OFFSET: usize = 40;
+pub const SECTION_CHECKSUM_OFFSET: usize = layout::section_header::CHECKSUM;
 
 /// A zero integrity checksum means "omitted", not "hash of zeros" — reserved
 /// for transient output the API explicitly requests unchecked.
@@ -70,7 +189,7 @@ pub const CHECKSUM_OMITTED: u64 = 0;
 /// Container-header reserved range (offset 40, 8 bytes). Reserved bytes must be
 /// zero on read: accepting nonzero would let a later version's field pass
 /// silently through a build that cannot honour it.
-pub const CONTAINER_RESERVED_OFFSET: usize = 40;
+pub const CONTAINER_RESERVED_OFFSET: usize = layout::container_header::RESERVED;
 pub const CONTAINER_RESERVED_LEN: usize = 8;
 
 /// Container header `flags:u32`. No container-level flag is defined in v1;
@@ -1000,6 +1119,237 @@ mod tests {
                 assert_eq!(usize::from(field.id), index);
             }
         }
+    }
+
+    /// Pins every [`layout`] offset against a really-encoded container.
+    ///
+    /// The codec writes and reads these structures with a sequential cursor, so
+    /// nothing in the encode/decode path would notice if a constant here went
+    /// stale — but the pure-JS decoder built on the generated constants would
+    /// silently read the wrong bytes. Reading each field *by offset* and
+    /// comparing it against what the cursor-based reader reports is what makes a
+    /// reorder in `container.rs` fail here instead of in production.
+    #[test]
+    fn layout_offsets_name_the_fields_the_codec_writes() {
+        use crate::container::read_container;
+        use crate::token_codec::encode_token_section;
+        use layout::{container_header, directory_entry, section_header, toc_entry};
+        use usfm_onion::parse::parse;
+        use usfm_onion::token::BookId;
+
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 \\w grace|lemma=\"charis\"\\w*\n";
+        let parsed = parse(source);
+        let book = BookId::from_str("GEN").unwrap();
+        let buffers = encode_token_section(book, source, &parsed.tokens).unwrap();
+        let snapshot_id = 0x0123_4567_89ab_cdef_u64;
+        let bytes = crate::container::write_container(snapshot_id, &[buffers.payload()]).unwrap();
+
+        let u16_at = |at: usize| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap());
+        let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let u64_at = |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
+
+        let container = read_container(&bytes).unwrap();
+        let header = *container.header();
+        assert_eq!(&bytes[container_header::MAGIC..4], &CONTAINER_MAGIC);
+        assert_eq!(u16_at(container_header::FORMAT_VERSION), header.format_version);
+        assert_eq!(
+            usize::from(u16_at(container_header::HEADER_LEN)),
+            CONTAINER_HEADER_LEN
+        );
+        assert_eq!(u32_at(container_header::FLAGS), header.flags);
+        assert_eq!(u32_at(container_header::SECTION_COUNT), header.section_count);
+        assert_eq!(u64_at(container_header::TOC_OFFSET), header.toc_offset);
+        assert_eq!(u64_at(container_header::CHECKSUM), header.checksum);
+        assert_eq!(u64_at(container_header::SNAPSHOT_ID), snapshot_id);
+        assert_eq!(
+            &bytes[container_header::RESERVED..container_header::RESERVED + CONTAINER_RESERVED_LEN],
+            &[0u8; 8]
+        );
+
+        let entry = container.toc()[0];
+        let toc = header.toc_offset as usize;
+        assert_eq!(bytes[toc + toc_entry::KIND], entry.kind.as_u8());
+        assert_eq!(
+            &bytes[toc + toc_entry::BOOK..toc + toc_entry::BOOK + 3],
+            entry.book.as_str().as_bytes()
+        );
+        assert_eq!(u16_at(toc + toc_entry::SECTION_VERSION), entry.section_version);
+        assert_eq!(u16_at(toc + toc_entry::FLAGS), entry.flags);
+        assert_eq!(u64_at(toc + toc_entry::OFFSET), entry.offset);
+        assert_eq!(u64_at(toc + toc_entry::BYTE_LEN), entry.byte_len);
+        assert_eq!(u64_at(toc + toc_entry::SOURCE_HASH), entry.source_hash);
+
+        let section = container.section(0).unwrap().unwrap();
+        let at = entry.offset as usize;
+        assert_eq!(&bytes[at + section_header::MAGIC..at + 4], &SECTION_MAGIC);
+        assert_eq!(
+            u16_at(at + section_header::FORMAT_VERSION),
+            section.header.format_version
+        );
+        assert_eq!(
+            u16_at(at + section_header::RULES_VERSION),
+            section.header.rules_version
+        );
+        assert_eq!(bytes[at + section_header::KIND], section.header.kind.as_u8());
+        assert_eq!(bytes[at + section_header::FLAGS], section.header.flags);
+        assert_eq!(
+            &bytes[at + section_header::BOOK..at + section_header::BOOK + 3],
+            section.header.book.as_str().as_bytes()
+        );
+        assert_eq!(
+            &bytes[at + section_header::RESERVED..at + section_header::RESERVED + 3],
+            &[0u8; 3]
+        );
+        assert_eq!(
+            u32_at(at + section_header::RECORD_COUNT),
+            section.header.record_count
+        );
+        assert_eq!(
+            usize::from(u16_at(at + section_header::DIRECTORY_COUNT)),
+            section.fields().len()
+        );
+        assert_eq!(
+            usize::from(u16_at(at + section_header::DIRECTORY_ENTRY_SIZE)),
+            DIRECTORY_ENTRY_LEN
+        );
+        assert_eq!(
+            u64_at(at + section_header::SOURCE_HASH),
+            section.header.source_hash
+        );
+        assert_eq!(
+            u64_at(at + section_header::SECTION_LEN),
+            section.header.section_len
+        );
+        assert_eq!(u64_at(at + section_header::CHECKSUM), section.header.checksum);
+        assert_eq!(
+            u64_at(at + section_header::SOURCE_LEN),
+            section.header.source_len
+        );
+        assert_eq!(
+            u64_at(at + section_header::CATALOG_STAMP),
+            section.header.catalog_stamp
+        );
+
+        // Directory entries are written in ascending field id, which is also the
+        // order `fields()` reports them in.
+        for (index, field) in section.fields().iter().enumerate() {
+            let row = at + SECTION_HEADER_LEN + index * DIRECTORY_ENTRY_LEN;
+            assert_eq!(u16_at(row + directory_entry::FIELD_ID), field.id);
+            assert_eq!(bytes[row + directory_entry::ELEMENT_WIDTH], field.width.as_u8());
+            assert_eq!(
+                bytes[row + directory_entry::FLAGS] & FIELD_FLAG_REQUIRED != 0,
+                field.required
+            );
+            assert_eq!(u32_at(row + directory_entry::BYTE_LEN) as usize, field.bytes.len());
+            assert_eq!(u32_at(row + directory_entry::COUNT), field.count);
+            // The offset is section-relative; following it must land on this
+            // field's own payload.
+            let payload = at + u32_at(row + directory_entry::OFFSET) as usize;
+            assert_eq!(&bytes[payload..payload + field.bytes.len()], field.bytes);
+        }
+    }
+
+    /// The record-shape offsets, pinned the same way: each is read out of a real
+    /// payload and compared against the value the semantic view reports.
+    #[test]
+    fn record_offsets_name_the_fields_the_payload_views_read() {
+        use crate::container::read_container;
+        use crate::token_codec::encode_token_section;
+        use layout::{
+            attribute_entry, attribute_row, book_code_record, descriptor_record, number_record,
+            packed_sid,
+        };
+        use usfm_onion::parse::parse;
+        use usfm_onion::token::BookId;
+
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1-2 \\w grace|lemma=\"charis\"\\w*\n";
+        let parsed = parse(source);
+        let book = BookId::from_str("GEN").unwrap();
+        let buffers = encode_token_section(book, source, &parsed.tokens).unwrap();
+        let bytes = crate::container::write_container(0, &[buffers.payload()]).unwrap();
+        let container = read_container(&bytes).unwrap();
+        let section = container.section(0).unwrap().unwrap();
+        let field = |id: u16| section.field(id).expect("field present").bytes;
+
+        let u16_at = |b: &[u8], at: usize| u16::from_le_bytes(b[at..at + 2].try_into().unwrap());
+        let u32_at = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+
+        // Packed SID: the `\v 1-2` bridge gives a non-zero delta to read.
+        let sids = field(token_field::PACKED_SID_DICTIONARY);
+        let bridge = (0..sids.len() / PACKED_SID_LEN)
+            .map(|index| &sids[index * PACKED_SID_LEN..(index + 1) * PACKED_SID_LEN])
+            .find(|record| record[packed_sid::DELTA] & SID_DELTA_MASK != 0)
+            .expect("the bridge verse interns a ranged sid");
+        assert_eq!(&bridge[packed_sid::BOOK..packed_sid::BOOK + 3], b"GEN");
+        assert_eq!(u16_at(bridge, packed_sid::CHAPTER), 1);
+        assert_eq!(u16_at(bridge, packed_sid::VERSE), 1);
+        assert_eq!(bridge[packed_sid::DELTA] & SID_DELTA_MASK, 1);
+
+        // Marker descriptor: name index resolves in the string dictionary.
+        let strings = field(token_field::STRING_DICTIONARY);
+        let string_at = |index: u32| {
+            let count = section
+                .field(token_field::STRING_DICTIONARY)
+                .unwrap()
+                .count as usize;
+            let starts = &strings[..count * layout::STRING_DICTIONARY_ENTRY_LEN];
+            let data = &strings[count * layout::STRING_DICTIONARY_ENTRY_LEN..];
+            let start = u32_at(starts, index as usize * 4) as usize;
+            let end = if index as usize + 1 < count {
+                u32_at(starts, (index as usize + 1) * 4) as usize
+            } else {
+                data.len()
+            };
+            std::str::from_utf8(&data[start..end]).unwrap().to_string()
+        };
+        let descriptors = field(token_field::MARKER_DESCRIPTOR_DICTIONARY);
+        assert_eq!(
+            string_at(u32_at(descriptors, descriptor_record::NAME_INDEX)),
+            "id"
+        );
+        assert_eq!(descriptors[descriptor_record::FLAGS] & DESCRIPTOR_FLAGS_KNOWN, 0);
+
+        // Number record: `1-2` has a meaningful end, so both the flag and the
+        // end column are exercised.
+        let numbers = field(token_field::NUMBER_RECORDS);
+        let ranged = (0..numbers.len() / NUMBER_RECORD_LEN)
+            .map(|index| &numbers[index * NUMBER_RECORD_LEN..(index + 1) * NUMBER_RECORD_LEN])
+            .find(|record| record[number_record::FLAGS] & NUMBER_FLAG_HAS_END != 0)
+            .expect("the bridge verse writes a ranged number record");
+        assert_eq!(u32_at(ranged, number_record::START), 1);
+        assert_eq!(u32_at(ranged, number_record::END), 2);
+        assert_eq!(
+            NumberRangeKindTag::from_u8(ranged[number_record::KIND]),
+            Some(NumberRangeKindTag::Range)
+        );
+        let row = u32_at(ranged, number_record::TOKEN_IDX) as usize;
+        assert_eq!(parsed.tokens[row].source, "1-2 ");
+
+        // Book-code record.
+        let book_codes = field(token_field::BOOK_CODE_RECORDS);
+        assert_eq!(string_at(u32_at(book_codes, book_code_record::CODE_INDEX)), "GEN");
+        assert_eq!(
+            book_codes[book_code_record::FLAGS] & BOOK_CODE_FLAG_VALID,
+            BOOK_CODE_FLAG_VALID
+        );
+        let row = u32_at(book_codes, book_code_record::TOKEN_IDX) as usize;
+        assert_eq!(parsed.tokens[row].source, "GEN");
+
+        // Attribute row and its one entry.
+        let attributes = section.field(token_field::ATTRIBUTE_RECORDS).unwrap();
+        let rows_len = attributes.count as usize * ATTRIBUTE_ROW_LEN;
+        let (rows, entries) = attributes.bytes.split_at(rows_len);
+        assert_eq!(u32_at(rows, attribute_row::FIRST_ENTRY), 0);
+        assert_eq!(u32_at(rows, attribute_row::ENTRY_COUNT), 1);
+        let list_start = u32_at(rows, attribute_row::LIST_START) as usize;
+        let list_len = u32_at(rows, attribute_row::LIST_LEN) as usize;
+        assert_eq!(&source[list_start..list_start + list_len], "|lemma=\"charis\"");
+        assert_eq!(string_at(u32_at(entries, attribute_entry::KEY_INDEX)), "lemma");
+        assert_eq!(string_at(u32_at(entries, attribute_entry::VALUE_INDEX)), "charis");
+        let span_start = u32_at(entries, attribute_entry::SPAN_START) as usize;
+        let span_len = u32_at(entries, attribute_entry::SPAN_LEN) as usize;
+        assert_eq!(&source[span_start..span_start + span_len], "lemma=\"charis\"");
+        assert_eq!(entries[attribute_entry::FLAGS] & ATTRIBUTE_FLAG_DEFAULT, 0);
     }
 
     #[test]

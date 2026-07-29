@@ -44,7 +44,7 @@ use crate::schema::{
     PACKED_SID_LEN, PARAM_CONTRACTS, SECTION_ALIGN, SECTION_CHECKSUM_OFFSET,
     SECTION_FLAG_POSITIONAL_IDS, SECTION_HEADER_LEN, SECTION_MAGIC, SECTION_VERSION,
     SID_DELTA_MASK, SID_FIDELITY_BIT, SPAN_ABSENT, TOC_ENTRY_LEN, TOC_FLAGS_KNOWN,
-    TOKEN_SECTION_FLAGS_KNOWN, TOKEN_SECTION_RULES_VERSION, finding_field, finding_flag,
+    TOKEN_SECTION_FLAGS_KNOWN, TOKEN_SECTION_RULES_VERSION, finding_field, finding_flag, layout,
     token_field,
 };
 
@@ -198,6 +198,7 @@ pub fn render() -> (String, String) {
     konst!(PACKED_SID_LEN: number = PACKED_SID_LEN);
     konst!(SID_FIDELITY_BIT: number = SID_FIDELITY_BIT);
     konst!(SID_DELTA_MASK: number = SID_DELTA_MASK);
+    konst!(STRING_DICTIONARY_ENTRY_LEN: number = layout::STRING_DICTIONARY_ENTRY_LEN);
 
     writeln!(
         js,
@@ -254,6 +255,145 @@ pub fn render() -> (String, String) {
         "\nexport declare const NUMBER_RANGE_KIND: Readonly<{{\n  Single: 0;\n  Range: 1;\n  Sequence: 2;\n  SequenceWithRange: 3;\n}}>;"
     )
     .unwrap();
+
+    // Field offsets, so a random-access decoder never hand-writes one. The Rust
+    // codec reads these structures with a sequential cursor and therefore has no
+    // offsets of its own to export — `schema::layout` holds them, pinned to the
+    // real byte layout by `schema::tests::layout_offsets_name_the_fields_the_codec_writes`.
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "CONTAINER_HEADER_OFFSET",
+        &[
+            ("magic", layout::container_header::MAGIC),
+            ("formatVersion", layout::container_header::FORMAT_VERSION),
+            ("headerLen", layout::container_header::HEADER_LEN),
+            ("flags", layout::container_header::FLAGS),
+            ("sectionCount", layout::container_header::SECTION_COUNT),
+            ("tocOffset", layout::container_header::TOC_OFFSET),
+            ("checksum", layout::container_header::CHECKSUM),
+            ("snapshotId", layout::container_header::SNAPSHOT_ID),
+            ("reserved", layout::container_header::RESERVED),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "TOC_ENTRY_OFFSET",
+        &[
+            ("kind", layout::toc_entry::KIND),
+            ("book", layout::toc_entry::BOOK),
+            ("sectionVersion", layout::toc_entry::SECTION_VERSION),
+            ("flags", layout::toc_entry::FLAGS),
+            ("offset", layout::toc_entry::OFFSET),
+            ("byteLen", layout::toc_entry::BYTE_LEN),
+            ("sourceHash", layout::toc_entry::SOURCE_HASH),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "SECTION_HEADER_OFFSET",
+        &[
+            ("magic", layout::section_header::MAGIC),
+            ("formatVersion", layout::section_header::FORMAT_VERSION),
+            ("rulesVersion", layout::section_header::RULES_VERSION),
+            ("kind", layout::section_header::KIND),
+            ("flags", layout::section_header::FLAGS),
+            ("book", layout::section_header::BOOK),
+            ("reserved", layout::section_header::RESERVED),
+            ("recordCount", layout::section_header::RECORD_COUNT),
+            ("directoryCount", layout::section_header::DIRECTORY_COUNT),
+            (
+                "directoryEntrySize",
+                layout::section_header::DIRECTORY_ENTRY_SIZE,
+            ),
+            ("sourceHash", layout::section_header::SOURCE_HASH),
+            ("sectionLen", layout::section_header::SECTION_LEN),
+            ("checksum", layout::section_header::CHECKSUM),
+            ("sourceLen", layout::section_header::SOURCE_LEN),
+            ("catalogStamp", layout::section_header::CATALOG_STAMP),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "DIRECTORY_ENTRY_OFFSET",
+        &[
+            ("fieldId", layout::directory_entry::FIELD_ID),
+            ("elementWidth", layout::directory_entry::ELEMENT_WIDTH),
+            ("flags", layout::directory_entry::FLAGS),
+            ("offset", layout::directory_entry::OFFSET),
+            ("byteLen", layout::directory_entry::BYTE_LEN),
+            ("count", layout::directory_entry::COUNT),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "PACKED_SID_OFFSET",
+        &[
+            ("book", layout::packed_sid::BOOK),
+            ("chapter", layout::packed_sid::CHAPTER),
+            ("verse", layout::packed_sid::VERSE),
+            ("delta", layout::packed_sid::DELTA),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "DESCRIPTOR_RECORD_OFFSET",
+        &[
+            ("nameIndex", layout::descriptor_record::NAME_INDEX),
+            ("flags", layout::descriptor_record::FLAGS),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "NUMBER_RECORD_OFFSET",
+        &[
+            ("tokenIdx", layout::number_record::TOKEN_IDX),
+            ("start", layout::number_record::START),
+            ("end", layout::number_record::END),
+            ("kind", layout::number_record::KIND),
+            ("flags", layout::number_record::FLAGS),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "BOOK_CODE_RECORD_OFFSET",
+        &[
+            ("tokenIdx", layout::book_code_record::TOKEN_IDX),
+            ("codeIndex", layout::book_code_record::CODE_INDEX),
+            ("flags", layout::book_code_record::FLAGS),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "ATTRIBUTE_ROW_OFFSET",
+        &[
+            ("tokenIdx", layout::attribute_row::TOKEN_IDX),
+            ("firstEntry", layout::attribute_row::FIRST_ENTRY),
+            ("entryCount", layout::attribute_row::ENTRY_COUNT),
+            ("listStart", layout::attribute_row::LIST_START),
+            ("listLen", layout::attribute_row::LIST_LEN),
+        ],
+    );
+    render_offsets(
+        &mut js,
+        &mut dts,
+        "ATTRIBUTE_ENTRY_OFFSET",
+        &[
+            ("keyIndex", layout::attribute_entry::KEY_INDEX),
+            ("valueIndex", layout::attribute_entry::VALUE_INDEX),
+            ("spanStart", layout::attribute_entry::SPAN_START),
+            ("spanLen", layout::attribute_entry::SPAN_LEN),
+            ("flags", layout::attribute_entry::FLAGS),
+        ],
+    );
 
     render_wire_strings(&mut js, &mut dts, "TOKEN_KIND_WIRE", &TOKEN_KIND_WIRE);
     render_wire_strings(
@@ -331,6 +471,20 @@ pub fn render() -> (String, String) {
     .unwrap();
 
     (js, dts)
+}
+
+/// Emits one structure's field offsets as a frozen object of byte positions.
+fn render_offsets(js: &mut String, dts: &mut String, export_name: &str, fields: &[(&str, usize)]) {
+    writeln!(js, "\nexport const {export_name} = {{").unwrap();
+    for (name, offset) in fields {
+        writeln!(js, "  {name}: {offset},").unwrap();
+    }
+    writeln!(js, "}};").unwrap();
+    writeln!(dts, "\nexport declare const {export_name}: Readonly<{{").unwrap();
+    for (name, _) in fields {
+        writeln!(dts, "  {name}: number;").unwrap();
+    }
+    writeln!(dts, "}}>;").unwrap();
 }
 
 /// Emits a tag-indexed array of serde wire strings: `array[tag]` is the string
