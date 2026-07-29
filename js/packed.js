@@ -97,6 +97,29 @@ function viewOf(bytes) {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
+/**
+ * Recursively freezes an object/array and everything reachable from it via
+ * its own property names (`Object.freeze` alone is shallow). Used once per
+ * book, at verify time, on the receipt's marker-descriptor tree — never per
+ * token and never per call — so every token that attaches
+ * `descriptor.markerMetadata`/`.structural` by reference (tokenReader, below)
+ * shares one frozen object instead of one a caller could mutate and have that
+ * mutation silently reappear in every later materialization of the same book.
+ */
+function deepFreeze(value) {
+  if (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    !Object.isFrozen(value)
+  ) {
+    Object.freeze(value);
+    for (const key of Object.getOwnPropertyNames(value)) {
+      deepFreeze(value[key]);
+    }
+  }
+  return value;
+}
+
 function ascii(bytes, at, len) {
   if (at + len > bytes.byteLength) fail("truncated");
   return ASCII.decode(bytes.subarray(at, at + len));
@@ -327,8 +350,10 @@ function tokenReader(book) {
   const rowCount = section.recordCount;
   const kinds = requiredField(section, FIELD.kind, rowCount).bytes;
   // Each column's own directory-reported `width` is its per-row byte stride —
-  // read off the field the container actually declared, not a hardcoded 2/4,
-  // so a widened column stays correct without a matching code change here.
+  // read off the field the container actually declared, not a hardcoded 2/4.
+  // The stride is therefore never a literal; the fixed getUint16/getUint32
+  // calls below still assume today's widths and would need to change to match
+  // a genuinely widened column.
   const spanStartField = requiredField(section, FIELD.spanStart, rowCount);
   const spanStarts = viewOf(spanStartField.bytes);
   const spanEndField = requiredField(section, FIELD.spanEnd, rowCount);
@@ -343,6 +368,10 @@ function tokenReader(book) {
   const sidCache = new Array(sidCount).fill(null);
 
   const strings = readStringDictionary(section.fields.get(FIELD.stringDictionary));
+  // Deep-frozen once at verify time (verifyPackedCorpus); every materialized
+  // token below attaches `.markerMetadata`/`.structural` from these same
+  // objects by reference, never a copy, so the freeze is what keeps a mutation
+  // on one materialized token from silently reappearing on every other.
   const descriptors = receipt.descriptors;
   const numbers = sparseColumn(section.fields.get(FIELD.numberRecords), NUMBER_RECORD_LEN);
   const bookCodes = sparseColumn(section.fields.get(FIELD.bookCodeRecords), BOOK_CODE_RECORD_LEN);
@@ -567,6 +596,12 @@ export function verifyPackedCorpus(wasm, records) {
         error: { kind: "invalidToc" },
       };
     }
+    // One-time O(descriptor-count) freeze (a few dozen rows for a whole
+    // scripture book) — not O(token-count): every token that attaches these
+    // objects by reference does so many times over, so cloning per token or
+    // per materialize call would be wasted work the freeze avoids entirely
+    // while still making mutation loud instead of silently shared.
+    deepFreeze(outcome.receipt.descriptors);
     books.set(record.path, {
       path: record.path,
       packed,
@@ -596,12 +631,14 @@ function requireVerified(verified) {
 }
 
 /**
- * A read-only copy of what verification certified for one book. Not part of
- * the decode path: `materialize`/`decodeTokens` read their own copy of this
- * same data out of `STATE`, never this function's return value, so mutating
- * what this returns cannot affect materialized output. Exists because tests
- * and callers legitimately need to inspect a receipt (book code, counts,
- * positional-ids flag) without the handle exposing its internal state.
+ * A detached snapshot of what verification certified for one book —
+ * `structuredClone` produces an ordinary mutable object, not a read-only one.
+ * It is detached, not read-only: `materialize`/`decodeTokens` read their own
+ * copy of this same data out of `STATE`, never this function's return value,
+ * so mutating what this returns cannot affect materialized output either way.
+ * Exists because tests and callers legitimately need to inspect a receipt
+ * (book code, counts, positional-ids flag) without the handle exposing its
+ * internal state.
  *
  * @returns {{ path: string, receipt: object }}
  */

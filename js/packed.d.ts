@@ -16,7 +16,13 @@ export type PackedRecord = Readonly<{
   source: Uint8Array;
 }>;
 
-/** Resolved name-derived marker facts the packed bytes deliberately do not store. */
+/**
+ * Resolved name-derived marker facts the packed bytes deliberately do not
+ * store. `markerMetadata`/`structural` are deep-frozen at verification time
+ * and shared by reference across every materialized token for the same
+ * marker form: attempting to mutate one throws under strict mode, and a
+ * consumer that wants a decorated copy clones it itself.
+ */
 export type PackedMarkerDescriptor = Readonly<{
   name: string;
   nested: boolean;
@@ -67,7 +73,7 @@ declare const verifiedBrand: unique symbol;
  * itself. Use {@link receiptFor} to inspect a book's receipt.
  *
  * This opacity is a footgun-elimination device, not a security boundary: see
- * the threat-model note on {@link verifyPackedCorpus} and epic §8.1.
+ * the threat-model note on {@link verifyPackedCorpus}.
  */
 export type VerifiedPacked = Readonly<{ readonly [verifiedBrand]: true }>;
 
@@ -134,9 +140,11 @@ export declare function verifyPackedCorpus(
 ): VerifyPackedResult;
 
 /**
- * A read-only snapshot of what verification certified for one book — a copy
- * the decoder never reads, so mutating it cannot affect `materialize`/
- * `decodeTokens`. For inspection only; not part of the decode path.
+ * A detached snapshot of what verification certified for one book —
+ * `structuredClone` produces an ordinary mutable object, not a read-only one.
+ * It is detached, not read-only: the decoder never reads this function's
+ * return value back, so mutating it cannot affect `materialize`/
+ * `decodeTokens` either way. For inspection only; not part of the decode path.
  */
 export declare function receiptFor(
   verified: VerifiedPacked,
