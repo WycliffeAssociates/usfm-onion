@@ -2327,3 +2327,63 @@ Two code commits behind the §8.1 respec, both with every gate green.
   `npm run test:wasm` (bundler + web), `test:wire-schema:import`, `test:token-sids:import`,
   `golden:wasm` (7 fixtures, unchanged), `test:packed` + `test:packed:web`, clippy clean on the new
   code.
+
+## 2026-07-29 — Phase B part 2 clean-room fix round: all seven findings landed
+
+Seven findings against `c98034f..6a8c095` (packed verify surface + pure-JS materializer), fixed in
+six commits (`b30b468`, `335ce3f`, `bf5a401`, `bae0ecb`, `592020c`, `9d1ff17`, plus `10eb969` for a
+regenerated golden noted below):
+
+- **P1-1 (mutable caller-owned buffers).** `verifyPackedCorpus` now copies `packed`/`source`
+  (`Uint8Array#slice`, never an `ArrayBuffer` transfer/detach) into the handle before verification.
+  Epic §8.1's "which it never copies" line is corrected in place, dated, with the failure mode
+  explained. Regression: mutate the caller's arrays after minting, assert materialized output
+  unaffected and the handle's buffers are not the caller's own.
+- **P1-2 (frozen types discarded).** `packed.d.ts` now imports `MarkerMetadata`,
+  `StructuralMarkerInfo`, `LintIssue`, `Token` from `pkg-bundler/usfm_onion_web.d.ts` instead of
+  `Record<string, unknown>`/`unknown[]`; `materialize` returns `ReadonlyMap`. Added
+  `js/packed-consumer.fixture.ts` + `tsconfig.packed-fixture.json`, wired as `test:packed:types`
+  (first step of `test:packed`); added a `typescript` devDependency (none existed). Verified the
+  fixture actually traps a regression (temporarily widening `markerMetadata` back to
+  `Record<string, unknown>` fails `tsc` with TS2322).
+- **P2-3 (circular chapter-gate check).** The equivalence script previously derived its "expected"
+  selective slice from the implementation's own reported `range` — now derives it solely from the
+  full materialize's own token `sid` fields. Widened from one chapter/book to first/middle/final
+  distinct chapters. Added a duplicate-book-ambiguity case (two paths, same book code,
+  `materialize({book})` → typed `ambiguousBook`).
+- **P2-4.** `MaterializedBook` (both `packed.js` and `packed.d.ts`) no longer carries a `range`
+  field; frozen shape is `{path, book, tokens, stableIds?}`.
+- **P2-5 (forgeable brand).** `VERIFIED` is a module-private `Symbol()`, not `Symbol.for()`.
+  Regression: a handle forged with the old interned name is rejected by both `materialize` and
+  `decodeTokens`.
+- **P2-6 (finish in-flight layout work + stop hand-writing offsets).** The previous builder's
+  in-flight `schema::layout` module (container/section header, TOC entry, directory entry, and
+  every fixed record shape's field offsets) already compiled and its drift test
+  (`js_schema::tests::wire_schema_matches_generator`) already passed — no module-path fix was
+  needed, contrary to the handoff's expectation. What remained: `packed.js` still hand-wrote every
+  offset in `readContainer`/`readSection`/`materializeRow`/`applyAttributes`. It now reads them all
+  through the generated `./wire-schema` `*_OFFSET` constants; the only remaining numeric literal is
+  the generic u64-as-two-u32-halves high-word check, which is a property of little-endian 64-bit
+  reads, not a schema field position.
+- **P3-7.** Stripped the `§H`/`§I`/`§G.1` plan citations from `packed.js:1-3`, `packed.d.ts:1-2`,
+  and `test-packed-equivalence.mjs:1`; `packed.js`'s "every offset is generated" claim is now true.
+
+**Gates, exact counts:** `cargo test --workspace` 0 failed (176 wire + 2 wire-corpus-ignored +
+core, matching the prior packet's shape); `cargo test --test lint_oracle -- --ignored` green;
+`cargo test --release -p usfm_onion_wire -- --ignored` green (both golden generators, both corpus
+round-trip gates, the per-code finding corpus gate); `npm run test:packed` (bundler) — **409 cases /
+5,717,137 tokens** (14 good goldens, 11 malformed goldens refused, 395 corpus books, **715**
+independently-derived chapter-selective slices, 1 duplicate-book ambiguity check); `npm run
+test:packed:web` — identical counts; `npm run test:wire-schema:import` green.
+
+**Not committed:** `pkg-bundler`/`pkg-web` were dirtied by the dev wasm builds the gates require and
+restored via `git checkout -- pkg-bundler pkg-web`, unchanged from prior practice.
+
+**Deviation, surfaced:** running the release corpus gate rewrote two `golden/finding/*.json` files'
+`proves` text (pre-existing staleness already noted in the prior packet's entry — the fix round
+stripped a `§G.1` citation from the Rust strings but not the committed JSON). Committed as
+`10eb969` rather than discarded, since it is exactly the one-line cleanup that entry flagged.
+
+**Not done:** no new production code beyond the seven findings; the 238-entry ordinal→name marker
+array §I.3 mentions but the prior packet deferred (dead until a catalog-ordinal `marker` producer
+exists) is still not added — out of scope for this fix round.
