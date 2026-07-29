@@ -61,19 +61,15 @@ export type PackedDecodeError =
 declare const verifiedBrand: unique symbol;
 
 /**
- * Certified packed bytes. Mintable only by {@link verifyPackedCorpus} — the
- * brand is a compile-time guardrail (not a security boundary) that keeps
- * unverified buffers out of the materializer's public type.
+ * Certified packed bytes. Opaque: mintable only by {@link verifyPackedCorpus},
+ * and exposes no data members at all — every decoder input lives in a
+ * module-private `WeakMap` keyed by the handle's identity, not on the handle
+ * itself. Use {@link receiptFor} to inspect a book's receipt.
+ *
+ * This opacity is a footgun-elimination device, not a security boundary: see
+ * the threat-model note on {@link verifyPackedCorpus} and epic §8.1.
  */
-export type VerifiedPacked = Readonly<{
-  [verifiedBrand]: true;
-  books: ReadonlyMap<string, Readonly<{
-    path: string;
-    packed: Uint8Array;
-    source: Uint8Array;
-    receipt: PackedBookReceipt;
-  }>>;
-}>;
+export type VerifiedPacked = Readonly<{ readonly [verifiedBrand]: true }>;
 
 /** What the wasm export returns for one record. A rejection is a value, not a throw. */
 export type PackedBookOutcome =
@@ -124,13 +120,28 @@ export declare class PackedError extends Error {
 }
 
 /**
- * Verifies every record through the Rust trust boundary and mints the
- * `VerifiedPacked` brand. The first rejected record short-circuits the corpus.
+ * Verifies every record through the Rust trust boundary and mints the opaque
+ * `VerifiedPacked` handle. The first rejected record short-circuits the corpus.
+ *
+ * Threat model (dated 2026-07-29): this module protects honest use —
+ * certification, typed errors, copy-at-mint — not deliberate subversion of its
+ * own in-process state. The handle's opacity is a footgun-elimination device,
+ * not a security boundary.
  */
 export declare function verifyPackedCorpus(
   wasm: { verifyPackedBook(packed: Uint8Array, source: Uint8Array): PackedBookOutcome },
   records: readonly PackedRecord[],
 ): VerifyPackedResult;
+
+/**
+ * A read-only snapshot of what verification certified for one book — a copy
+ * the decoder never reads, so mutating it cannot affect `materialize`/
+ * `decodeTokens`. For inspection only; not part of the decode path.
+ */
+export declare function receiptFor(
+  verified: VerifiedPacked,
+  path: string,
+): Readonly<{ path: string; receipt: PackedBookReceipt }>;
 
 /**
  * Materializes tokens from certified bytes in the JS engine, with no wasm call.
