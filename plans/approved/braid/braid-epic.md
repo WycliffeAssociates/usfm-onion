@@ -1516,6 +1516,13 @@ authority; this section is its concrete TypeScript surface.
 The division of labour in one sentence: **Rust certifies bytes and materializes findings; JS
 materializes tokens.**
 
+**Threat-model note (owner ruling, 2026-07-29):** this surface protects HONEST use — certification,
+typed errors, copy-at-mint — not deliberate subversion of its own in-process state. `VerifiedPacked`'s
+opacity (below) is a footgun-elimination device, not a security boundary: it is not meant to stop code
+already running in the same JS process that is deliberately trying to forge a handle or reach into
+this module's private state. Future reviews should hold this surface to that standard, not to a
+security-boundary standard it was never designed to meet.
+
 ```ts
 /** Caller's unit of restore: an application key, the packed container, its exact source. */
 export type PackedRecord = Readonly<{
@@ -1527,21 +1534,21 @@ export type PackedRecord = Readonly<{
 declare const verified: unique symbol;
 
 /**
- * Certified packed bytes. Mintable only by `verifyPackedCorpus` — the brand is a
- * compile-time guardrail (not a security boundary) that keeps unverified buffers
- * out of the pure-JS decoder's public type.
+ * Certified packed bytes. Opaque: mintable only by `verifyPackedCorpus`, and
+ * exposes no data members at all. Use `receiptFor` to inspect a book's
+ * receipt.
  */
-export type VerifiedPacked = Readonly<{
-  [verified]: true;
-  books: ReadonlyMap<string, VerifiedBook>;
-}>;
+export type VerifiedPacked = Readonly<{ readonly [verified]: true }>;
 
-export type VerifiedBook = Readonly<{
-  path: string;
-  packed: Uint8Array;
-  source: Uint8Array;
-  receipt: PackedBookReceipt;
-}>;
+/**
+ * A read-only snapshot of what verification certified for one book — a copy
+ * the decoder never reads, so mutating it cannot affect `materialize`/
+ * `decodeTokens`. For inspection only; not part of the decode path.
+ */
+export function receiptFor(
+  verified: VerifiedPacked,
+  path: string,
+): Readonly<{ path: string; receipt: PackedBookReceipt }>;
 
 /**
  * Per-book attestation. `sourceHash`/`catalogStamp`/`snapshotId` are 16-char
@@ -1645,6 +1652,15 @@ export function materialize(
 /** Pure JS. Tokens-only entry for a single book, by `path`. */
 export function decodeTokens(verified: VerifiedPacked, path: string): MaterializedBook;
 ```
+
+**Correction — 2026-07-29 (clean-room review, round 3):** this section previously modeled
+`VerifiedPacked` as `{[verified]: true, books: ReadonlyMap<string, VerifiedBook>}`, with `VerifiedBook`
+exposing each book's `packed`/`source`/`receipt` directly on the handle. Per the owner's opacity
+ruling above, the handle now exposes nothing publicly: all decoder state (byte copies, receipts,
+resolved descriptors) lives in a module-private `WeakMap` keyed by the handle's identity, and
+`WeakMap` membership *is* the mint check — it subsumes the separate brand-symbol check this section
+previously described. `VerifiedBook` is retired; callers who need receipt data call the new
+`receiptFor`, which returns a deep copy the decode path never reads back from.
 
 **The trust boundary is `verifyPackedBook`, a synchronous wasm export backed by
 `usfm_onion_wire::verify::verify_book`.** It runs the whole Rust boundary for one record —
