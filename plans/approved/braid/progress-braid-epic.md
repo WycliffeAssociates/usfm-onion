@@ -2045,3 +2045,18 @@ append-only public addition.
 - First-reviewer verification at `6f0d9a9`: wire 154 passed + 2 golden (0 failed), core lib 256
   passed (0 failed). Code confirms the related record is still `(u32, u16, u16)` — widening is
   builder work in the close-out packet.
+
+## 2026-07-29 — Owner reversal: decode boundary (epic §2.2#19 amended, freeze §H)
+
+- The 2026-07-28 "Rust is the only production packed decoder" rule contradicted the 0H evidence
+  (JS binary eager decode 3.7–10.4× faster than wasm parse+marshal; boundary marshalling is the
+  dominant cost; retention was 0H stop-threshold 4). Root cause of the original rule: consumers
+  must not need a JS hash dep — and `xxhashjs` cannot even verify XXH3-64.
+- Ruling: hybrid. Rust/wasm = sole trust boundary (`restoreCorpus` validates + seeds braid
+  residency internally, returns branded `VerifiedPacked` or typed error); pure-JS `materialize`
+  decodes certified bytes into DTO objects on the main thread via the generated wire-schema
+  layout constants (load-bearing again). Mandatory Rust↔JS equivalence gate: same bin → identical
+  serde-JSON objects for tokens and findings across the test corpora and golden vectors.
+- Recorded in epic §2.2#19 (amended in place with supersession note) and freeze §H. Phase B
+  part-2 packet (post clean-room review of the Rust finding codec) implements the JS decoder and
+  respecs epic §8.1. The in-flight Rust packet is unaffected.

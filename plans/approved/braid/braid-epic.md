@@ -285,18 +285,29 @@ identity; they do not choose paths, perform IO, commit artifacts, or coordinate 
     round-trip contract tests in their own suites. The Tauri command host itself remains
     editor-owned app code; braid ships no Tauri dependency, and Phase F parity transcripts run
     against both the web wasm host and the native host.
-19. **Rust is the only production packed decoder.** (Owner correction 2026-07-28.)
-    `usfm_onion_wire` exclusively owns checked packed decode, checksum/source binding, and
-    semantic token/finding materialization. The npm-facing `decodeTokens(packed, book, source)`
-    and `materialize(sources, packed)` are wasm exports backed directly by that Rust wire path,
-    returning ordinary DTOs/`MaterializedSnapshot` or the existing frozen typed errors. JS passes
-    packed bytes and external source bytes into wasm; on a typed failure it falls back to normal
-    Braid USFM ingest/parse. Native hosts call wire directly. Generated `./wire-schema` constants
-    are conformance/debug artifacts only — never a second production parser or a JS XXH3
-    implementation. Pure JS may reconcile already-validated semantic finding objects for identity
-    reuse, but never accepts or parses packed bytes. The previously proposed npm `decodeView` raw
-    buffer surface is narrowed away: `decode_view` remains a public native Rust representation API
-    if Phase 0 retains that exact name, but is not a JS/npm parser.
+19. **Rust is the only trust boundary; JS owns main-thread materialization of certified
+    buffers.** (Owner reversal 2026-07-29, superseding the 2026-07-28 wording — see freeze §H.
+    The 2026-07-28 rule made Rust the only production packed decoder, which forfeits the 0H
+    measured boundary advantage: JS binary eager decode beat wasm parse+marshal 3.7–10.4× and
+    ArrayBuffer transfer beat object marshalling 2,273–3,531×; retaining that advantage was 0H
+    stop-threshold 4. The concern the 2026-07-28 rule was actually protecting — consumers must
+    never need a JS hash implementation — is preserved below without giving up the fast path.)
+    `usfm_onion_wire` (via wasm, or called directly by native hosts) exclusively owns the trust
+    jobs: container/structure validation, XXH3 checksums, source binding, and catalog/rules
+    stamps. There is never a JS XXH3 or checksum implementation. The wasm-facing
+    `restoreCorpus(records)` takes `(path, packed, source)` records, performs full validation,
+    seeds braid's resident state internally (Rust decode inside wasm memory — no marshalling),
+    and returns either a branded `VerifiedPacked` handle or one frozen typed error (typed error →
+    caller falls back to normal Braid USFM ingest/parse). The official pure-JS `materialize`
+    accepts only `VerifiedPacked` (compile-time brand; the JS decoder still bounds-checks
+    structurally but performs no hash/source verification) and materializes token/finding DTO
+    objects directly in the JS engine from the certified bytes, using the generated
+    `./wire-schema` layout constants — which are therefore load-bearing production schema data,
+    not debug artifacts. Drift between the two decoders is contained by a mandatory equivalence
+    gate: for every test corpus book and golden vector, the same packed bytes must materialize —
+    via Rust and via JS — into identical serialized objects (serde JSON), tokens and findings
+    both. Pure JS still never *accepts* unverified packed bytes as a public contract; the npm
+    `decodeView` raw-buffer surface stays narrowed away.
 
 ## 3. Hard preconditions and Gate 0
 

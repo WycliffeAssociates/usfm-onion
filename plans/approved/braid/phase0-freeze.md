@@ -1298,3 +1298,35 @@ is token-relative, the public `LintIssue` span is absolute, and a JS helper hand
 cannot derive that identity safely. Braid's resident types will own the finding address/identity.
 Explicitly rejected: weakening identity to absolute spans, or adding a new public identity field to
 the materialized DTOs now.
+
+## H. Adjudication — 2026-07-29 (owner): decode boundary reversal — verify in Rust, materialize in JS
+
+Owner reversal of epic §2.2#19's 2026-07-28 wording ("Rust is the only production packed decoder").
+That rule was protecting one requirement — consumers must never need a JS hash implementation (and
+`xxhashjs` could not satisfy it anyway: it implements XXH32/XXH64, not the XXH3-64 this wire uses) —
+but it forfeited the 0H measured boundary advantage (JS binary eager decode 3.7–10.4× faster than
+wasm parse+marshal; ArrayBuffer transfer 2,273–3,531× cheaper than object marshalling; retention of
+this advantage was 0H stop-threshold 4).
+
+**Ruling (A — hybrid):**
+
+- Rust (wire, via wasm or called natively) is the sole **trust boundary**: container/structure
+  validation, XXH3 checksums, source binding, catalog/rules stamps. No JS hash code, ever.
+- `restoreCorpus(records: Array<{path, packed, source}>)` (wasm) validates everything, seeds
+  braid's resident state internally from the packed bytes (Rust decode inside wasm memory, no
+  marshalling), and returns `{ok: true, verified: VerifiedPacked} | {ok: false, error}` with the
+  existing frozen typed errors. Typed error → caller uses the normal parse/ingest cold path.
+- `VerifiedPacked` is a **branded** handle (mintable only by the wasm verifier; carries per-book
+  packed byte views + stamps). The brand is a compile-time guardrail, not a security boundary.
+- The official pure-JS `materialize(verified)` decodes token/finding DTO objects directly in the
+  JS engine from certified bytes using the generated `./wire-schema` layout constants, which are
+  hereby load-bearing production schema data again (not debug-only). It bounds-checks structure
+  but performs no hash/source verification.
+- **Equivalence gate (mandatory, drift containment):** for every test-corpus book and every golden
+  vector, the same packed bytes materialized via Rust and via JS must serialize to identical
+  objects (serde JSON), for tokens AND findings. The wire DTOs are already serde-derived
+  single-source, so the gate diffs canonical JSON from both decoders.
+- §G.2's "materialize returns what lint/parse already return" stands unchanged in substance — the
+  shapes are the existing onion DTO shapes; only WHERE materialization runs moved back to JS.
+- Epic §8.1 is respecified around this API in the Phase B part-2 packet; `reconcileFindings`
+  deferral to Phase C (§G.2) is unchanged.
