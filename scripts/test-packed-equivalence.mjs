@@ -1,5 +1,5 @@
-// Cross-language token equivalence gate (freeze §H, narrowed to tokens by §I.5)
-// plus the verify surface's rejection conformance.
+// Cross-language token equivalence gate plus the verify surface's rejection
+// conformance.
 //
 // Three things are asserted here, and they are the whole reason two token
 // decoders are allowed to exist:
@@ -136,17 +136,58 @@ async function assertTokenEquivalence(caseName, outDir, jsTokens) {
   return index;
 }
 
-const stats = { cases: 0, tokens: 0, goldensGood: 0, goldensMalformed: 0, corpus: 0, chapters: 0 };
+const stats = {
+  cases: 0,
+  tokens: 0,
+  goldensGood: 0,
+  goldensMalformed: 0,
+  corpus: 0,
+  chapters: 0,
+  duplicateBook: 0,
+};
 const workRoot = await mkdtemp(path.join(os.tmpdir(), "usfm-onion-equivalence-"));
 
-/** The first chapter any token is anchored to, or `undefined` for a book with none. */
-function firstChapter(tokens) {
+function sidChapter(sid) {
+  return Number(sid.slice(sid.indexOf(" ") + 1, sid.indexOf(":")));
+}
+
+/** Every distinct chapter number any token is anchored to, ascending. */
+function allChapters(tokens) {
+  const seen = new Set();
   for (const token of tokens) {
     if (token.sid === undefined) continue;
-    const chapter = Number(token.sid.slice(token.sid.indexOf(" ") + 1, token.sid.indexOf(":")));
-    if (Number.isInteger(chapter) && chapter > 0) return chapter;
+    const chapter = sidChapter(token.sid);
+    if (Number.isInteger(chapter) && chapter > 0) seen.add(chapter);
   }
-  return undefined;
+  return [...seen].sort((a, b) => a - b);
+}
+
+/** First, middle, and final distinct chapters — deduplicated, so a one- or
+ * two-chapter book does not run the same check twice under a different name. */
+function representativeChapters(chapters) {
+  if (chapters.length === 0) return [];
+  return [...new Set([chapters[0], chapters[Math.floor(chapters.length / 2)], chapters.at(-1)])];
+}
+
+/**
+ * The row range `chapter` occupies, derived solely from `tokens`' own `sid`
+ * field — never from anything the materializer itself reports. This is what
+ * makes the chapter-selective check non-circular: it independently names the
+ * rows a correct implementation must return, so a bug in the materializer's
+ * own range-finding (e.g. swallowing a neighboring chapter's boundary token,
+ * or including front-matter/trailing content that carries no chapter sid)
+ * cannot also produce the "expected" answer.
+ */
+function expectedChapterRange(tokens, chapter) {
+  let first = -1;
+  let last = -1;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const sid = tokens[index].sid;
+    if (sid === undefined || sidChapter(sid) !== chapter) continue;
+    if (first < 0) first = index;
+    last = index;
+  }
+  return first < 0 ? null : { start: first, end: last };
 }
 
 /** One good case: verify, materialize both ways, compare. */
@@ -194,17 +235,29 @@ async function runGoodCase(caseName, emitArgs, options = {}) {
     `${caseName}: materialize() and decodeTokens() agree`,
   );
 
-  // The chapter is derived from the stream rather than assumed: a corpus can
-  // legitimately hold a front-matter-only book with no `\\c` at all.
-  const chapter = options.selective ? firstChapter(book.tokens) : undefined;
-  if (chapter !== undefined) {
+  // Chapters are derived from the stream rather than assumed: a corpus can
+  // legitimately hold a front-matter-only book with no `\\c` at all, in which
+  // case `representativeChapters` returns nothing and this book contributes no
+  // selective checks (front matter and a missing `\\c` are exercised passively
+  // by such books flowing through the plain full-materialize assertions above).
+  const chapters = options.selective ? representativeChapters(allChapters(book.tokens)) : [];
+  for (const chapter of chapters) {
+    // Independently derived — never read off the implementation's own result —
+    // so this is a real check of where the boundary falls, including that
+    // front-matter/trailing content outside any chapter is excluded.
+    const expected = expectedChapterRange(book.tokens, chapter);
+    assert.ok(expected, `${caseName}: chapter ${chapter} must appear in the full materialize`);
     const selective = materialize(verified, { path: caseName, chapter });
     const slice = selective.get(caseName);
-    const { start, end } = slice.range;
     assert.equal(
-      structuralEqual(slice.tokens, book.tokens.slice(start, end + 1)),
+      slice.range,
+      undefined,
+      `${caseName}: MaterializedBook carries no range field (frozen shape)`,
+    );
+    assert.equal(
+      structuralEqual(slice.tokens, book.tokens.slice(expected.start, expected.end + 1)),
       null,
-      `${caseName}: chapter ${chapter} is exactly the slice of the full materialize`,
+      `${caseName}: chapter ${chapter} is exactly the independently-derived slice of the full materialize`,
     );
     assert.ok(slice.tokens.length > 0, `${caseName}: chapter ${chapter} is non-empty`);
     // Selection by book code works when it is unambiguous.
@@ -214,12 +267,14 @@ async function runGoodCase(caseName, emitArgs, options = {}) {
       null,
       `${caseName}: selecting by book code resolves to the same rows`,
     );
+    stats.chapters += 1;
+  }
+  if (chapters.length > 0) {
     assert.throws(
       () => materialize(verified, { path: caseName, chapter: 9999 }),
       (error) => error instanceof PackedError && error.kind === "unknownChapter",
       `${caseName}: an out-of-range chapter is a typed error`,
     );
-    stats.chapters += 1;
   }
   await rm(outDir, { recursive: true, force: true });
 }
@@ -309,6 +364,79 @@ for (const file of corpusPaths) {
     (error) => error instanceof PackedError,
     "materialize refuses an unbranded handle",
   );
+  // P1-5: the brand is a module-private `Symbol()`, not `Symbol.for()`. A
+  // look-alike that forges the *interned* name a `Symbol.for` brand would have
+  // used must still be refused, proving no other code in the process can mint
+  // the real brand by guessing its registry key.
+  const forged = { [Symbol.for("usfm-onion.verifiedPacked")]: true, books: verified.books };
+  assert.throws(
+    () => materialize(forged),
+    (error) => error instanceof PackedError,
+    "materialize refuses a handle forged with the old Symbol.for name",
+  );
+  assert.throws(
+    () => decodeTokens(forged, vector.name),
+    (error) => error instanceof PackedError,
+    "decodeTokens refuses a forged handle the same way",
+  );
+}
+
+// --- P1-1: certification outlives caller-side mutation -----------------------
+
+{
+  const vector = (await goldenVectors("token")).find((entry) => entry.base === undefined);
+  const packed = new Uint8Array(await readFile(path.join(vector.dir, `${vector.name}.bin`)));
+  const source = new Uint8Array(await readFile(path.join(vector.dir, `${vector.name}.usfm`)));
+  const caseName = "mutation";
+  const { verified } = verifyOne(caseName, packed, source);
+  const before = decodeTokens(verified, caseName);
+
+  // Mutate the caller's own arrays after minting. If the handle held these
+  // same buffers rather than copies, the certification would now be stale.
+  packed.fill(0xff);
+  source.fill(0x2a); // '*' — still valid UTF-8, so a copy bug wouldn't be
+  // masked by a decode failure; it would just silently return different text.
+
+  const after = decodeTokens(verified, caseName);
+  assert.equal(
+    structuralEqual(before.tokens, after.tokens),
+    null,
+    "mutating the caller's packed/source arrays after minting must not change materialized output",
+  );
+  // And the handle's own view was never the caller's buffer to begin with.
+  assert.notEqual(
+    verified.books.get(caseName).packed.buffer,
+    packed.buffer,
+    "the handle holds a copy of packed, not the caller's own buffer",
+  );
+  assert.notEqual(
+    verified.books.get(caseName).source.buffer,
+    source.buffer,
+    "the handle holds a copy of source, not the caller's own buffer",
+  );
+}
+
+// --- P2-3/duplicate-book ambiguity -------------------------------------------
+
+{
+  const vector = (await goldenVectors("token")).find((entry) => entry.base === undefined);
+  const packed = new Uint8Array(await readFile(path.join(vector.dir, `${vector.name}.bin`)));
+  const source = new Uint8Array(await readFile(path.join(vector.dir, `${vector.name}.usfm`)));
+  // Two records at different paths naming the same underlying book: a legal
+  // corpus (paths, the real key, are distinct) that makes book-code selection
+  // ambiguous.
+  const result = verifyPackedCorpus(wasm, [
+    { path: "dup/a", packed, source },
+    { path: "dup/b", packed, source },
+  ]);
+  assert.equal(result.ok, true, "two records naming the same book at different paths verify fine");
+  const book = result.verified.books.get("dup/a").receipt.book;
+  assert.throws(
+    () => materialize(result.verified, { book }),
+    (error) => error instanceof PackedError && error.kind === "ambiguousBook",
+    "selecting by book code is a typed error when two records share it",
+  );
+  stats.duplicateBook += 1;
 }
 
 await rm(workRoot, { recursive: true, force: true });
@@ -317,5 +445,6 @@ console.log(
   `${target} packed equivalence passed: ${stats.cases} cases / ${stats.tokens} tokens ` +
     `(${stats.goldensGood} good goldens, ${stats.goldensMalformed} malformed goldens refused, ` +
     `${stats.corpus} corpus books, ` +
-    `${stats.chapters} chapter-selective slices)`,
+    `${stats.chapters} chapter-selective slices, ` +
+    `${stats.duplicateBook} duplicate-book ambiguity check)`,
 );
