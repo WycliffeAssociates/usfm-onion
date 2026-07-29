@@ -1240,10 +1240,7 @@ fn lint_structure_rules<T: LintableToken>(
                     if enabled.has(LintCode::BookCodeNotUppercase) {
                         issues.push(simple_issue(
                             LintCode::BookCodeNotUppercase,
-                            message_params([
-                                ("code", code.to_string()),
-                                ("uppercase", upper),
-                            ]),
+                            message_params([("code", code.to_string()), ("uppercase", upper)]),
                             token,
                         ));
                     }
@@ -3162,7 +3159,10 @@ mod tests {
             .expect("an unrecognized book code must fire InvalidBookCode");
         assert_eq!(issue.severity, LintSeverity::Warning);
         assert_eq!(issue.category, LintCategory::Document);
-        assert_eq!(issue.message_params.get("code").map(String::as_str), Some("ZZZ"));
+        assert_eq!(
+            issue.message_params.get("code").map(String::as_str),
+            Some("ZZZ")
+        );
         // Must NOT also fire the casing rule.
         assert!(
             !result
@@ -3185,9 +3185,15 @@ mod tests {
             .find(|issue| issue.code == LintCode::BookCodeNotUppercase)
             .expect("a miscased-but-valid book code must fire BookCodeNotUppercase");
         assert_eq!(issue.severity, LintSeverity::Warning);
-        assert_eq!(issue.message_params.get("code").map(String::as_str), Some("php"));
+        assert_eq!(
+            issue.message_params.get("code").map(String::as_str),
+            Some("php")
+        );
         // The deterministic fix target is carried so braid can uppercase it.
-        assert_eq!(issue.message_params.get("uppercase").map(String::as_str), Some("PHP"));
+        assert_eq!(
+            issue.message_params.get("uppercase").map(String::as_str),
+            Some("PHP")
+        );
         assert!(
             !result
                 .issues

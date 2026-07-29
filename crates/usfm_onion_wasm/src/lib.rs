@@ -8,8 +8,7 @@ use usfm_onion::diff::{
     Anchor as NativeAnchor, CoveredBy as NativeCoveredBy, DecisionUnit as NativeDecisionUnit,
     DiffSkeleton as NativeDiffSkeleton, DiffableToken, Slot as NativeSlot,
     TextDiffMode as NativeTextDiffMode, UnitId as NativeUnitId,
-    derive_canonical_sids as native_derive_canonical_sids,
-    diff_skeleton as native_diff_skeleton,
+    derive_canonical_sids as native_derive_canonical_sids, diff_skeleton as native_diff_skeleton,
     diff_skeleton_by_chapter as native_diff_skeleton_by_chapter,
     diff_skeleton_canonical as native_diff_skeleton_canonical,
     merge_diff_blocks as native_merge_diff_blocks, revert_diff_block as native_revert_diff_block,
@@ -49,10 +48,10 @@ pub use usfm_onion_wire::dto::{
     AttributeItem, BlockBehavior, ClosingBehavior, CoveredSide, DecisionStatus, DecisionUnitKind,
     DiffOptions, HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory,
     LintCode, LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily,
-    MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide,
-    NoteFamily, NoteSubkind, NumberInfo, NumberRangeKind, ParagraphCategory, SlotRole, Span,
-    SpecContext, StructuralMarkerInfo, StructuralScopeKind, TextDiffMode, TextDiffRun,
-    TextDiffRunKind, Token, TokenKind, UnitTextDiff, format_sid, map_marker_info,
+    MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide, NoteFamily,
+    NoteSubkind, NumberInfo, NumberRangeKind, ParagraphCategory, SlotRole, Span, SpecContext,
+    StructuralMarkerInfo, StructuralScopeKind, TextDiffMode, TextDiffRun, TextDiffRunKind, Token,
+    TokenKind, UnitTextDiff, format_sid, map_marker_info,
 };
 
 // TODO: eventually move off of this ideally
@@ -1429,7 +1428,10 @@ fn map_diffs_by_chapter<T: DiffableToken>(
                 chapters
                     .iter()
                     .map(|(chapter, skeleton)| {
-                        (*chapter, map_native_skeleton(skeleton, &map_token, text_diff_mode))
+                        (
+                            *chapter,
+                            map_native_skeleton(skeleton, &map_token, text_diff_mode),
+                        )
                     })
                     .collect(),
             )
@@ -1891,7 +1893,10 @@ mod tests {
             .iter()
             .find(|u| matches!(u.status, DecisionStatus::Modified))
             .expect("expected one Modified unit (v1 heaven -> heavens)");
-        assert!(modified.text_diff.is_some(), "Modified must carry a text_diff");
+        assert!(
+            modified.text_diff.is_some(),
+            "Modified must carry a text_diff"
+        );
 
         let added = skeleton
             .units
@@ -1905,7 +1910,10 @@ mod tests {
             .iter()
             .find(|u| matches!(u.status, DecisionStatus::Deleted))
             .expect("expected one Deleted unit (v2)");
-        assert!(deleted.text_diff.is_some(), "Deleted must carry a text_diff");
+        assert!(
+            deleted.text_diff.is_some(),
+            "Deleted must carry a text_diff"
+        );
 
         let unchanged = skeleton
             .units
@@ -2022,7 +2030,11 @@ mod tests {
             .into_iter()
             .filter(|u| matches!(u.status, DecisionStatus::Modified))
             .collect::<Vec<_>>();
-        assert_eq!(modified.len(), 1, "fixture must have exactly one Modified unit");
+        assert_eq!(
+            modified.len(),
+            1,
+            "fixture must have exactly one Modified unit"
+        );
         modified.into_iter().next().unwrap().text_diff
     }
 
@@ -2041,7 +2053,11 @@ mod tests {
             .iter()
             .filter(|u| matches!(u.status, NativeDecisionStatus::Modified))
             .collect::<Vec<_>>();
-        assert_eq!(modified.len(), 1, "fixture must have exactly one Modified unit");
+        assert_eq!(
+            modified.len(),
+            1,
+            "fixture must have exactly one Modified unit"
+        );
         native_unit_text_diff(modified[0], native_mode).map(Into::into)
     }
 

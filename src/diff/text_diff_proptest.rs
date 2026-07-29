@@ -23,7 +23,9 @@ use proptest::prelude::*;
 use super::skeleton_proptest::edited_doc_strategy;
 use crate::diff::DiffableToken;
 use crate::diff::skeleton::{MergeSide, UnitId, diff_skeleton, merge_skeleton};
-use crate::diff::text_diff::{TextDiffMode, TextDiffRunKind, diff_skeleton_with_text, unit_text_diff};
+use crate::diff::text_diff::{
+    TextDiffMode, TextDiffRunKind, diff_skeleton_with_text, unit_text_diff,
+};
 use crate::parse::parse;
 use crate::token::Token;
 
