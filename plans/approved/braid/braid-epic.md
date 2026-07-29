@@ -1507,100 +1507,206 @@ before coding; it does not drop the field.
 
 ## 8. Official JS and wasm surfaces
 
-### 8.1 Wasm-backed npm materialization and pure-JS reconciliation
+### 8.1 Wasm verification and pure-JS token materialization
+
+Respecified 2026-07-29 for freeze §H (decode boundary reversal) and the §I adjudication (receipt
+carries resolved marker metadata; findings stay Rust-side; selective materialize). The freeze is the
+authority; this section is its concrete TypeScript surface.
+
+The division of labour in one sentence: **Rust certifies bytes and materializes findings; JS
+materializes tokens.**
 
 ```ts
-export type SourceCorpus = ReadonlyMap<BookCode, Uint8Array>;
-
-export type MaterializedBook = Readonly<{
-  book: BookCode;
-  tokens: readonly Token[];
-  findings: readonly Finding[];
+/** Caller's unit of restore: an application key, the packed container, its exact source. */
+export type PackedRecord = Readonly<{
+  path: string;
+  packed: Uint8Array;
+  source: Uint8Array;
 }>;
 
-export type MaterializedSnapshot = Readonly<{
-  id: bigint;
-  books: ReadonlyMap<BookCode, MaterializedBook>;
+declare const verified: unique symbol;
+
+/**
+ * Certified packed bytes. Mintable only by `verifyPackedCorpus` — the brand is a
+ * compile-time guardrail (not a security boundary) that keeps unverified buffers
+ * out of the pure-JS decoder's public type.
+ */
+export type VerifiedPacked = Readonly<{
+  [verified]: true;
+  books: ReadonlyMap<string, VerifiedBook>;
 }>;
 
-export type ApiResult<T, E> =
-  | Readonly<{ ok: true; value: T }>
-  | Readonly<{ ok: false; error: E }>;
+export type VerifiedBook = Readonly<{
+  path: string;
+  packed: Uint8Array;
+  source: Uint8Array;
+  receipt: PackedBookReceipt;
+}>;
 
-export type SourceBindingError =
-  | Readonly<{ kind: "invalidBookKey"; key: string }>
-  | Readonly<{ kind: "missingSource"; book: BookCode }>
-  | Readonly<{ kind: "extraSource"; book: BookCode }>
+/**
+ * Per-book attestation. `sourceHash`/`catalogStamp`/`snapshotId` are 16-char
+ * lowercase hex: an audit record of what Rust checked, never an input to a JS
+ * check — there is no JS hash implementation and never will be.
+ */
+export type PackedBookReceipt = Readonly<{
+  book: string;
+  sourceLen: number;
+  tokenCount: number;
+  findingCount: number;
+  positionalIds: boolean;
+  sourceHash: string;
+  catalogStamp: string;
+  snapshotId: string;
+  /** Descriptor-ordinal order; the packed descriptor-index column indexes this. */
+  descriptors: readonly PackedMarkerDescriptor[];
+}>;
+
+/**
+ * One marker form the book references, with the two token fields the packed
+ * bytes deliberately do not store because they are pure functions of the name
+ * under the verified `catalogStamp` (freeze §I.1, §I.3). Rust resolves them; JS
+ * attaches them by index. 25–31 rows for a whole scripture book.
+ */
+export type PackedMarkerDescriptor = Readonly<{
+  name: string;
+  nested: boolean;
+  markerMetadata: MarkerMetadata;
+  structural: StructuralMarkerInfo;
+}>;
+
+/** The frozen `DecodeError` set (freeze §6.2), tagged for TS narrowing. */
+export type PackedDecodeError =
+  | Readonly<{ kind: "truncated" }>
+  | Readonly<{ kind: "badMagic" }>
+  | Readonly<{ kind: "unsupportedVersion"; found: number }>
+  | Readonly<{ kind: "unsupportedFlags"; found: number }>
+  | Readonly<{ kind: "invalidToc" }>
+  | Readonly<{ kind: "invalidSection" }>
+  | Readonly<{ kind: "invalidUtf8" }>
+  | Readonly<{ kind: "invalidDiscriminant" }>
+  | Readonly<{ kind: "offsetOverflow" }>
+  | Readonly<{ kind: "tooManySids"; found: number }>
+  | Readonly<{ kind: "checksumMismatch" }>
+  | Readonly<{ kind: "catalogMismatch" }>
+  | Readonly<{ kind: "sourceLengthMismatch" }>
+  | Readonly<{ kind: "sourceHashMismatch" }>;
+
+/** What the wasm export returns for one record. Tagged, not thrown. */
+export type PackedBookOutcome =
   | Readonly<{
-      kind: "sourceLengthMismatch";
-      book: BookCode;
-      expected: number;
-      found: number;
+      status: "verified";
+      receipt: PackedBookReceipt;
+      findings: readonly LintIssue[];
     }>
-  | Readonly<{ kind: "sourceHashMismatch"; book: BookCode }>;
+  | Readonly<{ status: "rejected"; error: PackedDecodeError }>;
 
-export type MaterializeError =
-  | Readonly<{ kind: "decode"; error: DecodeError }>
-  | Readonly<{ kind: "sourceBinding"; error: SourceBindingError }>;
+export type VerifyPackedResult =
+  | Readonly<{
+      ok: true;
+      verified: VerifiedPacked;
+      /** Rust-materialized, keyed by `path`. The existing `LintIssue` DTO shape. */
+      findings: ReadonlyMap<string, readonly LintIssue[]>;
+    }>
+  | Readonly<{ ok: false; path: string; error: PackedDecodeError }>;
 
-/** wasm export backed directly by `usfm_onion_wire`. */
-export function decodeTokens(
-  packed: Uint8Array,
-  book: BookCode,
-  source: Uint8Array,
-): ApiResult<DecodedTokenBook, MaterializeError>;
-/** wasm export backed directly by `usfm_onion_wire`. */
+/** Tokens for one book. `stableIds` is present iff the section carried explicit ids. */
+export type MaterializedBook = Readonly<{
+  path: string;
+  book: string;
+  tokens: readonly Token[];
+  stableIds?: readonly string[];
+}>;
+
+export type MaterializeSelector = Readonly<{
+  path?: string;
+  book?: string;
+  chapter?: number;
+}>;
+
+/** Thrown by the JS decoder. `kind` mirrors `PackedDecodeError["kind"]`. */
+export declare class PackedError extends Error {
+  readonly kind: PackedDecodeError["kind"] | "unknownBook" | "ambiguousBook" | "unknownChapter";
+}
+
+// --- npm surface -----------------------------------------------------------
+
+/** `usfm-onion-web/packed`. `wasm` is the initialized module namespace. */
+export function verifyPackedCorpus(
+  wasm: { verifyPackedBook(packed: Uint8Array, source: Uint8Array): PackedBookOutcome },
+  records: readonly PackedRecord[],
+): VerifyPackedResult;
+
+/** Pure JS. Whole corpus, one book, or one chapter of one book. */
 export function materialize(
-  sources: SourceCorpus,
-  packed: Uint8Array,
-): ApiResult<MaterializedSnapshot, MaterializeError>;
-/** Pure JS: both arguments are already-validated semantic finding DTOs. */
-export function reconcileFindings(
-  previous: MaterializedFindings | undefined,
-  next: MaterializedFindings,
-): MaterializedFindings;
+  verified: VerifiedPacked,
+  selector?: MaterializeSelector,
+): ReadonlyMap<string, MaterializedBook>;
+
+/** Pure JS. Tokens-only entry for a single book, by `path`. */
+export function decodeTokens(verified: VerifiedPacked, path: string): MaterializedBook;
 ```
 
-`decodeTokens` and `materialize` are synchronous wasm exports, backed directly by
-`usfm_onion_wire`'s checked Rust decode. Rust alone validates headers, TOC/section ranges,
-checksums, discriminants, exact source length/hash binding, and semantic token/finding
-materialization; no independent production JS binary parser or JS XXH3 exists. The existing frozen
-typed errors cross the same boundary as ordinary DTOs. A typed failure is the deliberate signal for
-the application to use normal Braid USFM ingest/parse instead.
+**The trust boundary is `verifyPackedBook`, a synchronous wasm export backed by
+`usfm_onion_wire::verify::verify_book`.** It runs the whole Rust boundary for one record —
+container/section structure, both integrity checksums, exact source length and XXH3 content hash,
+marker-catalog stamp, every discriminant, index range, and reserved byte — then decodes the book's
+findings and resolves its marker descriptors, returning a receipt plus findings or one frozen typed
+error. Nothing else in this surface validates anything. There is no JS XXH3, no JS checksum, and no
+JS source binding, in this release or any later one.
 
-Native hosts call the wire crate directly. If the Phase 0 API ledger retains the promised
-`decode_view` representation API, it remains a public native Rust view over checked bytes; it is
-not an npm/raw-`Uint8Array` parser and is deliberately absent from this TypeScript surface.
+`verifyPackedCorpus` is the thin npm-side glue: it walks the records, calls the wasm export per
+record, and is the only minter of the `VerifiedPacked` brand — pairing each receipt with the
+caller's *own* `Uint8Array`s, which it never copies. The first rejected record short-circuits the
+whole result and names the offending `path`, because a partially-restored corpus is not a state the
+application asked for. A typed failure is the deliberate signal to fall back to normal USFM
+ingest/parse.
 
-`materialize` is the cold-open object API. Its canonical input is one source byte array per unique
-`BookCode`; an ergonomic `Readonly<Partial<Record<BookCode, Uint8Array>>>` overload may normalize
-to the same map after validating every key. The wasm wire path pairs keys directly with the
-three-byte book ids in the packed TOC, verifies exact source length/hash, and creates plain JS
-token/finding objects grouped by `BookCode` without lexing or parsing. Paths are not part of this
-API or the packed format. The application retains its separate `SourceKey/path -> BookCode`
-manifest association. On success it uses those regular semantic tokens/findings or seeds Braid
-through `restoreCorpus`; on a typed failure it falls back to normal Braid USFM ingest/parse.
+**`materialize` is pure JS and produces tokens only** (freeze §I.5, option (c)). It reads the
+certified buffer with the generated `./wire-schema` layout constants — load-bearing production schema
+data, not debug artifacts — and never a hand-written offset. It still bounds-checks every structure it
+walks and throws a typed `PackedError`; what it does not do is re-verify integrity, which Rust
+already certified. Both id modes work: an explicit-id section's opaque ids come back as `stableIds`
+(and `Token.id` carries the positional label, exactly as the Rust decoder returns), while a
+`positionalIds` section synthesizes `{book}-{index}` by the same rule `assign_ids` applies.
 
-The generated `./wire-schema` JS constants exist for generated-declaration conformance, debugging,
-and golden-vector inspection. They are never called by a production packed decoder, checksum/hash
-validator, source binder, or materializer.
+**Findings never cross as packed bytes into JS.** They arrive already materialized on the verify
+result, in the same `LintIssue` DTO shape `lint` returns today, keyed by `path`. This keeps
+`LintIssue.message` rendered exclusively by `LintCode::render_message` — one renderer, in one
+language — and gives findings zero cross-language drift surface. The volumes justify the asymmetry:
+190k–280k tokens for one large book against a 159-findings-per-book corpus average.
 
-`reconcileFindings` is the pure-JS warm-update API. It receives only already-validated semantic
-finding DTOs from wasm materialization or an equivalent native wire host; it neither accepts nor
-parses packed bytes. It keys findings by book plus stable token/finding identity, reuses objects
-only when every public field is equal, drops removed objects, inserts new objects in canonical
-order, and never mutates caller-owned objects in place. The v1 behavior is immutable object reuse.
+**Selective materialize.** `materialize(verified, {path, chapter})` builds a lazy view over the
+certified buffer, locates that chapter's contiguous token range through the packed SID column, and
+materializes only those rows — the columnar layout's random-access property, no format change. The
+result is required to be byte-for-byte the corresponding slice of a full materialize, including
+`Token.id`, so a viewport-first caller can materialize the rest later and splice. `book` is accepted
+in the selector in place of `path` when it resolves to exactly one record; it is not the primary key
+because two corpora in one restore can legitimately both carry `GEN` (`ambiguousBook`). Findings have
+no selective mode: they all arrive from wasm, and callers filter by SID.
 
-Finding identity is a deterministic tuple derived from rule code, primary stable token id or SID
-anchor, token-relative range, related address, and deterministic same-key occurrence. Message
-text and fix payload are excluded from identity but included in equality, matching the editor's
-current finding model.
+**Concurrency contract.** The receipt and the brand return as soon as the trust checks pass. When
+Phase C adds braid, seeding resident state continues *inside wasm* after that return, so JS token
+materialization and braid seeding run concurrently rather than in sequence — Phase C must not
+serialize them, and no part of this surface awaits seeding.
 
-Malformed packed input returns one typed wasm `ApiResult` error before returning a partial result.
-Decode errors describe packed corruption/version failures; source-binding errors name the affected
-book and distinguish invalid/extra/missing input and source length/hash mismatch. No API accepts a
-bare `ArrayBuffer` plus unchecked offsets; callers pass `Uint8Array`/views and Rust honors their
-byte offset/length.
+**Phase C wraps, it does not replace.** `Braid.restoreCorpus(records)` (§8.2) will call the same
+`verify_book` internally and seed residency from the bytes already inside wasm memory; the npm names
+`verifyPackedCorpus`, `materialize`, `decodeTokens`, and the `VerifiedPacked` brand survive that
+change unbroken. `reconcileFindings` stays deferred to Phase C (freeze §G.2): stable finding identity
+is token-relative, the public `LintIssue` span is absolute, and braid's resident types will own that
+address.
+
+Native hosts call `usfm_onion_wire` directly and are unaffected by this section. No API accepts a
+bare `ArrayBuffer` plus unchecked offsets; callers pass `Uint8Array` views and both languages honour
+their byte offset and length. The npm `decodeView` raw-buffer surface stays narrowed away: pure JS
+never *accepts* unverified packed bytes as a public contract.
+
+**Drift containment (freeze §H, narrowed by §I.5).** A mandatory cross-language equivalence gate
+covers **tokens**: for every good golden vector and every book of the test corpus, the same packed
+bytes materialized by Rust (`serde_json` of `dto::Token`) and by JS must be structurally identical.
+Malformed goldens are asserted to be rejected by the wasm verifier with their recorded error name, so
+they never reach the JS decoder at all. Findings keep their existing Rust round-trip and corpus
+gates, plus an equality gate between `verify_book`'s findings and `finding_codec::decode_book`'s.
 
 ### 8.2 Wasm `Braid`
 

@@ -2240,3 +2240,32 @@ fixed in place, same files, same gates.
   verify result; §I.4 moot. Scope adds selective `materialize(verified, {book, chapter})` via
   lazy-view range location. Cross-language equivalence gate narrows to tokens; findings keep
   single-decoder Rust gates. Recorded as a freeze adjudication appendix following §I.
+
+## 2026-07-29 — Phase B part 2 resumed: epic §8.1 respecified around the §I rulings
+
+- §I adjudicated at `ff96405` (receipt carries resolved descriptor rows; findings stay Rust-side per
+  §I.5 option (c); §I.4 moot; selective materialize added; concurrency note). Packet resumed.
+- Epic §8.1 rewritten (docs-first, ahead of any code) as the concrete TS surface for freeze §H + §I,
+  replacing the pre-reversal text whose `decodeTokens`/`materialize` were wasm exports and whose
+  `reconcileFindings` is now Phase C. One-sentence division of labour recorded at the top: Rust
+  certifies bytes and materializes findings; JS materializes tokens.
+- Names pinned for Phase C to wrap without an npm break: wasm export `verifyPackedBook(packed,
+  source) -> PackedBookOutcome` (tagged `verified`/`rejected`, never thrown), npm glue
+  `verifyPackedCorpus(wasm, records) -> VerifyPackedResult`, pure-JS `materialize(verified,
+  selector?)` and `decodeTokens(verified, path)`, branded `VerifiedPacked`, `PackedBookReceipt`,
+  `PackedMarkerDescriptor`, `PackedDecodeError` (the frozen §6.2 set, tagged for TS narrowing), and
+  a thrown `PackedError`.
+- Three respec decisions worth flagging, all recorded in §8.1 itself: (1) the receipt's three u64
+  attestations (`sourceHash`, `catalogStamp`, `snapshotId`) are 16-char lowercase hex strings —
+  an audit record of what Rust checked, explicitly not an input to any JS check; (2) the selector's
+  primary key is the caller's `path`, not `book`, because one restore can legitimately carry two
+  corpora that both contain `GEN` (`book` is still accepted when it resolves uniquely, else
+  `ambiguousBook`); (3) the first rejected record short-circuits the whole corpus result and names
+  its `path`, since a partially-restored corpus is not a state the application asked for.
+- Concurrency contract stated as the ruling requires: receipt and brand return as soon as trust
+  checks pass, Phase C's braid seeding continues inside wasm afterwards, so JS materialization and
+  seeding run concurrently and Phase C must not serialize them.
+- Gate wording narrowed in §8.1 to match the ruling: the cross-language equivalence gate covers
+  tokens (Rust `serde_json` of `dto::Token` vs JS materialize); malformed goldens are asserted
+  rejected at the wasm verifier with their recorded error names; findings keep their Rust round-trip
+  and corpus gates plus a new `verify_book`-vs-`decode_book` equality gate.
