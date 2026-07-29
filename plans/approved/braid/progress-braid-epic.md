@@ -2032,3 +2032,16 @@ append-only public addition.
   checked zero fillers, while their columns are present iff some row uses the corresponding flag.
 - Verified focused wire tests and schema-drift generation checks; patch/fix framing remains deferred
   under freeze §F.3.
+
+## 2026-07-29 — Pause-handoff decisions adjudicated; Phase B close-out packet drafted
+
+- Owner ruled on both open decisions from `handoff-phase-b-pause-2026-07-28.md`; recorded as freeze
+  §G. (1) Related records widen to 16 bytes `{token_idx:u32, offset:u32, len:u32, reserved:u32=0}`,
+  superseding §F.1's 8-byte mechanical choice — the primary-span overflow escape was never actually
+  available to the related span. (2) wasm `materialize` returns the existing onion token/`LintIssue`
+  DTO shapes in a per-book `path → { tokens, findings }` container or one typed error — no new
+  semantic types; `reconcileFindings` deferred to Phase C where braid owns token-relative finding
+  identity.
+- First-reviewer verification at `6f0d9a9`: wire 154 passed + 2 golden (0 failed), core lib 256
+  passed (0 failed). Code confirms the related record is still `(u32, u16, u16)` — widening is
+  builder work in the close-out packet.

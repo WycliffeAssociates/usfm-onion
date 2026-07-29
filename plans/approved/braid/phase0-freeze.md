@@ -1261,3 +1261,40 @@ The framing is now adjudicated. Phase B implements all six-plus-two fields in on
 pass with the per-code conformance gate green from the start. Patch fields 5/6
 remain deliberately deferred under §F.3; that interim omission does not weaken
 the final Phase B all-fields gate.
+
+## Adjudication — 2026-07-29 (owner): related-span width; materialize returns onion types
+
+Rulings on the two decisions raised by the 2026-07-28 Phase B pause handoff
+(`handoff-phase-b-pause-2026-07-28.md`).
+
+### G.1 Related record widens to 16 bytes (supersedes the §F.1 mechanical choice)
+
+The §F.1 row for field 1 took the related span as `{token_idx:u32, offset:u16, len:u16}` = 8 bytes
+"with the same `overflow` escape available". That escape is not actually available: the overflow
+record (field 2) belongs to the row's **primary** span, so a related span above 65,535 either
+collides with it or needs a second overflow column — ambiguous exactly when both spans overflow.
+
+**Owner decision:** field 1 records are 16 bytes, width 16:
+
+```text
+{token_idx: u32, offset: u32, len: u32, reserved: u32}
+```
+
+`reserved` MUST be zero on encode and MUST be rejected non-zero on decode. No flag, sentinel, or
+sidecar interaction changes; field 2 remains primary-span-only. Cost accepted: +8 bytes per related
+finding (observed worst case 262 related findings in one book ≈ 2 KB).
+
+### G.2 `materialize` returns what `lint`/parse already return; `reconcileFindings` deferred
+
+There is no new `MaterializedFinding` semantic type. The wasm cold-open surface takes records of
+`(path, packed bytes, source bytes)` and returns, per book, the **existing** onion-exposed shapes —
+the same token DTOs and `LintIssue` DTOs the parse/lint wasm surface returns today, in a thin
+per-book container (`path → { tokens, findings }`) — or one typed error, which tells the application
+to fall back to the normal parse/ingest path. The wire moved the data efficiently; unpacking restores
+the types consumers already know.
+
+`reconcileFindings(previous, next)` is **deferred to Phase C**: the approved stable finding identity
+is token-relative, the public `LintIssue` span is absolute, and a JS helper handed findings alone
+cannot derive that identity safely. Braid's resident types will own the finding address/identity.
+Explicitly rejected: weakening identity to absolute spans, or adding a new public identity field to
+the materialized DTOs now.
