@@ -3,5 +3,5 @@
   "kind": "malformed",
   "base": "related-span-unclosed-marker",
   "expectedError": "InvalidSection",
-  "proves": "§G.1: the 16-byte related record's trailing reserved word must be zero; a nonzero value rejects"
+  "proves": "the 16-byte related record's trailing reserved word must be zero; a nonzero value rejects"
 }
