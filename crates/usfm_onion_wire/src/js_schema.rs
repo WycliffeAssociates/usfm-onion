@@ -138,6 +138,30 @@ pub fn render() -> (String, String) {
     js.push_str(&header);
     dts.push_str(&header);
 
+    js.push_str(
+        "/**\n\
+         * Recursively freezes an object/array and everything reachable from it\n\
+         * via its own enumerable-or-not property names (`Object.freeze` alone\n\
+         * is shallow). Every exported table below is immutable schema data the\n\
+         * decoder indexes into; this makes that true at runtime, matching the\n\
+         * `Readonly<...>`/`readonly` types already declared for it in the\n\
+         * `.d.ts`, rather than only documenting it there.\n\
+         */\n\
+         function deepFreeze(value) {\n  \
+           if (\n    \
+             value !== null &&\n    \
+             (typeof value === \"object\" || typeof value === \"function\") &&\n    \
+             !Object.isFrozen(value)\n  \
+           ) {\n    \
+             Object.freeze(value);\n    \
+             for (const key of Object.getOwnPropertyNames(value)) {\n      \
+               deepFreeze(value[key]);\n    \
+             }\n  \
+           }\n  \
+           return value;\n\
+         }\n\n",
+    );
+
     macro_rules! konst {
         ($name:ident : number = $value:expr) => {
             writeln!(js, "export const {} = {};", stringify!($name), $value).unwrap();
@@ -202,7 +226,7 @@ pub fn render() -> (String, String) {
 
     writeln!(
         js,
-        "export const ELEMENT_WIDTHS = [{}];",
+        "export const ELEMENT_WIDTHS = deepFreeze([{}]);",
         ELEMENT_WIDTHS
             .iter()
             .map(u8::to_string)
@@ -218,7 +242,7 @@ pub fn render() -> (String, String) {
 
     writeln!(
         js,
-        "\nexport const FINDING_FLAG = {{\n  anchorOnly: {},\n  noAnchor: {},\n  range: {},\n  related: {},\n  payload: {},\n  fix: {},\n  overflow: {},\n}};",
+        "\nexport const FINDING_FLAG = deepFreeze({{\n  anchorOnly: {},\n  noAnchor: {},\n  range: {},\n  related: {},\n  payload: {},\n  fix: {},\n  overflow: {},\n}});",
         finding_flag::ANCHOR_ONLY,
         finding_flag::NO_ANCHOR,
         finding_flag::RANGE,
@@ -236,7 +260,7 @@ pub fn render() -> (String, String) {
 
     writeln!(
         js,
-        "\nexport const TOKEN_KIND = {{\n  Newline: 0,\n  OptBreak: 1,\n  Marker: 2,\n  EndMarker: 3,\n  Milestone: 4,\n  MilestoneEnd: 5,\n  BookCode: 6,\n  Number: 7,\n  Text: 8,\n}};"
+        "\nexport const TOKEN_KIND = deepFreeze({{\n  Newline: 0,\n  OptBreak: 1,\n  Marker: 2,\n  EndMarker: 3,\n  Milestone: 4,\n  MilestoneEnd: 5,\n  BookCode: 6,\n  Number: 7,\n  Text: 8,\n}});"
     )
     .unwrap();
     writeln!(
@@ -247,7 +271,7 @@ pub fn render() -> (String, String) {
 
     writeln!(
         js,
-        "\nexport const NUMBER_RANGE_KIND = {{\n  Single: 0,\n  Range: 1,\n  Sequence: 2,\n  SequenceWithRange: 3,\n}};"
+        "\nexport const NUMBER_RANGE_KIND = deepFreeze({{\n  Single: 0,\n  Range: 1,\n  Sequence: 2,\n  SequenceWithRange: 3,\n}});"
     )
     .unwrap();
     writeln!(
@@ -405,7 +429,7 @@ pub fn render() -> (String, String) {
 
     writeln!(
         js,
-        "\nexport const SECTION_KIND = {{\n  Token: 0,\n  Finding: 1,\n}};"
+        "\nexport const SECTION_KIND = deepFreeze({{\n  Token: 0,\n  Finding: 1,\n}});"
     )
     .unwrap();
     writeln!(
@@ -429,7 +453,7 @@ pub fn render() -> (String, String) {
         &FINDING_FIELD_NAMES,
     );
 
-    writeln!(js, "\nexport const LINT_CODES = [").unwrap();
+    writeln!(js, "\nexport const LINT_CODES = deepFreeze([").unwrap();
     for tag in LINT_CODE_TABLE {
         writeln!(
             js,
@@ -439,14 +463,14 @@ pub fn render() -> (String, String) {
         )
         .unwrap();
     }
-    writeln!(js, "];").unwrap();
+    writeln!(js, "]);").unwrap();
     writeln!(
         dts,
         "\nexport declare const LINT_CODES: readonly Readonly<{{ code: number; kebab: string }}>[];"
     )
     .unwrap();
 
-    writeln!(js, "\nexport const PARAM_CONTRACTS = [").unwrap();
+    writeln!(js, "\nexport const PARAM_CONTRACTS = deepFreeze([").unwrap();
     for contract in PARAM_CONTRACTS {
         writeln!(js, "  {{ code: {}, variants: [", contract.code.as_u8()).unwrap();
         for variant in contract.variants {
@@ -463,7 +487,7 @@ pub fn render() -> (String, String) {
         }
         writeln!(js, "  ] }},").unwrap();
     }
-    writeln!(js, "];").unwrap();
+    writeln!(js, "]);").unwrap();
     writeln!(
         dts,
         "\nexport declare const PARAM_CONTRACTS: readonly Readonly<{{ code: number; variants: readonly Readonly<{{ params: readonly Readonly<{{ key: string; allowedValues: readonly string[] }}>[] }}>[] }}>[];"
@@ -475,11 +499,11 @@ pub fn render() -> (String, String) {
 
 /// Emits one structure's field offsets as a frozen object of byte positions.
 fn render_offsets(js: &mut String, dts: &mut String, export_name: &str, fields: &[(&str, usize)]) {
-    writeln!(js, "\nexport const {export_name} = {{").unwrap();
+    writeln!(js, "\nexport const {export_name} = deepFreeze({{").unwrap();
     for (name, offset) in fields {
         writeln!(js, "  {name}: {offset},").unwrap();
     }
-    writeln!(js, "}};").unwrap();
+    writeln!(js, "}});").unwrap();
     writeln!(dts, "\nexport declare const {export_name}: Readonly<{{").unwrap();
     for (name, _) in fields {
         writeln!(dts, "  {name}: number;").unwrap();
@@ -492,7 +516,7 @@ fn render_offsets(js: &mut String, dts: &mut String, export_name: &str, fields: 
 fn render_wire_strings(js: &mut String, dts: &mut String, export_name: &str, values: &[&str]) {
     writeln!(
         js,
-        "\nexport const {export_name} = [{}];",
+        "\nexport const {export_name} = deepFreeze([{}]);",
         values
             .iter()
             .map(|value| format!("{value:?}"))
@@ -519,7 +543,7 @@ fn render_field_table(
         names.len(),
         "{export_name}: field table/name-list length mismatch"
     );
-    writeln!(js, "\nexport const {export_name} = [").unwrap();
+    writeln!(js, "\nexport const {export_name} = deepFreeze([").unwrap();
     for (field, name) in table.iter().zip(names) {
         let width = match field.element_width {
             Some(w) => w.to_string(),
@@ -532,7 +556,7 @@ fn render_field_table(
         )
         .unwrap();
     }
-    writeln!(js, "];").unwrap();
+    writeln!(js, "]);").unwrap();
     writeln!(
         dts,
         "\nexport declare const {export_name}: readonly Readonly<{{ id: number; name: string; elementWidth: number | null; required: boolean }}>[];"

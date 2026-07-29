@@ -20,6 +20,28 @@
 // localization. Both decoders are held identical by golden vectors and
 // a serde-JSON equivalence gate.
 
+/**
+* Recursively freezes an object/array and everything reachable from it
+* via its own enumerable-or-not property names (`Object.freeze` alone
+* is shallow). Every exported table below is immutable schema data the
+* decoder indexes into; this makes that true at runtime, matching the
+* `Readonly<...>`/`readonly` types already declared for it in the
+* `.d.ts`, rather than only documenting it there.
+*/
+function deepFreeze(value) {
+  if (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    !Object.isFrozen(value)
+  ) {
+    Object.freeze(value);
+    for (const key of Object.getOwnPropertyNames(value)) {
+      deepFreeze(value[key]);
+    }
+  }
+  return value;
+}
+
 export const CONTAINER_MAGIC = "uson";
 export const SECTION_MAGIC = "usos";
 export const FORMAT_VERSION = 1;
@@ -62,9 +84,9 @@ export const PACKED_SID_LEN = 8;
 export const SID_FIDELITY_BIT = 128;
 export const SID_DELTA_MASK = 127;
 export const STRING_DICTIONARY_ENTRY_LEN = 4;
-export const ELEMENT_WIDTHS = [1, 2, 4, 8, 16];
+export const ELEMENT_WIDTHS = deepFreeze([1, 2, 4, 8, 16]);
 
-export const FINDING_FLAG = {
+export const FINDING_FLAG = deepFreeze({
   anchorOnly: 1,
   noAnchor: 2,
   range: 4,
@@ -72,9 +94,9 @@ export const FINDING_FLAG = {
   payload: 16,
   fix: 32,
   overflow: 64,
-};
+});
 
-export const TOKEN_KIND = {
+export const TOKEN_KIND = deepFreeze({
   Newline: 0,
   OptBreak: 1,
   Marker: 2,
@@ -84,16 +106,16 @@ export const TOKEN_KIND = {
   BookCode: 6,
   Number: 7,
   Text: 8,
-};
+});
 
-export const NUMBER_RANGE_KIND = {
+export const NUMBER_RANGE_KIND = deepFreeze({
   Single: 0,
   Range: 1,
   Sequence: 2,
   SequenceWithRange: 3,
-};
+});
 
-export const CONTAINER_HEADER_OFFSET = {
+export const CONTAINER_HEADER_OFFSET = deepFreeze({
   magic: 0,
   formatVersion: 4,
   headerLen: 6,
@@ -103,9 +125,9 @@ export const CONTAINER_HEADER_OFFSET = {
   checksum: 24,
   snapshotId: 32,
   reserved: 40,
-};
+});
 
-export const TOC_ENTRY_OFFSET = {
+export const TOC_ENTRY_OFFSET = deepFreeze({
   kind: 0,
   book: 1,
   sectionVersion: 4,
@@ -113,9 +135,9 @@ export const TOC_ENTRY_OFFSET = {
   offset: 8,
   byteLen: 16,
   sourceHash: 24,
-};
+});
 
-export const SECTION_HEADER_OFFSET = {
+export const SECTION_HEADER_OFFSET = deepFreeze({
   magic: 0,
   formatVersion: 4,
   rulesVersion: 6,
@@ -131,69 +153,69 @@ export const SECTION_HEADER_OFFSET = {
   checksum: 40,
   sourceLen: 48,
   catalogStamp: 56,
-};
+});
 
-export const DIRECTORY_ENTRY_OFFSET = {
+export const DIRECTORY_ENTRY_OFFSET = deepFreeze({
   fieldId: 0,
   elementWidth: 2,
   flags: 3,
   offset: 4,
   byteLen: 8,
   count: 12,
-};
+});
 
-export const PACKED_SID_OFFSET = {
+export const PACKED_SID_OFFSET = deepFreeze({
   book: 0,
   chapter: 3,
   verse: 5,
   delta: 7,
-};
+});
 
-export const DESCRIPTOR_RECORD_OFFSET = {
+export const DESCRIPTOR_RECORD_OFFSET = deepFreeze({
   nameIndex: 0,
   flags: 4,
-};
+});
 
-export const NUMBER_RECORD_OFFSET = {
+export const NUMBER_RECORD_OFFSET = deepFreeze({
   tokenIdx: 0,
   start: 4,
   end: 8,
   kind: 12,
   flags: 13,
-};
+});
 
-export const BOOK_CODE_RECORD_OFFSET = {
+export const BOOK_CODE_RECORD_OFFSET = deepFreeze({
   tokenIdx: 0,
   codeIndex: 4,
   flags: 8,
-};
+});
 
-export const ATTRIBUTE_ROW_OFFSET = {
+export const ATTRIBUTE_ROW_OFFSET = deepFreeze({
   tokenIdx: 0,
   firstEntry: 4,
   entryCount: 8,
   listStart: 12,
   listLen: 16,
-};
+});
 
-export const ATTRIBUTE_ENTRY_OFFSET = {
+export const ATTRIBUTE_ENTRY_OFFSET = deepFreeze({
   keyIndex: 0,
   valueIndex: 4,
   spanStart: 8,
   spanLen: 12,
   flags: 16,
-};
+});
 
-export const TOKEN_KIND_WIRE = ["newline", "optBreak", "marker", "endMarker", "milestone", "milestoneEnd", "bookCode", "number", "text"];
+export const TOKEN_KIND_WIRE = deepFreeze(["newline", "optBreak", "marker", "endMarker", "milestone", "milestoneEnd", "bookCode", "number", "text"]);
 
-export const NUMBER_RANGE_KIND_WIRE = ["single", "range", "sequence", "sequenceWithRange"];
+export const NUMBER_RANGE_KIND_WIRE = deepFreeze(["single", "range", "sequence", "sequenceWithRange"]);
 
-export const SECTION_KIND = {
+export const SECTION_KIND = deepFreeze({
   Token: 0,
   Finding: 1,
-};
+});
 
-export const TOKEN_FIELD = [
+export const TOKEN_FIELD = deepFreeze([
   { id: 0, name: "kind", elementWidth: 1, required: true },
   { id: 1, name: "spanStart", elementWidth: 4, required: true },
   { id: 2, name: "spanEnd", elementWidth: 4, required: true },
@@ -207,9 +229,9 @@ export const TOKEN_FIELD = [
   { id: 10, name: "stringDictionary", elementWidth: null, required: true },
   { id: 11, name: "markerDescriptorDictionary", elementWidth: 8, required: true },
   { id: 12, name: "packedSidDictionary", elementWidth: 8, required: true },
-];
+]);
 
-export const FINDING_FIELD = [
+export const FINDING_FIELD = deepFreeze([
   { id: 0, name: "commonRow", elementWidth: 16, required: true },
   { id: 1, name: "relatedTokenIdx", elementWidth: 16, required: false },
   { id: 2, name: "overflowSpan", elementWidth: 8, required: false },
@@ -219,9 +241,9 @@ export const FINDING_FIELD = [
   { id: 6, name: "patchTable", elementWidth: null, required: false },
   { id: 7, name: "stringDictionary", elementWidth: null, required: false },
   { id: 8, name: "messagePayloadTable", elementWidth: null, required: false },
-];
+]);
 
-export const LINT_CODES = [
+export const LINT_CODES = deepFreeze([
   { code: 0, kebab: "missing-id-marker" },
   { code: 1, kebab: "duplicate-id-marker" },
   { code: 2, kebab: "id-marker-not-at-file-start" },
@@ -254,9 +276,9 @@ export const LINT_CODES = [
   { code: 29, kebab: "content-after-blank-marker" },
   { code: 30, kebab: "invalid-book-code" },
   { code: 31, kebab: "book-code-not-uppercase" },
-];
+]);
 
-export const PARAM_CONTRACTS = [
+export const PARAM_CONTRACTS = deepFreeze([
   { code: 3, variants: [
     { params: [
       { key: "marker", allowedValues: [] },
@@ -396,4 +418,4 @@ export const PARAM_CONTRACTS = [
       { key: "uppercase", allowedValues: [] },
     ] },
   ] },
-];
+]);
