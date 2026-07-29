@@ -2232,3 +2232,11 @@ fixed in place, same files, same gates.
   bake in the guesses this STOP exists to avoid. `decodeTokens` is blocked identically to
   `materialize` — it needs the two marker fields — so there is no shippable subset either.
 - Unaffected: the Phase B Rust half at `e2bcc0e`, and every gate it left green.
+
+## 2026-07-29 — §I adjudicated; Phase B part 2 re-dispatched
+
+- Owner ruled: §I.3 accepted (resolved descriptor rows + ordinal→name array on the receipt);
+  §I.5 = option (c) — JS materializes tokens only, findings return Rust-materialized on the
+  verify result; §I.4 moot. Scope adds selective `materialize(verified, {book, chapter})` via
+  lazy-view range location. Cross-language equivalence gate narrows to tokens; findings keep
+  single-decoder Rust gates. Recorded as a freeze adjudication appendix following §I.

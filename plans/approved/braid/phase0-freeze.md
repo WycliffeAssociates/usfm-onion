@@ -1437,3 +1437,29 @@ that rule, so it is raised rather than overridden. Options, none chosen:
 epic §8.1 respec is blocked with the implementation, because the receipt's contents (I.3) and the
 finding boundary (I.5) are the two shapes the respec exists to pin. The Rust half of Phase B
 (`e2bcc0e`) is unaffected, as is everything already landed.
+
+## Adjudication — 2026-07-29 (owner): §I rulings — receipt metadata, findings stay Rust-side, selective materialize
+
+- **§I.3 accepted (1A).** The verification receipt carries each book's marker descriptor rows
+  already resolved — `{name, nested, markerMetadata, structural}` in descriptor-ordinal order —
+  plus a generated ordinal→name array in the wire-schema module. Ruled inside §H's "per-book
+  stamps/metadata": it crosses once per distinct marker form (25–31 observed per book, catalog
+  ceiling 238), never per token, and no catalog logic is forked into JS.
+- **§I.5 ruled: option (c) (2A).** The official pure-JS `materialize` produces **tokens only**.
+  Findings are materialized in Rust/wasm and returned on the verify result (`{ok, verified,
+  findings}`), like every other finding-producing call already does. Grounds: the 0H boundary
+  advantage is a token-volume phenomenon (190k–280k tokens/book vs a 159 finding/book corpus
+  average; ~sub-ms marshalling), and this gives findings a single decoder — zero drift surface —
+  while `LintIssue.message` stays `render_message`-only with no second renderer in any language.
+  The §H cross-language equivalence gate therefore applies to **tokens**; findings keep their
+  existing Rust round-trip gates.
+- **§I.4 moot under (c):** the 32-row code/category/severity/issueType/template JS table is not
+  generated. `PARAM_CONTRACTS` remain (localization).
+- **Scope addition — selective materialize.** `materialize(verified, {book, chapter})`: lazy view
+  over the certified buffer, locate the chapter's contiguous token range via the SID column, and
+  materialize only that range; full materialization may follow in the background. No format
+  change — this exploits the columnar layout's random access (0H: lazy view 0.003ms, 200-token
+  viewport 0.03ms). Findings need no selective mode (all arrive from wasm; callers filter by SID).
+- **§8.1 respec note:** the receipt (and brand) may return as soon as trust checks pass; braid's
+  Phase C seeding continues inside wasm afterwards, so JS materialization and braid seeding run
+  concurrently. The respec must state this so Phase C does not serialize them.
