@@ -34,6 +34,8 @@ mod token_section;
 #[cfg(test)]
 mod container_tests;
 #[cfg(test)]
+mod finding_goldens;
+#[cfg(test)]
 mod token_codec_tests;
 #[cfg(test)]
 mod token_goldens;

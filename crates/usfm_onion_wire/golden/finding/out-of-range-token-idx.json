@@ -1,0 +1,7 @@
+{
+  "name": "out-of-range-token-idx",
+  "kind": "malformed",
+  "base": "several-codes",
+  "expectedError": "InvalidSection",
+  "proves": "a common row's token_idx naming no token in the paired section rejects rather than reading out of bounds"
+}

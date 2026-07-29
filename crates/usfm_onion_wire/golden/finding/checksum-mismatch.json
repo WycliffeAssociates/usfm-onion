@@ -1,0 +1,7 @@
+{
+  "name": "checksum-mismatch",
+  "kind": "malformed",
+  "base": "several-codes",
+  "expectedError": "ChecksumMismatch",
+  "proves": "a content byte changed inside the finding section without updating its checksum rejects"
+}
