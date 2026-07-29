@@ -2060,3 +2060,55 @@ append-only public addition.
 - Recorded in epic §2.2#19 (amended in place with supersession note) and freeze §H. Phase B
   part-2 packet (post clean-room review of the Rust finding codec) implements the JS decoder and
   respecs epic §8.1. The in-flight Rust packet is unaffected.
+
+## 2026-07-29 — Phase B Rust packet: related-record widen + semantic finding codec landed
+
+- §G.1 applied: `finding_field::RELATED_TOKEN_IDX` widened from 8 to 16 bytes
+  `{token_idx:u32, offset:u32, len:u32, reserved:u32}`; encode writes `reserved=0`, decode rejects
+  non-zero `reserved` via `DecodeError::InvalidSection` (this crate's existing reserved-byte
+  convention — no new error variant needed). `js/wire-schema.{js,d.ts}` regenerated;
+  `FINDING_FIELD.length` stays 9 (existing field widened, not a new one added), so
+  `test:wire-schema:import`'s assertions were unchanged and it was only extracted into
+  `scripts/test-wire-schema-import.mjs` per the owner's cleanup request.
+- Semantic codec landed: `usfm_onion_wire::finding_codec` (`encode_book`/`decode_book`,
+  `pub`) round-trips `LintResult.issues` through the paired token+finding container sections,
+  covering fields 0–4, 7, 8. Rows are written in §2.2#15 canonical order regardless of caller
+  order (own `canonical_order`, exposed `pub`, since core's own `canonical_sort`/`dedupe_issues`
+  are private and unreachable from this crate). `message` is rebuilt only via
+  `LintCode::render_message`; `category`/`severity`/`issue_type`/`template` are recomputed from
+  the decoded code. Fields 5/6 (patch/fix) remain unemitted per §F.3 — every decoded issue's
+  `fix` is unconditionally `None`.
+- Two derivations worth flagging for reviewers: (1) a finding's SID book comes from its anchor
+  token's own raw `Sid.book`, not the section's nominal book — a `book-code-not-uppercase` finding
+  on an unmodified lower-case `\id` needs its own book, distinct from the container's; (2) a
+  token-anchored finding can still have `sid: None` (e.g. `content-before-first-chapter`, which
+  fires on real content before any `\c` establishes an anchor) — `no_anchor` is independent of
+  whether the finding has a token at all, not a proxy for anchor-only. Both were caught by the
+  corpus gate before being fixed, not assumed correct in advance.
+- `js_schema.rs`'s generated-file header went through three revisions this packet as the owner
+  sharpened the rationale (mid-packet messages, superseding each other): final text distinguishes
+  why-codegen / why-not-wasm-bindgen / two consumer tiers (semantic catalog serves runtime JS
+  regardless of the decode boundary; byte-layout tables are load-bearing production data for the
+  next packet's pure-JS `materialize` decoder, per freeze §H — not "wasm is the sole parser",
+  which §H superseded).
+- Gates, all green: full workspace suite (256+165+... = 0 failed across every crate, `cargo test
+  --workspace`); lint oracle (`cargo test --test lint_oracle -- --ignored`); both 395-book corpus
+  gates in release (`corpus_token_sections_round_trip`, `corpus_owned_token_sections_round_trip`);
+  new per-`LintCode` corpus conformance gate in release
+  (`corpus_findings_round_trip_per_lint_code`, `#[ignore]`d) — all 26 corpus-producible codes
+  round-trip, 62,948 total findings, matching Gate 0D §2's evidence count exactly; 3 hand-built
+  fixtures for the codes no `.usfm` source can produce (`finding_codec::tests`), including
+  `invalid-number-range`, which turned out unreachable from *any* `Token<'a>` (not just
+  `lint_usfm(source)`) since `TokenData::Number` always carries a parsed payload — its fixture
+  builds the `LintIssue` directly rather than via `lint_tokens`; finding golden vectors under
+  `golden/finding/` (4 good + 6 malformed, mirroring `token_goldens.rs`); corruption-battery tests
+  for truncation, single-byte mutation, non-zero related reserved word, out-of-range indices, and
+  flag/column presence mismatches.
+- Evidence correction recorded, not a behavior change: `gate0-0d-payload-ledger.md` §2 lists
+  `related: yes` for `duplicate-chapter-number`/`duplicate-verse-number`, but both codes' current
+  sole producers (`lint_chapter_rules`, `lint_number_and_verse_rules`) call
+  `simple_issue_with_marker`, which has no related-token parameter — `related_span` is `None` for
+  both in every corpus occurrence and by construction. Picked `unclosed-marker` (a confirmed
+  `related_span` producer) for the related-span golden instead.
+- Scope not in this packet, per its own boundary: no JS/wasm decode or `materialize` work — that
+  is the next packet, gated on clean-room review of this one.
