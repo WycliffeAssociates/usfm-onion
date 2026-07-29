@@ -11,8 +11,11 @@
 // never will be: `verifyPackedBook` already certified the bytes. What the
 // decoder below does do is bounds-check every structure it walks, so a buffer
 // that somehow reached it uncertified fails loudly instead of reading past an
-// array. Every byte offset comes from the generated ./wire-schema constants —
-// never a literal written here.
+// array. Every field *position* comes from the generated ./wire-schema
+// constants, and every per-row *stride* comes from the container's own
+// directory-reported field width (never a hardcoded 2/4) — the sole exception
+// is `u64()`'s high/low split, 4 bytes forward by the definition of reading a
+// 64-bit value as two little-endian 32-bit halves, not a schema position.
 
 import {
   ATTRIBUTE_ENTRY_LEN,
@@ -65,13 +68,6 @@ const FIELD_WIDTH = Object.fromEntries(
 /** Kinds that carry a marker descriptor, and the subset that may carry attributes. */
 const MARKER_BEARING = new Set([TOKEN_KIND.Marker, TOKEN_KIND.EndMarker, TOKEN_KIND.Milestone]);
 const ATTRIBUTE_BEARING = new Set([TOKEN_KIND.Marker, TOKEN_KIND.Milestone]);
-
-// A module-private symbol, not `Symbol.for`: the latter interns in a
-// realm-wide registry, so any other code in the same process could mint
-// `{ [Symbol.for("usfm-onion.verifiedPacked")]: true, books: new Map() }` and
-// pass a forged handle through `requireVerified`'s brand check. This binding
-// never leaves the module, so only `verifyPackedCorpus` can produce it.
-const VERIFIED = Symbol("usfm-onion.verifiedPacked");
 
 // `fatal` is load-bearing: Rust resolves a token's text with `str::get`, which
 // refuses a span that splits a character. A lenient decoder would substitute
@@ -330,12 +326,17 @@ function tokenReader(book) {
 
   const rowCount = section.recordCount;
   const kinds = requiredField(section, FIELD.kind, rowCount).bytes;
-  const spanStarts = viewOf(requiredField(section, FIELD.spanStart, rowCount).bytes);
-  const spanEnds = viewOf(requiredField(section, FIELD.spanEnd, rowCount).bytes);
-  const sidIndices = viewOf(requiredField(section, FIELD.sidIndex, rowCount).bytes);
-  const descriptorIndices = viewOf(
-    requiredField(section, FIELD.markerDescriptorIndex, rowCount).bytes,
-  );
+  // Each column's own directory-reported `width` is its per-row byte stride —
+  // read off the field the container actually declared, not a hardcoded 2/4,
+  // so a widened column stays correct without a matching code change here.
+  const spanStartField = requiredField(section, FIELD.spanStart, rowCount);
+  const spanStarts = viewOf(spanStartField.bytes);
+  const spanEndField = requiredField(section, FIELD.spanEnd, rowCount);
+  const spanEnds = viewOf(spanEndField.bytes);
+  const sidIndexField = requiredField(section, FIELD.sidIndex, rowCount);
+  const sidIndices = viewOf(sidIndexField.bytes);
+  const descriptorIndexField = requiredField(section, FIELD.markerDescriptorIndex, rowCount);
+  const descriptorIndices = viewOf(descriptorIndexField.bytes);
   const sids = requiredField(section, FIELD.packedSidDictionary);
   const sidCount = sids.count;
   const sidView = viewOf(sids.bytes);
@@ -351,7 +352,8 @@ function tokenReader(book) {
   // the section flag asserts which, and the two must agree.
   const idIndexField = section.fields.get(FIELD.tokenIdIndex);
   if (section.positionalIds !== !idIndexField) fail("invalidSection");
-  const idIndices = idIndexField ? viewOf(requiredField(section, FIELD.tokenIdIndex, rowCount).bytes) : null;
+  if (idIndexField && idIndexField.count !== rowCount) fail("invalidSection");
+  const idIndices = idIndexField ? viewOf(idIndexField.bytes) : null;
   const idStrings = idIndexField
     ? readStringDictionary(section.fields.get(FIELD.tokenIdDictionary))
     : null;
@@ -400,18 +402,18 @@ function tokenReader(book) {
     const tag = kinds[row];
     const wireKind = TOKEN_KIND_WIRE[tag];
     if (wireKind === undefined) fail("invalidDiscriminant");
-    const start = spanStarts.getUint32(row * 4, true);
-    const end = spanEnds.getUint32(row * 4, true);
+    const start = spanStarts.getUint32(row * spanStartField.width, true);
+    const end = spanEnds.getUint32(row * spanEndField.width, true);
     const token = {
       id: `${bookLabelAt(row)}-${row}`,
       kind: wireKind,
       source: sourceText(start, end),
       span: { start, end },
     };
-    const sid = sidAt(sidIndices.getUint16(row * 2, true));
+    const sid = sidAt(sidIndices.getUint16(row * sidIndexField.width, true));
     if (sid !== null) token.sid = sid;
 
-    const descriptorIndex = descriptorIndices.getUint16(row * 2, true);
+    const descriptorIndex = descriptorIndices.getUint16(row * descriptorIndexField.width, true);
     const markerBearing = MARKER_BEARING.has(tag);
     if (markerBearing !== (descriptorIndex !== INDEX_NONE_U16)) fail("invalidSection");
     if (markerBearing) {
@@ -464,20 +466,20 @@ function tokenReader(book) {
     materializeRow,
     stableIdAt: idIndices
       ? (row) => {
-          const id = idStrings[idIndices.getUint32(row * 4, true)];
+          const id = idStrings[idIndices.getUint32(row * idIndexField.width, true)];
           if (id === undefined || id === "") fail("invalidSection");
           return id;
         }
       : null,
     /**
-     * First and last row anchored to `chapter`, inclusive. Reads only the 2-byte
-     * SID index column, so locating a viewport costs no token materialization.
+     * First and last row anchored to `chapter`, inclusive. Reads only the SID
+     * index column, so locating a viewport costs no token materialization.
      */
     chapterRange(chapter) {
       let first = -1;
       let last = -1;
       for (let row = 0; row < rowCount; row += 1) {
-        const index = sidIndices.getUint16(row * 2, true);
+        const index = sidIndices.getUint16(row * sidIndexField.width, true);
         if (index === INDEX_NONE_U16) continue;
         if (sidChapterAt(index) !== chapter) continue;
         if (first < 0) first = row;
@@ -526,7 +528,7 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
 // --- public surface ---------------------------------------------------------
 
 /**
- * Verifies every record through the Rust trust boundary and mints the branded
+ * Verifies every record through the Rust trust boundary and mints the opaque
  * `VerifiedPacked` handle.
  *
  * The first rejected record short-circuits the whole corpus: a partially
@@ -534,10 +536,16 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
  * the signal to fall back to normal USFM ingest/parse.
  *
  * The caller's `packed`/`source` bytes are copied (`Uint8Array#slice`, never an
- * `ArrayBuffer` transfer/detach) into handle-private buffers before they are
- * verified, and the handle holds only those copies. Without this, a caller
- * could mutate its own array after minting and pair a still-valid
- * certification with changed bytes.
+ * `ArrayBuffer` transfer/detach) into handle-private state before they are
+ * verified. Without this, a caller could mutate its own array after minting
+ * and pair a still-valid certification with changed bytes.
+ *
+ * Threat model (dated 2026-07-29): this module protects HONEST use — a
+ * caller that mutates its own buffers by accident, or passes an
+ * already-verified handle around a codebase without re-checking it. The
+ * handle's opacity (below) is a footgun-elimination device, not a security
+ * boundary: it is not meant to stop code in the same JS process that is
+ * deliberately trying to subvert this module's own state.
  *
  * @param {{ verifyPackedBook: (packed: Uint8Array, source: Uint8Array) => any }} wasm
  * @param {readonly { path: string, packed: Uint8Array, source: Uint8Array }[]} records
@@ -567,14 +575,41 @@ export function verifyPackedCorpus(wasm, records) {
     });
     findings.set(record.path, outcome.findings);
   }
-  return { ok: true, verified: { [VERIFIED]: true, books }, findings };
+  // The handle is a plain frozen object with no own properties at all — every
+  // decoder input lives in `STATE`, keyed by the handle's identity. Membership
+  // in `STATE` *is* the mint check: there is nothing on the handle itself to
+  // fake, and nothing public to read state off of by accident.
+  const verified = Object.freeze({});
+  STATE.set(verified, books);
+  return { ok: true, verified, findings };
 }
 
+/** Handle identity → its books, private to this module. */
+const STATE = new WeakMap();
+
 function requireVerified(verified) {
-  if (!verified || verified[VERIFIED] !== true) {
+  const books = STATE.get(verified);
+  if (!books) {
     fail("invalidSection", "materialize accepts only a VerifiedPacked handle");
   }
-  return verified.books;
+  return books;
+}
+
+/**
+ * A read-only copy of what verification certified for one book. Not part of
+ * the decode path: `materialize`/`decodeTokens` read their own copy of this
+ * same data out of `STATE`, never this function's return value, so mutating
+ * what this returns cannot affect materialized output. Exists because tests
+ * and callers legitimately need to inspect a receipt (book code, counts,
+ * positional-ids flag) without the handle exposing its internal state.
+ *
+ * @returns {{ path: string, receipt: object }}
+ */
+export function receiptFor(verified, path) {
+  const books = requireVerified(verified);
+  const book = books.get(path);
+  if (!book) fail("unknownBook", path);
+  return structuredClone({ path: book.path, receipt: book.receipt });
 }
 
 function resolveBook(books, selector) {
@@ -625,7 +660,7 @@ function materializeBook(book, chapter) {
  *
  * Findings are not here: they arrive already materialized on the verify result.
  *
- * @returns {Map<string, { path: string, book: string, tokens: object[], stableIds?: string[], range?: { start: number, end: number } }>}
+ * @returns {Map<string, { path: string, book: string, tokens: object[], stableIds?: string[] }>}
  */
 export function materialize(verified, selector) {
   const books = requireVerified(verified);
