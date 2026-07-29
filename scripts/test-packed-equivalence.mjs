@@ -417,6 +417,38 @@ for (const file of corpusPaths) {
   );
 }
 
+// --- descriptor tree is frozen: marker metadata mutation is rejected --------
+
+{
+  const vector = (await goldenVectors("token")).find((entry) => entry.base === undefined);
+  const packed = new Uint8Array(await readFile(path.join(vector.dir, `${vector.name}.bin`)));
+  const source = new Uint8Array(await readFile(path.join(vector.dir, `${vector.name}.usfm`)));
+  const caseName = "frozen-metadata";
+  const { verified } = verifyOne(caseName, packed, source);
+  const before = decodeTokens(verified, caseName);
+  const markerToken = before.tokens.find((token) => token.markerMetadata !== undefined);
+  assert.ok(
+    markerToken,
+    `${caseName}: at least one token must carry markerMetadata for this check to mean anything`,
+  );
+  assert.throws(
+    () => {
+      markerToken.markerMetadata.canonical = "evil";
+    },
+    TypeError,
+    "mutating a materialized token's markerMetadata throws (the descriptor tree is deep-frozen)",
+  );
+  // Every token sharing this marker form attaches the same frozen object, so
+  // the attempted mutation above (rejected, not silently applied) must not
+  // have leaked into a second materialization of the same book either.
+  const after = decodeTokens(verified, caseName);
+  assert.equal(
+    structuralEqual(before.tokens, after.tokens),
+    null,
+    "materializing again after the rejected mutation attempt is unaffected",
+  );
+}
+
 // --- duplicate-book ambiguity -------------------------------------------------
 
 {
