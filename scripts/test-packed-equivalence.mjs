@@ -21,13 +21,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { PackedError, decodeTokens, materialize, verifyPackedCorpus } from "../js/packed.js";
+import { PackedError, decodeTokens, materialize, receiptFor, verifyPackedCorpus } from "../js/packed.js";
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const target = process.argv.includes("web") ? "web" : "bundler";
@@ -147,6 +147,9 @@ const stats = {
 };
 const workRoot = await mkdtemp(path.join(os.tmpdir(), "usfm-onion-equivalence-"));
 
+/** First discovered corpus book with no `\c` at all, `{caseName, verified}` — or `undefined`. */
+let noChapterExample;
+
 function sidChapter(sid) {
   return Number(sid.slice(sid.indexOf(" ") + 1, sid.indexOf(":")));
 }
@@ -200,7 +203,7 @@ async function runGoodCase(caseName, emitArgs, options = {}) {
   const expectedStableIds = JSON.parse(await readFile(path.join(outDir, "stable-ids.json"), "utf8"));
 
   const { verified, findings } = verifyOne(caseName, packed, source);
-  const receipt = verified.books.get(caseName).receipt;
+  const receipt = receiptFor(verified, caseName).receipt;
   const book = decodeTokens(verified, caseName);
   assert.equal(
     book.tokens.length,
@@ -236,11 +239,15 @@ async function runGoodCase(caseName, emitArgs, options = {}) {
   );
 
   // Chapters are derived from the stream rather than assumed: a corpus can
-  // legitimately hold a front-matter-only book with no `\\c` at all, in which
-  // case `representativeChapters` returns nothing and this book contributes no
-  // selective checks (front matter and a missing `\\c` are exercised passively
-  // by such books flowing through the plain full-materialize assertions above).
-  const chapters = options.selective ? representativeChapters(allChapters(book.tokens)) : [];
+  // legitimately hold a front-matter-only book with no `\\c` at all. Remember
+  // the first one found so the explicit no-chapter assertion below (after the
+  // corpus loop) has a real case rather than only the passive coverage of it
+  // flowing through the full-materialize assertions above.
+  const chapterList = allChapters(book.tokens);
+  if (options.selective && chapterList.length === 0 && noChapterExample === undefined) {
+    noChapterExample = { caseName, verified };
+  }
+  const chapters = options.selective ? representativeChapters(chapterList) : [];
   for (const chapter of chapters) {
     // Independently derived — never read off the implementation's own result —
     // so this is a real check of where the boundary falls, including that
@@ -347,7 +354,7 @@ for (const file of corpusPaths) {
   stats.corpus += 1;
 }
 
-// --- selector and brand faults ----------------------------------------------
+// --- selector faults and forged-handle rejection -----------------------------
 
 {
   const vector = (await goldenVectors("token")).find((entry) => entry.base === undefined);
@@ -359,29 +366,33 @@ for (const file of corpusPaths) {
     (error) => error instanceof PackedError && error.kind === "unknownBook",
     "an unknown path is a typed error",
   );
-  assert.throws(
-    () => materialize({ books: verified.books }),
-    (error) => error instanceof PackedError,
-    "materialize refuses an unbranded handle",
-  );
-  // P1-5: the brand is a module-private `Symbol()`, not `Symbol.for()`. A
-  // look-alike that forges the *interned* name a `Symbol.for` brand would have
-  // used must still be refused, proving no other code in the process can mint
-  // the real brand by guessing its registry key.
-  const forged = { [Symbol.for("usfm-onion.verifiedPacked")]: true, books: verified.books };
+
+  // The handle is opaque: verification state lives in a module-private
+  // WeakMap keyed by the handle's identity, and the handle itself carries no
+  // own properties at all — genuine or not. A look-alike built from the
+  // genuine handle's own property *and* symbol keys is therefore
+  // indistinguishable by shape (both are empty objects), so its rejection
+  // proves the check is real WeakMap membership, not anything inspectable on
+  // the value.
+  const genuineKeys = [
+    ...Object.getOwnPropertyNames(verified),
+    ...Object.getOwnPropertySymbols(verified),
+  ];
+  const forged = Object.freeze(Object.fromEntries(genuineKeys.map((key) => [key, verified[key]])));
+  assert.notEqual(forged, verified, "the look-alike is a different object than the genuine handle");
   assert.throws(
     () => materialize(forged),
     (error) => error instanceof PackedError,
-    "materialize refuses a handle forged with the old Symbol.for name",
+    "materialize refuses a look-alike built from the genuine handle's own keys",
   );
   assert.throws(
     () => decodeTokens(forged, vector.name),
     (error) => error instanceof PackedError,
-    "decodeTokens refuses a forged handle the same way",
+    "decodeTokens refuses the same look-alike",
   );
 }
 
-// --- P1-1: certification outlives caller-side mutation -----------------------
+// --- certification outlives caller-side mutation -----------------------------
 
 {
   const vector = (await goldenVectors("token")).find((entry) => entry.base === undefined);
@@ -391,8 +402,9 @@ for (const file of corpusPaths) {
   const { verified } = verifyOne(caseName, packed, source);
   const before = decodeTokens(verified, caseName);
 
-  // Mutate the caller's own arrays after minting. If the handle held these
-  // same buffers rather than copies, the certification would now be stale.
+  // Mutate the caller's own arrays after minting. If the handle's state held
+  // these same buffers rather than copies, the certification would now be
+  // stale.
   packed.fill(0xff);
   source.fill(0x2a); // '*' — still valid UTF-8, so a copy bug wouldn't be
   // masked by a decode failure; it would just silently return different text.
@@ -403,20 +415,9 @@ for (const file of corpusPaths) {
     null,
     "mutating the caller's packed/source arrays after minting must not change materialized output",
   );
-  // And the handle's own view was never the caller's buffer to begin with.
-  assert.notEqual(
-    verified.books.get(caseName).packed.buffer,
-    packed.buffer,
-    "the handle holds a copy of packed, not the caller's own buffer",
-  );
-  assert.notEqual(
-    verified.books.get(caseName).source.buffer,
-    source.buffer,
-    "the handle holds a copy of source, not the caller's own buffer",
-  );
 }
 
-// --- P2-3/duplicate-book ambiguity -------------------------------------------
+// --- duplicate-book ambiguity -------------------------------------------------
 
 {
   const vector = (await goldenVectors("token")).find((entry) => entry.base === undefined);
@@ -430,13 +431,51 @@ for (const file of corpusPaths) {
     { path: "dup/b", packed, source },
   ]);
   assert.equal(result.ok, true, "two records naming the same book at different paths verify fine");
-  const book = result.verified.books.get("dup/a").receipt.book;
+  const book = receiptFor(result.verified, "dup/a").receipt.book;
   assert.throws(
     () => materialize(result.verified, { book }),
     (error) => error instanceof PackedError && error.kind === "ambiguousBook",
     "selecting by book code is a typed error when two records share it",
   );
   stats.duplicateBook += 1;
+}
+
+// --- no-\c book: chapter selection is a typed error --------------------------
+
+{
+  // A book with no `\c` at all has nothing for `{chapter}` to locate: assert
+  // that explicitly rather than only relying on such a book passively flowing
+  // through the plain full-materialize assertions. Prefer a real corpus
+  // example (`noChapterExample`, captured while the corpus loop ran); fall
+  // back to a tiny synthetic fixture if the corpus happens to have none.
+  let caseName;
+  let verified;
+  if (noChapterExample !== undefined) {
+    ({ caseName, verified } = noChapterExample);
+  } else {
+    caseName = "no-chapter-fixture";
+    const outDir = path.join(workRoot, "no-chapter-fixture");
+    await rm(outDir, { recursive: true, force: true });
+    await mkdir(outDir, { recursive: true });
+    const fixtureUsfm = path.join(outDir, "fixture.usfm");
+    await writeFile(fixtureUsfm, "\\id GEN\n\\h Genesis\n", "utf8");
+    emit(["usfm", fixtureUsfm], outDir);
+    const packed = new Uint8Array(await readFile(path.join(outDir, "packed.bin")));
+    const source = new Uint8Array(await readFile(path.join(outDir, "source.usfm")));
+    ({ verified } = verifyOne(caseName, packed, source));
+    await rm(outDir, { recursive: true, force: true });
+  }
+  const book = decodeTokens(verified, caseName);
+  assert.equal(
+    allChapters(book.tokens).length,
+    0,
+    `${caseName}: this case must genuinely have no chapter, or the assertion below proves nothing`,
+  );
+  assert.throws(
+    () => materialize(verified, { path: caseName, chapter: 1 }),
+    (error) => error instanceof PackedError && error.kind === "unknownChapter",
+    `${caseName}: selecting a chapter in a book with no \\c is a typed error`,
+  );
 }
 
 await rm(workRoot, { recursive: true, force: true });
