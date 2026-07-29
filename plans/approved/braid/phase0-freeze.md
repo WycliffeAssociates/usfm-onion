@@ -1330,3 +1330,110 @@ this advantage was 0H stop-threshold 4).
   shapes are the existing onion DTO shapes; only WHERE materialization runs moved back to JS.
 - Epic §8.1 is respecified around this API in the Phase B part-2 packet; `reconcileFindings`
   deferral to Phase C (§G.2) is unchanged.
+
+## I. Pure-JS materialize — catalog-derived DTO fields (2026-07-29: STOP, proposal pending adjudication)
+
+§H moved materialization to JS and §G.2 fixed its output as "the existing onion DTO shapes — the
+same token DTOs and `LintIssue` DTOs the parse/lint wasm surface returns today". Implementing that
+surfaced a class of gap §H does not address, and it is the same class §F hit: **five DTO fields have
+no storage in the packed bytes at all.** Rust decode does not read them; it *recalls* them by calling
+core — the marker registry and the lint catalog — which is precisely what a section's
+`catalog_stamp` exists to license. A JS decoder holding certified bytes has neither registry nor
+catalog, so it cannot produce those fields from the buffer no matter how correct its bounds checks
+are. Per the freeze-before-implement rule they are proposed here rather than guessed in code.
+
+### I.1 The five fields, with their producing call sites
+
+| # | DTO field | how Rust decode produces it | site |
+| --: | --- | --- | --- |
+| 1 | `Token.markerMetadata` | `marker_metadata(name)` → `resolve_marker_metadata`: registry lookup plus canonical/numbered-variant/nesting resolution | `token_codec.rs` `decode_payload` |
+| 2 | `Token.structural` | `structural_marker_info(name, metadata.kind)` | same |
+| 3 | `LintIssue.category` / `.severity` / `.issueType` / `.template` | `code.category()`, `.severity()`, `.issue_type()`, `.template()` | `finding_codec.rs` `decode_findings` |
+| 4 | `LintIssue.message` | `code.render_message(&params)` = `render_template(template, params)`, the ICU-subset renderer in `src/lint_impl/message.rs` | same |
+| 5 | `LintIssue.marker`, `MarkerRef::CatalogOrdinal` arm | `catalog_marker_name(ordinal)` — position in `marker_catalog().all()` | `catalog.rs` |
+
+Everything else in both DTOs **is** derivable from the certified bytes plus small, deterministic
+formatting the JS side can carry: token `id` (positional `{book}-{index}` from the same rule
+`assign_ids` applies, or the explicit id dictionary), `sid` (`"{book} {chapter}:{locator}"` from the
+packed 8-byte SID record), spans, `source` (a byte slice of the bound source), `nested`, `numberInfo`,
+`bookCode`/`bookCodeValid`, `attributes` (including a mirror of `dto::decode_attr_value`'s two
+escapes), `attributeSource`, and every finding column except the five rows above. The gap is
+catalog recall, not decoding.
+
+### I.2 Why a generated static table cannot cover fields 1 and 2
+
+Marker names are open-ended — `\zmy-thing`, `\q17`, `\+add` — and the values are produced by
+resolution *logic*, not a finite name table; mirroring `marker_defs` into JS is the opposite of this
+crate's single-source contract. But the set of names **one section** can reference is bounded and is
+already enumerated by that section's own marker-descriptor dictionary (token field 11). Measured on
+the largest example-corpus books:
+
+| book | source bytes | tokens | distinct marker forms |
+| --- | --: | --: | --: |
+| `en_ult/43-LUK.usfm` | 4,051,598 | 192,721 | 25 |
+| `en_ult/19-PSA.usfm` | 5,122,298 | 276,987 | 31 |
+
+Four orders of magnitude between the descriptor set and the token stream is what makes the next
+proposal cheap.
+
+### I.3 Proposal for fields 1, 2, 5 — the verification receipt carries catalog resolutions
+
+The wasm verifier already holds the section, the live registry, and a *validated* catalog stamp. It
+returns, per book, the section's descriptor rows already resolved: `{name, nested, markerMetadata,
+structural}` in descriptor-ordinal order. JS attaches them by the descriptor index it reads out of
+the packed column. Field 5 needs no per-book data: the catalog is **238 entries**, so an
+ordinal → name array is generated into `js/wire-schema.js` beside `MARKER_CATALOG_STAMP` and covered
+by the existing drift test.
+
+- No token and no finding object crosses the boundary — §H's constraint holds; ~25–31 descriptor
+  rows do, against 192,721 tokens for the same book.
+- No catalog logic is forked into JS; Rust remains the only thing that reads the registry.
+- **OWNER-DECISION I.3:** is receipt-carried catalog resolution inside "a small verification receipt
+  (per-book stamps/metadata)", or does the receipt stay stamps-only and the gap close some other way?
+
+### I.4 Field 3 — generated per-code catalog rows (recorded as mechanical)
+
+32 rows of `{code, category, severity, issueType, template}` generated into `js/wire-schema.js` from
+the same `LintCodeTag` table already rendered there, drift-tested like the rest. No logic, no new
+boundary data, and `js_schema.rs`'s own header already scopes the semantic catalog as serving
+"runtime JS like message localization". Recorded as mechanical, not raised as a decision.
+
+### I.5 Field 4 — `message` is the actual blocker
+
+`finding_codec.rs`'s module documentation states, normatively, in landed and clean-room-reviewed
+code:
+
+> `message` is rebuilt **only** via `LintCode::render_message` — never a wire-local template
+> renderer — so the English text a decoder produces can never drift from core's own rendering of the
+> same code and params.
+
+A pure-JS materializer that emits `message` **is** a second template renderer. §H did not address
+that rule, so it is raised rather than overridden. Options, none chosen:
+
+- **(a) Mirror `render_template` in JS.** ~130 self-contained lines: `{name}`, `{name, number}`,
+  `{name, select, … other {…}}`, no escaping, unknown formats passed through verbatim. Drift
+  contained by the §H equivalence gate itself (62,948 corpus findings across 395 books, plus the
+  golden vectors). Cost: a second renderer exists; the quoted rule must be amended to "never an
+  *ungated* renderer" rather than "never".
+- **(b) Omit `message` from JS-materialized findings**, and let consumers render from `template` +
+  `messageParams` — which core's own doc comment names as the localiser contract. Cost: the JS
+  finding DTO is no longer field-identical to the wasm one, so the §H equivalence gate cannot be a
+  strict deep-equal for findings, and any consumer reading `.message` breaks.
+- **(c) JS materializes tokens only; findings stay Rust-materialized.** One renderer, one finding
+  decoder, and the boundary win is kept where it was measured: the corpus averages 159 findings per
+  book (62,948 / 395) against 192,721 tokens for one book. Cost: `materialize`'s findings half
+  marshals objects, which is what §H reversed for tokens.
+- **(d) wasm exports `renderMessage(code, params)`**, called per finding from JS. One renderer, but
+  per-finding boundary crossings and `materialize` is no longer pure JS.
+
+- **OWNER-DECISION I.5:** which option. If a recommendation is useful: (c) for v1, with (a) available
+  later — the 0H advantage §H is protecting is a token-volume phenomenon, and findings are three
+  orders of magnitude smaller per book.
+
+### I.6 What is blocked
+
+**All of Phase B part 2**, not a subset of it. `decodeTokens` needs fields 1–2 exactly as much as
+`materialize` does, so there is no tokens-only slice that ships on the current freeze text; and the
+epic §8.1 respec is blocked with the implementation, because the receipt's contents (I.3) and the
+finding boundary (I.5) are the two shapes the respec exists to pin. The Rust half of Phase B
+(`e2bcc0e`) is unaffected, as is everything already landed.

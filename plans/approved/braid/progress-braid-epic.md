@@ -2196,3 +2196,39 @@ fixed in place, same files, same gates.
   `VerifiedPacked`, official pure-JS `materialize`/`decodeTokens`, Rust↔JS serde-JSON
   equivalence gate, epic §8.1 respec — per freeze §H. Braid seeding inside `restoreCorpus`
   arrives with Phase C when braid exists; part 2 ships verification + JS materialization only.
+
+## 2026-07-29 — Phase B part 2 STOPPED before any code: catalog-derived DTO fields (freeze §I)
+
+- The packet (wasm verify surface + branded `VerifiedPacked` + pure-JS `materialize`/`decodeTokens`
+  + Rust↔JS equivalence gate + epic §8.1 respec) stopped at the read-the-normative-docs stage. Cause:
+  five fields of the DTO shapes §G.2 pins as the output have **no storage in the packed bytes**. Rust
+  decode does not read them from the buffer, it recalls them by calling core under the licence of the
+  section's `catalog_stamp`: `Token.markerMetadata` (`marker_metadata`), `Token.structural`
+  (`structural_marker_info`), `LintIssue.{category,severity,issueType,template}` (per-code catalog),
+  `LintIssue.message` (`LintCode::render_message`), and `LintIssue.marker`'s catalog-ordinal arm
+  (`catalog_marker_name`). A JS decoder holding certified bytes has no registry and no catalog, so
+  bounds-checking correctness does not help it produce any of them.
+- Verified, not assumed, that the rest of both DTOs *is* JS-derivable from the certified bytes plus
+  small deterministic formatting: token id (positional rule or explicit dictionary), sid string,
+  spans, source slice, nested, numberInfo, bookCode/valid, attributes (incl. a mirror of
+  `decode_attr_value`'s two escapes), attributeSource, and every finding column outside the five.
+- Recorded as freeze **§I** in the §F house style: evidence table of the five producing call sites,
+  why a static JS table cannot cover the marker fields (open-ended names, resolution logic), and a
+  proposal per field. §I.3 proposes the verification receipt carry the section's descriptor rows
+  already resolved (`{name, nested, markerMetadata, structural}`, descriptor-ordinal order) plus a
+  generated 238-entry ordinal→name array in `js/wire-schema.js` — **OWNER-DECISION** on whether that
+  is inside §H's "per-book stamps/metadata". §I.4 records the 32-row per-code catalog table as
+  mechanical. §I.5 is the real blocker and carries four options with costs — **OWNER-DECISION**.
+- §I.5's blocker in one line: `finding_codec.rs`'s module doc says, normatively, "`message` is
+  rebuilt **only** via `LintCode::render_message` — never a wire-local template renderer", and a
+  pure-JS materializer emitting `message` is exactly a second renderer. §H addressed hashing, not
+  rendering, so this was raised rather than overridden.
+- Sizing measured for the proposal rather than estimated: `en_ult/43-LUK.usfm` is 4,051,598 bytes /
+  192,721 tokens / 25 distinct marker forms; `19-PSA.usfm` is 5,122,298 / 276,987 / 31; the marker
+  catalog is 238 entries; the corpus averages 159 findings per book (62,948 / 395).
+- **No production code, no JS, no wasm export, and no §8.1 respec was written.** §I.6 records why the
+  respec is blocked with the implementation rather than ahead of it: the receipt's contents (§I.3) and
+  the finding boundary (§I.5) are the two shapes the respec exists to pin, so writing it first would
+  bake in the guesses this STOP exists to avoid. `decodeTokens` is blocked identically to
+  `materialize` — it needs the two marker fields — so there is no shippable subset either.
+- Unaffected: the Phase B Rust half at `e2bcc0e`, and every gate it left green.
