@@ -49,10 +49,12 @@ pub use usfm_onion_wire::dto::{
     DiffOptions, HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory,
     LintCode, LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily,
     MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide, NoteFamily,
-    NoteSubkind, NumberInfo, NumberRangeKind, ParagraphCategory, SlotRole, Span, SpecContext,
-    StructuralMarkerInfo, StructuralScopeKind, TextDiffMode, TextDiffRun, TextDiffRunKind, Token,
-    TokenKind, UnitTextDiff, format_sid, map_marker_info,
+    NoteSubkind, NumberInfo, NumberRangeKind, PackedBookReceipt, PackedDecodeError,
+    PackedMarkerDescriptor, ParagraphCategory, SlotRole, Span, SpecContext, StructuralMarkerInfo,
+    StructuralScopeKind, TextDiffMode, TextDiffRun, TextDiffRunKind, Token, TokenKind,
+    UnitTextDiff, format_sid, map_marker_info,
 };
+use usfm_onion_wire::verify::verify_book as verify_packed_book;
 
 // TODO: eventually move off of this ideally
 #[wasm_bindgen(typescript_custom_section)]
@@ -696,6 +698,59 @@ impl UsfmMarkerCatalog {
 #[wasm_bindgen(js_name = parse)]
 pub fn wasm_parse(source: &str) -> ParsedUsfm {
     ParsedUsfm::new(source.to_string())
+}
+
+/// What [`wasm_verify_packed_book`] reports for one record.
+///
+/// A rejection is a *value*, not a thrown exception: it is an expected outcome
+/// (the caller falls back to normal USFM ingest) and it carries the frozen
+/// `DecodeError` variant rather than a message a consumer would have to parse.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PackedBookOutcome {
+    Verified {
+        receipt: PackedBookReceipt,
+        findings: Vec<LintIssue>,
+    },
+    Rejected {
+        error: PackedDecodeError,
+    },
+}
+
+/// The packed trust boundary: verifies one book's container against its exact
+/// source and returns the receipt plus that book's findings.
+///
+/// This runs the whole Rust boundary — container/section structure, both
+/// integrity checksums, exact source length and XXH3 content hash, the
+/// marker-catalog stamp, every discriminant, index range, and reserved byte.
+/// Nothing but tokens is left for the caller to materialize, and no token
+/// object crosses this boundary. Findings are materialized here so
+/// `LintIssue.message` keeps a single renderer (core's), in a single language.
+///
+/// `source` is bytes rather than a string so the caller can hand over the same
+/// buffer it read from disk without a UTF-16 round trip; non-UTF-8 source is a
+/// rejection, not a panic.
+#[wasm_bindgen(js_name = verifyPackedBook)]
+pub fn wasm_verify_packed_book(packed: &[u8], source: &[u8]) -> PackedBookOutcome {
+    let Ok(text) = std::str::from_utf8(source) else {
+        return PackedBookOutcome::Rejected {
+            error: PackedDecodeError::InvalidUtf8,
+        };
+    };
+    match verify_packed_book(packed, text) {
+        Ok(verified) => PackedBookOutcome::Verified {
+            receipt: verified.receipt,
+            findings: verified.findings.into_iter().map(map_lint_issue).collect(),
+        },
+        Err(error) => PackedBookOutcome::Rejected {
+            error: error.into(),
+        },
+    }
 }
 
 #[wasm_bindgen(js_name = lintUsfm)]

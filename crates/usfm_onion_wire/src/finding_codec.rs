@@ -34,7 +34,9 @@ use crate::finding_section::{
     FindingColumns, FindingDecodeInputs, FindingRowInput, FindingSectionBuffers, MarkerRef,
 };
 use crate::schema::{LintCodeTag, SectionKind, param_contract};
-use crate::token_codec::{DecodedTokens, anchor_fidelity, decode_token_section, encode_token_section};
+use crate::token_codec::{
+    DecodedTokens, anchor_fidelity, decode_token_section, encode_token_section,
+};
 
 /// Encodes one book's parsed tokens and lint issues into a single container
 /// with a token section and a paired finding section.
@@ -83,16 +85,35 @@ pub fn decode_book<'a>(bytes: &'a [u8], source: &'a str) -> Result<Vec<LintIssue
         return Err(DecodeError::InvalidToc);
     }
     let book = toc[token_index].book;
-    let token_section = container.section(token_index).ok_or(DecodeError::InvalidToc)??;
-    let finding_section = container.section(finding_index).ok_or(DecodeError::InvalidToc)??;
+    let token_section = container
+        .section(token_index)
+        .ok_or(DecodeError::InvalidToc)??;
+    let finding_section = container
+        .section(finding_index)
+        .ok_or(DecodeError::InvalidToc)??;
 
     let decoded_tokens = decode_token_section(&token_section, source)?;
-    let token_ids = resolve_token_ids(&decoded_tokens);
+    decode_finding_section(&finding_section, book, source, &decoded_tokens)
+}
+
+/// Trust-checks one finding section against the live source and registry, then
+/// materializes its rows against the already-decoded token section.
+///
+/// Shared by [`decode_book`] and [`crate::verify::verify_book`] so the three
+/// checks below exist once: a second copy is exactly how one caller would
+/// quietly end up trusting a catalog-derived value the other refuses.
+pub(crate) fn decode_finding_section<'a>(
+    finding_section: &crate::container::Section<'a>,
+    book: BookId,
+    source: &'a str,
+    decoded_tokens: &DecodedTokens<'a>,
+) -> Result<Vec<LintIssue>, DecodeError> {
+    let token_ids = resolve_token_ids(decoded_tokens);
     let inputs = FindingDecodeInputs {
         token_count: u32::try_from(decoded_tokens.tokens.len())
             .map_err(|_| DecodeError::OffsetOverflow)?,
     };
-    let columns = FindingColumns::from_section(&finding_section, inputs)?;
+    let columns = FindingColumns::from_section(finding_section, inputs)?;
     // The finding section carries its own copy of the exact facts the token
     // section already bound to (source length/hash, marker-catalog stamp);
     // both must be checked against the live source and registry before any
@@ -137,7 +158,10 @@ fn resolve_token_ids(decoded: &DecodedTokens<'_>) -> Vec<String> {
 /// caller comparing an unsorted `LintResult` against a decoded one needs the
 /// same key — [`encode_book`]/[`encode_findings`] always apply it before
 /// building rows.
-pub fn canonical_order(issues: &mut [LintIssue], resolve_row: impl Fn(Option<&str>) -> Option<u32>) {
+pub fn canonical_order(
+    issues: &mut [LintIssue],
+    resolve_row: impl Fn(Option<&str>) -> Option<u32>,
+) {
     let key = |issue: &LintIssue| -> (u32, &str, u32) {
         (
             resolve_row(issue.token_id.as_deref()).unwrap_or(u32::MAX),
@@ -181,10 +205,11 @@ pub(crate) fn encode_findings(
     // because canonical order is itself keyed on these row positions.
     let mut ids: Vec<String> = Vec::with_capacity(tokens.len());
     for token in tokens {
-        ids.push(token.id().ok_or(EncodeError::UnboundSpan {
-            book,
-            token_idx: 0,
-        })?);
+        ids.push(
+            token
+                .id()
+                .ok_or(EncodeError::UnboundSpan { book, token_idx: 0 })?,
+        );
     }
     let mut resolver: BTreeMap<&str, u32> = BTreeMap::new();
     for (row, id) in ids.iter().enumerate() {
@@ -192,12 +217,16 @@ pub(crate) fn encode_findings(
     }
 
     let mut sorted: Vec<LintIssue> = issues.to_vec();
-    canonical_order(&mut sorted, |id| id.and_then(|id| resolver.get(id).copied()));
+    canonical_order(&mut sorted, |id| {
+        id.and_then(|id| resolver.get(id).copied())
+    });
 
     let fidelity = anchor_fidelity(tokens);
     let mut rows = Vec::with_capacity(sorted.len());
     for issue in &sorted {
-        rows.push(issue_to_row(book, source, tokens, &resolver, &fidelity, issue)?);
+        rows.push(issue_to_row(
+            book, source, tokens, &resolver, &fidelity, issue,
+        )?);
     }
     FindingSectionBuffers::new(
         book,
@@ -268,9 +297,7 @@ fn issue_to_row(
     };
     let (offset, len) = match (issue.span, token_row) {
         (None, None) => (0u32, 0u32),
-        (Some(span), Some(row)) => {
-            span_within_token(book, code, tokens[row as usize].span, span)?
-        }
+        (Some(span), Some(row)) => span_within_token(book, code, tokens[row as usize].span, span)?,
         _ => return Err(err()),
     };
 
@@ -420,7 +447,9 @@ pub(crate) fn decode_findings(
         let related_span = row
             .related
             .map(|(idx, offset, len)| -> Result<Span, DecodeError> {
-                let related_token = tokens.get(idx as usize).ok_or(DecodeError::InvalidSection)?;
+                let related_token = tokens
+                    .get(idx as usize)
+                    .ok_or(DecodeError::InvalidSection)?;
                 resolve_span(related_token.span, offset, len)
             })
             .transpose()?;
@@ -670,7 +699,10 @@ mod tests {
             .iter()
             .find(|issue| issue.code == LintCode::UnknownToken)
             .expect("jammed marker+text fires unknown-token");
-        assert_eq!(issue.message_params.get("text").map(String::as_str), Some("\\pWord"));
+        assert_eq!(
+            issue.message_params.get("text").map(String::as_str),
+            Some("\\pWord")
+        );
 
         let bytes = encode_book(book("GEN"), source, &tokens, std::slice::from_ref(issue)).unwrap();
         let decoded = decode_book(&bytes, source).unwrap();
@@ -725,9 +757,13 @@ mod tests {
             fix: None,
         };
 
-        let bytes =
-            encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&issue))
-                .unwrap();
+        let bytes = encode_book(
+            book("GEN"),
+            source,
+            &parsed.tokens,
+            std::slice::from_ref(&issue),
+        )
+        .unwrap();
         let decoded = decode_book(&bytes, source).unwrap();
         assert_eq!(decoded.len(), 1);
         assert!(issue_round_trips(&issue, &decoded[0]));
@@ -830,14 +866,24 @@ mod tests {
         let mut wrong_message = issue.clone();
         wrong_message.message = "not what the catalog would render".to_string();
         assert!(matches!(
-            encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&wrong_message)),
+            encode_book(
+                book("GEN"),
+                source,
+                &parsed.tokens,
+                std::slice::from_ref(&wrong_message)
+            ),
             Err(EncodeError::UnrepresentablePayload { .. })
         ));
 
         issue.severity = usfm_onion::lint::LintSeverity::Error;
         assert_ne!(issue.severity, LintCode::BookCodeNotUppercase.severity());
         assert!(matches!(
-            encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&issue)),
+            encode_book(
+                book("GEN"),
+                source,
+                &parsed.tokens,
+                std::slice::from_ref(&issue)
+            ),
             Err(EncodeError::UnrepresentablePayload { .. })
         ));
     }
@@ -862,8 +908,10 @@ mod tests {
         let issues_b = lint_tokens(&parsed_b.tokens, LintOptions::scoped(LintScope::Book)).issues;
         let token_a = encode_token_section(book("GEN"), source_a, &parsed_a.tokens).unwrap();
         let token_b = encode_token_section(book("EXO"), source_b, &parsed_b.tokens).unwrap();
-        let finding_a = encode_findings(book("GEN"), source_a, &parsed_a.tokens, &issues_a).unwrap();
-        let finding_b = encode_findings(book("EXO"), source_b, &parsed_b.tokens, &issues_b).unwrap();
+        let finding_a =
+            encode_findings(book("GEN"), source_a, &parsed_a.tokens, &issues_a).unwrap();
+        let finding_b =
+            encode_findings(book("EXO"), source_b, &parsed_b.tokens, &issues_b).unwrap();
         let bytes = write_container(
             0,
             &[
@@ -886,7 +934,9 @@ mod tests {
         let common_row_offset = {
             let container = read_container(bytes).unwrap();
             let section = container.section(1).unwrap().unwrap();
-            let field = section.field(crate::schema::finding_field::COMMON_ROW).unwrap();
+            let field = section
+                .field(crate::schema::finding_field::COMMON_ROW)
+                .unwrap();
             field.bytes.as_ptr() as usize - bytes.as_ptr() as usize
         };
         (finding_offset, common_row_offset)
@@ -928,8 +978,13 @@ mod tests {
             marker: Some("v".to_string()),
             fix: None,
         };
-        let base = encode_book(book("GEN"), source, &parsed.tokens, std::slice::from_ref(&issue))
-            .unwrap();
+        let base = encode_book(
+            book("GEN"),
+            source,
+            &parsed.tokens,
+            std::slice::from_ref(&issue),
+        )
+        .unwrap();
 
         // (a) primary span offset/len escape the anchor token's own span.
         {
@@ -938,7 +993,10 @@ mod tests {
             bytes[row_offset + 6..row_offset + 8].copy_from_slice(&60_000u16.to_le_bytes());
             restamp_section(&mut bytes, finding_offset);
             restamp_container(&mut bytes);
-            assert_eq!(decode_book(&bytes, source), Err(DecodeError::InvalidSection));
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
         }
 
         // (b) stale source_len: the finding section's own recorded source
@@ -972,7 +1030,10 @@ mod tests {
                 .copy_from_slice(&0xdead_beef_dead_beefu64.to_le_bytes());
             restamp_section(&mut bytes, finding_offset);
             restamp_container(&mut bytes);
-            assert_eq!(decode_book(&bytes, source), Err(DecodeError::CatalogMismatch));
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::CatalogMismatch)
+            );
         }
 
         // (d) contradictory flags: force ANCHOR_ONLY on top of a row whose
@@ -1007,7 +1068,10 @@ mod tests {
             bytes[row_offset + 14] |= 0x01; // ANCHOR_ONLY, on top of the existing NO_ANCHOR bit
             restamp_section(&mut bytes, finding_offset);
             restamp_container(&mut bytes);
-            assert_eq!(decode_book(&bytes, source), Err(DecodeError::InvalidSection));
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
         }
     }
 }

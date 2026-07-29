@@ -1534,6 +1534,107 @@ impl From<HtmlCallerScope> for NativeHtmlCallerScope {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Packed-verification DTOs — the receipt a non-Rust materializer stands on.
+//
+// The packed bytes deliberately store no `markerMetadata`/`structural`: both
+// are pure functions of the marker name under the section's verified
+// `catalog_stamp`, so the Rust decoder recalls them from the registry instead.
+// A JS decoder has no registry, so the verifier hands back the resolved rows
+// for the marker forms this book actually references — 25-31 for a whole
+// scripture book, against hundreds of thousands of tokens. No token and no
+// finding object is in this receipt.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct PackedMarkerDescriptor {
+    pub name: String,
+    pub nested: bool,
+    pub marker_metadata: MarkerMetadata,
+    pub structural: StructuralMarkerInfo,
+}
+
+/// One book's attestation of what the Rust trust boundary checked.
+///
+/// The three `u64` integrity values are 16-character lowercase hex strings.
+/// They are an audit record, never an input to a check: a consumer of this
+/// receipt has already been told the bytes are certified, and there is no JS
+/// hash implementation to re-derive them with.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct PackedBookReceipt {
+    pub book: String,
+    pub source_len: u32,
+    pub token_count: u32,
+    pub finding_count: u32,
+    /// True when token ids are `{book}-{index}` and the id column/dictionary are
+    /// absent, so a materializer synthesizes them.
+    pub positional_ids: bool,
+    pub source_hash: String,
+    pub catalog_stamp: String,
+    pub snapshot_id: String,
+    /// Descriptor-ordinal order: the packed marker-descriptor-index column
+    /// indexes straight into this list.
+    pub descriptors: Vec<PackedMarkerDescriptor>,
+}
+
+/// The frozen [`crate::error::DecodeError`] set as a tagged boundary value.
+///
+/// Variant names and payloads are the same contract the Rust enum carries; the
+/// tag exists so a TypeScript consumer can narrow instead of string-matching a
+/// message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PackedDecodeError {
+    Truncated,
+    BadMagic,
+    UnsupportedVersion { found: u16 },
+    UnsupportedFlags { found: u32 },
+    InvalidToc,
+    InvalidSection,
+    InvalidUtf8,
+    InvalidDiscriminant,
+    OffsetOverflow,
+    TooManySids { found: u32 },
+    ChecksumMismatch,
+    CatalogMismatch,
+    SourceLengthMismatch,
+    SourceHashMismatch,
+}
+
+impl From<crate::error::DecodeError> for PackedDecodeError {
+    fn from(value: crate::error::DecodeError) -> Self {
+        use crate::error::DecodeError as E;
+        match value {
+            E::Truncated => Self::Truncated,
+            E::BadMagic => Self::BadMagic,
+            E::UnsupportedVersion { found } => Self::UnsupportedVersion { found },
+            E::UnsupportedFlags { found } => Self::UnsupportedFlags { found },
+            E::InvalidToc => Self::InvalidToc,
+            E::InvalidSection => Self::InvalidSection,
+            E::InvalidUtf8 => Self::InvalidUtf8,
+            E::InvalidDiscriminant => Self::InvalidDiscriminant,
+            E::OffsetOverflow => Self::OffsetOverflow,
+            E::TooManySids { found } => Self::TooManySids { found },
+            E::ChecksumMismatch => Self::ChecksumMismatch,
+            E::CatalogMismatch => Self::CatalogMismatch,
+            E::SourceLengthMismatch => Self::SourceLengthMismatch,
+            E::SourceHashMismatch => Self::SourceHashMismatch,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};

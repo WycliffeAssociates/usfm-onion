@@ -69,6 +69,29 @@ const TOKEN_FIELD_NAMES: [&str; 13] = [
     "packedSidDictionary",
 ];
 
+/// `dto::TokenKind`'s serde wire strings, in [`schema::TokenKindTag`] order, so
+/// a JS decoder can turn a packed kind tag into the exact string the wasm token
+/// DTO carries. Written out rather than derived because serde's `rename_all`
+/// is not reflectable at runtime;
+/// [`tests::kind_wire_strings_match_the_dto_serde_contract`] pins every entry
+/// against the real `Serialize` output.
+const TOKEN_KIND_WIRE: [&str; 9] = [
+    "newline",
+    "optBreak",
+    "marker",
+    "endMarker",
+    "milestone",
+    "milestoneEnd",
+    "bookCode",
+    "number",
+    "text",
+];
+
+/// `dto::NumberRangeKind`'s serde wire strings, in
+/// [`schema::NumberRangeKindTag`] order. Same rationale and same pinning test as
+/// [`TOKEN_KIND_WIRE`].
+const NUMBER_RANGE_KIND_WIRE: [&str; 4] = ["single", "range", "sequence", "sequenceWithRange"];
+
 /// Display names for `finding_field::TABLE`, in the same dense id order.
 const FINDING_FIELD_NAMES: [&str; 9] = [
     "commonRow",
@@ -232,6 +255,14 @@ pub fn render() -> (String, String) {
     )
     .unwrap();
 
+    render_wire_strings(&mut js, &mut dts, "TOKEN_KIND_WIRE", &TOKEN_KIND_WIRE);
+    render_wire_strings(
+        &mut js,
+        &mut dts,
+        "NUMBER_RANGE_KIND_WIRE",
+        &NUMBER_RANGE_KIND_WIRE,
+    );
+
     writeln!(
         js,
         "\nexport const SECTION_KIND = {{\n  Token: 0,\n  Finding: 1,\n}};"
@@ -300,6 +331,26 @@ pub fn render() -> (String, String) {
     .unwrap();
 
     (js, dts)
+}
+
+/// Emits a tag-indexed array of serde wire strings: `array[tag]` is the string
+/// the DTO serializes that discriminant as.
+fn render_wire_strings(js: &mut String, dts: &mut String, export_name: &str, values: &[&str]) {
+    writeln!(
+        js,
+        "\nexport const {export_name} = [{}];",
+        values
+            .iter()
+            .map(|value| format!("{value:?}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+    .unwrap();
+    writeln!(
+        dts,
+        "\nexport declare const {export_name}: readonly string[];"
+    )
+    .unwrap();
 }
 
 fn render_field_table(
@@ -375,6 +426,41 @@ mod tests {
             "js/wire-schema.d.ts is stale — regenerate with `{}`",
             super::GENERATOR_COMMAND
         );
+    }
+
+    /// The generated kind strings are what a JS materializer stamps onto every
+    /// token, so they must be the DTO's own serde output and not a plausible
+    /// guess at serde's casing rule.
+    #[test]
+    fn kind_wire_strings_match_the_dto_serde_contract() {
+        use crate::dto::{NumberRangeKind, TokenKind};
+        use crate::schema::{NumberRangeKindTag, TokenKindTag};
+        use usfm_onion::token::{
+            NumberRangeKind as NativeNumberRangeKind, TokenKind as NativeTokenKind,
+        };
+
+        for (tag, expected) in super::TOKEN_KIND_WIRE.iter().enumerate() {
+            let native: NativeTokenKind = TokenKindTag::from_u8(tag as u8)
+                .expect("every index is a frozen tag")
+                .into();
+            let wire: TokenKind = native.into();
+            assert_eq!(
+                serde_json::to_value(wire).unwrap(),
+                serde_json::Value::String((*expected).to_string()),
+                "TOKEN_KIND_WIRE[{tag}]"
+            );
+        }
+        for (tag, expected) in super::NUMBER_RANGE_KIND_WIRE.iter().enumerate() {
+            let native: NativeNumberRangeKind = NumberRangeKindTag::from_u8(tag as u8)
+                .expect("every index is a frozen tag")
+                .into();
+            let wire: NumberRangeKind = native.into();
+            assert_eq!(
+                serde_json::to_value(wire).unwrap(),
+                serde_json::Value::String((*expected).to_string()),
+                "NUMBER_RANGE_KIND_WIRE[{tag}]"
+            );
+        }
     }
 
     #[test]

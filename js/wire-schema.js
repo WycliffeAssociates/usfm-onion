@@ -92,6 +92,10 @@ export const NUMBER_RANGE_KIND = {
   SequenceWithRange: 3,
 };
 
+export const TOKEN_KIND_WIRE = ["newline", "optBreak", "marker", "endMarker", "milestone", "milestoneEnd", "bookCode", "number", "text"];
+
+export const NUMBER_RANGE_KIND_WIRE = ["single", "range", "sequence", "sequenceWithRange"];
+
 export const SECTION_KIND = {
   Token: 0,
   Finding: 1,

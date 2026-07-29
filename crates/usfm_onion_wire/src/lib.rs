@@ -30,6 +30,7 @@ mod token_codec;
 mod token_payload;
 #[allow(dead_code)]
 mod token_section;
+pub mod verify;
 
 #[cfg(test)]
 mod container_tests;

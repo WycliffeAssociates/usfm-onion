@@ -92,6 +92,10 @@ export declare const NUMBER_RANGE_KIND: Readonly<{
   SequenceWithRange: 3;
 }>;
 
+export declare const TOKEN_KIND_WIRE: readonly string[];
+
+export declare const NUMBER_RANGE_KIND_WIRE: readonly string[];
+
 export declare const SECTION_KIND: Readonly<{ Token: 0; Finding: 1 }>;
 
 export declare const TOKEN_FIELD: readonly Readonly<{ id: number; name: string; elementWidth: number | null; required: boolean }>[];
