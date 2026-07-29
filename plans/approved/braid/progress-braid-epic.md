@@ -2182,3 +2182,17 @@ fixed in place, same files, same gates.
   release — byte-identical totals (62,948 findings, same 26 per-code counts) before and after the
   canonical-order rekey, confirming it is not an observable behavior change for any current corpus
   fixture.
+
+## 2026-07-29 — Phase B Rust finding codec: clean-room re-review PASSED
+
+- Verdict from the owner's clean-room reviewer: `e2bcc0e` resolves all eight prior findings; no
+  remaining blockers in the fix delta. Wide-SID refusal accepted as defense-in-depth on the
+  `Sid::with_range` saturation proof. `(offset != 0, len == 0)` explicitly ruled a non-issue
+  (frozen meaning of `len == 0` is whole-token; encoder stays canonical with `(0,0)`). Noted,
+  not a regression: older plan citations elsewhere in `schema.rs` predate the fix round.
+- Reviewer verification: wire 168 passed, workspace green, lint oracle passed, release finding
+  corpus gate 62,948 findings. First-reviewer verification matched independently.
+- The Phase B **Rust** half is closed. Next packet (part 2): wasm verify surface + branded
+  `VerifiedPacked`, official pure-JS `materialize`/`decodeTokens`, Rust↔JS serde-JSON
+  equivalence gate, epic §8.1 respec — per freeze §H. Braid seeding inside `restoreCorpus`
+  arrives with Phase C when braid exists; part 2 ships verification + JS materialization only.
