@@ -9,7 +9,8 @@
     "./pkg-web/usfm_onion_web.js"
   ],
   "files": [
-    "js",
+    "js/*.js",
+    "js/*.d.ts",
     "pkg-bundler",
     "pkg-web",
     "README.md",

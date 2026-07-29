@@ -1,17 +1,18 @@
 // Type-check fixture for js/packed.d.ts. Not a runtime test: `tsc --noEmit`
 // over this file is the check (see package.json's `test:packed:types`). It
-// exists so a `.d.ts` edit that silently widens a frozen §8.1 type back to
-// `unknown`/`Record<string, unknown>` fails a gate instead of only a reviewer's
-// eyeball.
+// exists so a `.d.ts` edit that silently widens a frozen domain type back to
+// `unknown`/`Record<string, unknown>` fails a gate instead of only a
+// reviewer's eyeball.
 //
 // A small, realistic consumer: verify a corpus, materialize it two ways, and
-// touch the fields whose types are load-bearing (P1-2) — `markerMetadata`,
+// touch the fields whose types are load-bearing — `markerMetadata`,
 // `structural`, `messageParams`, `token.kind` — so TypeScript actually checks
 // them rather than merely accepting `any`.
 
 import {
   decodeTokens,
   materialize,
+  receiptFor,
   verifyPackedCorpus,
   type MaterializedBook,
   type PackedRecord,
@@ -27,6 +28,10 @@ const result: VerifyPackedResult = verifyPackedCorpus(wasm as never, records);
 if (result.ok) {
   const verified: VerifiedPacked = result.verified;
 
+  // The handle is opaque: it has no public data members at all.
+  // @ts-expect-error `VerifiedPacked` carries no `.books` (or anything else).
+  void verified.books;
+
   // `findings` must be the real `LintIssue[]`, not `unknown[]` — exercise a
   // field that only exists on the frozen DTO.
   for (const issues of result.findings.values()) {
@@ -38,12 +43,14 @@ if (result.ok) {
     }
   }
 
-  // The receipt's own descriptor rows (freeze §I.3) are the other place a
+  // The receipt's own descriptor rows are the other place a
   // `markerMetadata`/`structural` type lives — separate from `Token`'s copy —
   // so both must be checked, not just the one the fixture happens to reach
-  // through a token.
-  for (const b of verified.books.values()) {
-    for (const descriptor of b.receipt.descriptors) {
+  // through a token. `VerifiedPacked` is opaque, so this goes through the
+  // explicit snapshot accessor rather than any field on the handle.
+  for (const record of records) {
+    const { receipt } = receiptFor(verified, record.path);
+    for (const descriptor of receipt.descriptors) {
       const canonical: string | undefined = descriptor.markerMetadata.canonical;
       const scopeKind: string = descriptor.structural.scopeKind;
       void canonical;
