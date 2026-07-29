@@ -2447,3 +2447,39 @@ in every prior packet.
 
 **Not done:** nothing outstanding from the round-3 list; reviewer-confirmed items (pkg-bundler type
 import packaging safety, first/middle/final/front-matter selective coverage) required no action.
+
+## 2026-07-29 — Phase B part 2 clean-room round 4 (closing round): frozen descriptor tree
+
+One behavioral P1 plus comment cleanup, landed in two commits (`27a574c`, `3a83fdc`; this ledger
+entry is the third). Round 3's WeakMap opacity, frozen schema exports, forged-handle rejection, and
+no-\c coverage all passed clean-room re-review with no further action.
+
+- **P1 (behavioral).** `tokenReader` attaches `descriptor.markerMetadata`/`.structural` to every
+  materialized token by reference from the private receipt. Reviewer repro: mutate one returned
+  token's `markerMetadata.canonical`, every later materialization of the same book reports the
+  mutated value, because every token sharing that marker form points at the same object. Fixed by
+  deep-freezing `receipt.descriptors` once per book at verify/store time
+  (`verifyPackedCorpus`) — one-time O(descriptor-count) (a few dozen rows/book), explicitly not
+  O(token-count): cloning per token or per `materialize` call was ruled out as wasted work. Mutation
+  now throws `TypeError` under strict mode; a consumer wanting a decorated copy clones it itself.
+  Regression added: materialize, assert mutating a token's `markerMetadata` throws, materialize
+  again, assert unchanged output. Manually confirmed the assertion actually catches the bug (probed
+  the pre-fix mutation path directly; it silently succeeded and leaked, as the reviewer described).
+- **Comment fixes:** dropped the reintroduced "epic §8.1" citation from `VerifiedPacked`'s doc;
+  corrected the field-width comment that falsely claimed a widened column "stays correct without a
+  matching code change" (the fixed `getUint16`/`getUint32` calls still assume today's widths — only
+  the stride is generic); `receiptFor`'s doc in both `packed.js` and `packed.d.ts` now calls its
+  return value a "detached snapshot" rather than "read-only" (`structuredClone` produces an ordinary
+  mutable object; mutating it just never reaches the decoder).
+
+**Gates, exact counts:** `cargo test --workspace` 0 failed; `lint_oracle -- --ignored` green;
+`js_schema::tests` (drift test, unaffected by this round) green; `tsc --noEmit -p
+tsconfig.packed-fixture.json` green (no public type shapes changed, only doc comments); `npm run
+test:packed`/`test:packed:web` both green — 409 cases / 5,717,137 tokens, 14 good goldens, 11
+malformed, 395 corpus books, 715 chapter-selective slices, 1 duplicate-book check, plus the new
+frozen-descriptor-tree assertion passing silently within the same run.
+
+**Not committed:** `pkg-bundler`/`pkg-web`, restored via `git checkout --` after every dev build.
+
+**Not done:** nothing outstanding — this is the closing round for the Phase B part 2 packed verify
+surface fix cycle.
