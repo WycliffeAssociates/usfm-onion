@@ -1,6 +1,13 @@
 // Types for ./packed.js — packed-corpus verification glue and the pure-JS token
-// materializer. See epic §8.1 and freeze §H/§I for the boundary contract: Rust
-// certifies bytes and materializes findings; JS materializes tokens.
+// materializer. The boundary contract: Rust certifies bytes and materializes
+// findings; JS materializes tokens.
+
+import type {
+  LintIssue,
+  MarkerMetadata,
+  StructuralMarkerInfo,
+  Token,
+} from "../pkg-bundler/usfm_onion_web.js";
 
 /** One record to restore: the caller's key, the packed container, its exact source. */
 export type PackedRecord = Readonly<{
@@ -13,8 +20,8 @@ export type PackedRecord = Readonly<{
 export type PackedMarkerDescriptor = Readonly<{
   name: string;
   nested: boolean;
-  markerMetadata: Readonly<Record<string, unknown>>;
-  structural: Readonly<Record<string, unknown>>;
+  markerMetadata: MarkerMetadata;
+  structural: StructuralMarkerInfo;
 }>;
 
 /**
@@ -70,7 +77,7 @@ export type VerifiedPacked = Readonly<{
 
 /** What the wasm export returns for one record. A rejection is a value, not a throw. */
 export type PackedBookOutcome =
-  | Readonly<{ status: "verified"; receipt: PackedBookReceipt; findings: readonly unknown[] }>
+  | Readonly<{ status: "verified"; receipt: PackedBookReceipt; findings: readonly LintIssue[] }>
   | Readonly<{ status: "rejected"; error: PackedDecodeError }>;
 
 export type VerifyPackedResult =
@@ -78,23 +85,24 @@ export type VerifyPackedResult =
       ok: true;
       verified: VerifiedPacked;
       /** Rust-materialized `LintIssue` DTOs, keyed by `path`. */
-      findings: ReadonlyMap<string, readonly unknown[]>;
+      findings: ReadonlyMap<string, readonly LintIssue[]>;
     }>
   | Readonly<{ ok: false; path: string; error: PackedDecodeError }>;
 
 /**
- * One book's tokens.
+ * One book's tokens (frozen shape: `{path, book, tokens, stableIds?}` — no
+ * `range` field, selective materialize is a slicing strategy, not part of the
+ * public result).
  *
  * `stableIds` is present exactly when the section carried explicit ids; `Token.id`
  * still carries the positional `{book}-{index}` label in that case, matching the
- * Rust decoder. `range` is present only for a chapter-selective materialize.
+ * Rust decoder.
  */
 export type MaterializedBook = Readonly<{
   path: string;
   book: string;
-  tokens: readonly Record<string, unknown>[];
+  tokens: readonly Token[];
   stableIds?: readonly string[];
-  range?: Readonly<{ start: number; end: number }>;
 }>;
 
 export type MaterializeSelector = Readonly<{
@@ -133,7 +141,7 @@ export declare function verifyPackedCorpus(
 export declare function materialize(
   verified: VerifiedPacked,
   selector?: MaterializeSelector,
-): Map<string, MaterializedBook>;
+): ReadonlyMap<string, MaterializedBook>;
 
 /** Tokens-only entry for one book, by the path the caller supplied. */
 export declare function decodeTokens(verified: VerifiedPacked, path: string): MaterializedBook;
