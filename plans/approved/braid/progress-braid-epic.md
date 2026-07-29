@@ -2269,3 +2269,61 @@ fixed in place, same files, same gates.
   tokens (Rust `serde_json` of `dto::Token` vs JS materialize); malformed goldens are asserted
   rejected at the wasm verifier with their recorded error names; findings keep their Rust round-trip
   and corpus gates plus a new `verify_book`-vs-`decode_book` equality gate.
+
+## 2026-07-29 — Phase B part 2 landed: wasm verify surface + pure-JS token materializer
+
+Two code commits behind the §8.1 respec, both with every gate green.
+
+- **`34accb8` — `usfm_onion_wire::verify`.** `verify_book(packed, source)` is the whole trust
+  boundary for one book and returns `{receipt, findings}`. The receipt carries the §I.3 payload: each
+  marker form's `markerMetadata`/`structural` already resolved from the stamped registry, in
+  descriptor-ordinal order, one row per distinct marker form rather than per token. Also
+  `materialize_tokens` (the native host's token path and the gate's reference half) and wasm
+  `verifyPackedBook(packed, source) -> PackedBookOutcome`. `source` crosses as bytes, not a string, so
+  a caller hands over the buffer it read; non-UTF-8 is a rejection value, not a panic.
+- **Refactor worth noting:** `decode_book`'s three finding-section trust checks (source length, source
+  hash, catalog stamp) moved into a shared `decode_finding_section`. Two copies is precisely how one
+  caller would have ended up trusting a catalog-derived value the other refuses.
+- **`096dd59` — `usfm-onion-web/packed`.** `verifyPackedCorpus` (sole minter of the `VerifiedPacked`
+  brand; first rejection short-circuits and names its `path`), `materialize`, `decodeTokens`,
+  `PackedError`. All offsets come from `./wire-schema`; no hash, checksum, or source-binding code
+  exists in the module. Selective materialize reads only the 2-byte SID index column to find a
+  chapter's row range.
+- **Equivalence gate (`npm run test:packed`, `scripts/test-packed-equivalence.mjs`):** 409 cases /
+  **5,717,137 tokens** structurally identical between Rust and JS — 14 good golden vectors (token +
+  finding) and all **395** corpus books; **11** malformed goldens refused at the wasm verifier with
+  their exact recorded error names; **382** chapter-selective slices proved deep-equal to the slice of
+  the full materialize, plus `unknownChapter`/`unknownBook`/unbranded-handle typed-error assertions.
+  Green on both the bundler and web targets. Runs in ~70s: the Rust reference streams as one JSON
+  token per line and fixtures are written and deleted per book, so a 280k-token book never needs two
+  copies in memory.
+- **Option/omitted-field policy, made explicit** (the packet asked for it): Rust omits `None` fields
+  entirely (`skip_serializing_if`), so the JS decoder never sets an absent key, and the comparator
+  treats an `undefined` value as an absent key. Nothing on either side emits `null` for an absent
+  optional. `stableIds` is `null` from Rust and absent from JS for a positional-id section, compared
+  as `book.stableIds ?? null`.
+- **Three JS mirrors of trivial Rust logic**, each covered by the gate over 5.7M tokens rather than
+  argued: `assign_ids`' positional-id rule, `format_sid`'s `"{book} {chapter}:{locator}"`, and
+  `decode_attr_value`'s two escapes. The material catalog logic is *not* mirrored — that is what the
+  receipt exists for.
+- **`TextDecoder` is constructed `{fatal: true}` deliberately.** Rust resolves token text with
+  `str::get`, which refuses a span that splits a character; a lenient decoder would substitute U+FFFD
+  and hand back a token that never existed.
+- **Deviation from §I.3, surfaced not silently taken:** the generated 238-entry ordinal→name marker
+  array was **not** added to `js/wire-schema.js`. Its only consumer would have been the
+  catalog-ordinal arm of a finding's `marker`, and §I.5's ruling (c) resolves findings in Rust, so the
+  array would ship dead. Say the word and it goes in.
+- **Two pre-existing staleness items found and left alone** (restored rather than folded into this
+  packet's diff): `cargo fmt --all` reflows `catalog.rs` and `finding_goldens.rs`, and rerunning the
+  golden generator rewrites the `proves` text of two `golden/finding/*.json` files (the fix round
+  stripped `§` citations from the Rust strings but not from the committed JSON). Both are one-line
+  cleanups whenever someone wants them.
+- **`pkg-bundler`/`pkg-web` restored, not committed.** The new `verifyPackedBook` export therefore is
+  not in the checked-in packages until someone runs a release build, the same way every prior wire
+  surface has landed.
+- Gates: `cargo test --workspace` (0 failed; wire 174 passed, core 256), lint oracle
+  (`--test lint_oracle -- --ignored`), release `-p usfm_onion_wire -- --ignored` (both 395-book token
+  corpus gates, the per-`LintCode` finding corpus gate, both golden generators byte-identical),
+  `npm run test:wasm` (bundler + web), `test:wire-schema:import`, `test:token-sids:import`,
+  `golden:wasm` (7 fixtures, unchanged), `test:packed` + `test:packed:web`, clippy clean on the new
+  code.
