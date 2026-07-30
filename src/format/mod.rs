@@ -2378,11 +2378,11 @@ mod tests {
         );
     }
 
-    /// Reviewer repro: an *identified* token split three ways must not hand
-    /// the same stable id to more than one fragment. Duplicate ids are a
-    /// braid error condition, so this has to be fixed at the source — the
-    /// first fragment (the prefix, here) keeps the original identity, and
-    /// every fragment after it is synthetic and gets its own minted id.
+    /// An *identified* token split three ways must not hand the same stable
+    /// id to more than one fragment — duplicate ids are an error condition
+    /// downstream, so this has to be fixed at the source. The first
+    /// fragment (the prefix, here) keeps the original identity, and every
+    /// fragment after it is synthetic and gets its own minted id.
     #[test]
     fn recover_malformed_markers_does_not_duplicate_the_original_id() {
         let identified = FormatToken {

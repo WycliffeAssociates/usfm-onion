@@ -2642,6 +2642,14 @@ fn dedupe_issues(issues: Vec<LintIssue>) -> Vec<LintIssue> {
             issue.span.map(|span| (span.start, span.end)),
             issue.related_span.map(|span| (span.start, span.end)),
             issue.token_id.clone(),
+            // Without these, two distinct findings that are both id-less and
+            // spanless (bare caller tokens with neither) collapse to the same
+            // (code, None, None, None) identity and one is silently dropped
+            // before the position-aware sort ever runs. Position always
+            // distinguishes them: it names the token, not just what the
+            // token happened to carry.
+            issue.position,
+            issue.related_position,
         );
         if seen.insert(identity) {
             deduped.push(issue);
@@ -3215,14 +3223,14 @@ mod tests {
         assert_eq!(from_source, from_tokens);
     }
 
-    /// Clean-room repro (P1-1): `into_format_tokens`'s public output carries
-    /// no id at all (`FormatToken::id` is `None` unless something later
-    /// calls `set_id`), so canonical order must not be resolved through an
-    /// id -> position lookup — it has nothing to resolve. Linting the same
-    /// source directly and via a round trip through `into_format_tokens`
-    /// must produce the same finding order (ignoring `position`/
-    /// `related_position`, which `PartialEq` already excludes since they are
-    /// call-specific, not part of a finding's identity).
+    /// `into_format_tokens`'s public output carries no id at all
+    /// (`FormatToken::id` is `None` unless something later calls `set_id`),
+    /// so canonical order must not be resolved through an id -> position
+    /// lookup — it has nothing to resolve. Linting the same source directly
+    /// and via a round trip through `into_format_tokens` must produce the
+    /// same finding order (ignoring `position`/`related_position`, which
+    /// `PartialEq` already excludes since they are call-specific, not part
+    /// of a finding's identity).
     #[test]
     fn lint_tokens_over_id_less_format_tokens_preserves_position_order() {
         let source = "\\id GEN\n\\zzz x\n\\v x";
@@ -3243,8 +3251,7 @@ mod tests {
         // Compare the *sequence* of codes, not full `LintIssue` equality:
         // `token_id`/`sid` legitimately differ (bare `FormatToken`s carry
         // neither), which is expected type-shape divergence, not an
-        // ordering bug. Canonical order — what P1-1 is actually about — is
-        // exactly this sequence.
+        // ordering bug. Canonical order is exactly this sequence.
         let codes = |result: &LintResult| {
             result
                 .issues
@@ -3256,6 +3263,46 @@ mod tests {
             codes(&from_parsed_tokens),
             codes(&from_format_tokens),
             "id-less caller tokens must preserve the same canonical order as parsed tokens"
+        );
+    }
+
+    /// Two distinct findings that are both id-less and spanless (bare
+    /// caller tokens carrying neither) must not collapse into one:
+    /// `dedupe_issues`'s identity tuple has to include `position`/
+    /// `related_position`, or two `\v` markers at different positions, each
+    /// missing its number, hash to the same `(code, None, None, None)` key
+    /// and one is silently dropped before the position-aware sort ever
+    /// runs.
+    #[test]
+    fn dedupe_does_not_collapse_distinct_findings_on_id_less_spanless_tokens() {
+        let bare_verse_marker = FormatToken {
+            kind: TokenKind::Marker,
+            text: "\\v".to_string(),
+            marker: Some("v".to_string()),
+            sid: None,
+            id: None,
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        };
+        let tokens = vec![bare_verse_marker.clone(), bare_verse_marker];
+
+        let options = LintOptions {
+            enabled_codes: Some(vec![LintCode::MissingVerseNumber]),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_tokens(&tokens, options);
+
+        assert_eq!(
+            result
+                .issues
+                .iter()
+                .filter(|issue| issue.code == LintCode::MissingVerseNumber)
+                .count(),
+            2,
+            "one finding per \\v marker, not deduped into one: {:?}",
+            result.issues
         );
     }
 

@@ -535,9 +535,11 @@ pub(crate) fn decode_findings(
             // by the structural decoder before rows are even read — so every
             // decoded issue's fix is unconditionally absent.
             fix: None,
-            // The row's own token index IS the position — more direct than
-            // core's own id-string resolution, since wire stores it as a
-            // number already.
+            // Core records these positions at the moment a rule creates the
+            // finding, from the token's own index in the slice `lint_tokens`
+            // was given. The row's own token index (already a checked,
+            // in-bounds `u32`) is that same position, so decode reconstructs
+            // it directly rather than re-deriving it.
             position: row.token_idx.unwrap_or(NO_TOKEN_POSITION),
             related_position: row.related.map_or(NO_TOKEN_POSITION, |(idx, ..)| idx),
         });
