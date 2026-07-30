@@ -1697,3 +1697,24 @@ book. Parsing in the book's own context is what gives the new content a real
 `\id`-backed sid and ids, instead of parsing the fragment in isolation and
 reconciling placeholder identities afterward. The same doc comment lives on
 `ChapterInput` in `crates/braid/src/input.rs`.
+
+## L. Adjudication — 2026-07-30 (owner): resident fix/format id-minting shape
+
+Resolves the F1-packet stop (`OwnedToken` cannot implement `FormattableToken` honestly —
+`synthetic_like` has no way to receive an id at creation). Ruling: **no trait impl; braid
+converts at its boundary and holds the minter.**
+
+- The minter is **handle-held**: `Braid::new(config, minter)` takes the application's
+  deterministic id-creating function at construction (Galley-precedent), rather than threading
+  it per call. Core's `*_with_minter` seams remain the underlying mechanism.
+- Fix/format passes run over the id-optional working type (`FormatToken`); after the pass, any
+  token without an id receives one from the handle's minter.
+- Conversion back to resident `OwnedToken`s is the enforcement checkpoint: it requires an id on
+  every token, and the post-pass sweep makes an id-less token structurally unreachable there.
+  Core never invents ids; the application's function does — per the 2026-07-28 adjudication.
+- Sync-back needs nothing new: the mutation returns its `MutationEffect`; §K pull/reconcile
+  handles identity (survivors keep ids/object identity, synthesized tokens are fresh objects).
+- The trait-surgery alternative (id-at-creation in `FormattableToken`'s signature) was
+  considered and shelved — revisit only if boundary conversion ever measures hot in C4.
+
+C4 wires this; nothing builds before then.
