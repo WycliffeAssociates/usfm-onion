@@ -2561,3 +2561,61 @@ question the freeze left unanswered.
   application). changedSince(snapshotId) added as the cursor-free recovery valve. Mut-style
   "pass my tokens in" APIs rejected on boundary physics (recorded in §K.6). C2 specs
   MutationEffect/pull against §K verbatim; reconcile lands with the Phase C JS work.
+
+## 2026-07-30 — C1 clean-room fix round: three P1s + comment sweep landed, C2 unblocked
+
+Clean-room review of C1 returned BLOCK with three P1s (all verified at the cited sites) plus a P2
+comment sweep. Five commits (`0d9e820`, `327c1e5`, `7986c34`, `beaf2a2`, plus this ledger entry) fix
+all four; the declared-book seam itself passed review unchanged.
+
+- **P1-1 (position order lost for id-less tokens).** `canonical_sort` resolved a finding's position
+  by looking up its `token_id` string in a map built from the token slice — which has nothing to
+  resolve for a caller whose tokens carry no id at all, e.g. `into_format_tokens`'s own public
+  output, so those findings all fell into the "no position" bucket and sorted by code string alone.
+  Fixed by recording `position`/`related_position` on `LintIssue` directly at the moment a rule
+  creates the finding (every `issue()`/`simple_issue*` call site already has the token's own index
+  in scope), not resolved afterward from an id. Verified oracle-neutral: `lint_oracle_is_stable` and
+  `partitioned_matches_serial_over_corpora` both stayed byte-identical, zero rebless. Added the
+  reviewer's exact repro (`\id GEN\n\zzz x\n\v x` through `into_format_tokens`, comparing finding
+  order against `lint_usfm`).
+- **P1-2 (duplicate id across split fragments).** `recover_malformed_markers` cloned the original
+  token for BOTH the prefix and suffix fragments of a malformed-marker split, so an identified
+  "before\q1 after" yielded two fragments sharing one stable id. Ruled: the first-emitted fragment
+  keeps the original identity, every fragment after it is synthetic and gets minted. Added the
+  reviewer's repro plus a no-prefix sibling case.
+- **P1-3 (unenforceable minter guarantee).** `FormattableToken::set_id` had a no-op default, so an
+  implementor could satisfy the `_with_minter` APIs' type signature while silently discarding every
+  minted id. Removed the default — `set_id` is now required (pre-release, breaking accepted). Both
+  in-tree implementors already had real bodies; only future implementors are affected. Added a test
+  exercising the trait contract directly through both implementors.
+- **P2 comment sweep.** Stripped the dated/phase/gate citations from the id-minting seam's doc
+  comments, `canonical_sort`'s doc, `finding_codec::canonical_order`'s cross-reference (also fixed
+  its now-stale reference to the removed `token_positions` helper), `LintCodeTag::BookIdMismatch`'s
+  doc, and the wasm `declared_book` default's comment — keeping architectural rationale and the
+  core<->wire cross-reference in each case. Left pre-existing citations in files I didn't otherwise
+  touch (`schema.rs`'s `LintCodeTag` module doc, `finding_goldens.rs`'s header) alone — not in scope.
+
+**Ripple, forced by `LintIssue` gaining two fields:** every out-of-core `LintIssue` literal
+construction needed `position`/`related_position` — `finding_codec.rs`'s `decode_findings` sets
+them from the row's own `token_idx`/related index (more direct than core's creation-time recording);
+three test/golden fixtures (`finding_codec.rs` x2, `finding_goldens.rs`, `usfm_onion_wasm` lib.rs)
+use the `NO_TOKEN_POSITION` sentinel, correctly — none of those paths read these fields for their
+own ordering. `LintIssue` also gained a manual `PartialEq`/`Eq` (replacing the derive) excluding
+both new fields from equality, since they are a sort-key artifact of one particular call, not part
+of a finding's semantic identity.
+
+**Gates, exact counts:** `cargo test --workspace` 270 passed / 0 failed (core, up from 269 —
+the P1-1/P1-2/P1-3 regression tests), all other crates green; `lint_oracle_is_stable` and
+`partitioned_matches_serial_over_corpora` both byte-identical, zero rebless; `cargo test --release
+-p usfm_onion_wire -- --ignored` green, zero golden diffs; `npm run test:packed`/`test:packed:web`
+both green — 409 cases / 5,717,137 tokens, unchanged; `pkg-bundler`/`pkg-web` restored, never
+committed.
+
+**API ledger:** appended a correction to `phase0-freeze.md` for the two new `LintIssue` fields and
+`NO_TOKEN_POSITION` (core-only; no wasm/JS-facing addition).
+
+**Deviations:** none. **Stops:** none — all three P1s had a clear fix within the stated latitude,
+and no frozen public contract needed to change (the `LintIssue` field additions are new surface,
+not a break: `#[serde(skip)]` keeps the wire/JS shape unchanged).
+
+- C2 (the `braid` crate itself) is unblocked pending re-review of this fix round.
