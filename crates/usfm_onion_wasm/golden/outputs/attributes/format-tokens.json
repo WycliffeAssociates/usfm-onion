@@ -173,6 +173,7 @@
       }
     },
     {
+      "attributeSource": "|lemma=\"grace\" ",
       "id": "GEN-15",
       "kind": "marker",
       "marker": "w",
@@ -211,5 +212,5 @@
       }
     }
   ],
-  "usfm": "\\id GEN\n\\c 1\n\\p\n\\v 1 the first verse \\v 2 the second verse \\w gracious\\w*"
+  "usfm": "\\id GEN\n\\c 1\n\\p\n\\v 1 the first verse \\v 2 the second verse \\w gracious|lemma=\"grace\" \\w*"
 }

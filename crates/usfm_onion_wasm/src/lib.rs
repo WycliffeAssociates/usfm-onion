@@ -1153,6 +1153,7 @@ fn token_value_to_format_token(value: Token) -> NativeFormatToken {
         structural: value.structural.map(parse_structural_info),
         number_info: value.number_info.map(parse_number_info),
         marker_profile: None,
+        attribute_source: value.attribute_source,
     }
 }
 
@@ -1256,8 +1257,14 @@ fn map_format_token(token: &NativeFormatToken) -> Token {
         }),
         book_code: None,
         book_code_valid: None,
+        // `FormatToken` deliberately carries the attribute list as one
+        // opaque verbatim string, not a structured `Vec<AttributeItem>` (see
+        // `usfm_onion::format::FormatToken::attribute_source`) — format
+        // never parses or edits attribute content, so there is nothing to
+        // populate `attributes` from here. `attribute_source` is the real
+        // fix: it is what `format_tokens_to_usfm` actually emits.
         attributes: Vec::new(),
-        attribute_source: None,
+        attribute_source: token.attribute_source.clone(),
     }
 }
 

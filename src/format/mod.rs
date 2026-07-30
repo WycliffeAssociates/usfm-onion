@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use crate::marker_defs::StructuralMarkerInfo;
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
-use crate::token::{NumberRangeKind, Span, Token, TokenData, TokenKind};
+use crate::token::{
+    NumberRangeKind, OwnedAttribute, SerializableToken, Span, Token, TokenData, TokenKind,
+};
 
 const POETRY_MARKERS: &[&str] = &[
     "q", "q1", "q2", "q3", "q4", "q5", "qc", "qa", "qm", "qm1", "qm2", "qm3", "qd",
@@ -403,6 +405,14 @@ pub struct FormatToken {
     pub structural: Option<StructuralMarkerInfo>,
     pub number_info: Option<(u32, Option<u32>, NumberRangeKind)>,
     pub marker_profile: Option<FormatMarkerProfile>,
+    /// Verbatim `|...` attribute-list text (the same shape as
+    /// `dto::Token.attributeSource`/`OwnedToken::attribute_list()`), carried
+    /// as one opaque string rather than parsed apart. Format never inspects
+    /// or edits attribute content — no rule needs to — so a single string
+    /// field that survives `Clone` and gets placed back on emission (see
+    /// [`format_tokens_to_usfm`]) is the whole fix: nothing downstream has
+    /// to special-case it. `None` when the token has no attribute list.
+    pub attribute_source: Option<String>,
 }
 
 impl FormatToken {
@@ -435,15 +445,44 @@ impl<'a> From<&Token<'a>> for FormatToken {
             marker_profile: token
                 .marker_name()
                 .map(|marker| build_marker_profile(marker, token.kind(), structural)),
+            attribute_source: token.attribute_list().map(ToOwned::to_owned),
         }
     }
 }
 
+impl SerializableToken for FormatToken {
+    // FormatToken never carries a structured attribute list — only the
+    // verbatim `attribute_source` string (attribute content is not
+    // something any format rule inspects or edits) — so `Self::Attr` is
+    // never actually populated; `OwnedAttribute` just satisfies the bound.
+    type Attr = OwnedAttribute;
+
+    fn attributes(&self) -> &[Self::Attr] {
+        &[]
+    }
+
+    fn attribute_list(&self) -> Option<&str> {
+        self.attribute_source.as_deref()
+    }
+
+    // No `attribute_offset` override: `None` (the default) means every
+    // attribute list places at its marker's closer, never at a remembered
+    // byte distance. Format is a normalizing pass, not a byte-exact one —
+    // token order can shift — so the closer rule is the correct choice
+    // here, not a fallback for a missing feature.
+}
+
+/// An attribute-bearing marker's list does not sit next to the marker's own
+/// text in USFM — `\w gracious|lemma="x" \w*` stores the list on the
+/// *opening* token but it reads after the content, right before `\w*`.
+/// [`crate::token::tokens_to_usfm_reconstruct`] already solves exactly this
+/// placement problem generically over any [`SerializableToken`] (it is what
+/// keeps owned/editor-authored streams, which have no reliable span, byte-
+/// correct); reusing it here — rather than a second, naive "append after
+/// this token" concatenation — is the whole attribute-passthrough fix. No
+/// rule in this module reads or writes attribute content anywhere.
 pub fn format_tokens_to_usfm(tokens: &[FormatToken]) -> String {
-    tokens
-        .iter()
-        .map(FormatToken::to_usfm_fragment)
-        .collect::<String>()
+    crate::token::tokens_to_usfm_reconstruct(tokens)
 }
 
 pub trait FormattableToken: Clone {
@@ -480,6 +519,18 @@ pub trait FormattableToken: Clone {
     fn marker_profile(&self) -> Option<FormatMarkerProfile> {
         None
     }
+    /// Verbatim `|...` attribute-list text. Defaults to `None`/no-op so a
+    /// token type that never carries attributes (most `LintableToken`-only
+    /// test fixtures, editor types that model attributes some other way)
+    /// implements nothing extra — the same shape `sid`/`structural` already
+    /// use. A type that does carry attributes overrides both, and gets them
+    /// preserved through every format/fix pass with zero changes to the
+    /// pass itself: passthrough is `Clone` plus this one pair of accessors,
+    /// not per-rule bookkeeping.
+    fn attribute_source(&self) -> Option<&str> {
+        None
+    }
+    fn set_attribute_source(&mut self, _source: Option<String>) {}
     fn synthetic_like(
         anchor: Option<&Self>,
         kind: TokenKind,
@@ -569,6 +620,14 @@ impl FormattableToken for FormatToken {
         self.marker_profile
     }
 
+    fn attribute_source(&self) -> Option<&str> {
+        self.attribute_source.as_deref()
+    }
+
+    fn set_attribute_source(&mut self, source: Option<String>) {
+        self.attribute_source = source;
+    }
+
     fn synthetic_like(
         anchor: Option<&Self>,
         kind: TokenKind,
@@ -589,6 +648,10 @@ impl FormattableToken for FormatToken {
             structural: None,
             number_info: None,
             marker_profile,
+            // A synthesized token (an inserted linebreak, a default `\p`, a
+            // template-built fix replacement) is new content that never had
+            // an attribute list of its own.
+            attribute_source: None,
         }
     }
 }
@@ -2162,6 +2225,88 @@ mod tests {
         assert!(output.contains("\\v 1"));
     }
 
+    /// The F1 gate: `\w gracious|lemma="grace" \w*` must survive a full
+    /// `format` pass. Before `FormatToken` carried `attribute_source`, this
+    /// silently emitted `\w gracious\w*` — the attribute list vanished
+    /// because it was never in any field `format_tokens_to_usfm` read, not
+    /// because any rule deliberately stripped it.
+    #[test]
+    fn format_preserves_attribute_bearing_tokens_round_trip() {
+        let source =
+            "\\id GEN\n\\c 1\n\\p\n\\v 2 the second verse \\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        assert!(
+            tokens.iter().any(|token| token.attribute_source.is_some()),
+            "into_format_tokens must actually carry the attribute list, or this test proves nothing"
+        );
+        format_tokens(&mut tokens, FormatOptions::default());
+        let output = format_tokens_to_usfm(&tokens);
+        assert!(
+            output.contains("\\w gracious|lemma=\"grace\" \\w*"),
+            "attribute list must survive a format pass: {output:?}"
+        );
+    }
+
+    /// Same fixture, but every token is id-less (as `into_format_tokens`
+    /// itself already produces) — attribute passthrough must not depend on
+    /// id presence, since the two are unrelated fields on `FormatToken`.
+    #[test]
+    fn format_preserves_attributes_on_id_less_tokens() {
+        let source = "\\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let tokens = into_format_tokens(&parsed.tokens);
+        assert!(tokens.iter().all(|token| token.id.is_none()));
+        let mut tokens = tokens;
+        format_tokens(&mut tokens, FormatOptions::default());
+        assert_eq!(
+            format_tokens_to_usfm(&tokens),
+            "\\w gracious|lemma=\"grace\" \\w*"
+        );
+    }
+
+    /// Same fixture, but every token is minted an id first (the C1 seam) —
+    /// attribute passthrough must not depend on id *absence* either.
+    #[test]
+    fn format_preserves_attributes_on_id_bearing_tokens() {
+        let source = "\\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        for (index, token) in tokens.iter_mut().enumerate() {
+            token.set_id(format!("synthetic-{index}"));
+        }
+        assert!(tokens.iter().all(|token| token.id.is_some()));
+        format_tokens(&mut tokens, FormatOptions::default());
+        assert_eq!(
+            format_tokens_to_usfm(&tokens),
+            "\\w gracious|lemma=\"grace\" \\w*"
+        );
+    }
+
+    /// Tokens the formatter itself synthesizes (inserted structural
+    /// linebreaks, a default `\p`) are new content and must never invent an
+    /// attribute list — `synthetic_like`'s `attribute_source: None` is the
+    /// whole rule, with no per-call-site bookkeeping needed. Proven by
+    /// count: this fixture has none to begin with, format adds tokens, and
+    /// the attribute-bearing count must stay exactly zero throughout.
+    #[test]
+    fn synthesized_tokens_never_carry_an_attribute_list() {
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        assert!(tokens.iter().all(|token| token.attribute_source.is_none()));
+        let original_count = tokens.len();
+        format_tokens(&mut tokens, FormatOptions::all_enabled());
+        assert!(
+            tokens.len() > original_count,
+            "this fixture must actually synthesize tokens, or the test proves nothing"
+        );
+        assert!(
+            tokens.iter().all(|token| token.attribute_source.is_none()),
+            "no synthesized token may invent an attribute list"
+        );
+    }
+
     #[test]
     fn format_rule_has_stable_machine_identifiers() {
         let rule = FormatRule::InsertDefaultParagraphAfterChapterIntro;
@@ -2325,6 +2470,7 @@ mod tests {
             structural: None,
             number_info: None,
             marker_profile: None,
+            attribute_source: None,
         });
         assert_round_trips(EditorToken {
             kind: TokenKind::Text,
@@ -2352,6 +2498,7 @@ mod tests {
             structural: None,
             number_info: None,
             marker_profile: None,
+            attribute_source: None,
         };
         let mut mint_fn = counting_minter();
         let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
@@ -2395,6 +2542,7 @@ mod tests {
             structural: None,
             number_info: None,
             marker_profile: None,
+            attribute_source: None,
         };
         let mut mint_fn = counting_minter();
         let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
@@ -2433,6 +2581,7 @@ mod tests {
             structural: None,
             number_info: None,
             marker_profile: None,
+            attribute_source: None,
         };
         let mut mint_fn = counting_minter();
         let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
@@ -2467,6 +2616,7 @@ mod tests {
             structural: None,
             number_info: None,
             marker_profile: None,
+            attribute_source: None,
         };
         let tokens = vec![target.clone()];
 

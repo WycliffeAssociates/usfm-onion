@@ -2981,6 +2981,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
             crate::FormatToken {
                 kind: TokenKind::Marker,
@@ -2992,6 +2993,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
         ];
 
@@ -3025,6 +3027,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
             crate::FormatToken {
                 kind: TokenKind::Number,
@@ -3036,6 +3039,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
         ];
 
@@ -3285,6 +3289,7 @@ mod tests {
             structural: None,
             number_info: None,
             marker_profile: None,
+            attribute_source: None,
         };
         let tokens = vec![bare_verse_marker.clone(), bare_verse_marker];
 
@@ -3352,6 +3357,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
             crate::FormatToken {
                 kind: TokenKind::Text,
@@ -3363,6 +3369,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
         ];
 
@@ -3820,6 +3827,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
             crate::FormatToken {
                 kind: TokenKind::Number,
@@ -3831,6 +3839,7 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
             },
         ];
         let invalid_range_result =
