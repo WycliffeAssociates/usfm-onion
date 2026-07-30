@@ -471,7 +471,9 @@ impl LintCode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// No `Eq`/`PartialEq` derive: see the manual `impl` below, which excludes
+/// `position`/`related_position` from equality.
+#[derive(Debug, Clone, Serialize)]
 pub struct LintIssue {
     pub code: LintCode,
     pub category: LintCategory,
@@ -496,7 +498,49 @@ pub struct LintIssue {
     pub sid: Option<String>,
     pub marker: Option<String>,
     pub fix: Option<TokenFix>,
+    /// Position of the primary token (`token_id`) in the slice `lint_tokens`
+    /// was called with, recorded when the finding was created rather than
+    /// resolved afterward from `token_id` — resolving it from an id has
+    /// nothing to resolve for a caller whose tokens carry no id at all (e.g.
+    /// `into_format_tokens`'s public output), which would lose ordering
+    /// entirely for exactly those findings.
+    /// [`NO_TOKEN_POSITION`] means anchor-only (no primary token at all).
+    /// Not part of the wire/JS contract (`#[serde(skip)]`) and not part of a
+    /// finding's semantic identity (excluded from equality below): it is a
+    /// sort-key artifact of one particular call, not a fact about the
+    /// finding itself. A cross-crate constructor that has no real position
+    /// to report (wire's decoder, test fixtures) uses `NO_TOKEN_POSITION`.
+    #[serde(skip)]
+    pub position: u32,
+    /// Same, for `related_token_id`.
+    #[serde(skip)]
+    pub related_position: u32,
 }
+
+/// Sentinel for "no position" on [`LintIssue::position`]/`related_position`
+/// — anchor-only, or a related token that doesn't exist.
+pub const NO_TOKEN_POSITION: u32 = u32::MAX;
+
+impl PartialEq for LintIssue {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+            && self.category == other.category
+            && self.severity == other.severity
+            && self.issue_type == other.issue_type
+            && self.template == other.template
+            && self.message == other.message
+            && self.message_params == other.message_params
+            && self.span == other.span
+            && self.related_span == other.related_span
+            && self.token_id == other.token_id
+            && self.related_token_id == other.related_token_id
+            && self.sid == other.sid
+            && self.marker == other.marker
+            && self.fix == other.fix
+    }
+}
+
+impl Eq for LintIssue {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub struct LintSummary {
@@ -865,21 +909,16 @@ pub fn lint_tokens<T: LintableToken + Sync>(tokens: &[T], options: LintOptions) 
     #[cfg(target_arch = "wasm32")]
     let issues = collect_issues_serial(tokens, &options, &enabled);
 
-    finalize_issues(issues, tokens, &options)
+    finalize_issues(issues, &options)
 }
 
 /// Shared tail: dedupe, suppress, canonically sort, and summarize. Runs once
 /// after collection, so the serial and chapter-parallel collectors converge on
 /// byte-identical output here.
-fn finalize_issues<T: LintableToken>(
-    issues: Vec<LintIssue>,
-    tokens: &[T],
-    options: &LintOptions,
-) -> LintResult {
+fn finalize_issues(issues: Vec<LintIssue>, options: &LintOptions) -> LintResult {
     let unique = dedupe_issues(issues);
     let (mut issues, suppressed_count) = apply_suppressions(unique, &options.suppressed);
-    let positions = token_positions(tokens);
-    canonical_sort(&mut issues, &positions);
+    canonical_sort(&mut issues);
     let summary = summarize(&issues, suppressed_count);
 
     LintResult { issues, summary }
@@ -1204,7 +1243,8 @@ fn lint_empty_paragraphs<T: LintableToken>(
             LintCode::EmptyParagraph,
             marker_params(marker),
             token,
-            Some(&tokens[boundary_index]),
+            index,
+            Some((&tokens[boundary_index], boundary_index)),
         ));
     }
 }
@@ -1220,7 +1260,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
 
         if enabled.has(LintCode::UnknownToken)
             && token.kind() == TokenKind::Text
-            && let Some(issue) = lint_unknown_token_like(token)
+            && let Some(issue) = lint_unknown_token_like(token, index)
         {
             issues.push(issue);
         }
@@ -1238,6 +1278,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         LintCode::MissingChapterNumber,
                         MessageParams::default(),
                         token,
+                        index,
                     ));
                 }
             }
@@ -1248,6 +1289,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         LintCode::MissingVerseNumber,
                         MessageParams::default(),
                         token,
+                        index,
                     ));
                 }
                 if enabled.has(LintCode::VerseIsEmpty)
@@ -1259,7 +1301,8 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         LintCode::VerseIsEmpty,
                         MessageParams::default(),
                         &tokens[next_index],
-                        Some(token),
+                        next_index,
+                        Some((token, index)),
                     ));
                 }
             }
@@ -1296,6 +1339,7 @@ fn lint_structure_rules<T: LintableToken>(
                                 LintCode::BookCodeNotUppercase,
                                 message_params([("code", code.to_string()), ("uppercase", upper)]),
                                 token,
+                                index,
                             ));
                         }
                     } else if enabled.has(LintCode::InvalidBookCode) {
@@ -1303,6 +1347,7 @@ fn lint_structure_rules<T: LintableToken>(
                             LintCode::InvalidBookCode,
                             message_params([("code", code.to_string())]),
                             token,
+                            index,
                         ));
                     }
                 } else if enabled.has(LintCode::BookIdMismatch)
@@ -1316,6 +1361,7 @@ fn lint_structure_rules<T: LintableToken>(
                             ("found", code.to_string()),
                         ]),
                         token,
+                        index,
                     ));
                 }
             }
@@ -1330,6 +1376,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::IdMarkerNotAtFileStart,
                     MessageParams::default(),
                     token,
+                    index,
                 ));
             }
             if enabled.has(LintCode::DuplicateIdMarker) && marker == "id" {
@@ -1338,6 +1385,7 @@ fn lint_structure_rules<T: LintableToken>(
                         LintCode::DuplicateIdMarker,
                         MessageParams::default(),
                         token,
+                        index,
                     ));
                 }
                 id_seen = true;
@@ -1374,6 +1422,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("marker", marker.to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1386,6 +1435,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::ContentBeforeFirstChapter,
                     message_params([("kind", "verse".to_string()), ("marker", "v".to_string())]),
                     token,
+                    index,
                 ));
             }
 
@@ -1403,6 +1453,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::VerseOutsideExplicitParagraph,
                     MessageParams::default(),
                     token,
+                    index,
                 ));
             }
 
@@ -1414,6 +1465,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::NoteSubmarkerOutsideNote,
                     marker_params(marker),
                     token,
+                    index,
                 ));
             }
 
@@ -1428,6 +1480,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("target", "chapter".to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1442,6 +1495,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("target", "verse".to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1475,6 +1529,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("context", spec_context_name(validation_context).to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1523,6 +1578,8 @@ fn lint_structure_rules<T: LintableToken>(
             sid: None,
             marker: Some("id".to_string()),
             fix: None,
+            position: NO_TOKEN_POSITION,
+            related_position: NO_TOKEN_POSITION,
         });
     }
 }
@@ -1532,7 +1589,8 @@ fn lint_unknown_markers<T: LintableToken>(
     range: std::ops::Range<usize>,
     issues: &mut Vec<LintIssue>,
 ) {
-    for token in &tokens[range] {
+    let start = range.start;
+    for (offset, token) in tokens[range].iter().enumerate() {
         if token.kind() != TokenKind::Marker {
             continue;
         }
@@ -1546,6 +1604,7 @@ fn lint_unknown_markers<T: LintableToken>(
             LintCode::UnknownMarker,
             marker_params(marker),
             token,
+            start + offset,
         ));
     }
 }
@@ -1555,7 +1614,8 @@ fn lint_unknown_close_markers<T: LintableToken>(
     range: std::ops::Range<usize>,
     issues: &mut Vec<LintIssue>,
 ) {
-    for token in &tokens[range] {
+    let start = range.start;
+    for (offset, token) in tokens[range].iter().enumerate() {
         if token.kind() != TokenKind::EndMarker {
             continue;
         }
@@ -1569,6 +1629,7 @@ fn lint_unknown_close_markers<T: LintableToken>(
             LintCode::UnknownCloseMarker,
             marker_params(marker),
             token,
+            start + offset,
         ));
     }
 }
@@ -1597,6 +1658,7 @@ fn lint_chapter_rules<T: LintableToken>(
                     ]),
                     "c",
                     &tokens[number_index],
+                    number_index,
                 ));
             }
             seen_chapters.insert(chapter);
@@ -1653,6 +1715,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 ]),
                 "v",
                 number_token,
+                number_index,
             ));
             continue;
         }
@@ -1679,6 +1742,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 ]),
                 "v",
                 number_token,
+                number_index,
             ));
         }
 
@@ -1689,6 +1753,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 MessageParams::default(),
                 "v",
                 number_token,
+                number_index,
             ));
         }
 
@@ -1786,6 +1851,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                     LintCode::MissingWhitespaceBeforeMarker,
                     marker_params(marker),
                     token,
+                    index,
                 );
                 if !prefix.is_empty() && token.id().is_some() {
                     issue = issue.with_fix(prepend_ws_fix(
@@ -1829,12 +1895,13 @@ fn lint_whitespace_rules<T: LintableToken>(
             // genuine content riding the same line (`\b here`), anchored
             // at that content rather than at the marker.
             if enabled.has(LintCode::ContentAfterBlankMarker)
-                && let Some(content) = content_after_blank_marker(tokens, index)
+                && let Some(content_index) = content_after_blank_marker(tokens, index)
             {
                 issues.push(simple_issue(
                     LintCode::ContentAfterBlankMarker,
                     marker_params(marker),
-                    content,
+                    &tokens[content_index],
+                    content_index,
                 ));
             }
         } else if !after_name_satisfied_by_marker_token {
@@ -1861,6 +1928,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                             LintCode::MissingHorizontalWhitespaceAfterMarkerName,
                             marker_params(marker),
                             token,
+                            index,
                         );
                         if !prefix.is_empty() && token.id().is_some() {
                             issue = issue.with_fix(append_ws_fix(
@@ -1889,6 +1957,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                             LintCode::MissingTagEndDelimiterAfterMarker,
                             marker_params(marker),
                             token,
+                            index,
                         );
                         if !prefix.is_empty() && token.id().is_some() {
                             issue = issue.with_fix(append_ws_fix(
@@ -1933,6 +2002,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                     LintCode::MissingContentSpaceAfterCloseMarker,
                     marker_params(marker),
                     token,
+                    index,
                 ));
             }
         }
@@ -1951,7 +2021,7 @@ fn requirement_demands_leading_ws(req: crate::whitespace::StructuralWhitespaceRe
     )
 }
 
-fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
+fn lint_unknown_token_like<T: LintableToken>(token: &T, index: usize) -> Option<LintIssue> {
     let text = token.source();
     let trimmed = text.trim_start_matches([' ', '\t']);
     let remainder = trimmed.strip_prefix('\\')?;
@@ -1976,6 +2046,7 @@ fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
         message_params([("text", token.source().to_string())]),
         marker,
         token,
+        index,
     ))
 }
 
@@ -2006,6 +2077,7 @@ fn lint_number_predecessor<T: LintableToken>(
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
             MessageParams::default(),
             token,
+            index,
         ));
         return;
     };
@@ -2018,6 +2090,7 @@ fn lint_number_predecessor<T: LintableToken>(
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
             MessageParams::default(),
             token,
+            index,
         ));
     }
 }
@@ -2325,15 +2398,18 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
 /// is allowed and skipped, so `\b \n` returns `None` (clean) while
 /// `\b here` returns the `here` token (flagged). End-of-input with only
 /// horizontal whitespace also counts as clean.
-fn content_after_blank_marker<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<&T> {
+fn content_after_blank_marker<T: LintableToken>(
+    tokens: &[T],
+    marker_index: usize,
+) -> Option<usize> {
     use crate::whitespace::{is_horizontal_whitespace_char, is_newline_char};
-    for token in &tokens[marker_index + 1..] {
+    for (offset, token) in tokens[marker_index + 1..].iter().enumerate() {
         for ch in token.source().chars() {
             if is_newline_char(ch) {
                 return None;
             }
             if !is_horizontal_whitespace_char(ch) {
-                return Some(token);
+                return Some(marker_index + 1 + offset);
             }
         }
     }
@@ -2410,7 +2486,8 @@ fn issue<T: LintableToken, U: LintableToken>(
     code: LintCode,
     params: MessageParams,
     token: &T,
-    related: Option<&U>,
+    index: usize,
+    related: Option<(&U, usize)>,
 ) -> LintIssue {
     let template = code.template();
     let message = render_template(template, &params);
@@ -2423,12 +2500,14 @@ fn issue<T: LintableToken, U: LintableToken>(
         message,
         message_params: params,
         span: token.span(),
-        related_span: related.and_then(LintableToken::span),
+        related_span: related.and_then(|(token, _)| token.span()),
         token_id: token.id(),
-        related_token_id: related.and_then(LintableToken::id),
+        related_token_id: related.and_then(|(token, _)| token.id()),
         sid: token.sid(),
         marker: token.marker().map(ToOwned::to_owned),
         fix: None,
+        position: index as u32,
+        related_position: related.map_or(NO_TOKEN_POSITION, |(_, index)| index as u32),
     }
 }
 
@@ -2487,8 +2566,13 @@ fn append_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, suffix: 
     }
 }
 
-fn simple_issue<T: LintableToken>(code: LintCode, params: MessageParams, token: &T) -> LintIssue {
-    issue(code, params, token, None::<&T>)
+fn simple_issue<T: LintableToken>(
+    code: LintCode,
+    params: MessageParams,
+    token: &T,
+    index: usize,
+) -> LintIssue {
+    issue(code, params, token, index, None::<(&T, usize)>)
 }
 
 fn simple_issue_with_marker<T: LintableToken>(
@@ -2496,8 +2580,9 @@ fn simple_issue_with_marker<T: LintableToken>(
     params: MessageParams,
     marker: &str,
     token: &T,
+    index: usize,
 ) -> LintIssue {
-    let mut issue = simple_issue(code, params, token);
+    let mut issue = simple_issue(code, params, token, index);
     issue.marker = Some(marker.to_string());
     issue
 }
@@ -2508,62 +2593,43 @@ fn marker_params(marker: &str) -> MessageParams {
     message_params([("marker", marker.to_string())])
 }
 
-/// Maps each token's `id()` string to its ordinal position within `tokens` —
-/// the slice this `lint_tokens` call was given. Built once per call and
-/// consulted only by [`canonical_sort`]; a token id string is never itself
-/// compared (see that function's doc). `.entry().or_insert()` keeps the
-/// first occurrence on the rare chance two tokens report the same id, the
-/// same "first use wins" convention the wire packing already uses for
-/// interning.
-fn token_positions<T: LintableToken>(tokens: &[T]) -> FxHashMap<String, u32> {
-    let mut positions = FxHashMap::default();
-    for (index, token) in tokens.iter().enumerate() {
-        if let Some(id) = token.id() {
-            positions.entry(id).or_insert(index as u32);
-        }
-    }
-    positions
-}
-
-/// Canonical output order for findings (§2.2#15). Independent of the order
-/// rule groups happen to run in, so callers see a stable sequence and a
-/// chapter-parallel linter (which produces findings out of segment order)
-/// sorts to the same result. Ordered by the primary token's position in the
-/// token stream, then the stable kebab-case lint code, then the related
-/// token's position; anchor-only findings (no primary token id at all, e.g.
-/// a missing `\id`) sort last.
+/// Canonical output order for findings. Independent of the order rule groups
+/// happen to run in, so callers see a stable sequence and a chapter-parallel
+/// linter (which produces findings out of segment order) sorts to the same
+/// result. Ordered by the primary token's position in the token stream, then
+/// the stable kebab-case lint code, then the related token's position;
+/// anchor-only findings ([`LintIssue::position`] == [`NO_TOKEN_POSITION`],
+/// e.g. a missing `\id`) sort last.
 ///
-/// Deliberately keyed on *position*, not byte span: position is defined
-/// identically for parsed tokens and for tokens a future caller supplies
-/// with no span at all, so resident lint order can equal stateless order
-/// without a caller-token type having to carry spans. Deliberately NOT
-/// comparing `token_id`/`related_token_id` strings, even as a tie-breaker:
-/// a token id is caller-opaque and may not compare the same way in Rust
-/// (UTF-8 byte order) as in a JS reconciler over the same data (UTF-16 code
-/// unit order); resolving ids to numeric positions up front and comparing
-/// only numbers keeps this order reproducible without a string comparator
-/// in either language. Deliberately NOT ordered by SID either — duplicate,
-/// malformed, or decreasing references are valid linter inputs and must not
-/// drive output order.
+/// Position is recorded on each [`LintIssue`] at the moment a rule creates
+/// it (every `issue`/`simple_issue*` call takes the token's own index in the
+/// slice `lint_tokens` was given), not resolved afterward from `token_id`.
+/// Resolving it afterward from a `token_id -> index` map has nothing to
+/// resolve for a caller whose tokens carry no id at all (e.g.
+/// `usfm_onion::format::into_format_tokens`'s public output), so every
+/// finding over such tokens would silently lose position ordering. Recording
+/// position at creation time works identically whether or not the caller's
+/// tokens carry ids, or spans either — position is defined purely by "which
+/// element of the slice this was," which exists for any token type.
+///
+/// Deliberately NOT comparing `token_id`/`related_token_id` strings, even as
+/// a tie-breaker: a token id is caller-opaque and may not compare the same
+/// way in Rust (UTF-8 byte order) as in a JS reconciler over the same data
+/// (UTF-16 code unit order); comparing only the recorded position numbers
+/// keeps this order reproducible without a string comparator in either
+/// language. Deliberately NOT ordered by SID either — duplicate, malformed,
+/// or decreasing references are valid linter inputs and must not drive
+/// output order.
 ///
 /// `usfm_onion_wire`'s `finding_codec::canonical_order` uses this same
 /// 3-key shape independently, not by sharing code with this function — see
 /// its doc comment for why.
-fn canonical_sort(issues: &mut [LintIssue], positions: &FxHashMap<String, u32>) {
-    fn position_key(token_id: &Option<String>, positions: &FxHashMap<String, u32>) -> (u8, u32) {
-        match token_id.as_deref().and_then(|id| positions.get(id)) {
-            Some(&position) => (0, position),
-            None => (1, u32::MAX),
-        }
-    }
+fn canonical_sort(issues: &mut [LintIssue]) {
     issues.sort_by(|a, b| {
-        position_key(&a.token_id, positions)
-            .cmp(&position_key(&b.token_id, positions))
+        a.position
+            .cmp(&b.position)
             .then_with(|| a.code.code().cmp(b.code.code()))
-            .then_with(|| {
-                position_key(&a.related_token_id, positions)
-                    .cmp(&position_key(&b.related_token_id, positions))
-            })
+            .then_with(|| a.related_position.cmp(&b.related_position))
     });
 }
 
@@ -3149,6 +3215,50 @@ mod tests {
         assert_eq!(from_source, from_tokens);
     }
 
+    /// Clean-room repro (P1-1): `into_format_tokens`'s public output carries
+    /// no id at all (`FormatToken::id` is `None` unless something later
+    /// calls `set_id`), so canonical order must not be resolved through an
+    /// id -> position lookup — it has nothing to resolve. Linting the same
+    /// source directly and via a round trip through `into_format_tokens`
+    /// must produce the same finding order (ignoring `position`/
+    /// `related_position`, which `PartialEq` already excludes since they are
+    /// call-specific, not part of a finding's identity).
+    #[test]
+    fn lint_tokens_over_id_less_format_tokens_preserves_position_order() {
+        let source = "\\id GEN\n\\zzz x\n\\v x";
+        let parsed = parse(source);
+        let from_parsed_tokens = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+
+        let format_tokens = crate::format::into_format_tokens(&parsed.tokens);
+        assert!(
+            format_tokens.iter().all(|token| token.id.is_none()),
+            "into_format_tokens must still emit no ids, or this test proves nothing"
+        );
+        let from_format_tokens = lint_tokens(&format_tokens, LintOptions::scoped(LintScope::Book));
+
+        assert!(
+            from_format_tokens.issues.len() > 1,
+            "this fixture must produce more than one finding, or order is not under test"
+        );
+        // Compare the *sequence* of codes, not full `LintIssue` equality:
+        // `token_id`/`sid` legitimately differ (bare `FormatToken`s carry
+        // neither), which is expected type-shape divergence, not an
+        // ordering bug. Canonical order — what P1-1 is actually about — is
+        // exactly this sequence.
+        let codes = |result: &LintResult| {
+            result
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            codes(&from_parsed_tokens),
+            codes(&from_format_tokens),
+            "id-less caller tokens must preserve the same canonical order as parsed tokens"
+        );
+    }
+
     #[test]
     fn lint_accepts_editor_tokens_without_conversion() {
         let tokens = vec![
@@ -3324,10 +3434,10 @@ mod tests {
         }
     }
 
-    /// Gate 0D probe D: with no declared-book context (the default —
-    /// `LintOptions::scoped` never sets one), a valid-but-different-from-any-
-    /// expectation `\id` produces no finding at all. This is the "stateless
-    /// callers retain current behavior" half of the declared-book seam.
+    /// With no declared-book context (the default — `LintOptions::scoped`
+    /// never sets one), a valid-but-different-from-any-expectation `\id`
+    /// produces no finding at all. This is the "stateless callers retain
+    /// current behavior" half of the declared-book seam.
     #[test]
     fn no_declared_book_context_leaves_a_valid_but_wrong_code_unflagged() {
         let result = lint_usfm(
@@ -3343,8 +3453,8 @@ mod tests {
         );
     }
 
-    /// Gate 0D probe C row 4: a declared book that disagrees with a valid
-    /// source `\id` — the gap the declared-book context exists to close.
+    /// A declared book that disagrees with a valid source `\id` — the gap
+    /// the declared-book context exists to close.
     #[test]
     fn declared_book_context_fires_mismatch_for_a_valid_but_different_code() {
         let options = LintOptions {
@@ -3822,12 +3932,10 @@ mod tests {
             let parsed = parse(&source);
             let serial = finalize_issues(
                 collect_issues_serial(&parsed.tokens, &options, &enabled),
-                &parsed.tokens,
                 &options,
             );
             let partitioned = finalize_issues(
                 collect_issues_partitioned(&parsed.tokens, &options, &enabled),
-                &parsed.tokens,
                 &options,
             );
             assert_eq!(

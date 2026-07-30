@@ -149,7 +149,8 @@ impl<'a, T: LintableToken> MarkerBalanceVisitor<'a, T> {
             ("location", location.to_string()),
         ]);
         let token = &self.tokens[pending.token_index];
-        let anchor = self.tokens.last();
+        let anchor_index = self.tokens.len().checked_sub(1);
+        let anchor = anchor_index.map(|index| &self.tokens[index]);
         self.issues.push(LintIssue {
             code,
             category: code.category(),
@@ -165,6 +166,8 @@ impl<'a, T: LintableToken> MarkerBalanceVisitor<'a, T> {
             sid: token.sid().or_else(|| anchor.and_then(|a| a.sid())),
             marker: Some(pending.marker.clone()),
             fix: None,
+            position: pending.token_index as u32,
+            related_position: anchor_index.map_or(super::NO_TOKEN_POSITION, |i| i as u32),
         });
     }
 }
@@ -194,6 +197,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
                 LintCode::MissingMilestoneSelfClose,
                 marker_params(frame.marker),
                 token,
+                token_index,
             ));
         }
 
@@ -219,6 +223,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
                     LintCode::VerseInSectionOrOtherParagraph,
                     message_params([("category", category_key.to_string())]),
                     token,
+                    token_index,
                 ));
             }
         }
@@ -280,6 +285,8 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
                             sid: close_token.sid(),
                             marker: Some(frame.marker.to_string()),
                             fix: None,
+                            position: frame.source_token_index as u32,
+                            related_position: super::NO_TOKEN_POSITION,
                         });
                     }
                     if !victims.is_empty() && self.enabled.has(LintCode::ImplicitlyClosedMarker) {
@@ -293,6 +300,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
                                 ]),
                                 &victim.marker,
                                 open_token,
+                                victim.token_index,
                             ));
                         }
                     }
@@ -358,13 +366,14 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
         &mut self,
         _ctx: &WalkContext<'tokens, '_>,
         token: &'tokens T,
-        _token_index: usize,
+        token_index: usize,
     ) {
         if !self.just_closed_via_explicit && self.enabled.has(LintCode::StrayCloseMarker) {
             self.issues.push(simple_issue(
                 LintCode::StrayCloseMarker,
                 message_params([("form", "milestone-end".to_string())]),
                 token,
+                token_index,
             ));
         }
         self.just_closed_via_explicit = false;
@@ -400,12 +409,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
         self.just_closed_via_explicit = false;
     }
 
-    fn on_other(
-        &mut self,
-        _ctx: &WalkContext<'tokens, '_>,
-        token: &'tokens T,
-        _token_index: usize,
-    ) {
+    fn on_other(&mut self, _ctx: &WalkContext<'tokens, '_>, token: &'tokens T, token_index: usize) {
         // Walker routed an EndMarker here when no scope matched —
         // that's a stray close.
         if token.kind() == TokenKind::EndMarker
@@ -419,6 +423,7 @@ impl<'a, 'tokens, T: LintableToken> Visitor<'tokens, T> for MarkerBalanceVisitor
                     ("form", "named".to_string()),
                 ]),
                 token,
+                token_index,
             ));
         }
         self.drain_pending_as_boundary_unclosed();
