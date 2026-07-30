@@ -1741,3 +1741,159 @@ C4 wires this; nothing builds before then.
 - **Format/fix are ordinary mutations.** `format(scope)`-class and fix-application verbs return
   the same `MutationEffect` as every other mutator and follow the identical §K pull/reconcile
   loop; no special sync path exists for formatting.
+
+---
+
+## N. Patch-table framing — 2026-07-30 (C3/C4 packet; closes the §F.3 deferral)
+
+§F.3 deferred field 6's framing to "the braid phase that produces it". This is that
+framing, implemented in the same packet, under the §J rulings and the C4 census
+(0D ledger §9, which found nothing contradicting them).
+
+### N.1 Field 5 — `patch_id[N]:u32`
+
+The dense index into this section's own patch table, `u32::MAX` for a finding with
+no fix. Common-row flag bit 5 (`fix`) and the column must agree in both
+directions; the non-sentinel values, read in row order, must be exactly
+`0..record_count` (dense and ascending). That is the one canonical form an encoder
+can produce, so any other is a table a decoder would be guessing about.
+
+### N.2 Field 6 — the patch table
+
+`count` fixed 24-byte patch records followed by the flat row array they
+partition — the §D.5 two-array shape, the same one the message payload table
+uses.
+
+| patch record (24 bytes) | meaning |
+| --- | --- |
+| `first_row:u32` | first row of this patch's contiguous run |
+| `row_count:u32` | rows in the run |
+| `code:u32` | field-7 index of `TokenFix.code` (the *remedy* code; census §9.1 found it is never the finding's lint code) |
+| `label:u32` | field-7 index of `TokenFix.label` |
+| `label_params:u32` | field-8 payload-row index of `TokenFix.label_params` |
+| `reserved:u32` | MUST be zero on encode, rejected non-zero on decode |
+
+| patch row (20 bytes) | meaning |
+| --- | --- |
+| `op:u8` | frozen §5.2 discriminant (`0` insert, `1` replace, `2` delete) |
+| `kind:u8` | `TokenKindTag` of the placed template; zero for `Delete` |
+| `reserved:u16` | MUST be zero on encode, rejected non-zero on decode |
+| `position:u32` | the target token's index in the paired token section |
+| `text:u32` | field-7 index of the template text |
+| `marker:u32` | field-7 index, `u32::MAX` = absent |
+| `sid:u32` | field-7 index, `u32::MAX` = absent |
+
+Rules the decoder enforces before any fix is materialized: records partition the
+row array exactly (contiguous, ascending, counts summing to the row total); every
+string index resolves; `label_params` names a real payload row; `op` and `kind`
+are known discriminants; `position` is in bounds for the paired token section;
+every row of one patch names the *same* position (that token is the fix's target,
+and a run naming two of them would not be one fix); a placing op carries a text
+index and a `Delete` carries none of the three. An empty table is not a legal way
+to say "no patches" — the field is then absent.
+
+Consequences worth recording:
+
+- **A fix with no label parameters still gets a payload row** (`pair_count = 0`)
+  rather than a sentinel, so the reader has one shape. All 92 corpus fixes take
+  this path.
+- **Field 7 and field 8 now have two users each.** They are present iff field 3
+  *or* the patch table is present. §F.2's "present iff field 3 is present" is
+  amended accordingly.
+- **The flattening rule is duplicated, deliberately.** Braid resolves a
+  `TokenFix` into rows and so does wire's encoder; the crates depend on each other
+  in neither direction, and each side is pinned by its own bijectivity gate against
+  `TokenFix`. Same judgment call as `canonical_order`, owner-endorsed in §J.8.
+- **Ordinal bridging is a Phase D task, recorded not built.** Field 5 is a
+  per-section index; braid's `PatchId.ordinal` is corpus-wide. A container's
+  section knows nothing of the books before it, so the composing adapter must map
+  the two (or Phase D adds a section-level ordinal base). No column was added for
+  it now, because a column whose value always equals the index it sits beside is
+  speculative surface.
+
+### N.3 Known limitation of `(SnapshotId, ordinal)` identity, recorded
+
+`update_config` changes which findings exist without changing any source byte, so
+it cannot change `SnapshotId` (§J.4/J.5: identity covers source bytes only). An
+ordinal held across `update_config` + `lint()` could therefore name a *different*
+patch under an unchanged snapshot id. Mitigated, not eliminated: `update_config`
+drops every cached result and its patches, so a held id fails as
+`UnknownPatch` until a fresh `lint()`, at which point a caller has re-read the
+findings it is acting on. Closing it completely would need a third identity
+component, which §J.2 deliberately does not have.
+
+---
+
+## API ledger append — 2026-07-30 (C3 + C4: resident lint, patches, restore seed)
+
+Extends §7.4 and the C2 append. Phase E (baseline/diff/format patches), the
+lint-cache prime, and the wasm class remain unbuilt, not withdrawn.
+
+### Landed as ledgered
+
+`Braid::lint`, `apply_patch`, `preview_patch`, `restore_corpus`, `to_tokens`
+(C2); `LintSnapshot`, `BookLintSnapshot`, `PatchId`, `RestoreReport`,
+`PrimeRejection`, `PrimeRejectReason`, `CorpusRestoreInput`, `BookRestoreInput`,
+`PatchError`. 15 of §7.4's 23 methods now exist.
+
+### Amended or added
+
+| item | disposition | why |
+| --- | --- | --- |
+| `Braid::new(config, minter)` | **amended** — gains the `impl FnMut() -> String + 'static` minter | freeze §L: the minter is handle-held. `Braid` consequently loses `Clone` and gets a manual `Debug` (a boxed closure is neither) |
+| `LintSnapshot<'a>` / `BookLintSnapshot<'a>` | **amended** — borrowed, not owned: `tokens: &'a [OwnedToken]`, `result: &'a LintResult`, plus `source_key: &'a SourceKey` | §5.5's own "storage may avoid cloning tokens into each published view". `lint()` returns the value (not `&LintSnapshot`), which is what lets it borrow resident state; publishing a whole-corpus snapshot copies no token streams |
+| `Braid::lint(&mut self) -> LintSnapshot<'_>` | **amended** — infallible, no `LintError` | core rule execution over resident tokens has no failure mode, so `LintError`'s one proposed variant (§6.8 `RuleExecutionFailed`) has no producer. Not built, exactly like C2's `IngestError::InvalidToken`/`Parse` rows |
+| `PatchId { snapshot: SnapshotId, ordinal: u32 }` | **amended** — supersedes §5.3's `PatchId(u32)` **and** `PatchHandle` | §J.2 makes the id the pair, which is exactly what `PatchHandle` was. Two names for one value would be a `PatchHandle` whose only field pair is a `PatchId` |
+| `Patch { id, book, source_hash, code, label, label_params, rows }`, `PatchRow { op, position, template }`, `PatchOp` | **new** — supersede §5.3's `TokenPatch`/`BookTokenPatch`/`TokenEdit` | §J.1 replaced range-based flat edits with token-operation rows. One patch is one fix and one fix is one book, so the `TokenPatch { books: [...] }` envelope has nothing to group; `Patch::book` names it. The frozen 0/1/2 discriminants are unchanged |
+| `Braid::patches()`, `Braid::patch(id)` | **new** | without an accessor the patch table is unobservable and untestable — same argument as C2's `chapter_labels`. A book awaiting recompute publishes none, so a stale row position is never addressable |
+| `Braid::preview_patch(&mut self, id) -> Result<Vec<OwnedToken>, PatchError>` | **amended** — takes `&mut self`, returns one book's tokens | `&mut` because preview and apply share one code path, and that path mints ids through the handle. `Vec<OwnedToken>` rather than `ScopedOutput`: one fix targets one book, and `Patch::book` already names it |
+| `PatchError` | **amended** — 3 of the 6 frozen variants built (`StaleSnapshot`, `UnknownPatch`, `InvalidResult`) | `InvalidEditOrder`, `OverlappingEdits`, `OutOfBounds` describe a patch table braid did not resolve itself; every table in this phase comes from braid's own resolution, so they get producers when one can arrive from outside (a restored cache, a decoded container) |
+| `IngestError::InvalidToken(TokenBuildError)` | **built**, with a core payload type instead of wire's `TokenInputError` | C2 recorded it as producerless; the §L residency checkpoint is the producer. The producer is core's working-token checkpoint, not a DTO conversion, so the payload is core's own error |
+| `PrimeRejectReason` | **amended** — one variant (`SourceTokenMismatch`), the five frozen cache-acceptance reasons unbuilt | they all gate a cached lint contribution, which no input can carry until the §8.2/§8.3 stamps are decided |
+| `BookRestoreInput` | **amended** — no `lint: Option<BookLintPrime>` field; gains `line_ending` | same stamp gap; a token-ingested book must declare its ending (C2's `BookTokensInput` rule) |
+| `CorpusRestoreInput` | **amended** — no `config_fingerprint`/`engine_stamp` | nothing to validate them against yet |
+| `Braid::restore_corpus(&mut self, seed) -> Result<RestoreReport, IngestError>` | landed as ledgered | — |
+
+### New core exports (required by the above)
+
+| name | rationale |
+| --- | --- |
+| `usfm_onion::token::OwnedToken::from_format_token(&FormatToken, anchor: Option<&OwnedToken>)` | the §L residency checkpoint: demands an id, takes the payload facts the working shape cannot carry from the anchor token, refuses rather than inventing them |
+| `usfm_onion::token::TokenBuildError` (+ `Serialize`/`Deserialize`) | that checkpoint's typed failure: `MissingId`, `MissingPayload`, `UnresolvableSid` |
+| `impl From<&OwnedToken> for usfm_onion::format::FormatToken` | the inbound half of the same boundary |
+| `usfm_onion::token::TokenKind: Deserialize`, `usfm_onion::format::TokenTemplate: Deserialize` | a template is patch *input* on the resident boundary; both already had `Serialize` |
+| `usfm_onion_wire::schema::PatchOpTag` | the frozen §5.2 op discriminants, wire-side |
+
+Row counts: **9 items landed as ledgered**, **4 new**, **9 amended**, **5 new core
+exports**, **9 frozen variants/fields deliberately unbuilt** (1 `LintError`
+variant, 3 `PatchError`, 5 `PrimeRejectReason`).
+
+### Recorded finding — core's whitespace remedies do not satisfy their own rule on tokens
+
+Found while building C4's application path, and pinned by
+`crates/braid/tests/patches.rs::applying_a_patch_rewrites_the_bytes_the_template_named`.
+
+The three fix-producing codes' remedy prepends the missing whitespace into the
+*marker token's own source* (`"\n\\p"`), because `prepend_ws_fix` builds one
+replacement template from `prefix + target.source()`. The rule that fired reads the
+**previous** token's trailing character. So after applying the fix:
+
+- the emitted bytes are correct, and a fresh parse of them is clean;
+- the resident token stream still reports the same finding, because the newline
+  now lives inside the marker token rather than in front of it;
+- the stream holds a marker token no lexer would ever produce.
+
+Braid applies core's recipe faithfully and never reparses (reparsing would destroy
+the caller's token identity, which §K's pull/reconcile loop is built on), so this
+is core's fix shape to change, not braid's application to work around. It affects
+the editor's existing fix button identically today.
+
+**Recommended reshape (owner decision, not taken here):** express the three
+remedies as an `InsertAfter`/insert-before of a separate `Newline`/`Text` token
+rather than a `ReplaceToken` that rewrites the marker's text. That produces a token
+stream a lexer could have produced, makes the finding actually disappear on
+re-lint, and would give `TokenFix::InsertAfter` its first real producer. Cost: it
+changes all 92 corpus fix payloads (the 0D §9 census would be re-run) and the
+`missing-whitespace-before-marker` fix would need an "insert *before* the target"
+op, which the frozen op set does not have (`InsertAfter` on the *previous* token
+expresses it, at the cost of addressing a token the finding does not anchor).

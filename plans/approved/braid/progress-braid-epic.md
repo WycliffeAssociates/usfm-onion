@@ -3032,3 +3032,68 @@ clean on every touched crate; `pkg-bundler`/`pkg-web` restored via `git checkout
   defer-pkg-regeneration-until-Phase-F policy; scratch build proves publication emits span?.
 - Next: C3+C4 combined packet (owner-approved), single clean-room review at the end; C4's
   92-fix census runs FIRST as the early stop-detector against freeze §J.
+
+## 2026-07-30 — C3 + C4 landed: resident lint, snapshots, patches, wire fields 5/6, restore seed
+
+Five commits on `braid`, in order:
+
+1. `1ebe20b` docs(braid): the C4 fix census — 92 corpus `TokenFix` payloads, recorded in the 0D
+   ledger §9. **Ran first, as the packet required.** No contradiction with §J/§K/§L.
+2. `7d32bfd` feat(token): the lossless residency boundary — `From<&OwnedToken> for FormatToken`
+   plus `OwnedToken::from_format_token(working, anchor)`.
+3. `021b36b` feat(braid): resident lint, complete snapshots, snapshot-bound patches.
+4. `3d01f4a` feat(wire): finding fields 5 and 6 — `LintIssue.fix` survives the wire, closing
+   §F.3's interim `None`.
+5. `411b393` feat(braid): `restore_corpus`, the semantic warm cold-open seed path.
+
+### Census (item 0) — the early stop-detector cleared
+
+92 fixes over `testData` + `en_ult` + `en_ulb`, split exactly 48/32/12 as predicted. All are
+single-replacement `ReplaceToken` with **empty** `label_params`; every one flattens to exactly one
+§J.1 row; template texts max 6 bytes; `target_token_id` resolves and equals the finding's own
+`token_id` 92/92. Two recorded consequences: `TokenFix.code` is a *remedy* code and never the
+finding's lint code (0/92 match), so it must be interned; and six fixture cases have two findings
+proposing different whole-token replacements for the **same** token, which is what makes §J.2's
+snapshot-bound identity and §J.6's hash check load-bearing rather than belt-and-braces.
+
+### What the freeze gained
+
+- **§N** — field 5/6 framing, closing §F.3: dense addressing column, 24-byte patch records, 20-byte
+  rows, every check the decoder runs, and three recorded consequences (fields 7/8 now have two users;
+  the flattening rule is duplicated deliberately per §J.8; ordinal bridging is a Phase D task).
+- **§N.3** — the one known limitation of `(SnapshotId, ordinal)`: `update_config` changes the finding
+  set without changing source bytes, so an ordinal held across it could name a different patch.
+  Mitigated by dropping caches (a held id fails `UnknownPatch` until a fresh lint), not eliminated —
+  eliminating it needs a third identity component §J.2 deliberately lacks.
+- **API ledger append** — 9 landed as ledgered, 4 new, 9 amended, 5 new core exports, 9 frozen
+  variants/fields deliberately unbuilt with the reason each has no producer.
+
+### Gates
+
+Full workspace suite green: core 282 (+3), braid 46 across four files (4 lib + 27 lifecycle + 8
+resident lint + 7 patches), wire 179 (+3), wasm 27 (+1). Lint oracle `--ignored` byte-identical, no
+rebless. Release ignored gates: wire lib 4, wire corpus 2 (**62,948 findings, all 92 fixes
+round-tripping, per-code counts asserted at 48/32/12**), braid corpus 3 (including the new
+whole-corpus ordering gate over all 66 `en_ulb` books). `npm run test:packed` and `test:packed:web`
+both pass at 410 cases / 5,717,153 tokens — **counts legitimately changed** from 14 good + 11
+malformed goldens to 15 + 15 (one new good vector, four new malformed patch vectors); no existing
+golden's bytes changed. Golden generators re-run and their output committed. `pkg-bundler`/`pkg-web`
+restored after the dev builds.
+
+### Two things surfaced rather than worked around
+
+- **Core's whitespace remedies do not satisfy their own rule on tokens.** The fix prepends the
+  whitespace into the marker token's own source; the rule reads the *previous* token's trailing
+  character. Patched bytes are correct and a fresh parse is clean, but the resident token stream
+  still reports the finding, and holds a marker token no lexer would produce. Pinned by test, written
+  up in the freeze with a recommended reshape (express the remedy as an inserted token) and its cost
+  (re-runs the 92-payload census; needs an insert-before op the frozen set lacks). **Owner decision.**
+- **The warm lint cache is blocked on the stamps.** `restore_corpus` seeds source + tokens (saving
+  the parse) but cannot accept a cached lint contribution: §8.2/§8.3's lint-config fingerprint and
+  engine stamp are still OWNER-DECISION, and a stamp that does not cover what changed would accept
+  stale findings. `prime_lint_cache` is unbuilt for the same reason.
+
+### Next
+
+Clean-room review of this batch (Will runs it). Then Phase D — which the full finding-and-patch gate
+above now unblocks — with the ordinal-bridging task from §N.2 as its first patch-related item.
