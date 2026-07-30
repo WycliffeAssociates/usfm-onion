@@ -80,9 +80,28 @@ pub struct BookTokensInput {
 
 /// One chapter run's worth of replacement content. The book's stored line
 /// ending is inherited; a chapter never declares its own.
+///
+/// Tokens-only by design (owner-ruled): a raw-USFM `Usfm { source: String }`
+/// variant existed briefly and was removed. A bare chapter fragment has no
+/// `\id`, so `parse` can address none of its tokens — no book code means no
+/// sid at all, and its ids are positional to that one fragment's parse, so a
+/// second raw-text splice into a different run of the same book collides on
+/// `IngestError::DuplicateTokenId` the moment two fragments both start their
+/// own token numbering from zero. No real caller needs it either: an editor
+/// speaks tokens (it already has the caller-addressed stream in memory), and
+/// raw USFM enters at book/corpus grain (`BookInput::Usfm`), where a real
+/// `\id` makes addressing possible in the first place. `ChapterInput::Tokens`
+/// carries the caller's own ids/sids and has neither problem.
+///
+/// If a raw-text chapter lane is ever wanted again, the design is: splice the
+/// caller's bytes into the *book's* authoritative source at the run's byte
+/// range, then reparse the whole book. Parsing in the book's own context is
+/// what gives the new content a real `\id`-backed sid and ids, instead of
+/// parsing the fragment in isolation and hoping to reconcile placeholder
+/// identities afterward. Recorded here so a future need does not re-litigate
+/// this from scratch.
 #[derive(Debug, Clone)]
 pub enum ChapterInput {
-    Usfm { source: String },
     Tokens(Vec<OwnedToken>),
 }
 

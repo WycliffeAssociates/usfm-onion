@@ -253,9 +253,7 @@ fn a_changed_chapter_reports_exactly_that_chapter() {
         let effect = resident
             .update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 2\n\\p\n\\v 1 Thus the heavens and the earth.\n".to_string(),
-                },
+                ChapterInput::Tokens(owned("\\c 2\n\\p\n\\v 1 Thus the heavens and the earth.\n")),
             )
             .unwrap();
 
@@ -295,9 +293,7 @@ fn a_duplicate_chapter_book_widens_its_effect_to_the_whole_book() {
         let effect = resident
             .update_chapter(
                 ChapterTarget::new(id("GEN"), ChapterLabel::Number("2".into())),
-                ChapterInput::Usfm {
-                    source: "\\c 2\n\\p\n\\v 1 c edited\n".to_string(),
-                },
+                ChapterInput::Tokens(owned("\\c 2\n\\p\n\\v 1 c edited\n")),
             )
             .unwrap();
         assert_eq!(effect.changed, vec![Scope::book(id("GEN"))], "{lane:?}");
@@ -322,9 +318,7 @@ fn ambiguous_chapter_operations_error_atomically() {
         assert_eq!(
             resident.update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 1\n\\p\n\\v 1 edited\n".to_string()
-                }
+                ChapterInput::Tokens(owned("\\c 1\n\\p\n\\v 1 edited\n"))
             ),
             Err(IngestError::AmbiguousChapter {
                 target: target.clone(),
@@ -359,9 +353,7 @@ fn a_missing_or_mismatched_chapter_replacement_is_rejected_atomically() {
         assert_eq!(
             resident.update_chapter(
                 absent.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 9\n\\p\n\\v 1 x\n".to_string()
-                }
+                ChapterInput::Tokens(owned("\\c 9\n\\p\n\\v 1 x\n"))
             ),
             Err(IngestError::ChapterNotFound(absent)),
             "{lane:?}"
@@ -370,12 +362,7 @@ fn a_missing_or_mismatched_chapter_replacement_is_rejected_atomically() {
         // A chapter of a book that is not resident at all is equally not found.
         let absent_book = ChapterTarget::new(id("LEV"), ChapterLabel::Number("1".into()));
         assert_eq!(
-            resident.update_chapter(
-                absent_book.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 1\n".to_string()
-                }
-            ),
+            resident.update_chapter(absent_book.clone(), ChapterInput::Tokens(owned("\\c 1\n"))),
             Err(IngestError::ChapterNotFound(absent_book)),
             "{lane:?}"
         );
@@ -386,9 +373,7 @@ fn a_missing_or_mismatched_chapter_replacement_is_rejected_atomically() {
         assert_eq!(
             resident.update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 3\n\\p\n\\v 1 x\n".to_string()
-                }
+                ChapterInput::Tokens(owned("\\c 3\n\\p\n\\v 1 x\n"))
             ),
             Err(IngestError::ReplacementLabelMismatch {
                 target: target.clone(),
@@ -402,9 +387,7 @@ fn a_missing_or_mismatched_chapter_replacement_is_rejected_atomically() {
         assert_eq!(
             resident.update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 1\n\\p\n\\v 1 x\n\\c 5\n\\p\n\\v 1 y\n".to_string()
-                }
+                ChapterInput::Tokens(owned("\\c 1\n\\p\n\\v 1 x\n\\c 5\n\\p\n\\v 1 y\n"))
             ),
             Err(IngestError::ReplacementLabelMismatch {
                 target: target.clone(),
@@ -418,9 +401,7 @@ fn a_missing_or_mismatched_chapter_replacement_is_rejected_atomically() {
         assert_eq!(
             resident.update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\c 1\n\\p\n\\v 1 x\n\\c 1\n\\p\n\\v 2 y\n".to_string()
-                }
+                ChapterInput::Tokens(owned("\\c 1\n\\p\n\\v 1 x\n\\c 1\n\\p\n\\v 2 y\n"))
             ),
             Err(IngestError::AmbiguousChapter {
                 target: target.clone(),
@@ -433,9 +414,7 @@ fn a_missing_or_mismatched_chapter_replacement_is_rejected_atomically() {
         assert_eq!(
             resident.update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\p\n\\v 1 x\n".to_string()
-                }
+                ChapterInput::Tokens(owned("\\p\n\\v 1 x\n"))
             ),
             Err(IngestError::ReplacementLabelMismatch {
                 target,
@@ -457,9 +436,7 @@ fn front_matter_is_a_run_the_caller_can_replace_and_empty() {
         let effect = resident
             .update_chapter(
                 target.clone(),
-                ChapterInput::Usfm {
-                    source: "\\id GEN\n\\h Beginnings\n".to_string(),
-                },
+                ChapterInput::Tokens(owned("\\id GEN\n\\h Beginnings\n")),
             )
             .unwrap();
         assert_eq!(
@@ -555,34 +532,6 @@ fn a_duplicate_token_id_is_rejected_atomically() {
         })
     );
     assert_eq!(state_fingerprint(&resident), before);
-
-    // A splice that would introduce one is refused the same way — the ids of a
-    // separately parsed fragment are positional to that parse, so pushing the
-    // same fragment into two runs of one book collides.
-    let mut resident = seeded(Lane::Parsed);
-    let before = state_fingerprint(&resident);
-    let fragment = "\\c 1\n\\p\n\\v 1 x\n";
-    resident
-        .update_chapter(
-            ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into())),
-            ChapterInput::Usfm {
-                source: fragment.to_string(),
-            },
-        )
-        .unwrap();
-    let after_first = state_fingerprint(&resident);
-    assert_ne!(after_first, before);
-    let second = resident.update_chapter(
-        ChapterTarget::new(id("GEN"), ChapterLabel::Number("2".into())),
-        ChapterInput::Usfm {
-            source: "\\c 2\n\\p\n\\v 1 y\n".to_string(),
-        },
-    );
-    assert!(
-        matches!(second, Err(IngestError::DuplicateTokenId { .. })),
-        "expected the collision to be typed and refused, got {second:?}"
-    );
-    assert_eq!(state_fingerprint(&resident), after_first);
 }
 
 #[test]
@@ -800,9 +749,7 @@ fn to_tokens_returns_current_truth_for_an_effects_scopes() {
         let effect = resident
             .update_chapter(
                 ChapterTarget::new(id("GEN"), ChapterLabel::Number("2".into())),
-                ChapterInput::Usfm {
-                    source: "\\c 2\n\\p\n\\v 1 Thus the heavens, edited.\n".to_string(),
-                },
+                ChapterInput::Tokens(owned("\\c 2\n\\p\n\\v 1 Thus the heavens, edited.\n")),
             )
             .unwrap();
 
@@ -824,9 +771,7 @@ fn to_tokens_returns_current_truth_for_an_effects_scopes() {
         resident
             .update_chapter(
                 ChapterTarget::new(id("GEN"), ChapterLabel::Number("2".into())),
-                ChapterInput::Usfm {
-                    source: "\\c 2\n\\p\n\\v 1 Later still.\n".to_string(),
-                },
+                ChapterInput::Tokens(owned("\\c 2\n\\p\n\\v 1 Later still.\n")),
             )
             .unwrap();
         let pulled = resident.to_tokens(&effect).unwrap();
@@ -976,9 +921,7 @@ fn a_mixed_ending_file_is_preserved_verbatim_until_it_is_edited() {
     resident
         .update_chapter(
             ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into())),
-            ChapterInput::Usfm {
-                source: "\\c 1\n\\p\n\\v 1 b\n".to_string(),
-            },
+            ChapterInput::Tokens(owned("\\c 1\n\\p\n\\v 1 b\n")),
         )
         .unwrap();
     // First edit re-emits the whole book with the ending it leads with.
@@ -1038,42 +981,8 @@ fn verse_sid(tokens: &[OwnedToken]) -> Option<String> {
 #[test]
 fn resident_tokens_keep_the_ids_and_sids_their_source_gave_them() {
     // Core is address-agnostic and honors caller ids/SIDs, and braid does not
-    // re-address a stream it was handed. That has a visible consequence for
-    // chapter-level USFM ingest: a fragment parsed on its own has no `\id`, so
-    // its tokens carry no book-scoped sid, and its ids are positional to that
-    // fragment's parse. This pins the behavior rather than leaving it to be
-    // discovered — a consumer needing canonical anchors over the resident stream
-    // derives them (`usfm_onion::diff::derive_canonical_sids`), which is exactly
-    // how the stateless diff path already works.
-    let mut resident = seeded(Lane::Parsed);
-    let pulled = resident
-        .to_tokens(Scope::chapter(id("GEN"), ChapterLabel::Number("1".into())))
-        .unwrap()
-        .remove(0)
-        .tokens;
-    assert_eq!(verse_sid(&pulled), Some("GEN 1:1".to_string()));
-    assert!(pulled[0].id().as_str().starts_with("GEN-"));
-
-    resident
-        .update_chapter(
-            ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into())),
-            ChapterInput::Usfm {
-                source: "\\c 1\n\\p\n\\v 1 In the beginning, edited.\n".to_string(),
-            },
-        )
-        .unwrap();
-    let pulled = resident
-        .to_tokens(Scope::chapter(id("GEN"), ChapterLabel::Number("1".into())))
-        .unwrap()
-        .remove(0)
-        .tokens;
-    // No `\id` in the fragment means no book code, so parse derives no sid at
-    // all for its tokens, and their ids are positional to that parse.
-    assert_eq!(verse_sid(&pulled), None);
-    assert!(pulled[0].id().as_str().starts_with("unknown-"));
-
-    // The editor lane keeps whatever the caller holds, which is the sid braid
-    // handed it in the first place.
+    // re-address a stream it was handed: the editor lane keeps whatever the
+    // caller holds, which is the sid braid handed it in the first place.
     let mut resident = seeded(Lane::Parsed);
     let tokens = resident
         .to_tokens(Scope::chapter(id("GEN"), ChapterLabel::Number("1".into())))

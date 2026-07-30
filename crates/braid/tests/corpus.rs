@@ -197,9 +197,7 @@ fn mutated_books_pull_what_a_fresh_parse_of_their_new_bytes_would_yield() {
         let effect = resident
             .update_chapter(
                 target,
-                ChapterInput::Usfm {
-                    source: format!("{current}\\p\n\\v 99 An appended verse.\n"),
-                },
+                ChapterInput::Tokens(owned(&format!("{current}\\p\n\\v 99 An appended verse.\n"))),
             )
             .unwrap();
         assert_eq!(

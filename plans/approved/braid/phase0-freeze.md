@@ -1671,3 +1671,29 @@ Extends §7.4. C2 landed the crate and the mutation/pull/identity floor; lint
 Row counts: **16 items landed as ledgered**, **8 new**, **3 amended**, **1
 moved to core**, **1 new core export**, **2 frozen variants deliberately
 unbuilt**.
+
+---
+
+## Freeze note — 2026-07-30: `ChapterInput::Usfm` dropped (owner-ruled)
+
+Amends the row above: `ChapterInput` is no longer a two-variant enum. The
+`Usfm { source: String }` variant this ledger listed under "landed, exactly as
+ledgered" is removed; `ChapterInput` is now `Tokens(Vec<OwnedToken>)` only, and
+`update_chapter` is tokens-only.
+
+Reason: boundary 1 in C2's entry above (a bare chapter fragment has no `\id`,
+so `parse` derives no sid and its ids are positional to that one fragment's
+parse — a second raw-text splice into the same book collides on
+`DuplicateTokenId`) is not a bug to fix but a property of parsing text outside
+its book. No real caller needs the lane at chapter grain: an editor already
+holds a caller-addressed token stream, and raw USFM ingest belongs at
+book/corpus grain (`BookInput::Usfm`), where a real `\id` makes addressing
+possible in the first place.
+
+Pre-made design answer, recorded so a future need does not re-litigate this: if
+a raw-text chapter lane is wanted again, splice the caller's bytes into the
+*book's* authoritative source at the run's byte range, then reparse the whole
+book. Parsing in the book's own context is what gives the new content a real
+`\id`-backed sid and ids, instead of parsing the fragment in isolation and
+reconciling placeholder identities afterward. The same doc comment lives on
+`ChapterInput` in `crates/braid/src/input.rs`.

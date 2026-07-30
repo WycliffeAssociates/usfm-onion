@@ -34,7 +34,6 @@ mod input;
 mod state;
 
 use usfm_onion::lint::LintOptions;
-use usfm_onion::parse::parse;
 use usfm_onion::token::{BookId, OwnedToken, tokens_to_usfm_reconstruct_with_eol};
 
 use crate::corpus::{BookState, chapter_runs};
@@ -211,14 +210,7 @@ impl Braid {
             .resolve_chapter(&target)
             .map_err(|error| IngestError::from_scope(error, &target))?;
 
-        let tokens = match replacement {
-            ChapterInput::Usfm { source } => parse(&source)
-                .tokens
-                .iter()
-                .map(OwnedToken::from_parsed)
-                .collect(),
-            ChapterInput::Tokens(tokens) => tokens,
-        };
+        let ChapterInput::Tokens(tokens) = replacement;
         validate_replacement_shape(&tokens, &target)?;
 
         let resident = &self.books[book_index];
