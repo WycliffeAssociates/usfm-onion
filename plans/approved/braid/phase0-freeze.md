@@ -1605,3 +1605,14 @@ this verbatim.
   Same helper family as the Phase-C-deferred `reconcileFindings`.
 - **K.8 Verbs live on the handle, not the DTO.** `braid.applyFix(finding)` etc.; finding/token
   DTOs stay inert frozen data.
+
+### K.5a — implementation note (2026-07-30): snapshot identity vs changedSince ordering
+
+`SnapshotId` stays content-derived per §J.4 (identity, unordered). `changedSince` needs order, so
+braid keeps a private monotonic revision counter (bumped per effective mutation), stamps each
+scope's last-modified revision, and maintains a bounded recent map of snapshot-hash → revision.
+`changedSince(id)` resolves the hash to a revision and scans newer stamps; a hash absent from the
+map (aged out, or pre-restart) degrades to everything-changed per §K.5. The revision counter is
+internal only — it never crosses the public API; counters were rejected as public identity
+because they do not survive restore, and timestamps because they are neither deterministic nor
+unique.
