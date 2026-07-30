@@ -1143,28 +1143,29 @@ fn token_to_walk_token(value: Token) -> WalkToken {
     }
 }
 
-/// Wire `AttributeItem` -> native `OwnedAttribute`. `span` has no home on
-/// `OwnedAttribute` (it carries no per-attribute position at all — see
-/// `map_format_token`'s use of the owning token's own span on the way back
-/// out); `key`/`value`/`is_default` are the only fields `format_attribute_list`
-/// reads, and `text` is the verbatim per-attribute source `OwnedAttribute`
-/// calls `source`.
+/// Wire `AttributeItem` -> native `OwnedAttribute`. The caller's own span
+/// rides along verbatim (`None` for an attribute the caller synthesized or
+/// structurally edited) rather than being discarded and reinvented on the way
+/// back out; `key`/`value`/`is_default` are the only other fields
+/// `format_attribute_list` reads, and `text` is the verbatim per-attribute
+/// source `OwnedAttribute` calls `source`.
 fn wire_attribute_to_owned(item: &AttributeItem) -> NativeOwnedAttribute {
     NativeOwnedAttribute {
         source: Box::from(item.text.as_str()),
         key: Box::from(item.key.as_str()),
         value: Box::from(item.value.as_str()),
         is_default: item.is_default,
+        span: item.span.clone().map(native_span),
     }
 }
 
-/// Native `OwnedAttribute` -> wire `AttributeItem`. `span` is required on the
-/// wire shape but not carried by `OwnedAttribute`; the owning token's own span
-/// is the closest available position, and — like every other span on a
-/// `FormatToken` — it is best-effort after a format pass, not byte-exact.
-fn owned_attribute_to_wire(attribute: &NativeOwnedAttribute, span: Span) -> AttributeItem {
+/// Native `OwnedAttribute` -> wire `AttributeItem`. Emits the preserved span
+/// (or `None`) rather than substituting the owning token's — the marker's own
+/// span is a different byte range than the attribute list's, and using it
+/// would misreport a position the attribute never occupied.
+fn owned_attribute_to_wire(attribute: &NativeOwnedAttribute) -> AttributeItem {
     AttributeItem {
-        span,
+        span: attribute.span.map(map_span),
         text: attribute.source.to_string(),
         key: attribute.key.to_string(),
         value: attribute.value.to_string(),
@@ -1275,12 +1276,11 @@ fn map_token(token: &NativeToken<'_>) -> Token {
 }
 
 fn map_format_token(token: &NativeFormatToken) -> Token {
-    let span = token.span.map(map_span);
     Token {
         id: token.id.clone().unwrap_or_default(),
         kind: token.kind.into(),
         source: token.text.clone(),
-        span: span.clone(),
+        span: token.span.map(map_span),
         sid: token.sid.clone(),
         marker: token.marker.clone(),
         nested: None,
@@ -1302,12 +1302,7 @@ fn map_format_token(token: &NativeFormatToken) -> Token {
         attributes: token
             .attributes
             .iter()
-            .map(|attribute| {
-                owned_attribute_to_wire(
-                    attribute,
-                    span.clone().unwrap_or(Span { start: 0, end: 0 }),
-                )
-            })
+            .map(owned_attribute_to_wire)
             .collect(),
         attribute_source: token.attribute_source.clone(),
     }
@@ -1856,6 +1851,18 @@ mod tests {
             .iter_mut()
             .find(|t| !t.attributes.is_empty())
             .expect("expected attribute-bearing token");
+        let marker_span = attr_token.span.as_ref().map(|span| (span.start, span.end));
+        let original_attribute_span = attr_token.attributes[0]
+            .span
+            .as_ref()
+            .map(|span| (span.start, span.end))
+            .expect("a parsed attribute must carry its own real span");
+        assert_ne!(
+            Some(original_attribute_span),
+            marker_span,
+            "fixture must actually put the attribute list at a different byte \
+             range than the marker, or this test cannot catch span fabrication"
+        );
         attr_token.attributes[0].value = "b".to_string();
         attr_token.attribute_source = None;
 
@@ -1872,6 +1879,18 @@ mod tests {
             .expect("formatTokens must return the attribute-bearing token with its structured list intact");
         assert_eq!(returned.attributes[0].value, "b");
         assert!(returned.attribute_source.is_none());
+        // The regression this guards: the attribute's own parsed span must
+        // survive verbatim, never substituted with the owning marker's span.
+        let returned_attribute_span = returned.attributes[0]
+            .span
+            .as_ref()
+            .map(|span| (span.start, span.end));
+        assert_eq!(
+            returned_attribute_span,
+            Some(original_attribute_span),
+            "the attribute's own span must survive formatTokens, not be \
+             replaced with the owning marker's span"
+        );
     }
 
     #[test]

@@ -463,6 +463,7 @@ impl<'a> From<&Token<'a>> for FormatToken {
                     key: Box::from(attribute.key),
                     value: Box::from(attribute.value),
                     is_default: attribute.is_default,
+                    span: Some(attribute.span),
                 })
                 .collect(),
         }

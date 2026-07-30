@@ -791,7 +791,12 @@ impl From<NativeMarkerMetadata> for MarkerMetadata {
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(rename_all = "camelCase")]
 pub struct AttributeItem {
-    pub span: Span,
+    /// `None` for an attribute an editor synthesized or structurally edited —
+    /// same convention as `Token.span`, and never fabricated from some other
+    /// token's span, which would misreport a position this attribute never
+    /// actually occupied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<Span>,
     pub text: String,
     pub key: String,
     pub value: String,
@@ -802,7 +807,7 @@ pub struct AttributeItem {
 impl From<&NativeAttributeItem<'_>> for AttributeItem {
     fn from(item: &NativeAttributeItem<'_>) -> Self {
         Self {
-            span: item.span.into(),
+            span: Some(item.span.into()),
             text: item.source.to_string(),
             key: item.key.to_string(),
             value: decode_attr_value(item.value),

@@ -424,6 +424,11 @@ pub struct OwnedAttribute {
     pub key: Box<str>,
     pub value: Box<str>,
     pub is_default: bool,
+    /// Byte span in the source this attribute was parsed from. `None` for an
+    /// attribute an editor synthesized or structurally edited — never
+    /// fabricated from some other token's span, since that would misreport a
+    /// position the attribute never actually occupied.
+    pub span: Option<Span>,
 }
 
 /// Parsed number payload carried by a `TokenKind::Number` token.
@@ -700,6 +705,7 @@ fn owned_marker_attrs(
                 key: Box::from(attribute.key),
                 value: Box::from(attribute.value),
                 is_default: attribute.is_default,
+                span: Some(attribute.span),
             })
             .collect(),
         attribute_source: attrs.attribute_source.map(|(_, source)| Box::from(source)),
