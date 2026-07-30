@@ -450,7 +450,14 @@ pub trait FormattableToken: Clone {
     fn id(&self) -> Option<&str> {
         None
     }
-    fn set_id(&mut self, _id: String) {}
+    /// No default: a no-op default here would let an implementor pass the
+    /// `_with_minter` seam's guarantee silently — the minter mints an id,
+    /// `set_id` discards it, and callers relying on every token being
+    /// addressable would find out only when something downstream can't
+    /// find the token it was promised. Every implementor must decide, in
+    /// its own visible code, what happens to a set id — even if that
+    /// decision is "nothing" — rather than inherit silence from the trait.
+    fn set_id(&mut self, id: String);
     fn kind(&self) -> TokenKind;
     fn set_kind(&mut self, kind: TokenKind);
     fn text(&self) -> &str;
@@ -485,15 +492,14 @@ pub trait FormattableToken: Clone {
 /// Attaches a fresh id to a token the formatter/fix-applier just synthesized,
 /// when a minter is supplied.
 ///
-/// This is the seam the 2026-07-28 freeze adjudication calls for: core never
-/// invents an id itself (address-agnostic — ids come from a caller or from
-/// `assign_ids` at parse time, never fabricated mid-pipeline) and never uses
-/// randomness (`std` has none, and determinism is a format invariant, not an
-/// implementation detail). With no minter — every call site before this seam
-/// existed, and every call site today unless a caller opts in — a synthesized
-/// token keeps its historical no-id shape (`synthetic_like` itself never
-/// calls `set_id`). A caller that needs every resident token addressable
-/// (braid, from Phase C onward) supplies a minter that is a pure function of
+/// Core never invents an id itself (address-agnostic — ids come from a
+/// caller or from `assign_ids` at parse time, never fabricated mid-pipeline)
+/// and never uses randomness (`std` has none, and determinism is a format
+/// invariant, not an implementation detail). With no minter — every call
+/// site before this seam existed, and every call site today unless a caller
+/// opts in — a synthesized token keeps its historical no-id shape
+/// (`synthetic_like` itself never calls `set_id`). A caller that needs every
+/// resident token addressable supplies a minter that is a pure function of
 /// how many times it has already been called in this pass, e.g.
 /// `{book}-p{patch}-{n}` — reproducible across runs, unique per book by
 /// construction; ingest/apply validation remains the collision backstop.
@@ -910,10 +916,27 @@ fn recover_malformed_markers<T: FormattableToken>(
         return None;
     }
 
+    // Splitting one token into several must not duplicate its identity onto
+    // every fragment: the original id (if any) goes to whichever fragment
+    // is emitted first — mirroring the same "first replacement reuses the
+    // target's own clone" rule `build_replacement_tokens` already applies —
+    // and every fragment after that is synthetic and gets minted, never a
+    // second copy of an id something else in the pipeline may already be
+    // addressing.
+    let mut original_id = token.id().map(ToOwned::to_owned);
     let mut out = Vec::new();
+
     if slash_index > 0 {
-        let mut prefix = token.clone();
-        prefix.set_text(text[..slash_index].to_string());
+        let mut prefix = T::synthetic_like(
+            Some(token),
+            TokenKind::Text,
+            text[..slash_index].to_string(),
+            None,
+            token.sid().map(ToOwned::to_owned),
+        );
+        if let Some(id) = original_id.take() {
+            prefix.set_id(id);
+        }
         out.push(prefix);
     }
 
@@ -924,12 +947,21 @@ fn recover_malformed_markers<T: FormattableToken>(
         Some(marker.clone()),
         token.sid().map(ToOwned::to_owned),
     );
-    mint_synthetic_id(&mut recovered_marker, minter);
+    match original_id.take() {
+        Some(id) => recovered_marker.set_id(id),
+        None => mint_synthetic_id(&mut recovered_marker, minter),
+    }
     out.push(recovered_marker);
 
     if rest.len() > 1 {
-        let mut suffix = token.clone();
-        suffix.set_text(rest[1..].to_string());
+        let mut suffix = T::synthetic_like(
+            Some(token),
+            TokenKind::Text,
+            rest[1..].to_string(),
+            None,
+            token.sid().map(ToOwned::to_owned),
+        );
+        mint_synthetic_id(&mut suffix, minter);
         out.push(suffix);
     }
 
@@ -2161,8 +2193,8 @@ mod tests {
         }
     }
 
-    /// A minter that counts its own calls — the shape the freeze adjudication
-    /// asks for (`{book}-p{patch}-{n}`, a pure function of call count).
+    /// A minter that counts its own calls — a pure function of call count,
+    /// e.g. `{book}-p{patch}-{n}`, the shape a deterministic minter needs.
     fn counting_minter() -> impl FnMut() -> String {
         let mut count: u32 = 0;
         move || {
@@ -2270,6 +2302,40 @@ mod tests {
         assert_eq!(ids(&first), ids(&second));
     }
 
+    /// `FormattableToken::set_id` has no default body specifically so a
+    /// minted id can't be silently dropped by an implementor that never
+    /// wrote a real one. This exercises the trait-level guarantee directly,
+    /// through `id()`, for both in-tree implementors — not just by reading
+    /// `FormatToken`'s own `id` field, which would only prove the field
+    /// exists, not that the trait contract holds.
+    #[test]
+    fn a_minted_id_is_observable_through_the_trait_after_set_id() {
+        fn assert_round_trips<T: FormattableToken>(mut token: T) {
+            token.set_id("synthetic-1".to_string());
+            assert_eq!(token.id(), Some("synthetic-1"));
+        }
+
+        assert_round_trips(FormatToken {
+            kind: TokenKind::Text,
+            text: String::new(),
+            marker: None,
+            sid: None,
+            id: None,
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        });
+        assert_round_trips(EditorToken {
+            kind: TokenKind::Text,
+            text: String::new(),
+            marker: None,
+            sid: None,
+            id: String::new(),
+            lane: 0,
+        });
+    }
+
     /// Direct unit test of the malformed-marker recovery path: a `Text`
     /// token whose content embeds an unescaped marker the parser didn't
     /// split out gets recovered into its own token, which is exactly as
@@ -2305,6 +2371,82 @@ mod tests {
             "the recovered marker token is synthetic and must be minted"
         );
         assert_eq!(recovered[2].text, "after");
+        assert_eq!(
+            recovered[2].id.as_deref(),
+            Some("synthetic-2"),
+            "the suffix is synthetic too and must be minted, not left with the (absent) original id"
+        );
+    }
+
+    /// Reviewer repro: an *identified* token split three ways must not hand
+    /// the same stable id to more than one fragment. Duplicate ids are a
+    /// braid error condition, so this has to be fixed at the source — the
+    /// first fragment (the prefix, here) keeps the original identity, and
+    /// every fragment after it is synthetic and gets its own minted id.
+    #[test]
+    fn recover_malformed_markers_does_not_duplicate_the_original_id() {
+        let identified = FormatToken {
+            kind: TokenKind::Text,
+            text: "before\\q1 after".to_string(),
+            marker: None,
+            sid: None,
+            id: Some("GEN-7".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        };
+        let mut mint_fn = counting_minter();
+        let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
+        let recovered = recover_malformed_markers(&identified, &mut minter)
+            .expect("embedded \\q1 must recover");
+
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(
+            recovered[0].id.as_deref(),
+            Some("GEN-7"),
+            "the first fragment (the prefix) keeps the original identity"
+        );
+        assert_ne!(recovered[1].id.as_deref(), Some("GEN-7"));
+        assert_ne!(recovered[2].id.as_deref(), Some("GEN-7"));
+        assert_ne!(
+            recovered[1].id, recovered[2].id,
+            "no two fragments may share an id, minted or otherwise"
+        );
+        let ids: std::collections::HashSet<_> =
+            recovered.iter().map(|token| token.id.clone()).collect();
+        assert_eq!(ids.len(), 3, "all three fragment ids must be distinct");
+    }
+
+    /// Same recovery, but with no prefix (the malformed marker starts the
+    /// text): the recovered marker token itself is the first fragment and
+    /// must inherit the identity instead of the (nonexistent) prefix.
+    #[test]
+    fn recover_malformed_markers_gives_the_original_id_to_the_marker_when_there_is_no_prefix() {
+        let identified = FormatToken {
+            kind: TokenKind::Text,
+            text: "\\q1 after".to_string(),
+            marker: None,
+            sid: None,
+            id: Some("GEN-9".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        };
+        let mut mint_fn = counting_minter();
+        let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
+        let recovered = recover_malformed_markers(&identified, &mut minter)
+            .expect("embedded \\q1 must recover");
+
+        assert_eq!(recovered.len(), 2, "marker, suffix text — no prefix");
+        assert_eq!(recovered[0].kind, TokenKind::Marker);
+        assert_eq!(
+            recovered[0].id.as_deref(),
+            Some("GEN-9"),
+            "with no prefix, the marker itself is the first fragment"
+        );
+        assert_ne!(recovered[1].id.as_deref(), Some("GEN-9"));
     }
 
     /// `apply_token_fix_with_minter`: an `InsertAfter` fix's new token is
