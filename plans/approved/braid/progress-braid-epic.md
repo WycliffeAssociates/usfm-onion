@@ -2553,3 +2553,11 @@ question the freeze left unanswered.
 
 - Next: Phase C step 2 onward — the `braid` crate itself (C2): strict input/selector/error types,
   candidate validation, ordered unique declared books, duplicate-preserving chapter-run metadata.
+
+## 2026-07-30 — Freeze §K: mutation/sync caller contract ruled
+
+- Owner ruled the braid caller API trio: MutationEffect (scopes out, mutate-first-atomic) +
+  pull (normalizing, current-truth, transport-hidden) + reconcile (pure-JS identity-stable
+  application). changedSince(snapshotId) added as the cursor-free recovery valve. Mut-style
+  "pass my tokens in" APIs rejected on boundary physics (recorded in §K.6). C2 specs
+  MutationEffect/pull against §K verbatim; reconcile lands with the Phase C JS work.

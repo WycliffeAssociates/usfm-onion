@@ -1566,3 +1566,42 @@ Rulings on `phase-c-freeze-topics.md` (all owner-ruled 2026-07-30):
 
 C4's evidence pass (census of the 92 corpus fixes) proceeds under these rulings; if the census
 contradicts any of them, that is a STOP with the data attached.
+
+## K. Adjudication — 2026-07-30 (owner): mutation/sync caller contract (MutationEffect · pull · reconcile)
+
+Owner-ruled after API exploration; C2's `MutationEffect` and the §8.2 surface are specced against
+this verbatim.
+
+- **K.1 Mutate-first, atomic.** Every mutating verb applies to resident state before returning;
+  rejected mutation → typed error with state untouched and no effect. Read-after-mutate is always
+  consistent.
+- **K.2 Effects are values, not subscriptions.** Braid tracks no per-consumer read cursors. An
+  effect describes what one mutation changed:
+  `MutationEffect { snapshot_id: u64 (16-hex string in JS), changed: Vec<Scope>, removed: Vec<BookId> }`
+  with `Scope { book, chapter? }` (chapter omitted = whole book). `changed` is exact (what was
+  rewritten, not what was inspected); `changed.is_empty()` IS the no-op signal. Findings are not
+  in the effect — lint stays an explicit separate call. Effects carry no handles (plain data).
+- **K.3 Duplicate chapter numbers widen.** When a book contains duplicate `\c` numbers, effects
+  report that book as whole-book scope rather than inventing a chapter address space; ambiguous
+  chapter *operations* still error per the epic gate.
+- **K.4 `pull` is the single hydration verb.** `pull(scopes: &[Scope]) -> [{book, chapter?, tokens}]`
+  returns CURRENT truth (not state-at-effect-time), normalizes its input (dedupe; whole-book
+  absorbs chapter scopes), so naive concatenation of multiple effects' `changed` lists is always
+  correct. Transport is hidden in the official JS glue (DTO marshal for small scopes; the packed
+  buffer + JS materialize lane if a scope is ever measured hot) — callers never choose.
+- **K.5 `changedSince(snapshot_id)` is the recovery valve.** Returns `{snapshot_id, changed,
+  removed}` relative to a caller-remembered snapshot, computed from braid's per-scope
+  last-modified stamps (no per-consumer state); unknown/too-old id degrades to everything-changed
+  (full resync). Makes dropped effects a non-event.
+- **K.6 Tokens flow INTO braid in exactly one place** — `update_chapter`/`update_book` (the
+  keystroke push), the only moment the caller knows something braid doesn't. Mutating verbs
+  (applyFix/applyPatch, canonicalize-class operations) never take caller tokens as input.
+  Boundary physics recorded: passing tokens into wasm pays the expensive marshalling direction
+  and braid cannot preserve JS object identity anyway (identity lives in the JS heap) — a
+  "mutate my array" API was considered and rejected on these grounds.
+- **K.7 `reconcile(prev, next)` is pure JS glue** (token-sids-style packaging): one pass keyed on
+  stable token ids; unchanged tokens return the caller's existing object references, changed ones
+  are fresh — serving both setState (new array, identity-stable elements) and ref-style callers.
+  Same helper family as the Phase-C-deferred `reconcileFindings`.
+- **K.8 Verbs live on the handle, not the DTO.** `braid.applyFix(finding)` etc.; finding/token
+  DTOs stay inert frozen data.
