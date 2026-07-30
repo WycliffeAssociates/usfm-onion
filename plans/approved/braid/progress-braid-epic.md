@@ -2771,3 +2771,105 @@ packet required lint or patch machinery.
 - Next: C3 — explicit whole-dirty-book `lint()` over the resident corpus with the
   declared `BookId` in core's lint context, plus the complete native snapshot.
   Boundary 1 above wants a ruling first.
+
+## 2026-07-30 — F1 (format-token attribute passthrough) landed; two C2 follow-ups resolved
+
+Three-item packet: drop the chapter-grain raw-USFM lane C2 flagged as boundary 1,
+land F1 per the approved plan, and attempt C2's boundary 3 (`FormattableToken` for
+`OwnedToken`).
+
+**ITEM 1 — `ChapterInput::Usfm` removed; `update_chapter` is tokens-only
+(owner-ruled).** C2's boundary 1 asked for a ruling; the ruling is to drop the
+lane rather than fix its addressing. A bare chapter fragment has no `\id`, so
+`parse` derives no book code and therefore no sid for its tokens, and its ids are
+positional to that one fragment's parse — a second raw-text splice into a
+different run of the same book starts its own numbering from zero and collides
+on `IngestError::DuplicateTokenId` the moment both fragments share a book. No
+real caller needs the lane either: an editor speaks tokens (it already holds the
+caller-addressed stream in memory) and raw USFM enters at book/corpus grain
+(`BookInput::Usfm`), where a real `\id` makes addressing possible in the first
+place. `ChapterInput` is now `Tokens(Vec<OwnedToken>)` only; `update_chapter`
+destructures it directly, no `parse` call left in `braid::lib`. Full rationale
+plus the pre-made design answer for if a raw-text chapter lane is ever wanted
+again (source-splice into the book's authoritative bytes + whole-book reparse,
+so parse addresses the new content in real book context instead of reconciling
+placeholder identities afterward) is recorded as a doc comment on
+`ChapterInput` itself (`crates/braid/src/input.rs`) and mirrored as a freeze
+note in `phase0-freeze.md`, so a future need does not re-litigate it.
+Lane-specific tests removed: the second (`ChapterInput::Usfm` splice) scenario
+in `a_duplicate_token_id_is_rejected_atomically`, and the first (`unknown-N`
+id / no-sid) scenario in `resident_tokens_keep_the_ids_and_sids_their_source_gave_them`
+— renamed in effect to a single-scenario test, since the token lane's
+"caller-addressed round-trip" property is what remains to test. All 17 other
+call sites were mechanical `ChapterInput::Usfm { source: X.to_string() }` →
+`ChapterInput::Tokens(owned(X))` rewrites (`crates/braid/tests/lifecycle.rs`,
+`crates/braid/tests/corpus.rs`); no behavioral change to any surviving
+assertion.
+
+**ITEM 2 — F1 landed per `plans/approved/format-token-attribute-passthrough.md`.**
+`FormatToken` gains one field, `attribute_source: Option<String>` — the same
+verbatim `|...` shape as `dto::Token.attributeSource`/`OwnedToken::attribute_list()`
+— rather than a structured attribute list; format never inspects or edits
+attribute content, so nothing needs to parse it apart. `FormattableToken` gains
+`attribute_source()`/`set_attribute_source()` with `None`/no-op defaults, so any
+token type that never carries attributes (most `LintableToken`-only fixtures)
+implements nothing extra. The naive fix (concatenate the attribute string right
+after the marker's own text) is wrong: USFM attaches an attribute list to the
+opening marker structurally, but its verbatim text reads at the marker's
+*closer*, right before `\w*`/end-milestone — `\w gracious|lemma="grace" \w*`,
+not `\w |lemma="grace" gracious\w*`. Fixed by implementing `SerializableToken`
+for `FormatToken` (attributes as an empty slice, `attribute_list()` returning
+`attribute_source`, no `attribute_offset` override — a format pass is
+normalizing, not byte-exact, so the closer rule is correct rather than a
+byte-distance fallback) and delegating `format_tokens_to_usfm` to the existing
+`tokens_to_usfm_reconstruct` closer-rule emitter instead of a second, naive
+concatenation. wasm wiring: `token_value_to_format_token` (input direction,
+`formatTokens()`) now threads `value.attribute_source` through; `map_format_token`
+(output direction) sets the DTO's `attribute_source` from the native field and
+leaves `attributes: Vec::new()` with a comment explaining why (format never
+populates a structured list, `attribute_source` is the real fix). `map_walk_token`
+and its `WalkToken` DTO are untouched — no attribute field exists there and the
+plan's gate is format/fix paths, not walk. Golden fixture
+`crates/usfm_onion_wasm/golden/outputs/attributes/{format.usfm,format-tokens.json}`
+regenerated (`npm run golden:wasm:update`); `git status` on the golden tree
+confirmed only those two files moved. Four new tests in `src/format/mod.rs`
+cover the plan's own gates: full round-trip through `format_tokens`, id-less
+tokens, id-bearing tokens (`set_id` called on every token first), and a proof
+that synthesized tokens never invent an attribute list.
+
+**ITEM 3 — STOP: `impl FormattableToken for OwnedToken` cannot be completed
+honestly.** Every accessor `FormattableToken` requires except one can be
+implemented honestly against `OwnedToken`'s existing catalog-backed fields
+(`marker_metadata`/`structural_marker_info` are the same catalog a real parse
+consults, so synthesizing e.g. `structural()` for a new token is not a fake).
+The blocker is `synthetic_like`: the trait requires it to produce a full new
+token of the caller's own type, and `OwnedToken` mandates a real
+`StableTokenId` (`StableTokenId::new` rejects the empty string; there is no
+`Default`) where `FormatToken`'s id is optional. `synthetic_like`'s signature
+gives no id to store — there is no caller-supplied id to honor, and core's
+address-agnostic, never-invents-ids principle (§2.1#7, the same principle
+boundary 1 above rests on) forbids fabricating one to fill the slot. Any
+implementation is therefore either dishonest (mint a fake id) or requires a
+bigger design change out of this packet's scope: make `OwnedToken`'s id
+optional, or extend `synthetic_like`'s signature to accept a caller-supplied id
+(if the design allows a source at that call site — the coordinator/owner would
+need to weigh in, since either change touches C4's contract, not just this
+impl). No code changed for this item. C4's patch path over resident tokens
+remains blocked on this ruling.
+
+**Gates:** `cargo test --workspace` 278 (core) + 27 (braid) + 176 (wire) + 25
+(wasm), 0 failed; `cargo test --test lint_oracle -- --ignored` byte-identical,
+zero rebless; `cargo test --release -p usfm_onion_wire -- --ignored` 4 + 2
+green, zero golden diffs; `npm run test:packed` and `test:packed:web` both
+green, pinned counts unchanged — 409 cases / 5,717,137 tokens / 715 chapter
+slices; `cargo fmt --check` clean on every touched crate; `pkg-bundler`/
+`pkg-web` restored via `git checkout --`, never committed.
+
+**Deviations:** none from the plan or the freeze. ITEM 3 is a stop, not a
+deviation — no code was written that could deviate.
+
+**Stops:** ITEM 3, as above.
+
+- Next: owner ruling wanted on `synthetic_like`'s id gap before C4's patch path
+  can be built over resident tokens; otherwise C3 (whole-dirty-book `lint()`,
+  boundary 1 from the previous entry now resolved by this entry's ITEM 1).
