@@ -1534,3 +1534,35 @@ Eight new items (six core, two wire); zero deletions, zero renumbers. `LINT_CODE
 32->33; `PARAM_CONTRACTS` gained one entry (24->25); `js/wire-schema.js`'s generated `LINT_CODES`
 and `PARAM_CONTRACTS` regenerated to match; the checked-in import-shape pin
 (`scripts/test-wire-schema-import.mjs`) updated to the new counts.
+
+## J. Adjudication — 2026-07-30 (owner): Phase C patch framing and snapshot identity
+
+Rulings on `phase-c-freeze-topics.md` (all owner-ruled 2026-07-30):
+
+- **J.1 — Patches are token operations, not byte edits** (supersedes the sheet's draft byte-span
+  recommendation, owner-corrected). Vocabulary: a **fix** is core's existing `TokenFix` (target
+  token + replacement/insertion `TokenTemplate`s). A **patch row** is one flattened op:
+  `{op: insert|replace|delete (frozen §5 discriminants), token position in the snapshot's token
+  stream, template payload}`. A **patch** is the contiguous row-run for one fix; a finding's
+  field-5 `patch_id` addresses its run (first/count, the §D.5 two-array shape). Application:
+  braid splices the resident token stream and re-serializes — source bytes and spans are derived
+  artifacts; the editor applies the same ops to its token array. This matches the editor's
+  existing fix-button mechanic and the token-first design contract; byte offsets appear nowhere
+  in the patch contract.
+- **J.2** — `PatchId = (SnapshotId, ordinal)`; staleness falls out of snapshot comparison.
+- **J.3** — Patch strings (label, label params, template text/marker/sid) intern in the finding
+  section's field-7 dictionary with the field-8 key/value framing for param maps.
+- **J.4** — `SnapshotId` is content-derived: xxh3 over the ordered per-book source hashes.
+  Deterministic across restore/process boundaries; same corpus ⇒ same id.
+- **J.5** — The id covers source bytes only; catalog/rules/config remain separate stamps; cache
+  validity is the tuple.
+- **J.6** — Mutation contract confirmed as epic-stated: effective mutation ⇒ new id; no-ops and
+  rejected mutations preserve id and caches; patch application requires snapshot id AND target
+  book source hash to match, else the typed stale error, never partial application.
+- **J.7 — Rules-version append policy (from C1 review):** no bump for `LintCode` 32; the library
+  has not shipped a release with the packed format, so pre-release appends ride version 1.
+  Post-release append policy is deferred to the release checkpoint, not silently decided here.
+- **J.8** — C1's core/wire canonical-order non-delegation judgment call: endorsed by owner.
+
+C4's evidence pass (census of the 92 corpus fixes) proceeds under these rulings; if the census
+contradicts any of them, that is a STOP with the data attached.

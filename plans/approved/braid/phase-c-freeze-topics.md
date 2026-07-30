@@ -1,7 +1,8 @@
 # Phase C freeze topics — owner decision sheet (drafted 2026-07-30)
 
-Status: DRAFT for owner adjudication before packet C4 (patch resolution + finding-and-patch
-gate). Decisions get recorded as dated freeze appendices in `phase0-freeze.md` once ruled.
+Status: RULED 2026-07-30 — recorded as freeze appendix §J in phase0-freeze.md. A1 was
+owner-corrected to token operations (see §J.1); the byte-span draft below is retained for
+history only.
 
 Context: Phase B deliberately deferred the patch table (freeze §F.3) because a patch is
 snapshot-bound and no snapshot identity existed. Phase C creates both. `TokenFix` today:
