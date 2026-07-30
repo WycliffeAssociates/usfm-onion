@@ -1718,3 +1718,14 @@ converts at its boundary and holds the minter.**
   considered and shelved — revisit only if boundary conversion ever measures hot in C4.
 
 C4 wires this; nothing builds before then.
+
+### L.1 — owner clarifications (2026-07-30)
+
+- **BYO identity function.** The minter contract is `() -> String`, hasher-style: speed,
+  format, and collision resistance are the application's trade. This loosens the 2026-07-28
+  "deterministic minter" wording — braid does not require determinism of the function; it
+  enforces uniqueness-within-a-book at the residency boundary via the existing
+  `DuplicateTokenId` typed error (atomic rejection on collision).
+- **Format/fix are ordinary mutations.** `format(scope)`-class and fix-application verbs return
+  the same `MutationEffect` as every other mutator and follow the identical §K pull/reconcile
+  loop; no special sync path exists for formatting.
