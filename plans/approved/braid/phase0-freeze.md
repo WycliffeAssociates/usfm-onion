@@ -1577,10 +1577,22 @@ this verbatim.
   consistent.
 - **K.2 Effects are values, not subscriptions.** Braid tracks no per-consumer read cursors. An
   effect describes what one mutation changed:
-  `MutationEffect { snapshot_id: u64 (16-hex string in JS), changed: Vec<Scope>, removed: Vec<BookId> }`
+  `MutationEffect { snapshot_id: u64 (16-hex string in JS), changed: Vec<Scope>, removed: Vec<BookId>, reordered: Option<Vec<BookId>> }`
   with `Scope { book, chapter? }` (chapter omitted = whole book). `changed` is exact (what was
-  rewritten, not what was inspected); `changed.is_empty()` IS the no-op signal. Findings are not
-  in the effect — lint stays an explicit separate call. Effects carry no handles (plain data).
+  rewritten, not what was inspected); `is_noop() == changed.is_empty() && removed.is_empty() &&
+  reordered.is_none()` is the no-op signal (see K.2a: `changed.is_empty()` alone is not sufficient).
+  Findings are not in the effect — lint stays an explicit separate call. Effects carry no handles
+  (plain data).
+- **K.2a Corpus order is a fourth observable, not folded into `changed` (proxy-ruled, C2/F1
+  clean-room review, 2026-07-30 — amends K.2).** A pure `replace_corpus` permutation of resident
+  books (`[GEN, EXO] -> [EXO, GEN]`, same bytes) rewrites no tokens, so `changed`/`removed` are
+  rightly empty — but it does change `snapshot_id` (order is part of §J.4 identity), which meant
+  `is_noop()` claimed nothing happened while the corpus's observable order silently changed
+  underneath, with no way for a caller to learn the new order short of re-reading every book.
+  `MutationEffect` gains `reordered: Option<Vec<BookId>>`: `Some(full new book order)` when the
+  relative order of the books present both before and after the mutation changed, `None`
+  otherwise (including the ordinary no-op case). Only `replace_corpus` can produce a reorder today;
+  every other verb always passes `None`. Serializes as usual under the `serde` feature.
 - **K.3 Duplicate chapter numbers widen.** When a book contains duplicate `\c` numbers, effects
   report that book as whole-book scope rather than inventing a chapter address space; ambiguous
   chapter *operations* still error per the epic gate.

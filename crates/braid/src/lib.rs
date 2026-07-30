@@ -151,8 +151,25 @@ impl Braid {
             }
         }
 
+        // The relative order of books present both before and after — additions
+        // and removals alone are not a reorder, and are already observable via
+        // `changed`/`removed`; only a genuine permutation of the survivors is.
+        let new_order: Vec<BookId> = candidates.iter().map(|candidate| candidate.book).collect();
+        let old_retained: Vec<BookId> = self
+            .books
+            .iter()
+            .map(|book| book.book)
+            .filter(|book| new_order.contains(book))
+            .collect();
+        let new_retained: Vec<BookId> = new_order
+            .iter()
+            .copied()
+            .filter(|book| old_retained.contains(book))
+            .collect();
+        let reordered = (old_retained != new_retained).then(|| new_order.clone());
+
         self.books = candidates;
-        Ok(self.effect(changed, removed))
+        Ok(self.effect_with_reorder(changed, removed, reordered))
     }
 
     /// Replaces one book, or appends it when it is not resident yet.
@@ -437,11 +454,28 @@ impl Braid {
     /// id falls out of installed state, which is why a no-op preserves it
     /// without any special case.
     fn effect(&mut self, changed: Vec<Scope>, removed: Vec<BookId>) -> MutationEffect {
+        self.effect_with_reorder(changed, removed, None)
+    }
+
+    /// Same as [`Self::effect`], plus the corpus-order signal only
+    /// [`Self::replace_corpus`] can produce (freeze §K.2a): the full new book
+    /// order, when the relative order of the books that persisted across the
+    /// call changed, `None` otherwise. A pure reorder rewrites no tokens — so
+    /// `changed`/`removed` stay empty — but it does change `snapshot_id`
+    /// (order is part of identity, §J.4), and without this field that new
+    /// order was otherwise unobservable through `to_tokens`.
+    fn effect_with_reorder(
+        &mut self,
+        changed: Vec<Scope>,
+        removed: Vec<BookId>,
+        reordered: Option<Vec<BookId>>,
+    ) -> MutationEffect {
         self.snapshot_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
         MutationEffect {
             snapshot_id: self.snapshot_id,
             changed,
             removed,
+            reordered,
         }
     }
 }

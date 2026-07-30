@@ -70,23 +70,35 @@ impl Scope {
 /// Findings are absent by design; lint stays an explicit separate call. Plain
 /// data, no handles.
 ///
-/// `snapshot_id` is the corpus identity *after* the mutation. Two changes it
-/// records that `changed` deliberately does not: a pure reorder and a
-/// source-key rebinding rewrite no tokens, so neither appears in `changed`;
-/// reordering changes the id (order is part of identity) while a rename does
-/// not (it is not semantic content).
+/// `snapshot_id` is the corpus identity *after* the mutation. Three changes it
+/// records that `changed` deliberately does not: a pure reorder, a
+/// source-key rebinding, and (for the reorder case) the new order itself all
+/// rewrite no tokens, so none of them appear in `changed`; reordering changes
+/// the id (order is part of identity) while a rename does not (it is not
+/// semantic content).
+///
+/// `reordered` (freeze §K.2a) is the reorder's own observable: `Some(full new
+/// book order)` when the relative order of the books present both before and
+/// after the mutation changed, `None` otherwise — including the ordinary
+/// no-op case. Without it, a pure `[GEN, EXO] -> [EXO, GEN]` replace_corpus
+/// changed `snapshot_id` (order is part of §J.4 identity) while reporting an
+/// empty `changed`, so `is_noop` claimed nothing happened and the new order
+/// was unobservable through `to_tokens`. Only `replace_corpus` can produce a
+/// reorder today; every other verb always passes `None`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MutationEffect {
     pub snapshot_id: SnapshotId,
     pub changed: Vec<Scope>,
     pub removed: Vec<BookId>,
+    pub reordered: Option<Vec<BookId>>,
 }
 
 impl MutationEffect {
-    /// Nothing was rewritten and nothing was removed.
+    /// Nothing was rewritten, nothing was removed, and the corpus order did
+    /// not change.
     pub fn is_noop(&self) -> bool {
-        self.changed.is_empty() && self.removed.is_empty()
+        self.changed.is_empty() && self.removed.is_empty() && self.reordered.is_none()
     }
 }
 

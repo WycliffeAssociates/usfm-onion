@@ -9,9 +9,9 @@ publish = false
 [features]
 default = []
 # Plain serde derives over braid's own lifecycle types — what a native
-# (Tauri) resident host needs, with no tsify or wasm-bindgen in the binary
-# (epic §2.2#13/#18). The `wasm` feature that adds tsify/wasm-bindgen glue
-# lands with the wasm composition root, not here.
+# (Tauri) resident host needs, with no tsify or wasm-bindgen in the binary.
+# The `wasm` feature that adds tsify/wasm-bindgen glue lands with the wasm
+# composition root, not here.
 serde = ["dep:serde"]
 
 [dev-dependencies]

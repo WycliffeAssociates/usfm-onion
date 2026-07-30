@@ -591,7 +591,10 @@ fn removing_a_chapter_reports_the_whole_book() {
 fn snapshot_identity_is_content_derived_and_order_sensitive() {
     // Same books, same bytes, different order: the id is over the *ordered*
     // per-book hashes, so it differs. Nothing was rewritten, so `changed` is
-    // empty — the two facts answer different questions.
+    // empty — the two facts answer different questions. Freeze §K.2a:
+    // `reordered` is what makes the new order itself observable, and it is
+    // what makes this a non-no-op effect despite `changed`/`removed` both
+    // being empty.
     let mut forward = braid();
     forward
         .replace_corpus(CorpusInput::new(vec![
@@ -608,7 +611,23 @@ fn snapshot_identity_is_content_derived_and_order_sensitive() {
         .unwrap();
     assert!(effect.changed.is_empty());
     assert!(effect.removed.is_empty());
+    assert_eq!(effect.reordered, Some(vec![id("EXO"), id("GEN")]));
+    assert!(
+        !effect.is_noop(),
+        "a pure reorder changes snapshot_id and must not report as a no-op"
+    );
     assert_ne!(effect.snapshot_id, before);
+
+    // Resubmitting the same order again is a genuine no-op: `reordered` is
+    // `None`, not `Some` of the order that already held.
+    let genuine_noop = forward
+        .replace_corpus(CorpusInput::new(vec![
+            Lane::Parsed.book("EXO", "02-EXO.usfm", EXO_SOURCE),
+            Lane::Parsed.book("GEN", "01-GEN.usfm", GEN_SOURCE),
+        ]))
+        .unwrap();
+    assert_eq!(genuine_noop.reordered, None);
+    assert!(genuine_noop.is_noop());
 
     // A freshly built braid with the same ordered content reproduces the id
     // exactly — no counters, no timestamps, no session state.
@@ -833,9 +852,9 @@ fn pulled_tokens_round_trip_through_the_token_ingest_lane() {
 
 #[test]
 fn a_books_line_ending_survives_a_token_push() {
-    // The CRLF trap (epic §2.2#16): the editor pushes `\n` newline tokens into a
-    // book whose file is CRLF. Without a per-book ending the book would silently
-    // flip endings on first edit and its hash would never match what is saved.
+    // The CRLF trap: the editor pushes `\n` newline tokens into a book whose
+    // file is CRLF. Without a per-book ending the book would silently flip
+    // endings on first edit and its hash would never match what is saved.
     let crlf = GEN_SOURCE.replace('\n', "\r\n");
     let mut resident = braid();
     resident
