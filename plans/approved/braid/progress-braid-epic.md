@@ -2619,3 +2619,31 @@ and no frozen public contract needed to change (the `LintIssue` field additions 
 not a break: `#[serde(skip)]` keeps the wire/JS shape unchanged).
 
 - C2 (the `braid` crate itself) is unblocked pending re-review of this fix round.
+
+## 2026-07-30 — C1 formally CLOSED: dedupe-identity tail fixed
+
+Re-review verdict: the three P1 fixes from the prior round passed and C2 was unblocked, but C1
+stayed formally open for one correctness tail. One commit (`094f878`, plus this ledger entry)
+closes it.
+
+- **P1 (dedupe collapsed distinct id-less/spanless findings).** `dedupe_issues`'s identity tuple —
+  `(code, span, related_span, token_id)` — didn't include the new `position`/`related_position`
+  fields, so two distinct findings that are both id-less and spanless (bare caller tokens carrying
+  neither) hashed to the same `(code, None, None, None)` key and one was silently dropped *before*
+  the position-aware sort ever ran. Fixed by adding both position fields to the identity tuple.
+  Verified the regression test genuinely catches the bug: reverted the fix locally, confirmed the
+  test failed (1 finding reported instead of 2), restored the fix, confirmed it passed again.
+  Verified oracle-neutral: `lint_oracle_is_stable` and `partitioned_matches_serial_over_corpora`
+  both stayed byte-identical, zero rebless — parsed tokens always carry a real span or id, so this
+  never changes what counted as a duplicate on that path.
+- **P2.** Stripped the remaining ephemeral review labels from two test comments (kept the
+  rationale) and rewrote `finding_codec.rs`'s `decode_findings` comment, which still described the
+  retired id-string-resolution design, to the current truth: core records positions at finding
+  creation; the decoder reconstructs the same positions from the row's own checked token index.
+
+**Gates:** `cargo test --workspace` 271 passed / 0 failed (core, up from 270 — the new dedupe
+regression); `lint_oracle_is_stable` byte-identical, zero rebless.
+
+**C1 is formally closed.** All four packet items (declared-book context, §2.2#15 re-key, formatter
+id-minting seam, and this dedupe tail) are landed and re-reviewed clean. C2 (the `braid` crate) may
+proceed.
