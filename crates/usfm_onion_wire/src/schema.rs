@@ -678,6 +678,10 @@ pub enum LintCodeTag {
     ContentAfterBlankMarker = 29,
     InvalidBookCode = 30,
     BookCodeNotUppercase = 31,
+    /// Appended 2026-07-30 (Phase C, C1): the declared-book lint context's
+    /// mismatch rule. Tombstone-safe append per the freeze's assignment
+    /// rule — 30/31 keep their values, this is a new slot, not a renumber.
+    BookIdMismatch = 32,
 }
 
 impl LintCodeTag {
@@ -715,6 +719,7 @@ impl LintCodeTag {
             29 => Some(Self::ContentAfterBlankMarker),
             30 => Some(Self::InvalidBookCode),
             31 => Some(Self::BookCodeNotUppercase),
+            32 => Some(Self::BookIdMismatch),
             _ => None,
         }
     }
@@ -762,6 +767,7 @@ impl LintCodeTag {
             Self::ContentAfterBlankMarker => "content-after-blank-marker",
             Self::InvalidBookCode => "invalid-book-code",
             Self::BookCodeNotUppercase => "book-code-not-uppercase",
+            Self::BookIdMismatch => "book-id-mismatch",
         }
     }
 }
@@ -807,6 +813,7 @@ impl From<LintCode> for LintCodeTag {
             LintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
             LintCode::InvalidBookCode => Self::InvalidBookCode,
             LintCode::BookCodeNotUppercase => Self::BookCodeNotUppercase,
+            LintCode::BookIdMismatch => Self::BookIdMismatch,
         }
     }
 }
@@ -854,13 +861,14 @@ impl From<LintCodeTag> for LintCode {
             LintCodeTag::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
             LintCodeTag::InvalidBookCode => Self::InvalidBookCode,
             LintCodeTag::BookCodeNotUppercase => Self::BookCodeNotUppercase,
+            LintCodeTag::BookIdMismatch => Self::BookIdMismatch,
         }
     }
 }
 
-/// All 32 `LintCode` variants in frozen `u8` order — the table the generated
+/// All 33 `LintCode` variants in frozen `u8` order — the table the generated
 /// JS/TS schema constants and any future finding catalog both iterate.
-pub const LINT_CODE_TABLE: [LintCodeTag; 32] = [
+pub const LINT_CODE_TABLE: [LintCodeTag; 33] = [
     LintCodeTag::MissingIdMarker,
     LintCodeTag::DuplicateIdMarker,
     LintCodeTag::IdMarkerNotAtFileStart,
@@ -893,6 +901,7 @@ pub const LINT_CODE_TABLE: [LintCodeTag; 32] = [
     LintCodeTag::ContentAfterBlankMarker,
     LintCodeTag::InvalidBookCode,
     LintCodeTag::BookCodeNotUppercase,
+    LintCodeTag::BookIdMismatch,
 ];
 
 /// One message parameter. An empty `allowed_values` admits any UTF-8 string;
@@ -1062,6 +1071,10 @@ pub const PARAM_CONTRACTS: &[ParamContract] = &[
     contract!(
         LintCodeTag::BookCodeNotUppercase,
         [("code", []), ("uppercase", [])]
+    ),
+    contract!(
+        LintCodeTag::BookIdMismatch,
+        [("expected", []), ("found", [])]
     ),
 ];
 
@@ -1441,9 +1454,10 @@ mod tests {
             LintCode::ContentAfterBlankMarker,
             LintCode::InvalidBookCode,
             LintCode::BookCodeNotUppercase,
+            LintCode::BookIdMismatch,
         ];
-        assert_eq!(codes.len(), 32);
-        assert_eq!(LINT_CODE_TABLE.len(), 32);
+        assert_eq!(codes.len(), 33);
+        assert_eq!(LINT_CODE_TABLE.len(), 33);
 
         let mut seen_kebab = Vec::new();
         for (value, code) in codes.into_iter().enumerate() {
@@ -1456,12 +1470,13 @@ mod tests {
             assert!(!seen_kebab.contains(&tag.kebab()));
             seen_kebab.push(tag.kebab());
         }
-        assert_eq!(LintCodeTag::from_u8(32), None);
+        assert_eq!(LintCodeTag::from_u8(33), None);
         assert_eq!(LintCodeTag::MissingIdMarker.kebab(), "missing-id-marker");
         assert_eq!(
             LintCodeTag::BookCodeNotUppercase.kebab(),
             "book-code-not-uppercase"
         );
+        assert_eq!(LintCodeTag::BookIdMismatch.kebab(), "book-id-mismatch");
     }
 
     #[test]

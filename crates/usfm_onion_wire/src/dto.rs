@@ -1145,6 +1145,7 @@ pub enum LintCode {
     ContentAfterBlankMarker,
     InvalidBookCode,
     BookCodeNotUppercase,
+    BookIdMismatch,
 }
 
 impl From<NativeLintCode> for LintCode {
@@ -1190,6 +1191,7 @@ impl From<NativeLintCode> for LintCode {
             NativeLintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
             NativeLintCode::InvalidBookCode => Self::InvalidBookCode,
             NativeLintCode::BookCodeNotUppercase => Self::BookCodeNotUppercase,
+            NativeLintCode::BookIdMismatch => Self::BookIdMismatch,
         }
     }
 }
@@ -1235,6 +1237,7 @@ impl From<LintCode> for NativeLintCode {
             LintCode::ContentAfterBlankMarker => Self::ContentAfterBlankMarker,
             LintCode::InvalidBookCode => Self::InvalidBookCode,
             LintCode::BookCodeNotUppercase => Self::BookCodeNotUppercase,
+            LintCode::BookIdMismatch => Self::BookIdMismatch,
         }
     }
 }

@@ -276,6 +276,7 @@ export const LINT_CODES = deepFreeze([
   { code: 29, kebab: "content-after-blank-marker" },
   { code: 30, kebab: "invalid-book-code" },
   { code: 31, kebab: "book-code-not-uppercase" },
+  { code: 32, kebab: "book-id-mismatch" },
 ]);
 
 export const PARAM_CONTRACTS = deepFreeze([
@@ -416,6 +417,12 @@ export const PARAM_CONTRACTS = deepFreeze([
     { params: [
       { key: "code", allowedValues: [] },
       { key: "uppercase", allowedValues: [] },
+    ] },
+  ] },
+  { code: 32, variants: [
+    { params: [
+      { key: "expected", allowedValues: [] },
+      { key: "found", allowedValues: [] },
     ] },
   ] },
 ]);
