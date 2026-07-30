@@ -2647,3 +2647,127 @@ regression); `lint_oracle_is_stable` byte-identical, zero rebless.
 **C1 is formally closed.** All four packet items (declared-book context, §2.2#15 re-key, formatter
 id-minting seam, and this dedupe tail) are landed and re-reviewed clean. C2 (the `braid` crate) may
 proceed.
+
+## 2026-07-30 — Phase C step 2–5 + native pull (C2): the `braid` residency floor landed
+
+Two commits (`7ba75ee`, `b5846b4`, plus this ledger entry). C2's scope was the
+crate itself: strict inputs, candidate validation, ordered unique books,
+duplicate-preserving chapter runs, the mutation verbs with exact
+`MutationEffect`s, authoritative bytes/hashes/snapshot identity/dirty stamps, and
+the native `to_tokens` pull. No lint (C3), no patches (C4), no wasm (Phase F).
+
+- **Core (`7ba75ee`) — one new export, zero byte changes.**
+  `usfm_onion::token::LineEnding { Lf, CrLf }` (with `as_str`/`detect`) and
+  `tokens_to_usfm_reconstruct_with_eol`, the §2.2#16 emission override: the shared
+  private `reconstruct` takes an optional ending and substitutes only
+  `TokenKind::Newline` sources. Both existing entry points pass `None` and are
+  byte-unchanged (oracle byte-identical, zero rebless). **Ledger deviation:**
+  freeze §7.3 assigned `LineEnding` to braid; it landed in core and is
+  re-exported as `braid::LineEnding`, because §2.2#16 puts emission in core and an
+  emitter knob must be a core type — one enum re-exported beats braid mirroring a
+  core parameter type. Recorded in the freeze's C2 API append.
+- **`braid` (`b5846b4`) — new workspace member**, `serde` feature = plain derives
+  (no tsify/wasm-bindgen anywhere), deps `usfm_onion` + `xxhash-rust` +
+  `rustc-hash`. Modules: `input`, `corpus`, `state`, `error`, `lib`.
+  - Mutate-first atomicity: every candidate book is parsed, id-validated, emitted,
+    and hashed before resident state is touched. Every typed-rejection test
+    fingerprints (snapshot id, ordered source keys + per-book hashes, dirty set)
+    and asserts it identical after the rejection.
+  - Effects are §K.2 verbatim: `MutationEffect { snapshot_id, changed: Vec<Scope>,
+    removed: Vec<BookId> }`, `changed` exact (rewritten, not inspected).
+    Duplicate `\c` labels widen that book to whole-book (K.3); ambiguous chapter
+    *operations* error. Two state changes deliberately carry an empty `changed`
+    and are tested as such: a source-key rebinding (freeze: renames preserve
+    semantic identity and caches) and a pure reorder (no book rewritten, but the
+    id changes because §J.4's id is over the **ordered** hashes).
+  - Identity is §J.4: xxh3-64 over the ordered per-book source hashes, so no-op
+    preservation falls out with no special case. The per-book hash is pinned by a
+    golden produced from wire's own `source_hash`, since braid cannot depend on
+    wire to prove the fingerprints agree.
+  - Chapter runs come from core's `walker::chapter_segments`, so braid's grain
+    cannot drift from the linter's; labels are the verbatim number token (`01` and
+    `1` stay distinct). Duplicate and out-of-order runs are retained in order.
+  - `update_chapter` replaces exactly one run: 0 matches `ChapterNotFound`, >1
+    `AmbiguousChapter`, a differing/extra run `ReplacementLabelMismatch`, and
+    several runs of the target label inside one replacement `AmbiguousChapter`
+    (label matches, count does not) — all with the frozen variant set, no new
+    error names. An empty replacement counts as front matter, so clearing front
+    matter is expressible while emptying a chapter stays `remove_chapter`'s job.
+  - `to_tokens` is the §K.4/K.5 pull: `Into<ScopeSet>` accepts a scope, a scope
+    list, or a `MutationEffect` (`braid.to_tokens(&effect)`), normalizes (dedupe,
+    whole-book absorbs chapter scopes, either arrival order), resolves everything
+    before emitting so no partial pull is possible, and returns corpus-then-run
+    order. A scope naming an absent book errors (`BookNotFound`) rather than being
+    skipped: callers already learn about removals from `effect.removed`.
+  - EOL contract: USFM ingest keeps the supplied bytes verbatim (mixed endings
+    preserved until first edit), token ingest declares its ending, chapter updates
+    inherit the book's, and every post-edit byte is core's override output — an
+    editor pushing LF tokens into a CRLF book still saves CRLF, and the hash is
+    over those saved bytes.
+- **Both ingest lanes, every test.** A `Lane` enum runs each lifecycle assertion
+  through `BookInput::Usfm` and `BookInput::Tokens`; the corpus gate runs all 66
+  `en_ulb` books through both and asserts byte-identical bytes, identical per-book
+  hashes, and identical snapshot ids, then edits three books' chapters and proves
+  each edited book pulls what a fresh parse of its new bytes yields while every
+  untouched book stays identical token-for-token (ids included).
+
+**Gates, exact counts:** `cargo test --workspace` 0 failed — braid 2 lib + 27
+lifecycle (+2 ignored corpus), core 274 (271 + 3 line-ending tests), wire 176 + 2,
+wasm 25; `cargo test -p braid --features serde` +1 (serde round-trip);
+`cargo test -p braid --test corpus -- --ignored` 2 passed (66 books);
+`lint_oracle_is_stable` byte-identical, zero rebless; `cargo test --release -p
+usfm_onion_wire -- --ignored` 4 + 2 green, zero golden diffs; `npm run
+test:packed` and `test:packed:web` both green at the pinned counts — 409 cases /
+5,717,137 tokens / 715 chapter slices, unchanged (includes `tsc --noEmit`);
+`cargo clippy -p braid --all-targets` clean. `pkg-bundler`/`pkg-web` restored,
+never committed.
+
+**Pre-existing failures (not introduced here, verified at `c22caa9` in a clean
+worktree):** `usx::tests::validated_pass_fixtures_are_lossless_across_usfm_usj_usx_usj_usfm`
+and its `usj` sibling fail on `testData/advanced/custom-attributes/origin.usfm`
+under `cargo test --release -p usfm_onion --lib -- --ignored`. Both fail
+identically before C2 — consistent with the recorded `testData` CRLF-taint
+hazard. Flagged for whoever owns that fixture, not fixed here.
+
+**Boundaries reported (owner/coordinator input wanted before C3):**
+
+1. **Chapter-level USFM ingest produces unaddressed tokens.** `parse` derives
+   both ids and sids per stream: a bare chapter fragment has no `\id`, so its
+   tokens get `unknown-N` ids and **no sid at all**. Two consequences, both
+   pinned by tests rather than papered over: a second `ChapterInput::Usfm` splice
+   into the same book collides on `unknown-N` and is refused with the frozen
+   `DuplicateTokenId`; and spliced content carries no canonical anchor. Braid did
+   not re-address the stream, because core is address-agnostic by decision
+   §2.1#7 and `OwnedToken` exposes neither an id nor a sid setter — re-addressing
+   would need new core seams (a sid stamper, or the C1 minter extended past the
+   formatter). Today's honest reading: `ChapterInput::Tokens` is the editor's
+   lane and carries the caller's own ids/sids; `ChapterInput::Usfm` is native-host
+   convenience with this caveat. C3 needs a ruling because findings anchor on
+   sids.
+2. **Caller-authored `OwnedToken` has no constructor.** `OwnedToken::from_parsed`
+   is the only way to build one, so a host cannot construct an editor-authored
+   token stream at all — the frozen path is wire's `TryFrom<TokenDto>` (§5.1),
+   which does not exist yet. C2 therefore exercises the caller lane with
+   parse-origin streams (pull, edit by splice, push) rather than synthesizing
+   token payloads. Nothing in C2 needs the constructor; Phase F's DTO conversion
+   does, and that is also where `IngestError::InvalidToken(TokenInputError)`
+   acquires a producer.
+3. **`OwnedToken` does not implement `FormattableToken`**, so core's formatter and
+   `apply_token_fix` cannot run over resident tokens. C4's patch path will need
+   either that impl or a conversion — recorded, not stubbed.
+
+**Deviations:** (a) `LineEnding` in core, above; (b) `MutationEffect`/`to_tokens`
+follow §K over the older §5.3 shapes (as the packet directed); (c) `Scope.chapter`
+is `Option<ChapterLabel>`, not the packet's paraphrased `Option<u16>`, because
+§5.2 forbids parsing a chapter label anywhere in braid; (d) the two unbuildable
+`IngestError` variants above; (e) the crate landed as one commit rather than one
+per epic step — the modules do not compile independently, and staging partial
+files would have made the history less reviewable, not more.
+
+**Stops:** none. No freeze/§J/§K contradiction was hit, every operation's
+atomicity is provable from candidate-first construction, and nothing in the
+packet required lint or patch machinery.
+
+- Next: C3 — explicit whole-dirty-book `lint()` over the resident corpus with the
+  declared `BookId` in core's lint context, plus the complete native snapshot.
+  Boundary 1 above wants a ruling first.

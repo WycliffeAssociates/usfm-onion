@@ -1633,3 +1633,41 @@ C1 entry was written): `usfm_onion::lint::LintIssue::position`, `::related_posit
 `usfm_onion::lint::NO_TOKEN_POSITION` (const). Two core items, zero wire/wasm-facing additions (the
 wasm `LintIssue` DTO does not mirror these — they are core-internal sort-key state, not part of the
 frozen finding shape any caller across the wasm boundary reads).
+
+---
+
+## API ledger append — 2026-07-30 (C2, the `braid` residency floor)
+
+Extends §7.4. C2 landed the crate and the mutation/pull/identity floor; lint
+(C3), patches (C4), baseline/diff (Phase E), restore/prime, and the wasm class
+(Phase F) are absent, so §7.4's other rows are still unbuilt, not withdrawn.
+
+### Landed, exactly as ledgered
+
+`Braid`, `Braid::new`, `replace_corpus`, `update_book`, `update_chapter`,
+`remove_book`, `remove_chapter`, `clear`, `update_config`, `to_usfm`,
+`expected_snapshot_id` (11 of the 23 methods); `BraidConfig`, `SourceKey`,
+`BookInput`, `BookTokensInput`, `ChapterInput`, `ChapterLabel`, `ChapterTarget`,
+`CorpusInput`, `CorpusScope`, `ScopedOutput<T>`, `SourceOutput<T>`,
+`SnapshotId`, `SourceHash`, `MutationEffect`, `IngestError`, `ScopeError`; the
+`serde` feature (plain derives, no tsify/wasm-bindgen).
+
+### Amended or added by C2
+
+| item | disposition | why |
+| --- | --- | --- |
+| `MutationEffect` | **amended** — the §5.3 `{Unchanged, Changed}` enum is superseded by freeze §K.2's struct `{snapshot_id, changed: Vec<Scope>, removed: Vec<BookId>}` | §K.2 is the newer ruling and C2 was specced against it verbatim |
+| `Scope { book: BookId, chapter: Option<ChapterLabel> }` | **new** (§K.2's `Scope`) | §K.2 writes `chapter?` without a type; `ChapterLabel` is used rather than a `u16`, because §5.2 forbids parsing or normalizing a chapter label anywhere in braid — a numeric chapter field would have to |
+| `Braid::to_tokens<S: Into<ScopeSet>>(&self, scopes: S) -> Result<Vec<ScopeTokens>, ScopeError>` | **amended** — supersedes §5.3's `to_tokens(CorpusScope) -> ScopedOutput<Vec<OwnedToken>>` | §K.4 makes the pull multi-scope and self-normalizing; `Into<ScopeSet>` is the §K.5 sugar in Rust form, accepting a `Scope`, a `Vec<Scope>`/slice/array, or a `MutationEffect` (by value or reference) |
+| `ScopeSet`, `ScopeTokens { book, chapter, tokens }` | **new** | the pull's input selector and its `[{book, chapter?, tokens}]` row |
+| `BookEntry { source_key, book, source_hash, line_ending }` + `Braid::books()` | **new** | the ordered read surface for corpus order, source keys, per-book hashes, and endings — one accessor instead of four |
+| `Braid::chapter_labels(BookId)` | **new** | the duplicate-preserving run order is a deliverable; without an accessor it is unobservable and untestable |
+| `Braid::dirty_books()` | **new** | the dirty stamps C3 consumes, exposed as derived state (safe to read twice) rather than a drained queue |
+| `MutationEffect::is_noop()` | **new** | names the `changed.is_empty() && removed.is_empty()` reading the contract gives that pair |
+| `LineEnding` | **moved to core** — `usfm_onion::token::LineEnding`, re-exported as `braid::LineEnding` | §7.3 ledgered it under braid, but §2.2#16 puts emission in core's reconstruct emitter, and an emitter knob has to be a core type. One enum, re-exported, beats a braid mirror of a core parameter type (§15 "DTO mirror"). Its serde derives are core's, unconditional |
+| `usfm_onion::token::tokens_to_usfm_reconstruct_with_eol(&[T], LineEnding) -> String` | **new core export** | the §2.2#16 override itself. The spanned emitter deliberately did **not** gain the parameter: nothing needs it until the packed encoder writes an edited CRLF book (Phase D), and an unused public variant is speculative surface |
+| `IngestError::InvalidToken(TokenInputError)`, `IngestError::Parse(ParseInputError)` | **not built** (§6.1 rows) | neither has a producer at this boundary: core `parse` is infallible, and `OwnedToken`'s private payload enum makes the illegal token/payload combinations `TokenInputError` describes unconstructible. §5.1 assigns `TryFrom<TokenDto> for OwnedToken` and its `TokenInputError` to **wire**, so the validating conversion — and any braid variant composing it — belongs with the DTO boundary in Phase F |
+
+Row counts: **16 items landed as ledgered**, **8 new**, **3 amended**, **1
+moved to core**, **1 new core export**, **2 frozen variants deliberately
+unbuilt**.
