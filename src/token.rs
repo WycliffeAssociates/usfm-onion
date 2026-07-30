@@ -1195,7 +1195,60 @@ fn emit_pending<T: SerializableToken>(output: &mut String, attrs: PendingAttrs<'
 /// including for unclosed markers, where the closer rule alone had to fall back to
 /// end-of-stream. See the `tokens_to_usfm_reconstruct_parity` tests.
 pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String {
-    reconstruct(tokens, None)
+    reconstruct(tokens, None, None)
+}
+
+/// The line ending a token stream serializes its newline tokens with.
+///
+/// Two variants only: these are the endings a USFM file is written with. A
+/// lone `\r` is a legal newline to the lexer but is not a writable choice
+/// here, so [`Self::detect`] reports it as [`Self::Lf`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LineEnding {
+    Lf,
+    CrLf,
+}
+
+impl LineEnding {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Lf => "\n",
+            Self::CrLf => "\r\n",
+        }
+    }
+
+    /// The first line ending in `source` wins; `Lf` when there is none.
+    ///
+    /// A file with mixed endings has no single answer, and this deliberately
+    /// does not invent one — it reports what the file leads with, and a
+    /// caller keeping the exact source bytes never re-emits until an edit
+    /// forces it.
+    pub fn detect(source: &str) -> Self {
+        match source.find('\n') {
+            Some(0) | None => Self::Lf,
+            Some(index) if source.as_bytes()[index - 1] == b'\r' => Self::CrLf,
+            Some(_) => Self::Lf,
+        }
+    }
+}
+
+/// [`tokens_to_usfm_reconstruct`] with every newline token emitted as
+/// `line_ending` instead of its own source.
+///
+/// Exists because a token stream and the line ending it must be saved with are
+/// independent facts once tokens outlive their file: an editor pushing tokens
+/// into a resident CRLF book supplies `\n` newline tokens, and a book that
+/// serialized them verbatim would flip its own file's endings on first edit.
+/// Emission stays here, in the one emitter, rather than in a caller
+/// post-processing newline tokens it does not own.
+///
+/// Only `TokenKind::Newline` tokens are affected; no other token source,
+/// attribute list, or whitespace is touched.
+pub fn tokens_to_usfm_reconstruct_with_eol<T: SerializableToken>(
+    tokens: &[T],
+    line_ending: LineEnding,
+) -> String {
+    reconstruct(tokens, None, Some(line_ending))
 }
 
 /// Where one token's bytes landed in a reconstructed source.
@@ -1234,7 +1287,7 @@ pub fn tokens_to_usfm_reconstruct_spanned<T: SerializableToken>(
         };
         tokens.len()
     ];
-    let output = reconstruct(tokens, Some(&mut spans));
+    let output = reconstruct(tokens, Some(&mut spans), None);
     (output, spans)
 }
 
@@ -1244,6 +1297,7 @@ pub fn tokens_to_usfm_reconstruct_spanned<T: SerializableToken>(
 fn reconstruct<T: SerializableToken>(
     tokens: &[T],
     mut spans: Option<&mut Vec<ReconstructedSpans>>,
+    line_ending: Option<LineEnding>,
 ) -> String {
     let mut output = String::new();
     let mut pending: Vec<Pending<'_, T>> = Vec::new();
@@ -1268,7 +1322,10 @@ fn reconstruct<T: SerializableToken>(
         }
 
         let start = output.len();
-        output.push_str(token.source());
+        match line_ending {
+            Some(ending) if token.kind() == TokenKind::Newline => output.push_str(ending.as_str()),
+            _ => output.push_str(token.source()),
+        }
         if let Some(spans) = spans.as_deref_mut() {
             spans[row].token = Span::new(start as BytePos, output.len() as BytePos);
         }
@@ -1893,6 +1950,72 @@ mod tokens_to_usfm_reconstruct_parity {
         ] {
             assert_parity(source);
         }
+    }
+}
+
+#[cfg(test)]
+mod line_ending_tests {
+    use super::{
+        LineEnding, OwnedToken, tokens_to_usfm_reconstruct, tokens_to_usfm_reconstruct_with_eol,
+    };
+    use crate::parse::parse;
+
+    fn owned(source: &str) -> Vec<OwnedToken> {
+        parse(source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect()
+    }
+
+    #[test]
+    fn detect_reports_what_the_source_leads_with() {
+        assert_eq!(LineEnding::detect("\\id GEN\r\n\\c 1\n"), LineEnding::CrLf);
+        assert_eq!(LineEnding::detect("\\id GEN\n\\c 1\r\n"), LineEnding::Lf);
+        assert_eq!(LineEnding::detect("\\id GEN"), LineEnding::Lf);
+        // A leading newline has no preceding byte to inspect, and a lone `\r`
+        // is not a writable ending — both report Lf rather than panicking or
+        // inventing a third variant.
+        assert_eq!(LineEnding::detect("\n\\id GEN"), LineEnding::Lf);
+        assert_eq!(LineEnding::detect("\\id GEN\r\\c 1"), LineEnding::Lf);
+    }
+
+    #[test]
+    fn the_override_rewrites_newline_tokens_and_nothing_else() {
+        // The editor's push direction: tokens carry `\n` newlines because that
+        // is what a JS editor produces, while the resident book must keep
+        // saving CRLF. Only the newline tokens change — the `\w` attribute
+        // list, its spacing, and every other token source survive verbatim.
+        let tokens = owned("\\id GEN\n\\c 1\n\\p\n\\v 1 \\w a|lemma=\"b\"\\w*\n");
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::CrLf),
+            "\\id GEN\r\n\\c 1\r\n\\p\r\n\\v 1 \\w a|lemma=\"b\"\\w*\r\n"
+        );
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::Lf),
+            tokens_to_usfm_reconstruct(&tokens)
+        );
+    }
+
+    #[test]
+    fn the_override_normalizes_a_mixed_ending_stream_both_ways() {
+        // A stream that came from a mixed-EOL file: the override is what makes
+        // one book's saved bytes consistent, in either direction.
+        let tokens = owned("\\id GEN\r\n\\c 1\n\\p\r\n");
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::Lf),
+            "\\id GEN\n\\c 1\n\\p\n"
+        );
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::CrLf),
+            "\\id GEN\r\n\\c 1\r\n\\p\r\n"
+        );
+        // Without an override the emitter stays verbatim — mixed input is
+        // never silently normalized.
+        assert_eq!(
+            tokens_to_usfm_reconstruct(&tokens),
+            "\\id GEN\r\n\\c 1\n\\p\r\n"
+        );
     }
 }
 
