@@ -1589,10 +1589,13 @@ this verbatim.
   absorbs chapter scopes), so naive concatenation of multiple effects' `changed` lists is always
   correct. Transport is hidden in the official JS glue (DTO marshal for small scopes; the packed
   buffer + JS materialize lane if a scope is ever measured hot) — callers never choose.
-- **K.5 `changedSince(snapshot_id)` is the recovery valve.** Returns `{snapshot_id, changed,
-  removed}` relative to a caller-remembered snapshot, computed from braid's per-scope
-  last-modified stamps (no per-consumer state); unknown/too-old id degrades to everything-changed
-  (full resync). Makes dropped effects a non-event.
+- **K.5 Pending effects are the caller's job (owner-ruled 2026-07-30, replacing the earlier
+  changedSince valve — withdrawn as unnecessary bookkeeping before any packet consumed it).**
+  The canonical contract IS the loop: mutate → `pull(effect.changed)` → `reconcile`. Consumers
+  that defer hydration keep their own pending list; `pull`'s normalization makes naive
+  accumulation always correct. Sugar: `pull` accepts either a scope list or a `MutationEffect`
+  directly, so the immediate form is one expression: `braid.pull(braid.applyFix(finding))`.
+  No revision counter, no snapshot→revision map, no changedSince API.
 - **K.6 Tokens flow INTO braid in exactly one place** — `update_chapter`/`update_book` (the
   keystroke push), the only moment the caller knows something braid doesn't. Mutating verbs
   (applyFix/applyPatch, canonicalize-class operations) never take caller tokens as input.
@@ -1606,13 +1609,3 @@ this verbatim.
 - **K.8 Verbs live on the handle, not the DTO.** `braid.applyFix(finding)` etc.; finding/token
   DTOs stay inert frozen data.
 
-### K.5a — implementation note (2026-07-30): snapshot identity vs changedSince ordering
-
-`SnapshotId` stays content-derived per §J.4 (identity, unordered). `changedSince` needs order, so
-braid keeps a private monotonic revision counter (bumped per effective mutation), stamps each
-scope's last-modified revision, and maintains a bounded recent map of snapshot-hash → revision.
-`changedSince(id)` resolves the hash to a revision and scans newer stamps; a hash absent from the
-map (aged out, or pre-restart) degrades to everything-changed per §K.5. The revision counter is
-internal only — it never crosses the public API; counters were rejected as public identity
-because they do not survive restore, and timestamps because they are neither deterministic nor
-unique.
