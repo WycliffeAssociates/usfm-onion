@@ -418,7 +418,7 @@ impl std::fmt::Display for StableTokenId {
 }
 
 /// One USFM attribute entry retained with its source spelling.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct OwnedAttribute {
     pub source: Box<str>,
     pub key: Box<str>,

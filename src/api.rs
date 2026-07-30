@@ -544,6 +544,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: crate::TokenKind::Text,
@@ -556,6 +557,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
         let issue = TokenStream::from_tokens(malformed_tokens.clone())

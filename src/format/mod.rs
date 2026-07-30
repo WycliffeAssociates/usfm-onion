@@ -411,8 +411,18 @@ pub struct FormatToken {
     /// or edits attribute content — no rule needs to — so a single string
     /// field that survives `Clone` and gets placed back on emission (see
     /// [`format_tokens_to_usfm`]) is the whole fix: nothing downstream has
-    /// to special-case it. `None` when the token has no attribute list.
+    /// to special-case it. `None` when the token has no attribute list or
+    /// when a caller edited it structurally (see `attributes` below).
     pub attribute_source: Option<String>,
+    /// The structured attribute list — the same shape as `dto::Token.attributes`.
+    /// A caller (an editor) that edits an attribute's value clears
+    /// `attribute_source` (the "touch an attribute, drop its verbatim" rule)
+    /// and leaves the edit here instead; `format_tokens_to_usfm`'s reconstruct
+    /// path already falls back to rendering this list from structure whenever
+    /// `attribute_source` is `None`, so carrying it through is what makes an
+    /// edited attribute survive a format/fix pass rather than a verbatim
+    /// string that no longer matches. Empty when the token has no attributes.
+    pub attributes: Vec<OwnedAttribute>,
 }
 
 impl FormatToken {
@@ -446,19 +456,24 @@ impl<'a> From<&Token<'a>> for FormatToken {
                 .marker_name()
                 .map(|marker| build_marker_profile(marker, token.kind(), structural)),
             attribute_source: token.attribute_list().map(ToOwned::to_owned),
+            attributes: SerializableToken::attributes(token)
+                .iter()
+                .map(|attribute| OwnedAttribute {
+                    source: Box::from(attribute.source),
+                    key: Box::from(attribute.key),
+                    value: Box::from(attribute.value),
+                    is_default: attribute.is_default,
+                })
+                .collect(),
         }
     }
 }
 
 impl SerializableToken for FormatToken {
-    // FormatToken never carries a structured attribute list — only the
-    // verbatim `attribute_source` string (attribute content is not
-    // something any format rule inspects or edits) — so `Self::Attr` is
-    // never actually populated; `OwnedAttribute` just satisfies the bound.
     type Attr = OwnedAttribute;
 
     fn attributes(&self) -> &[Self::Attr] {
-        &[]
+        &self.attributes
     }
 
     fn attribute_list(&self) -> Option<&str> {
@@ -652,6 +667,7 @@ impl FormattableToken for FormatToken {
             // template-built fix replacement) is new content that never had
             // an attribute list of its own.
             attribute_source: None,
+            attributes: Vec::new(),
         }
     }
 }
@@ -2225,11 +2241,11 @@ mod tests {
         assert!(output.contains("\\v 1"));
     }
 
-    /// The F1 gate: `\w gracious|lemma="grace" \w*` must survive a full
-    /// `format` pass. Before `FormatToken` carried `attribute_source`, this
-    /// silently emitted `\w gracious\w*` — the attribute list vanished
-    /// because it was never in any field `format_tokens_to_usfm` read, not
-    /// because any rule deliberately stripped it.
+    /// `\w gracious|lemma="grace" \w*` must survive a full `format` pass.
+    /// Before `FormatToken` carried `attribute_source`, this silently emitted
+    /// `\w gracious\w*` — the attribute list vanished because it was never in
+    /// any field `format_tokens_to_usfm` read, not because any rule
+    /// deliberately stripped it.
     #[test]
     fn format_preserves_attribute_bearing_tokens_round_trip() {
         let source =
@@ -2280,6 +2296,31 @@ mod tests {
         assert_eq!(
             format_tokens_to_usfm(&tokens),
             "\\w gracious|lemma=\"grace\" \\w*"
+        );
+    }
+
+    /// The other half of the attribute-passthrough gate: a caller (an editor) that edits an
+    /// attribute's structured value clears `attribute_source` (the
+    /// "touch an attribute, drop its verbatim" rule) and expects the edit
+    /// itself, not the stale verbatim text, to survive. `attribute_source`
+    /// alone cannot express this — it is exactly what the edit invalidated —
+    /// so `format_tokens_to_usfm` must fall back to reconstructing from
+    /// `attributes` whenever `attribute_source` is `None`.
+    #[test]
+    fn format_preserves_a_structurally_edited_attribute() {
+        let source = "\\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        let attr_token = tokens
+            .iter_mut()
+            .find(|token| !token.attributes.is_empty())
+            .expect("expected attribute-bearing token");
+        attr_token.attributes[0].value = Box::from("changed");
+        attr_token.attribute_source = None;
+        format_tokens(&mut tokens, FormatOptions::default());
+        assert_eq!(
+            format_tokens_to_usfm(&tokens),
+            "\\w gracious|lemma=\"changed\"\\w*"
         );
     }
 
@@ -2471,6 +2512,7 @@ mod tests {
             number_info: None,
             marker_profile: None,
             attribute_source: None,
+            attributes: Vec::new(),
         });
         assert_round_trips(EditorToken {
             kind: TokenKind::Text,
@@ -2499,6 +2541,7 @@ mod tests {
             number_info: None,
             marker_profile: None,
             attribute_source: None,
+            attributes: Vec::new(),
         };
         let mut mint_fn = counting_minter();
         let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
@@ -2543,6 +2586,7 @@ mod tests {
             number_info: None,
             marker_profile: None,
             attribute_source: None,
+            attributes: Vec::new(),
         };
         let mut mint_fn = counting_minter();
         let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
@@ -2582,6 +2626,7 @@ mod tests {
             number_info: None,
             marker_profile: None,
             attribute_source: None,
+            attributes: Vec::new(),
         };
         let mut mint_fn = counting_minter();
         let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
@@ -2617,6 +2662,7 @@ mod tests {
             number_info: None,
             marker_profile: None,
             attribute_source: None,
+            attributes: Vec::new(),
         };
         let tokens = vec![target.clone()];
 

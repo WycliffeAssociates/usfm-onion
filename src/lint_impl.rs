@@ -2982,6 +2982,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Marker,
@@ -2994,6 +2995,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
 
@@ -3028,6 +3030,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Number,
@@ -3040,6 +3043,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
 
@@ -3290,6 +3294,7 @@ mod tests {
             number_info: None,
             marker_profile: None,
             attribute_source: None,
+            attributes: Vec::new(),
         };
         let tokens = vec![bare_verse_marker.clone(), bare_verse_marker];
 
@@ -3358,6 +3363,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Text,
@@ -3370,6 +3376,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
 
@@ -3828,6 +3835,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Number,
@@ -3840,6 +3848,7 @@ mod tests {
                 number_info: None,
                 marker_profile: None,
                 attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
         let invalid_range_result =

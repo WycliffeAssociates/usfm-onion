@@ -32,8 +32,9 @@ use usfm_onion::marker_defs::StructuralMarkerInfo as NativeStructuralMarkerInfo;
 use usfm_onion::markers::{is_known_marker, marker_catalog, marker_info};
 use usfm_onion::parse::parse as native_parse;
 use usfm_onion::token::{
-    NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
-    TokenKind as NativeTokenKind, UsfmToken, tokens_to_usfm, tokens_to_usfm_reconstruct,
+    NumberRangeKind as NativeNumberRangeKind, OwnedAttribute as NativeOwnedAttribute,
+    Span as NativeSpan, Token as NativeToken, TokenKind as NativeTokenKind, UsfmToken,
+    tokens_to_usfm, tokens_to_usfm_reconstruct,
 };
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
@@ -1142,6 +1143,35 @@ fn token_to_walk_token(value: Token) -> WalkToken {
     }
 }
 
+/// Wire `AttributeItem` -> native `OwnedAttribute`. `span` has no home on
+/// `OwnedAttribute` (it carries no per-attribute position at all — see
+/// `map_format_token`'s use of the owning token's own span on the way back
+/// out); `key`/`value`/`is_default` are the only fields `format_attribute_list`
+/// reads, and `text` is the verbatim per-attribute source `OwnedAttribute`
+/// calls `source`.
+fn wire_attribute_to_owned(item: &AttributeItem) -> NativeOwnedAttribute {
+    NativeOwnedAttribute {
+        source: Box::from(item.text.as_str()),
+        key: Box::from(item.key.as_str()),
+        value: Box::from(item.value.as_str()),
+        is_default: item.is_default,
+    }
+}
+
+/// Native `OwnedAttribute` -> wire `AttributeItem`. `span` is required on the
+/// wire shape but not carried by `OwnedAttribute`; the owning token's own span
+/// is the closest available position, and — like every other span on a
+/// `FormatToken` — it is best-effort after a format pass, not byte-exact.
+fn owned_attribute_to_wire(attribute: &NativeOwnedAttribute, span: Span) -> AttributeItem {
+    AttributeItem {
+        span,
+        text: attribute.source.to_string(),
+        key: attribute.key.to_string(),
+        value: attribute.value.to_string(),
+        is_default: attribute.is_default,
+    }
+}
+
 fn token_value_to_format_token(value: Token) -> NativeFormatToken {
     NativeFormatToken {
         kind: value.kind.into(),
@@ -1154,6 +1184,11 @@ fn token_value_to_format_token(value: Token) -> NativeFormatToken {
         number_info: value.number_info.map(parse_number_info),
         marker_profile: None,
         attribute_source: value.attribute_source,
+        attributes: value
+            .attributes
+            .iter()
+            .map(wire_attribute_to_owned)
+            .collect(),
     }
 }
 
@@ -1240,11 +1275,12 @@ fn map_token(token: &NativeToken<'_>) -> Token {
 }
 
 fn map_format_token(token: &NativeFormatToken) -> Token {
+    let span = token.span.map(map_span);
     Token {
         id: token.id.clone().unwrap_or_default(),
         kind: token.kind.into(),
         source: token.text.clone(),
-        span: token.span.map(map_span),
+        span: span.clone(),
         sid: token.sid.clone(),
         marker: token.marker.clone(),
         nested: None,
@@ -1257,13 +1293,22 @@ fn map_format_token(token: &NativeFormatToken) -> Token {
         }),
         book_code: None,
         book_code_valid: None,
-        // `FormatToken` deliberately carries the attribute list as one
-        // opaque verbatim string, not a structured `Vec<AttributeItem>` (see
-        // `usfm_onion::format::FormatToken::attribute_source`) — format
-        // never parses or edits attribute content, so there is nothing to
-        // populate `attributes` from here. `attribute_source` is the real
-        // fix: it is what `format_tokens_to_usfm` actually emits.
-        attributes: Vec::new(),
+        // The real structured list, not an unconditional empty vec: an
+        // editor that edits an attribute's value clears `attributeSource`
+        // (the whole-list attr-edit contract) and relies on `attributes`
+        // being the authoritative copy from then on. `FormatToken` carries
+        // both (see `attribute_source` and `attributes` there); this must
+        // return both or a structurally-edited attribute silently reverts.
+        attributes: token
+            .attributes
+            .iter()
+            .map(|attribute| {
+                owned_attribute_to_wire(
+                    attribute,
+                    span.clone().unwrap_or(Span { start: 0, end: 0 }),
+                )
+            })
+            .collect(),
         attribute_source: token.attribute_source.clone(),
     }
 }
@@ -1794,6 +1839,39 @@ mod tests {
         assert_eq!(attr_token.attributes[0].value, "a\"b");
         attr_token.attribute_source = None;
         assert_eq!(tokens_to_usfm_reconstruct(&tokens), source);
+    }
+
+    #[test]
+    fn format_tokens_preserves_a_structurally_edited_attribute() {
+        // An editor that edits an attribute's structured value clears
+        // `attributeSource` (the whole-list attr-edit contract), so the
+        // structured edit is what must survive. Before this fix,
+        // `token_value_to_format_token` only ever copied `attributeSource`
+        // (never the structured list) and `map_format_token` unconditionally
+        // returned an empty `attributes` vec, so `formatTokens` silently
+        // reverted the edit.
+        let source = "\\w word|note=\"a\"\\w*";
+        let mut tokens = map_tokens(&native_parse(source).tokens);
+        let attr_token = tokens
+            .iter_mut()
+            .find(|t| !t.attributes.is_empty())
+            .expect("expected attribute-bearing token");
+        attr_token.attributes[0].value = "b".to_string();
+        attr_token.attribute_source = None;
+
+        let result = wasm_format_tokens(tokens, None);
+        assert!(
+            result.usfm.contains("note=\"b\""),
+            "edited attribute must survive formatTokens: {:?}",
+            result.usfm
+        );
+        let returned = result
+            .tokens
+            .iter()
+            .find(|t| !t.attributes.is_empty())
+            .expect("formatTokens must return the attribute-bearing token with its structured list intact");
+        assert_eq!(returned.attributes[0].value, "b");
+        assert!(returned.attribute_source.is_none());
     }
 
     #[test]
