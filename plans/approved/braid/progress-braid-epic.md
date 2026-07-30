@@ -2496,3 +2496,60 @@ surface fix cycle.
 - Next: Phase C (braid residency floor). C1 = core pull-forwards (declared-book lint context +
   mismatch rule; §2.2#15 canonical-order re-key in core, oracle-gated; formatter id-minting per
   the 2026-07-28 freeze adjudication).
+
+## 2026-07-30 — Phase C step 1 (C1): core pull-forwards landed
+
+Six commits (`5533dcc`, `06e31e0`, `6caed47`, `7dd7121`, `00c32e7`, plus this ledger entry) land
+all three C1 items — no braid crate yet (that's C2), core-crate work only, with the minimal wire/
+wasm ripple the shared `LintCode` enum and `LintOptions` struct force.
+
+- **Declared-book lint context + `BookIdMismatch`.** `LintOptions.declared_book: Option<BookId>`,
+  defaulting to `None` via `scoped` — every existing caller keeps stateless behavior, proven by the
+  lint oracle staying byte-identical with zero rebless. New stable `LintCode::BookIdMismatch`
+  (kebab `book-id-mismatch`, `u8` 32, `Document`/`Warning`/`Usfm`) fires when a source `\id` IS a
+  canonical code but disagrees with the declared one; `InvalidBookCode` still wins when the code
+  isn't canonical at all. Followed the Gate 0D-blessed shape exactly — no conflict hit, no stop.
+  `BookId` gained a manual `Deserialize` impl (mirrors its existing `Serialize`) since this is the
+  first `Deserialize`-deriving struct to hold one.
+- **§2.2#15 canonical-order re-key.** `canonical_sort` now keys on primary-token position (via a
+  one-time `token_id -> position` map, `token_positions`) instead of byte span, then kebab code,
+  then related-token position — token id strings never enter the comparator itself. Verified
+  oracle-neutral exactly as the freeze predicted: `lint_oracle_is_stable` AND
+  `partitioned_matches_serial_over_corpora` both pass byte-identical, no rebless, over the full
+  corpus. `usfm_onion_wire::finding_codec::canonical_order` already used this identical 3-key shape
+  before this packet; chose not to consolidate the two (independently pinned by separate gates,
+  wire's version deliberately more generic) — cross-referenced in both doc comments instead.
+- **Formatter/fix id-minting seam.** `format_tokens_with_minter`/`format_with_minter`/
+  `format_mut_with_minter` and `apply_token_fix_with_minter` accept an optional
+  `&mut dyn FnMut() -> String`; every synthesized token (structural linebreak, default `\p` after a
+  bare chapter intro, malformed-marker recovery, `TokenFix` replacement/insert) gets a minted id
+  through the new `pub(crate) format::mint_synthetic_id` when a minter is supplied, and keeps its
+  historical no-id shape when not. Scoped to the seam + tests, per the packet; braid is the first
+  real caller in C2.
+- **Wire/wasm ripple** (forced by the shared `LintCode`/`LintOptions` types, not scope creep):
+  `usfm_onion_wire::dto::LintCode` + `schema::LintCodeTag` both gained `BookIdMismatch` (append-only,
+  code 32), `LINT_CODE_TABLE` widened 32->33, `PARAM_CONTRACTS` gained one entry (24->25),
+  `js/wire-schema.js` regenerated, `scripts/test-wire-schema-import.mjs`'s pinned counts updated.
+  `usfm_onion_wasm`'s `lint_options_into_native` hardcodes `declared_book: None` (no wasm/JS surface
+  change this packet).
+
+**Gates, exact counts:** `cargo test --workspace` 0 failed (266 core, up from 256 — 10 new tests:
+6 declared-book/mismatch tests + 6 formatter-minter tests minus overlap, see commit for the exact
+list); `lint_oracle_is_stable` and `partitioned_matches_serial_over_corpora` both byte-identical,
+zero rebless; `cargo test --release -p usfm_onion_wire -- --ignored` green, zero golden diffs; `npm
+run test:packed`/`test:packed:web` both green — 409 cases / 5,717,137 tokens (unaffected: the new
+rule needs a declared-book context no current corpus/golden caller supplies, so it produces zero
+findings today); `scripts/test-wire-schema-import.mjs` updated and green; `tsc --noEmit` green
+(no public JS type shapes changed). `pkg-bundler`/`pkg-web` restored, never committed.
+
+**API additions:** appended to `plans/approved/braid/phase0-freeze.md` table 1 and §7 (this ledger
+entry's commit `00c32e7`) — `LintCode::BookIdMismatch` (u8 32), `LintOptions.declared_book`,
+`BookId`'s new `Deserialize`, the five id-minting seam functions, and the two wire mirror additions.
+
+**Deviations:** none from the packet's shape. **Stops:** none — the Gate 0D blessed API shape
+matched current code cleanly, the re-key was oracle-neutral as predicted, and the freeze's
+"trait/closure" wording for the minter left the closure-vs-trait choice open, which is not a design
+question the freeze left unanswered.
+
+- Next: Phase C step 2 onward — the `braid` crate itself (C2): strict input/selector/error types,
+  candidate validation, ordered unique declared books, duplicate-preserving chapter-run metadata.
