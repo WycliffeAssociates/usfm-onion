@@ -233,7 +233,10 @@ pub type Lexeme<'a> = ScanToken<'a>;
 pub type LexemeKind = ScanTokenKind;
 pub type LexResult<'a> = ScanResult<'a>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// `Deserialize` as well as `Serialize`: a token kind travels back *into* the
+/// library on the resident boundary (a patch's replacement template, a native
+/// host's IPC payload), not only out of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenKind {
     Newline,
     OptBreak,
@@ -517,7 +520,7 @@ pub struct OwnedToken {
 /// cannot be given honestly — so the conversion refuses instead of inventing
 /// one. All three are checkpoint failures at a residency boundary, never
 /// something a well-formed format or fix pass produces.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenBuildError {
     /// The working token carries no id, so nothing could address it.
     MissingId,

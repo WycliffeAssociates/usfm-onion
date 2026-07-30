@@ -59,7 +59,20 @@ fn fixtures() -> Vec<Fixture> {
 }
 
 fn braid() -> Braid {
-    Braid::new(BraidConfig::new(LintOptions::scoped(LintScope::Book)))
+    Braid::new(
+        BraidConfig::new(LintOptions::scoped(LintScope::Book)),
+        minter(),
+    )
+}
+
+/// A test minter with the shape a real application supplies: unique per handle
+/// and reproducible per run, so an assertion can name a synthesized id.
+fn minter() -> impl FnMut() -> String {
+    let mut next = 0u32;
+    move || {
+        next += 1;
+        format!("minted-{next}")
+    }
 }
 
 fn parsed_corpus(fixtures: &[Fixture]) -> CorpusInput {
@@ -241,4 +254,90 @@ fn mutated_books_pull_what_a_fresh_parse_of_their_new_bytes_would_yield() {
         resident.expected_snapshot_id(),
         pristine.expected_snapshot_id()
     );
+}
+
+/// The Phase C ordering gate at corpus scale: for all 66 books, resident lint
+/// must equal stateless whole-book core lint in content **and** order.
+///
+/// Two comparisons, because they prove different things. Against core lint over
+/// the same owned tokens: braid's caching, dirty stamps, and per-book
+/// partitioning change nothing at all — every field is equal. Against core lint
+/// over a fresh parse of the same bytes: the finding *sequence* is identical
+/// (same codes, same anchors, same order) and only the byte spans differ, which
+/// is the one documented consequence of resident tokens being spanless.
+#[test]
+#[ignore = "corpus-scale"]
+fn resident_lint_equals_stateless_core_lint_over_the_whole_corpus() {
+    let fixtures = fixtures();
+    let mut resident = braid();
+    resident.replace_corpus(parsed_corpus(&fixtures)).unwrap();
+
+    let snapshot = resident.lint();
+    assert_eq!(snapshot.books.len(), 66);
+    let mut total = 0usize;
+    let mut with_fix = 0usize;
+
+    for (book, fixture) in snapshot.books.iter().zip(&fixtures) {
+        assert_eq!(book.book, fixture.book);
+        let mut options = LintOptions::scoped(LintScope::Book);
+        options.declared_book = Some(fixture.book);
+
+        // 1. Same tokens, same options: identical in every field.
+        let over_tokens = usfm_onion::lint::lint_tokens(book.tokens, options.clone()).issues;
+        assert_eq!(
+            book.result.issues, over_tokens,
+            "{} diverged from core lint over the same tokens",
+            fixture.book
+        );
+
+        // 2. Fresh parse of the same bytes: same findings, same order, spans
+        // present there and absent here.
+        let parsed = parse(&fixture.source);
+        let over_parsed = usfm_onion::lint::lint_tokens(&parsed.tokens, options).issues;
+        assert_eq!(
+            book.result.issues.len(),
+            over_parsed.len(),
+            "{} changed finding count",
+            fixture.book
+        );
+        for (resident_issue, parsed_issue) in book.result.issues.iter().zip(&over_parsed) {
+            assert_eq!(resident_issue.code, parsed_issue.code);
+            assert_eq!(resident_issue.token_id, parsed_issue.token_id);
+            assert_eq!(
+                resident_issue.related_token_id,
+                parsed_issue.related_token_id
+            );
+            assert_eq!(resident_issue.sid, parsed_issue.sid);
+            assert_eq!(resident_issue.marker, parsed_issue.marker);
+            assert_eq!(resident_issue.message, parsed_issue.message);
+            assert_eq!(resident_issue.message_params, parsed_issue.message_params);
+            assert_eq!(resident_issue.fix, parsed_issue.fix);
+            assert_eq!(resident_issue.position, parsed_issue.position);
+            assert!(resident_issue.span.is_none() && parsed_issue.span.is_some());
+        }
+
+        total += book.result.issues.len();
+        with_fix += book
+            .result
+            .issues
+            .iter()
+            .filter(|issue| issue.fix.is_some())
+            .count();
+    }
+    drop(snapshot);
+
+    assert!(total > 0, "the corpus must exercise the linter");
+    // The census figure for this corpus: `en_ulb` carries exactly one fix, a
+    // `missing-tag-end-delimiter-after-marker`.
+    assert_eq!(with_fix, 1, "en_ulb's fix count from the C4 census");
+    let patches = resident.patches();
+    assert_eq!(patches.len(), 1, "every fix resolves to one patch");
+    assert_eq!(patches[0].id.ordinal, 0);
+    assert_eq!(patches[0].code, "insert-tag-end-delimiter-after-marker");
+
+    // A clean corpus schedules no rule work, and linting it again changes
+    // nothing.
+    assert!(resident.dirty_books().is_empty());
+    let again = resident.lint();
+    assert_eq!(again.summary.total_count, total);
 }

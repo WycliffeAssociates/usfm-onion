@@ -328,7 +328,9 @@ pub struct FormatLabel {
     pub params: MessageParams,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// `Deserialize` as well as `Serialize`: a template is patch *input* on the
+/// resident boundary, so it has to survive a round trip back into the library.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenTemplate {
     pub kind: TokenKind,
     pub text: String,

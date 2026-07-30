@@ -5,9 +5,11 @@
 //! first re-reading everything. `Display` text is for logs; callers match on
 //! variants.
 
-use usfm_onion::token::{BookId, StableTokenId};
+use usfm_onion::token::{BookId, StableTokenId, TokenBuildError};
 
 use crate::input::{ChapterLabel, ChapterTarget, SourceKey};
+use crate::patch::PatchId;
+use crate::state::SnapshotId;
 
 /// Core's [`StableTokenId`] as a plain string.
 ///
@@ -72,6 +74,12 @@ pub enum IngestError {
         target: ChapterTarget,
         found: ChapterLabel,
     },
+    /// A token produced by a format or fix pass cannot become resident: the
+    /// working shape it came back in is missing something a resident token must
+    /// have, and core refuses to invent it. Frozen as `InvalidToken`; the payload
+    /// is core's own boundary error, because the producer here is core's
+    /// working-token checkpoint rather than a DTO conversion.
+    InvalidToken(TokenBuildError),
 }
 
 impl std::fmt::Display for IngestError {
@@ -93,11 +101,62 @@ impl std::fmt::Display for IngestError {
             Self::ReplacementLabelMismatch { target, found } => {
                 write!(f, "replacement for {target} carries the run {found}")
             }
+            Self::InvalidToken(error) => write!(f, "{error}"),
         }
     }
 }
 
 impl std::error::Error for IngestError {}
+
+/// A patch that could not be looked up or applied.
+///
+/// Patch application is never partial: every rejection below happens before
+/// resident state is touched, and a patch that applies commits its whole book at
+/// once.
+///
+/// Three of the frozen variants have no producer yet and are deliberately not
+/// built: `InvalidEditOrder`, `OverlappingEdits`, and `OutOfBounds` describe a
+/// patch table braid did not resolve itself. Every table in this phase comes from
+/// braid's own resolution against its own token stream, so those three cannot
+/// arise; they get producers when a patch table can arrive from outside (a
+/// restored lint cache, a decoded container), and inventing them now would be
+/// unreachable code claiming a check that never runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum PatchError {
+    /// The patch was resolved against a different corpus than the resident one —
+    /// either the corpus identity moved, or the target book was rewritten since.
+    /// Both halves matter: identity alone would accept a patch whose own book
+    /// changed and changed back within a corpus that hashes the same.
+    StaleSnapshot {
+        expected: SnapshotId,
+        found: SnapshotId,
+    },
+    /// The current snapshot's patch table has no such ordinal. A book awaiting
+    /// recompute contributes no patches, so this is also what a patch of a
+    /// not-yet-relinted book reports.
+    UnknownPatch(PatchId),
+    /// Applying the patch produced a token stream that cannot become resident.
+    InvalidResult(IngestError),
+}
+
+impl std::fmt::Display for PatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StaleSnapshot { expected, found } => write!(
+                f,
+                "patch was resolved against snapshot {:016x}, resident is {:016x}",
+                found.0, expected.0
+            ),
+            Self::UnknownPatch(id) => {
+                write!(f, "no patch with ordinal {} in this snapshot", id.ordinal)
+            }
+            Self::InvalidResult(error) => write!(f, "patched book is not resident-valid: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for PatchError {}
 
 /// A scope that does not resolve against the resident corpus.
 ///

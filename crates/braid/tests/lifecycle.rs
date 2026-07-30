@@ -22,7 +22,20 @@ const GEN_SOURCE: &str = "\\id GEN\n\\h Genesis\n\\c 1\n\\p\n\\v 1 In the beginn
 const EXO_SOURCE: &str = "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\n";
 
 fn braid() -> Braid {
-    Braid::new(BraidConfig::new(LintOptions::scoped(LintScope::Book)))
+    Braid::new(
+        BraidConfig::new(LintOptions::scoped(LintScope::Book)),
+        minter(),
+    )
+}
+
+/// A test minter with the shape a real application supplies: unique per handle
+/// and reproducible per run, so an assertion can name a synthesized id.
+fn minter() -> impl FnMut() -> String {
+    let mut next = 0u32;
+    move || {
+        next += 1;
+        format!("minted-{next}")
+    }
 }
 
 fn key(value: &str) -> SourceKey {

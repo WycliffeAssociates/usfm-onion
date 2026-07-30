@@ -31,18 +31,25 @@
 mod corpus;
 mod error;
 mod input;
+mod lint;
+mod patch;
 mod state;
 
-use usfm_onion::lint::LintOptions;
+use usfm_onion::format::FormatToken;
+use usfm_onion::lint::{LintOptions, LintSummary, apply_token_fix_with_minter};
 use usfm_onion::token::{BookId, OwnedToken, tokens_to_usfm_reconstruct_with_eol};
 
 use crate::corpus::{BookState, chapter_runs};
+use crate::lint::accumulate;
+use crate::patch::ResolvedFix;
 
-pub use crate::error::{IngestError, ScopeError};
+pub use crate::error::{IngestError, PatchError, ScopeError};
 pub use crate::input::{
     BookInput, BookTokensInput, ChapterInput, ChapterLabel, ChapterTarget, CorpusInput,
     CorpusScope, LineEnding, ScopedOutput, SourceKey, SourceOutput,
 };
+pub use crate::lint::{BookLintSnapshot, LintSnapshot};
+pub use crate::patch::{Patch, PatchId, PatchOp, PatchRow};
 pub use crate::state::{
     BookEntry, MutationEffect, Scope, ScopeSet, ScopeTokens, SnapshotId, SourceHash,
 };
@@ -63,21 +70,47 @@ impl BraidConfig {
 /// The resident handle. Instance methods always operate on ingested resident
 /// data; stateless operations over caller-supplied values stay on core's own
 /// free functions.
-#[derive(Debug, Clone)]
 pub struct Braid {
     config: BraidConfig,
     /// Ordered and unique by both declared book and source key. Caller order is
     /// preserved — nothing here sorts.
     books: Vec<BookState>,
     snapshot_id: SnapshotId,
+    /// The application's own identity function, held for the life of the handle.
+    ///
+    /// Core never invents a token id, so every token a fix or format pass
+    /// synthesizes gets one from here. The contract is deliberately thin — a
+    /// function returning a `String` — because speed, spelling, and collision
+    /// resistance are the application's trade, not braid's. Uniqueness is not
+    /// assumed: it is enforced at the residency boundary by the same duplicate-id
+    /// check every other ingest path goes through, so a colliding minter is a
+    /// typed rejection rather than a corrupted book.
+    minter: Box<dyn FnMut() -> String>,
+}
+
+impl std::fmt::Debug for Braid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Braid")
+            .field("config", &self.config)
+            .field("books", &self.books)
+            .field("snapshot_id", &self.snapshot_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Braid {
-    pub fn new(config: BraidConfig) -> Self {
+    /// Creates an empty handle bound to the application's id minter.
+    ///
+    /// The minter is handle-held rather than a per-call argument because every
+    /// verb that can synthesize a token needs the same one, and an application
+    /// that changed it mid-session would start issuing ids from a different
+    /// space than the tokens already resident.
+    pub fn new(config: BraidConfig, minter: impl FnMut() -> String + 'static) -> Self {
         Self {
             config,
             books: Vec::new(),
             snapshot_id: SnapshotId::of([]),
+            minter: Box::new(minter),
         }
     }
 
@@ -145,7 +178,7 @@ impl Braid {
         for candidate in &mut candidates {
             match self.book(candidate.book) {
                 Some(resident) if resident.content_eq(candidate) => {
-                    candidate.lint_dirty = resident.lint_dirty;
+                    candidate.inherit_cache(resident);
                 }
                 _ => changed.push(Scope::book(candidate.book)),
             }
@@ -194,7 +227,7 @@ impl Braid {
                 if self.books[index].content_eq(&candidate) {
                     // Content-identical: a no-op for hydration and for caches,
                     // even if the source key was rebound.
-                    candidate.lint_dirty = self.books[index].lint_dirty;
+                    candidate.inherit_cache(&self.books[index]);
                     self.books[index] = candidate;
                     Ok(self.effect(Vec::new(), Vec::new()))
                 } else {
@@ -305,9 +338,138 @@ impl Braid {
             self.config = config;
             for book in &mut self.books {
                 book.lint_dirty = true;
+                // Dropped, not merely stamped stale: a cached result computed
+                // under the old configuration is not an answer to any question
+                // anyone can now ask, and the patches resolved from it are
+                // addressable until they are gone.
+                book.lint = None;
+                book.patches.clear();
             }
         }
         self.effect(Vec::new(), Vec::new())
+    }
+
+    // ---- lint ----------------------------------------------------------
+
+    /// Recomputes every dirty book and returns the complete resident snapshot.
+    ///
+    /// The only recompute verb, and always explicit: no mutation lints
+    /// implicitly and no effect carries findings. Exactly the dirty books run
+    /// rules — a clean corpus runs none, and a one-chapter edit recomputes that
+    /// one whole book. Recompute is whole-book because that is the grain every
+    /// document-level rule needs; chapter-grain lint is deliberately absent.
+    ///
+    /// The returned snapshot borrows resident state, so publishing it copies no
+    /// token streams.
+    pub fn lint(&mut self) -> LintSnapshot<'_> {
+        for book in &mut self.books {
+            if book.lint_dirty || book.lint.is_none() {
+                book.recompute_lint(&self.config.lint);
+            }
+        }
+
+        let mut summary = LintSummary::default();
+        let mut books = Vec::with_capacity(self.books.len());
+        for book in &self.books {
+            // Established by the loop above: every book was just recomputed or
+            // already held a result.
+            let result = book
+                .lint
+                .as_ref()
+                .expect("every resident book holds a result after recompute");
+            accumulate(&mut summary, &result.summary);
+            books.push(BookLintSnapshot {
+                source_key: &book.source_key,
+                book: book.book,
+                source_hash: book.hash,
+                tokens: &book.tokens,
+                result,
+            });
+        }
+        LintSnapshot {
+            id: self.snapshot_id,
+            books,
+            summary,
+        }
+    }
+
+    // ---- patches -------------------------------------------------------
+
+    /// Every patch of the current snapshot, in corpus order and then per-book
+    /// canonical finding order — which is what assigns each one its ordinal.
+    ///
+    /// A book awaiting recompute contributes nothing: its stored positions
+    /// address the token stream it held when its result was computed, so
+    /// publishing them would hand out addresses into a stream that no longer
+    /// exists. Call [`Self::lint`] first.
+    pub fn patches(&self) -> Vec<Patch> {
+        self.resolved()
+            .map(|(ordinal, book, resolved)| {
+                resolved.published(
+                    PatchId {
+                        snapshot: self.snapshot_id,
+                        ordinal,
+                    },
+                    book.book,
+                )
+            })
+            .collect()
+    }
+
+    /// One patch by id, refusing a stale or unknown one.
+    pub fn patch(&self, id: PatchId) -> Result<Patch, PatchError> {
+        let (book, resolved) = self.locate(id)?;
+        Ok(resolved.published(id, self.books[book].book))
+    }
+
+    /// The token stream the patch would produce, without applying it.
+    ///
+    /// Preview and apply share one code path and one snapshot, so a preview
+    /// cannot describe a result the apply would not produce. The book is
+    /// [`Patch::book`] — one patch is one fix, and one fix targets one book.
+    pub fn preview_patch(&mut self, id: PatchId) -> Result<Vec<OwnedToken>, PatchError> {
+        let (book, resolved) = self.locate(id)?;
+        let resolved = resolved.clone();
+        self.applied_tokens(book, &resolved)
+    }
+
+    /// Applies a patch as an ordinary mutation.
+    ///
+    /// Atomic in the same sense as every other mutating verb: the new token
+    /// stream is built, id-checked, and re-serialized as a candidate before
+    /// resident state is touched, so a rejection leaves the corpus, its hashes,
+    /// and its snapshot id exactly as they were. The patched book is marked for
+    /// recompute; nothing lints implicitly.
+    pub fn apply_patch(&mut self, id: PatchId) -> Result<MutationEffect, PatchError> {
+        let (book_index, resolved) = self.locate(id)?;
+        let resolved = resolved.clone();
+        let tokens = self.applied_tokens(book_index, &resolved)?;
+
+        let resident = &self.books[book_index];
+        let candidate = resident
+            .rebuilt(tokens)
+            .map_err(PatchError::InvalidResult)?;
+        if resident.content_eq(&candidate) {
+            return Ok(self.effect(Vec::new(), Vec::new()));
+        }
+
+        // The scope is the run the patch landed in, unless this book's duplicate
+        // labels make every chapter address in it ambiguous.
+        let scope = resolved
+            .rows
+            .first()
+            .filter(|_| !resident.has_duplicate_labels() && !candidate.has_duplicate_labels())
+            .and_then(|row| {
+                resident
+                    .runs
+                    .iter()
+                    .find(|run| run.range.contains(&(row.position as usize)))
+            })
+            .map(|run| Scope::chapter(resident.book, run.label.clone()))
+            .unwrap_or_else(|| Scope::book(resident.book));
+
+        self.books[book_index] = candidate;
+        Ok(self.effect(vec![scope], Vec::new()))
     }
 
     // ---- reads ---------------------------------------------------------
@@ -420,6 +582,101 @@ impl Braid {
     }
 
     // ---- internals -----------------------------------------------------
+
+    /// The current patch table with its ordinals: corpus order, then each
+    /// book's own canonical finding order.
+    fn resolved(&self) -> impl Iterator<Item = (u32, &BookState, &ResolvedFix)> {
+        self.books
+            .iter()
+            .filter(|book| !book.lint_dirty)
+            .flat_map(|book| book.patches.iter().map(move |resolved| (book, resolved)))
+            .enumerate()
+            .map(|(ordinal, (book, resolved))| (ordinal as u32, book, resolved))
+    }
+
+    /// Resolves a patch id to its book and resolved fix, applying both halves of
+    /// the staleness rule: the corpus's identity and the target book's own hash
+    /// must be the ones the patch was resolved against. The hash is the half
+    /// that matters after a mutation elsewhere in the corpus put the id's own
+    /// snapshot back in play.
+    fn locate(&self, id: PatchId) -> Result<(usize, &ResolvedFix), PatchError> {
+        if id.snapshot != self.snapshot_id {
+            return Err(PatchError::StaleSnapshot {
+                expected: self.snapshot_id,
+                found: id.snapshot,
+            });
+        }
+        let (_, book, resolved) = self
+            .resolved()
+            .find(|(ordinal, ..)| *ordinal == id.ordinal)
+            .ok_or(PatchError::UnknownPatch(id))?;
+        if resolved.source_hash != book.hash {
+            return Err(PatchError::StaleSnapshot {
+                expected: self.snapshot_id,
+                found: id.snapshot,
+            });
+        }
+        let index = self
+            .index_of(book.book)
+            .expect("a located patch names a resident book");
+        Ok((index, resolved))
+    }
+
+    /// Runs one fix over the book's tokens and converts the result back to
+    /// resident tokens.
+    ///
+    /// This is the whole §L boundary: the pass runs over the id-optional working
+    /// type (so it may synthesize), every token it synthesized is minted an id by
+    /// the application's own function, and the conversion back demands one — an
+    /// id-less token is structurally unreachable here rather than a resident
+    /// token nothing can address. Core owns what the fix means; braid owns only
+    /// the two conversions and the identity sweep between them.
+    fn applied_tokens(
+        &mut self,
+        book_index: usize,
+        resolved: &ResolvedFix,
+    ) -> Result<Vec<OwnedToken>, PatchError> {
+        let book = &self.books[book_index];
+        let working: Vec<FormatToken> = book.tokens.iter().map(FormatToken::from).collect();
+        let mut applied = {
+            let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut *self.minter);
+            apply_token_fix_with_minter(&working, &resolved.fix, &mut minter)
+        };
+        // The sweep the fix pass itself cannot do: a token core did not route
+        // through `synthetic_like` (a future pass, a caller-built template) still
+        // has to be addressable before it can become resident.
+        for token in &mut applied {
+            if token.id.is_none() {
+                token.id = Some((self.minter)());
+            }
+        }
+
+        let book = &self.books[book_index];
+        let mut by_id: rustc_hash::FxHashMap<&str, &OwnedToken> =
+            rustc_hash::FxHashMap::with_capacity_and_hasher(
+                book.tokens.len(),
+                rustc_hash::FxBuildHasher,
+            );
+        for token in &book.tokens {
+            by_id.insert(token.id().as_str(), token);
+        }
+        // A token the pass synthesized descends from the fix's target, which is
+        // the anchor core cloned its shape from.
+        let target = by_id.get(resolved.fix.target_token_id()).copied();
+
+        applied
+            .iter()
+            .map(|token| {
+                let anchor = token
+                    .id
+                    .as_deref()
+                    .and_then(|id| by_id.get(id).copied())
+                    .or(target);
+                OwnedToken::from_format_token(token, anchor)
+                    .map_err(|error| PatchError::InvalidResult(IngestError::InvalidToken(error)))
+            })
+            .collect()
+    }
 
     fn index_of(&self, book: BookId) -> Option<usize> {
         self.books.iter().position(|state| state.book == book)
@@ -538,4 +795,99 @@ fn validate_replacement_shape(
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use usfm_onion::format::TokenTemplate;
+    use usfm_onion::lint::{LintOptions, LintScope, TokenFix};
+    use usfm_onion::token::{BookId, TokenKind};
+
+    use super::*;
+    use crate::patch::ResolvedFix;
+
+    /// Core's linter produces only single-replacement `ReplaceToken` fixes, so
+    /// the synthesis half of the boundary — the minter, and the sweep behind it
+    /// — has no public route to reach in this phase. These tests drive the
+    /// internal seam directly rather than leave it unexercised until a later
+    /// phase's formatter is the first thing to try it in anger.
+    fn seeded(minter: impl FnMut() -> String + 'static) -> Braid {
+        let mut resident = Braid::new(
+            BraidConfig::new(LintOptions::scoped(LintScope::Book)),
+            minter,
+        );
+        resident
+            .replace_corpus(CorpusInput::new(vec![BookInput::Usfm {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: BookId::from_str("GEN").unwrap(),
+                source: "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\n".to_string(),
+            }]))
+            .expect("one book");
+        resident
+    }
+
+    /// A fix that inserts a token: the new token is not in the resident stream,
+    /// so it is minted an id by the handle's own function and rebuilt against
+    /// the fix's target as its anchor.
+    fn insert_after(target: &str, text: &str) -> ResolvedFix {
+        ResolvedFix::new(
+            &TokenFix::InsertAfter {
+                code: "test-insert".to_string(),
+                label: "TestInsert".to_string(),
+                label_params: Default::default(),
+                target_token_id: target.to_string(),
+                insert: vec![TokenTemplate {
+                    kind: TokenKind::Text,
+                    text: text.to_string(),
+                    marker: None,
+                    sid: None,
+                }],
+            },
+            0,
+            SourceHash(0),
+        )
+    }
+
+    #[test]
+    fn a_synthesized_token_is_minted_by_the_handles_own_function() {
+        let mut next = 0u32;
+        let mut resident = seeded(move || {
+            next += 1;
+            format!("app-{next}")
+        });
+        let target = resident.books[0].tokens[0].id().as_str().to_string();
+        let resolved = insert_after(&target, "inserted");
+
+        let tokens = resident.applied_tokens(0, &resolved).expect("applies");
+        assert_eq!(tokens.len(), resident.books[0].tokens.len() + 1);
+        assert_eq!(tokens[1].source(), "inserted");
+        assert_eq!(
+            tokens[1].id().as_str(),
+            "app-1",
+            "the application's function is the only source of a new id"
+        );
+        // Every other token came back byte-identical, anchored by its own id.
+        assert_eq!(tokens[0], resident.books[0].tokens[0]);
+        assert_eq!(&tokens[2..], &resident.books[0].tokens[1..]);
+    }
+
+    /// The minter contract is deliberately thin — any `() -> String` — so
+    /// uniqueness is not assumed. A colliding one is caught by the same
+    /// duplicate-id check every ingest path runs, as a typed rejection with the
+    /// corpus untouched.
+    #[test]
+    fn a_colliding_minter_is_rejected_atomically() {
+        let mut resident = seeded(|| "GEN-0".to_string());
+        let target = resident.books[0].tokens[0].id().as_str().to_string();
+        let resolved = insert_after(&target, "inserted");
+        let before = resident.expected_snapshot_id();
+
+        let tokens = resident.applied_tokens(0, &resolved).expect("rebuilds");
+        let rejected = resident.books[0].rebuilt(tokens);
+        assert!(matches!(
+            rejected,
+            Err(IngestError::DuplicateTokenId { .. })
+        ));
+        assert_eq!(resident.expected_snapshot_id(), before);
+    }
 }

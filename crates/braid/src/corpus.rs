@@ -3,14 +3,16 @@
 
 use std::ops::Range;
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
+use usfm_onion::lint::{LintOptions, LintResult, lint_tokens};
 use usfm_onion::parse::parse;
 use usfm_onion::token::{BookId, LineEnding, OwnedToken, tokens_to_usfm_reconstruct_with_eol};
 use usfm_onion::walker::chapter_segments;
 
 use crate::error::IngestError;
 use crate::input::{BookInput, ChapterLabel, SourceKey};
+use crate::patch::ResolvedFix;
 use crate::state::SourceHash;
 
 /// One contiguous chapter run: its label and its token range in the book.
@@ -39,6 +41,15 @@ pub(crate) struct BookState {
     /// a lint run. Derived from authoritative state rather than consumed from a
     /// queue, so retrying after a failure is safe.
     pub(crate) lint_dirty: bool,
+    /// This book's last computed lint contribution. `None` until the first
+    /// recompute; a dirty book's stale result is kept until a new one replaces
+    /// it, so nothing is ever published half-recomputed.
+    pub(crate) lint: Option<LintResult>,
+    /// The fixes of [`Self::lint`], resolved against this book's own token
+    /// stream. Resolved once at recompute time rather than on every read: the
+    /// positions are only meaningful for the token stream they were resolved
+    /// against, which is the stream this book held when its result was computed.
+    pub(crate) patches: Vec<ResolvedFix>,
 }
 
 impl BookState {
@@ -84,6 +95,8 @@ impl BookState {
             tokens,
             line_ending,
             lint_dirty: true,
+            lint: None,
+            patches: Vec::new(),
         })
     }
 
@@ -102,7 +115,64 @@ impl BookState {
             tokens,
             line_ending: self.line_ending,
             lint_dirty: true,
+            lint: None,
+            patches: Vec::new(),
         })
+    }
+
+    /// Adopts a content-identical predecessor's cached lint contribution.
+    ///
+    /// A no-op mutation must leave the caches exactly as they were — including
+    /// after a source-key rebinding, which changes where a book came from but
+    /// not what it says. Only ever called when [`Self::content_eq`] holds.
+    pub(crate) fn inherit_cache(&mut self, resident: &Self) {
+        debug_assert!(self.content_eq(resident));
+        self.lint_dirty = resident.lint_dirty;
+        self.lint = resident.lint.clone();
+        self.patches = resident.patches.clone();
+    }
+
+    /// Recomputes this book's whole-book lint contribution and the patch table
+    /// derived from it.
+    ///
+    /// The caller-declared [`BookId`] enters core's lint context here — this is
+    /// the only place it can, since braid is the only thing that knows which
+    /// book a source was declared as. A source whose own `\id` names a
+    /// different valid book reports `book-id-mismatch` because of it.
+    pub(crate) fn recompute_lint(&mut self, base: &LintOptions) {
+        let mut options = base.clone();
+        options.declared_book = Some(self.book);
+        let result = lint_tokens(&self.tokens, options);
+        self.patches = self.resolve_fixes(&result);
+        self.lint = Some(result);
+        self.lint_dirty = false;
+    }
+
+    /// Flattens every finding's fix against this book's token stream.
+    ///
+    /// Position resolution is by token id, the only address a `TokenFix`
+    /// carries. A fix naming a token this book does not hold cannot happen from
+    /// its own lint pass — core only attaches a fix to a token it just read, and
+    /// resident ids are unique — and is skipped rather than guessed at.
+    fn resolve_fixes(&self, result: &LintResult) -> Vec<ResolvedFix> {
+        let mut positions: FxHashMap<&str, u32> =
+            FxHashMap::with_capacity_and_hasher(self.tokens.len(), rustc_hash::FxBuildHasher);
+        for (position, token) in self.tokens.iter().enumerate() {
+            positions.insert(token.id().as_str(), position as u32);
+        }
+        result
+            .issues
+            .iter()
+            .filter_map(|issue| {
+                let fix = issue.fix.as_ref()?;
+                let position = positions.get(fix.target_token_id()).copied();
+                debug_assert!(
+                    position.is_some(),
+                    "a fix from this book's own lint names one of its tokens"
+                );
+                Some(ResolvedFix::new(fix, position?, self.hash))
+            })
+            .collect()
     }
 
     /// Exact content equality — the check that decides a no-op. Hash equality
