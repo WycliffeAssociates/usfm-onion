@@ -1609,3 +1609,27 @@ this verbatim.
 - **K.8 Verbs live on the handle, not the DTO.** `braid.applyFix(finding)` etc.; finding/token
   DTOs stay inert frozen data.
 
+
+---
+
+## Correction — 2026-07-30 (clean-room review, C1 fix round): `LintIssue` gains position fields
+
+Amends the C1 API ledger entry above. Clean-room review found `canonical_sort`'s id-string-keyed
+position lookup lost ordering entirely for any caller whose tokens carry no id (e.g.
+`usfm_onion::format::into_format_tokens`'s own public output) — the re-key landed correctly for
+`Token<'a>` (proven oracle-neutral) but not for the general case the freeze's own wording called
+for ("position exists identically for parsed and caller-token ingest").
+
+Fix: `LintIssue` gains two new fields, `position: u32` and `related_position: u32` (sentinel
+`usfm_onion::lint::NO_TOKEN_POSITION = u32::MAX`), recorded at the moment a rule creates the finding
+rather than resolved afterward from `token_id`. Both are `#[serde(skip)]` (never cross the wire/JS
+boundary) and excluded from `LintIssue`'s equality (a manual `PartialEq`/`Eq` now backs the type).
+`canonical_sort` reads them directly; the `token_positions` map is removed. Wire's
+`decode_findings` sets them from the row's own `token_idx`/related index — a more direct source
+than core's own creation-time recording, since wire already stores the index as a number.
+
+New public API surface, appended (not previously ledgered since it did not exist when the original
+C1 entry was written): `usfm_onion::lint::LintIssue::position`, `::related_position` (fields),
+`usfm_onion::lint::NO_TOKEN_POSITION` (const). Two core items, zero wire/wasm-facing additions (the
+wasm `LintIssue` DTO does not mirror these — they are core-internal sort-key state, not part of the
+frozen finding shape any caller across the wasm boundary reads).
