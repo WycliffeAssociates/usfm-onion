@@ -303,3 +303,96 @@ fn an_empty_corpus_has_a_valid_empty_snapshot() {
     // sentinel: an empty braid publishes the same id every time.
     assert_eq!(snapshot.id, braid().expected_snapshot_id());
 }
+
+/// The warm cold-open: seeding from already-decoded state must land a corpus
+/// indistinguishable from one that was parsed, without parsing anything.
+#[test]
+fn restore_seeds_a_corpus_that_matches_the_parsed_one() {
+    let mut parsed = braid();
+    parsed
+        .replace_corpus(CorpusInput::new(vec![
+            usfm("GEN", GEN_SOURCE),
+            usfm("EXO", EXO_SOURCE),
+        ]))
+        .expect("two books");
+    let expected_books = parsed.books();
+    let expected_findings: Vec<Vec<usfm_onion::lint::LintIssue>> = parsed
+        .lint()
+        .books
+        .iter()
+        .map(|book| book.result.issues.clone())
+        .collect();
+
+    let mut restored = braid();
+    let report = restored
+        .restore_corpus(braid::CorpusRestoreInput::new(
+            [("GEN", GEN_SOURCE), ("EXO", EXO_SOURCE)]
+                .into_iter()
+                .map(|(code, source)| braid::BookRestoreInput {
+                    source_key: key(&format!("{code}.usfm")),
+                    book: id(code),
+                    source: source.to_string(),
+                    tokens: owned(source),
+                    line_ending: LineEnding::Lf,
+                })
+                .collect(),
+        ))
+        .expect("a well-formed seed");
+    assert_eq!(report.seeded, vec![id("GEN"), id("EXO")]);
+    assert!(report.rejected.is_empty());
+
+    // Same identity, same hashes, same order, same findings.
+    assert_eq!(restored.books(), expected_books);
+    assert_eq!(
+        restored.expected_snapshot_id(),
+        parsed.expected_snapshot_id()
+    );
+    assert_eq!(restored.dirty_books(), vec![id("GEN"), id("EXO")]);
+    let restored_findings: Vec<Vec<usfm_onion::lint::LintIssue>> = restored
+        .lint()
+        .books
+        .iter()
+        .map(|book| book.result.issues.clone())
+        .collect();
+    assert_eq!(restored_findings, expected_findings);
+}
+
+/// A seed whose tokens do not spell its own bytes is refused as data — that one
+/// book falls back to ordinary ingest while the rest of the corpus stays warm.
+#[test]
+fn a_seed_whose_tokens_disagree_with_its_bytes_is_refused() {
+    let mut restored = braid();
+    let report = restored
+        .restore_corpus(braid::CorpusRestoreInput::new(vec![
+            braid::BookRestoreInput {
+                source_key: key("GEN.usfm"),
+                book: id("GEN"),
+                source: GEN_SOURCE.to_string(),
+                tokens: owned(GEN_SOURCE),
+                line_ending: LineEnding::Lf,
+            },
+            braid::BookRestoreInput {
+                source_key: key("EXO.usfm"),
+                book: id("EXO"),
+                // The bytes claim one thing, the tokens spell another.
+                source: EXO_SOURCE.to_string(),
+                tokens: owned("\\id EXO\n\\c 1\n\\p\n\\v 1 Something else entirely.\n"),
+                line_ending: LineEnding::Lf,
+            },
+        ]))
+        .expect("the corpus itself is well-formed");
+
+    assert_eq!(report.seeded, vec![id("GEN")]);
+    assert_eq!(
+        report.rejected,
+        vec![braid::PrimeRejection {
+            book: id("EXO"),
+            reason: braid::PrimeRejectReason::SourceTokenMismatch,
+        }]
+    );
+    assert_eq!(
+        restored.books().len(),
+        1,
+        "a refused book is not resident at all"
+    );
+}

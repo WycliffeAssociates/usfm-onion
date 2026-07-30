@@ -175,6 +175,39 @@ pub struct BookEntry {
     pub line_ending: LineEnding,
 }
 
+/// What one [`crate::Braid::restore_corpus`] call installed, and what it refused.
+///
+/// A refusal is data, not an error: the caller falls back to ordinary ingest for
+/// that one book (re-reading and parsing it) while every other book stays warm.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct RestoreReport {
+    pub seeded: Vec<BookId>,
+    pub rejected: Vec<PrimeRejection>,
+}
+
+/// One book a warm seed or cache prime would not accept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PrimeRejection {
+    pub book: BookId,
+    pub reason: PrimeRejectReason,
+}
+
+/// Why a book was refused.
+///
+/// One variant, because one thing can be checked today. The frozen
+/// cache-acceptance reasons (`BookNotResident`, `SourceHashMismatch`,
+/// `ConfigFingerprintMismatch`, `EngineStampMismatch`, `InvalidPatch`) all gate a
+/// cached *lint* contribution, which no input can carry yet — the stamps that
+/// would license one are undecided — so they have no producer and are not built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum PrimeRejectReason {
+    /// The supplied tokens do not spell the supplied bytes.
+    SourceTokenMismatch,
+}
+
 /// A chapter scope that could not be resolved, kept alongside the address the
 /// caller supplied so the error can name it.
 pub(crate) fn target(book: BookId, label: &ChapterLabel) -> ChapterTarget {

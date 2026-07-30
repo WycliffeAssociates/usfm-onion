@@ -159,6 +159,46 @@ impl CorpusInput {
     }
 }
 
+/// A complete corpus to seed from already-decoded state — the warm cold-open.
+///
+/// The point is that nothing here needs lexing or parsing: the caller (or the
+/// adapter that decoded a packed container for it) already holds both the exact
+/// bytes and the semantic tokens, so braid only has to check that they agree and
+/// install them.
+///
+/// The per-book cached *lint* contribution §5.5 of the plan describes is
+/// deliberately absent: accepting a cached result requires the lint-config
+/// fingerprint and rule-engine stamp, whose input sets are still undecided, and a
+/// stamp that does not actually cover what changed would accept stale findings —
+/// the one failure mode a warm cache must not have. Seeded books are therefore
+/// dirty, and the next `lint()` computes their findings. What restore already
+/// saves is the parse, which is the expensive half.
+#[derive(Debug, Clone, Default)]
+pub struct CorpusRestoreInput {
+    pub books: Vec<BookRestoreInput>,
+}
+
+impl CorpusRestoreInput {
+    pub fn new(books: Vec<BookRestoreInput>) -> Self {
+        Self { books }
+    }
+}
+
+/// One book's seed: its exact bytes *and* the tokens they decode to.
+///
+/// The two must agree, and braid checks it. A pairing it cannot verify is the
+/// one thing a warm restore must never install: after a restore the first edit
+/// re-emits the whole book from its tokens, so tokens that do not spell these
+/// bytes would silently rewrite parts of the file nobody touched.
+#[derive(Debug, Clone)]
+pub struct BookRestoreInput {
+    pub source_key: SourceKey,
+    pub book: BookId,
+    pub source: String,
+    pub tokens: Vec<OwnedToken>,
+    pub line_ending: LineEnding,
+}
+
 /// A read/projection selector over resident data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

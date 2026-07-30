@@ -45,13 +45,15 @@ use crate::patch::ResolvedFix;
 
 pub use crate::error::{IngestError, PatchError, ScopeError};
 pub use crate::input::{
-    BookInput, BookTokensInput, ChapterInput, ChapterLabel, ChapterTarget, CorpusInput,
-    CorpusScope, LineEnding, ScopedOutput, SourceKey, SourceOutput,
+    BookInput, BookRestoreInput, BookTokensInput, ChapterInput, ChapterLabel, ChapterTarget,
+    CorpusInput, CorpusRestoreInput, CorpusScope, LineEnding, ScopedOutput, SourceKey,
+    SourceOutput,
 };
 pub use crate::lint::{BookLintSnapshot, LintSnapshot};
 pub use crate::patch::{Patch, PatchId, PatchOp, PatchRow};
 pub use crate::state::{
-    BookEntry, MutationEffect, Scope, ScopeSet, ScopeTokens, SnapshotId, SourceHash,
+    BookEntry, MutationEffect, PrimeRejectReason, PrimeRejection, RestoreReport, Scope, ScopeSet,
+    ScopeTokens, SnapshotId, SourceHash,
 };
 
 /// Resident configuration. Lint options live here so every recompute uses one
@@ -203,6 +205,53 @@ impl Braid {
 
         self.books = candidates;
         Ok(self.effect_with_reorder(changed, removed, reordered))
+    }
+
+    /// Seeds the whole corpus from already-decoded state — the warm cold-open.
+    ///
+    /// Every book arrives as exact bytes plus the tokens they decode to, so no
+    /// book is lexed or parsed. The pairing is what gets checked: a book whose
+    /// tokens do not re-emit its own bytes is refused into the report rather than
+    /// installed, because after a restore the first edit rewrites the whole book
+    /// from its tokens — tokens that spell something else would take unrelated
+    /// parts of the file with them.
+    ///
+    /// Corpus-level validation is the same as any other seed: duplicate declared
+    /// books or source keys refuse the entire call with resident state untouched.
+    /// Per-book refusals are data, and the caller re-ingests just those books.
+    ///
+    /// Seeded books are dirty: this restores the parse, not the findings. Braid
+    /// never decodes wire bytes — the composing adapter does that and hands the
+    /// results here.
+    pub fn restore_corpus(
+        &mut self,
+        seed: CorpusRestoreInput,
+    ) -> Result<RestoreReport, IngestError> {
+        let mut candidates = Vec::with_capacity(seed.books.len());
+        let mut rejected = Vec::new();
+        for book in seed.books {
+            let expected = book.source;
+            let candidate = BookState::build(BookInput::Tokens(BookTokensInput {
+                source_key: book.source_key,
+                book: book.book,
+                tokens: book.tokens,
+                line_ending: book.line_ending,
+            }))?;
+            if candidate.source == expected {
+                candidates.push(candidate);
+            } else {
+                rejected.push(PrimeRejection {
+                    book: book.book,
+                    reason: PrimeRejectReason::SourceTokenMismatch,
+                });
+            }
+        }
+        validate_unique(&candidates)?;
+
+        let seeded = candidates.iter().map(|book| book.book).collect();
+        self.books = candidates;
+        self.snapshot_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
+        Ok(RestoreReport { seeded, rejected })
     }
 
     /// Replaces one book, or appends it when it is not resident yet.
