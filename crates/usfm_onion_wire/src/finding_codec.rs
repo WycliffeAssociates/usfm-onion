@@ -158,6 +158,14 @@ fn resolve_token_ids(decoded: &DecodedTokens<'_>) -> Vec<String> {
 /// caller comparing an unsorted `LintResult` against a decoded one needs the
 /// same key — [`encode_book`]/[`encode_findings`] always apply it before
 /// building rows.
+///
+/// Same 3-key shape as core's own (private) `canonical_sort`/
+/// `token_positions` (§2.2#15) — the two are not shared code, since this
+/// function is deliberately generic over an arbitrary row-resolution closure
+/// (built once and reused for both encoding and test/reproduction callers, a
+/// shape core's `LintableToken`-only sort has no reason to grow) and each is
+/// pinned by its own gate (core's lint oracle; this crate's finding corpus
+/// round-trip gate). They agree by construction, not by delegation.
 pub fn canonical_order(
     issues: &mut [LintIssue],
     resolve_row: impl Fn(Option<&str>) -> Option<u32>,

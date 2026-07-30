@@ -2545,6 +2545,10 @@ fn token_positions<T: LintableToken>(tokens: &[T]) -> FxHashMap<String, u32> {
 /// in either language. Deliberately NOT ordered by SID either — duplicate,
 /// malformed, or decreasing references are valid linter inputs and must not
 /// drive output order.
+///
+/// `usfm_onion_wire`'s `finding_codec::canonical_order` uses this same
+/// 3-key shape independently, not by sharing code with this function — see
+/// its doc comment for why.
 fn canonical_sort(issues: &mut [LintIssue], positions: &FxHashMap<String, u32>) {
     fn position_key(token_id: &Option<String>, positions: &FxHashMap<String, u32>) -> (u8, u32) {
         match token_id.as_deref().and_then(|id| positions.get(id)) {
