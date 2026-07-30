@@ -74,6 +74,11 @@ fn hand_built_invalid_number_range(source: &str) -> LintIssue {
         sid: anchor.sid.map(|sid| sid.to_string()),
         marker: Some("v".to_string()),
         fix: None,
+        // `encode_book`'s own row placement resolves `token_id` strings, not
+        // these fields (core-only, never read by the wire encoder) — a
+        // sentinel is correct here, not just convenient.
+        position: usfm_onion::lint::NO_TOKEN_POSITION,
+        related_position: usfm_onion::lint::NO_TOKEN_POSITION,
     }
 }
 

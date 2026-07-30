@@ -24,7 +24,7 @@
 
 use std::collections::BTreeMap;
 
-use usfm_onion::lint::{LintCode, LintIssue, MessageParams};
+use usfm_onion::lint::{LintCode, LintIssue, MessageParams, NO_TOKEN_POSITION};
 use usfm_onion::token::{BookId, Sid, Span, Token};
 
 use crate::catalog::{catalog_marker_name, catalog_ordinal};
@@ -159,13 +159,13 @@ fn resolve_token_ids(decoded: &DecodedTokens<'_>) -> Vec<String> {
 /// same key — [`encode_book`]/[`encode_findings`] always apply it before
 /// building rows.
 ///
-/// Same 3-key shape as core's own (private) `canonical_sort`/
-/// `token_positions` (§2.2#15) — the two are not shared code, since this
-/// function is deliberately generic over an arbitrary row-resolution closure
-/// (built once and reused for both encoding and test/reproduction callers, a
-/// shape core's `LintableToken`-only sort has no reason to grow) and each is
-/// pinned by its own gate (core's lint oracle; this crate's finding corpus
-/// round-trip gate). They agree by construction, not by delegation.
+/// Same 3-key shape as core's own (private) `canonical_sort` — the two are
+/// not shared code, since this function is deliberately generic over an
+/// arbitrary row-resolution closure (built once and reused for both encoding
+/// and test/reproduction callers, a shape core's `LintableToken`-only sort
+/// has no reason to grow) and each is pinned by its own gate (core's lint
+/// oracle; this crate's finding corpus round-trip gate). They agree by
+/// construction, not by delegation.
 pub fn canonical_order(
     issues: &mut [LintIssue],
     resolve_row: impl Fn(Option<&str>) -> Option<u32>,
@@ -535,6 +535,11 @@ pub(crate) fn decode_findings(
             // by the structural decoder before rows are even read — so every
             // decoded issue's fix is unconditionally absent.
             fix: None,
+            // The row's own token index IS the position — more direct than
+            // core's own id-string resolution, since wire stores it as a
+            // number already.
+            position: row.token_idx.unwrap_or(NO_TOKEN_POSITION),
+            related_position: row.related.map_or(NO_TOKEN_POSITION, |(idx, ..)| idx),
         });
     }
     Ok(issues)
@@ -763,6 +768,8 @@ mod tests {
             sid: anchor.sid.map(|sid| sid.to_string()),
             marker: Some("v".to_string()),
             fix: None,
+            position: NO_TOKEN_POSITION,
+            related_position: NO_TOKEN_POSITION,
         };
 
         let bytes = encode_book(
@@ -985,6 +992,8 @@ mod tests {
             sid: anchor.sid.map(|sid| sid.to_string()),
             marker: Some("v".to_string()),
             fix: None,
+            position: NO_TOKEN_POSITION,
+            related_position: NO_TOKEN_POSITION,
         };
         let base = encode_book(
             book("GEN"),
@@ -1064,6 +1073,8 @@ mod tests {
                 sid: None,
                 marker: Some("id".to_string()),
                 fix: None,
+                position: NO_TOKEN_POSITION,
+                related_position: NO_TOKEN_POSITION,
             };
             let mut bytes = encode_book(
                 book("GEN"),

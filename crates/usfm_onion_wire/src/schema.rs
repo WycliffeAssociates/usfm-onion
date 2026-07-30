@@ -678,9 +678,8 @@ pub enum LintCodeTag {
     ContentAfterBlankMarker = 29,
     InvalidBookCode = 30,
     BookCodeNotUppercase = 31,
-    /// Appended 2026-07-30 (Phase C, C1): the declared-book lint context's
-    /// mismatch rule. Tombstone-safe append per the freeze's assignment
-    /// rule — 30/31 keep their values, this is a new slot, not a renumber.
+    /// The declared-book lint context's mismatch rule. Tombstone-safe
+    /// append — 30/31 keep their values, this is a new slot, not a renumber.
     BookIdMismatch = 32,
 }
 
