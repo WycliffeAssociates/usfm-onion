@@ -1973,6 +1973,11 @@ typed; existing diff/revert/merge tests and editor use cases remain equivalent.
 
 ### Phase F — wasm package and editor adoption
 
+Canonical-docs deferral (2026-07-30): `docs/usfm-onion.html` is not updated to describe the
+resident subsystem until the public braid surface stops moving — C3/C4 still change it — so
+documenting it now would go stale twice. Update it as part of this phase, once the surface is
+frozen.
+
 1. Split the wasm module by responsibility and expose the synchronous `Braid` class.
 2. Move/delete DTO duplication only after generated declarations and all stateless exports pass
    the API ledger.
