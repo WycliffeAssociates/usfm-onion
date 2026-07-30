@@ -510,7 +510,173 @@ pub struct OwnedToken {
     payload: OwnedTokenPayload,
 }
 
+/// Why a working token could not become an owned resident token.
+///
+/// Every variant names a payload fact the working shape
+/// ([`crate::format::FormattableToken`]) does not carry and that this token
+/// cannot be given honestly — so the conversion refuses instead of inventing
+/// one. All three are checkpoint failures at a residency boundary, never
+/// something a well-formed format or fix pass produces.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenBuildError {
+    /// The working token carries no id, so nothing could address it.
+    MissingId,
+    /// This kind's payload (a book code, a parsed number) is not reconstructible
+    /// from the working shape, and no anchor supplied it either.
+    MissingPayload { id: Box<str>, kind: TokenKind },
+    /// The working token names a canonical anchor no anchor token can supply the
+    /// structured form of. Keeping the formatted string without it would leave a
+    /// token whose spelling and structured anchor disagree.
+    UnresolvableSid { id: Box<str>, sid: Box<str> },
+}
+
+impl std::fmt::Display for TokenBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingId => f.write_str("working token carries no id"),
+            Self::MissingPayload { id, kind } => {
+                write!(
+                    f,
+                    "token {id} of kind {kind:?} has no reconstructible payload"
+                )
+            }
+            Self::UnresolvableSid { id, sid } => {
+                write!(
+                    f,
+                    "token {id} names the anchor {sid} with no structured form"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for TokenBuildError {}
+
 impl OwnedToken {
+    /// Rebuilds an owned resident token from a format/fix pass's working token.
+    ///
+    /// This is the residency checkpoint for the id-optional working type: a
+    /// token with no id cannot be addressed by anything downstream, so it is
+    /// refused here rather than stored unaddressable.
+    ///
+    /// `anchor` is the resident token this working token descends from — the
+    /// same-id token for one the pass modified, or the fix's target for one it
+    /// synthesized. It supplies exactly the payload facts a working token has no
+    /// field for: marker nesting, a book code, a parsed number, an attribute
+    /// list's remembered placement, and the structured form of a canonical
+    /// anchor. Passing `None` states there is no such predecessor, and then a
+    /// kind that needs one of those facts is refused rather than guessed.
+    ///
+    /// Facts the working token *does* carry always win: kind, source text,
+    /// marker name, and the formatted anchor are read from it, never from the
+    /// anchor token.
+    pub fn from_format_token(
+        token: &crate::format::FormatToken,
+        anchor: Option<&Self>,
+    ) -> Result<Self, TokenBuildError> {
+        // Field access, not the `FormattableToken` accessors: `FormatToken`
+        // implements two traits that both declare `marker`, so the fields are
+        // the unambiguous reading.
+        let id = StableTokenId::new(token.id.clone().ok_or(TokenBuildError::MissingId)?)
+            .ok_or(TokenBuildError::MissingId)?;
+        let kind = token.kind;
+        let missing_payload = || TokenBuildError::MissingPayload {
+            id: Box::from(id.as_str()),
+            kind,
+        };
+
+        // The formatted spelling comes from the working token; its structured
+        // form can only come from an anchor that spells the same anchor, since
+        // re-parsing the display string here would fork core's own formatting.
+        let (sid, parsed_sid) = match token.sid.as_deref() {
+            None => (None, None),
+            Some(text) => {
+                let inherited = anchor
+                    .filter(|anchor| anchor.sid() == Some(text))
+                    .and_then(|anchor| anchor.parsed_sid);
+                match inherited {
+                    Some(parsed) => (Some(Box::from(text)), Some(parsed)),
+                    None => {
+                        return Err(TokenBuildError::UnresolvableSid {
+                            id: Box::from(id.as_str()),
+                            sid: Box::from(text),
+                        });
+                    }
+                }
+            }
+        };
+
+        let payload = match kind {
+            TokenKind::Newline
+            | TokenKind::OptBreak
+            | TokenKind::MilestoneEnd
+            | TokenKind::Text => OwnedTokenPayload::Plain,
+            // A book code and a parsed number are payloads the working shape
+            // either omits entirely or carries verbatim; an anchor may only
+            // supply one while the token's own text still spells it.
+            TokenKind::BookCode => OwnedTokenPayload::BookCode(
+                anchor
+                    .filter(|anchor| anchor.source() == token.text)
+                    .and_then(Self::book_code)
+                    .cloned()
+                    .ok_or_else(missing_payload)?,
+            ),
+            TokenKind::Number => OwnedTokenPayload::Number(match token.number_info {
+                Some((start, end, kind)) => OwnedNumberInfo { start, end, kind },
+                None => anchor
+                    .filter(|anchor| anchor.source() == token.text)
+                    .and_then(Self::number_info)
+                    .cloned()
+                    .ok_or_else(missing_payload)?,
+            }),
+            TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone => {
+                let marker = token.marker.as_deref().ok_or_else(missing_payload)?;
+                let metadata = marker_metadata(marker);
+                let structural = token.structural.unwrap_or_else(|| {
+                    crate::marker_defs::structural_marker_info(marker, metadata.kind)
+                });
+                // Nesting is a spelling fact (`\+add`) the working type has no
+                // field for, so it survives only from an anchor spelling the
+                // same marker. A synthesized token is new content, and new
+                // content is not nested.
+                let nested = anchor
+                    .filter(|anchor| anchor.marker_name() == Some(marker))
+                    .is_some_and(|anchor| anchor.nested());
+                let attrs = rebuilt_marker_attrs(token, anchor);
+                match kind {
+                    TokenKind::Marker => OwnedTokenPayload::Marker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                        attrs,
+                    },
+                    TokenKind::EndMarker => OwnedTokenPayload::EndMarker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                    },
+                    _ => OwnedTokenPayload::Milestone {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        attrs,
+                    },
+                }
+            }
+        };
+
+        Ok(Self {
+            id,
+            kind,
+            source: Box::from(token.text.as_str()),
+            sid,
+            parsed_sid,
+            payload,
+        })
+    }
+
     /// Copies one parsed token into the owned semantic representation.
     pub fn from_parsed(value: &Token<'_>) -> Self {
         let kind = value.kind();
@@ -673,7 +839,10 @@ impl OwnedToken {
         }
     }
 
-    fn structural(&self) -> Option<StructuralMarkerInfo> {
+    /// The structural facts parse recorded for this marker. Crate-visible for
+    /// the format boundary, which must hand a working token exactly what parse
+    /// recorded rather than re-deriving it from the marker name.
+    pub(crate) fn structural(&self) -> Option<StructuralMarkerInfo> {
         match self.payload {
             OwnedTokenPayload::Marker { structural, .. }
             | OwnedTokenPayload::EndMarker { structural, .. }
@@ -690,6 +859,42 @@ impl OwnedToken {
             _ => MarkerIndex::UNKNOWN,
         }
     }
+}
+
+/// The attribute record a rebuilt token keeps.
+///
+/// An untouched list survives verbatim from its anchor — including the
+/// remembered placement distance, which is the one attribute fact a working
+/// token has no field for. A list the caller actually edited is rebuilt from the
+/// working token with no placement, which is exactly the "touch an attribute,
+/// drop its verbatim position" rule the emitter already falls back on.
+fn rebuilt_marker_attrs(
+    token: &crate::format::FormatToken,
+    anchor: Option<&OwnedToken>,
+) -> Option<OwnedMarkerAttrs> {
+    if token.attributes.is_empty() && token.attribute_source.is_none() {
+        return None;
+    }
+    let unchanged = anchor.filter(|anchor| {
+        anchor.attribute_list() == token.attribute_source.as_deref()
+            && anchor.attributes() == token.attributes.as_slice()
+    });
+    if let Some(anchor) = unchanged {
+        match &anchor.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => return Some(attrs.clone()),
+            _ => {}
+        }
+    }
+    Some(OwnedMarkerAttrs {
+        attributes: token.attributes.clone().into(),
+        attribute_source: token.attribute_source.as_deref().map(Box::from),
+        attribute_offset: None,
+    })
 }
 
 fn owned_marker_attrs(

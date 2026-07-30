@@ -7,7 +7,8 @@ use crate::marker_defs::StructuralMarkerInfo;
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
 use crate::token::{
-    NumberRangeKind, OwnedAttribute, SerializableToken, Span, Token, TokenData, TokenKind,
+    NumberRangeKind, OwnedAttribute, OwnedToken, SerializableToken, Span, Token, TokenData,
+    TokenKind,
 };
 
 const POETRY_MARKERS: &[&str] = &[
@@ -466,6 +467,41 @@ impl<'a> From<&Token<'a>> for FormatToken {
                     span: Some(attribute.span),
                 })
                 .collect(),
+        }
+    }
+}
+
+/// The working shape of a resident owned token.
+///
+/// This is the inbound half of the residency boundary a caller crosses to run a
+/// format or fix pass over owned tokens: the pass needs an id-optional working
+/// type it may synthesize into, and [`crate::token::OwnedToken::from_format_token`]
+/// is the outbound half that turns the result back into resident tokens. The
+/// facts this conversion drops (marker nesting, book codes, an attribute list's
+/// remembered placement) are exactly the ones that conversion takes from an
+/// anchor token, so a round trip through here loses nothing as long as each
+/// output token knows which resident token it descends from.
+impl From<&OwnedToken> for FormatToken {
+    fn from(token: &OwnedToken) -> Self {
+        let marker = token.marker_name().map(ToOwned::to_owned);
+        Self {
+            kind: token.kind(),
+            text: token.source().to_string(),
+            sid: token.sid().map(ToOwned::to_owned),
+            id: Some(token.id().as_str().to_string()),
+            // Owned tokens carry no span at all (that is what makes them
+            // outlive their source), so there is none to report.
+            span: None,
+            structural: token.structural(),
+            number_info: token
+                .number_info()
+                .map(|number| (number.start, number.end, number.kind)),
+            marker_profile: marker
+                .as_deref()
+                .map(|marker| build_marker_profile(marker, token.kind(), token.structural())),
+            attribute_source: token.attribute_list().map(ToOwned::to_owned),
+            attributes: token.attributes().to_vec(),
+            marker,
         }
     }
 }
@@ -2691,6 +2727,152 @@ mod tests {
             Some("synthetic-1"),
             "the inserted token is synthetic and must be minted"
         );
+    }
+
+    /// A source exercising every payload the working type cannot carry:
+    /// a book code, a parsed verse number, a nested character marker
+    /// (`\+add`), and a marker with a verbatim attribute list.
+    const BOUNDARY_SOURCE: &str = "\\id GEN Genesis\n\\c 1\n\\p\n\\v 1 a \\w gracious|lemma=\"grace\"\\w* \\add \\+add b\\+add*\\add* c\n";
+
+    fn owned_boundary_tokens() -> Vec<OwnedToken> {
+        crate::parse::parse(BOUNDARY_SOURCE)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect()
+    }
+
+    /// The residency boundary must be lossless in both directions when each
+    /// output token knows the resident token it descends from. Without this,
+    /// a fix or format pass over resident tokens would quietly rewrite every
+    /// book-code, nested-marker, and attribute-bearing token in the book —
+    /// the working type has no field for any of those facts.
+    #[test]
+    fn owned_tokens_survive_a_round_trip_through_the_working_type() {
+        let owned = owned_boundary_tokens();
+        assert!(owned.iter().any(|token| token.nested()));
+        assert!(owned.iter().any(|token| token.book_code().is_some()));
+        assert!(owned.iter().any(|token| token.number_info().is_some()));
+        assert!(owned.iter().any(|token| token.attribute_list().is_some()));
+        assert!(owned.iter().any(|token| token.attribute_offset().is_some()));
+
+        for token in &owned {
+            let working = FormatToken::from(token);
+            let rebuilt = OwnedToken::from_format_token(&working, Some(token))
+                .expect("a token rebuilt against its own anchor");
+            assert_eq!(&rebuilt, token, "round trip changed {token:?}");
+        }
+    }
+
+    /// With no anchor, the conversion refuses rather than inventing the
+    /// payloads it cannot see — the whole point of the checkpoint.
+    #[test]
+    fn rebuilding_without_an_anchor_refuses_what_it_cannot_know() {
+        use crate::token::TokenBuildError;
+
+        for token in owned_boundary_tokens() {
+            let working = FormatToken::from(&token);
+            let rebuilt = OwnedToken::from_format_token(&working, None);
+            match token.kind() {
+                // Anchorless rebuilds are refused for a token whose formatted
+                // anchor has no structured form to pair with (which every
+                // token after `\c 1` carries here), and never for a plain
+                // anchorless one.
+                _ if token.sid().is_some() => assert!(
+                    matches!(rebuilt, Err(TokenBuildError::UnresolvableSid { .. })),
+                    "{token:?} rebuilt to {rebuilt:?}"
+                ),
+                _ => {
+                    let rebuilt = rebuilt.expect("a payload-free token needs no anchor");
+                    // Nesting is the one fact an anchorless rebuild resets:
+                    // new content is not nested.
+                    assert!(!rebuilt.nested());
+                }
+            }
+        }
+
+        let mut idless = FormatToken::from(&owned_boundary_tokens()[0]);
+        idless.id = None;
+        assert_eq!(
+            OwnedToken::from_format_token(&idless, None),
+            Err(TokenBuildError::MissingId)
+        );
+
+        // A book code and a parsed number are the two payloads no anchor-free
+        // working token can supply, independent of the anchor question above.
+        let owned = owned_boundary_tokens();
+        for kind in [TokenKind::BookCode, TokenKind::Number] {
+            let token = owned
+                .iter()
+                .find(|token| token.kind() == kind)
+                .expect("the fixture carries both kinds");
+            let mut working = FormatToken::from(token);
+            working.sid = None;
+            working.number_info = None;
+            assert!(
+                matches!(
+                    OwnedToken::from_format_token(&working, None),
+                    Err(TokenBuildError::MissingPayload { .. })
+                ),
+                "{kind:?} must refuse an anchorless rebuild"
+            );
+        }
+    }
+
+    /// The end-to-end shape braid's resident fix application uses: convert,
+    /// apply a real `TokenFix` with a minter, convert back. Only the fix's own
+    /// token changes; every other resident token comes back byte-identical.
+    #[test]
+    fn a_fix_over_the_working_type_changes_only_its_own_token() {
+        let owned = owned_boundary_tokens();
+        let working: Vec<FormatToken> = owned.iter().map(FormatToken::from).collect();
+        let target = owned
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .expect("the paragraph marker");
+
+        let fix = TokenFixForTest::insert_after(
+            target.id().as_str(),
+            vec![crate::format::TokenTemplate {
+                kind: TokenKind::Text,
+                text: "inserted".to_string(),
+                marker: None,
+                sid: None,
+            }],
+        );
+        let mut minter = counting_minter();
+        let mut minter_opt: Option<&mut dyn FnMut() -> String> = Some(&mut minter);
+        let applied = crate::lint::apply_token_fix_with_minter(&working, &fix, &mut minter_opt);
+
+        let by_id: BTreeMap<&str, &OwnedToken> = owned
+            .iter()
+            .map(|token| (token.id().as_str(), token))
+            .collect();
+        let rebuilt: Vec<OwnedToken> = applied
+            .iter()
+            .map(|token| {
+                let anchor = token
+                    .id
+                    .as_deref()
+                    .and_then(|id| by_id.get(id).copied())
+                    .or(Some(target));
+                OwnedToken::from_format_token(token, anchor).expect("rebuild")
+            })
+            .collect();
+
+        assert_eq!(rebuilt.len(), owned.len() + 1);
+        let inserted = rebuilt
+            .iter()
+            .position(|token| token.source() == "inserted")
+            .expect("the synthesized token");
+        assert_eq!(rebuilt[inserted].id().as_str(), "synthetic-1");
+        let survivors: Vec<&OwnedToken> = rebuilt
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != inserted)
+            .map(|(_, token)| token)
+            .collect();
+        assert_eq!(survivors, owned.iter().collect::<Vec<_>>());
     }
 
     /// Builds a `TokenFix::InsertAfter` for the test above without depending
