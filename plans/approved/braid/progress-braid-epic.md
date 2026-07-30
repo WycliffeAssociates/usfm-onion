@@ -2961,3 +2961,65 @@ restored via `git checkout --` after every wasm dev build, never committed.
 
 - Next: same as the previous entry — owner ruling on `synthetic_like`'s id gap (ITEM 3), otherwise
   C3.
+
+## 2026-07-30 — Re-review: 1 P1 + 1 P2 fixed (attribute span fabrication, plan-citation sweep)
+
+Re-review of the P1-1 fix above came back BLOCKED with one P1 and one P2.
+
+**P1 — attribute spans were fabricated.** `wire_attribute_to_owned` discarded `AttributeItem.span`
+entirely, and `map_format_token` substituted the owning marker's own span for every attribute on the
+way back out — golden proof: a parsed attribute span of `71..84` became `59..62` (the `\w` marker's
+own bytes) after `formatTokens`. Fixed at the carrier: `OwnedAttribute` (`src/token.rs`) gains `span:
+Option<Span>` — `None` for an attribute an editor synthesized or structurally edited, the real parsed
+span otherwise, never invented from some other token. The wire DTO's own `AttributeItem.span` was
+the same shape of bug one layer up (`Span`, not `Option<Span>` — no way to express "no real
+position" honestly), so it became `Option<Span>` too, matching `Token.span`'s existing convention;
+`From<&NativeAttributeItem<'_>>` now wraps it in `Some`. `wire_attribute_to_owned`/
+`owned_attribute_to_wire` (`crates/usfm_onion_wasm/src/lib.rs`) carry the span straight through in
+both directions instead of dropping or substituting it; `owned_attribute_to_wire` no longer takes a
+fallback-span parameter at all, since there is no fallback anymore. Every format/fix/merge/revert leg
+shares these two conversions, so the one fix covers all of them (verified with the native
+`cargo test -p usfm_onion_wasm` suite, which needs no pkg tree). Extended the existing regression
+(`format_tokens_preserves_a_structurally_edited_attribute`) to capture the original attribute span
+before the edit, assert it differs from the owning marker's own span (so the test can actually catch
+fabrication), and assert the returned span matches it exactly after `formatTokens` — the previous
+version of this test passed before the fix precisely because it never compared spans.
+
+Golden consequence, re-blessed once cleared (see tree-constraint note below):
+`attributes/format-tokens.json`'s `\w` token's attribute entry changed only its `span` —
+`{start: 59, end: 62}` (the marker's bytes) to `{start: 71, end: 84}` (the attribute's own bytes) —
+every other field (`key`, `value`, `text`, `isDefault`) byte-identical. `git status` confirmed this
+was the only golden file touched.
+
+**Tree constraint this round.** `pkg-bundler/*` initially carried an owner-modified, uncommitted
+local build; the usual dev-build-then-`git checkout --` cycle would have destroyed it, so the P1 fix,
+full workspace suite, lint oracle, release wire ignored gates, and `cargo test -p usfm_onion_wasm`
+ran first with the two npm packed gates and golden regeneration explicitly deferred and described
+(not run) pending an owner decision. The owner then ruled the pkg-bundler changes disposable and
+cleared clobbering it; the deferred steps ran immediately after: `npm run golden:wasm` reproduced
+the exact one-file mismatch predicted, `golden:wasm:update` re-blessed it (span-only diff confirmed
+above), `golden:wasm:web` parity passed (7 fixtures), and both `npm run test:packed`/`test:packed:web`
+passed at the unchanged pinned counts — 409 cases / 5,717,137 tokens / 715 chapter slices.
+`pkg-bundler`/`pkg-web` restored via `git checkout --` once done, never committed — the standing rule
+back in force now that the disposable build is gone.
+
+**P2 — plan citations reintroduced.** New durable comments in the P1-2 fix round cited freeze `§K.2a`
+and `§J.4` at `crates/braid/src/lib.rs`, `crates/braid/src/state.rs`, and
+`crates/braid/tests/lifecycle.rs`. Stripped all three, keeping the behavioral rationale (why
+`reordered` exists, why a pure reorder still changes `snapshot_id`). Swept this round's own new
+comments (the `OwnedAttribute`/`AttributeItem` span docs, the extended regression test) for the same
+pattern before committing — none found.
+
+**Gates:** `cargo test --workspace` 279 (core) + 27 (braid) + 176 (wire) + 26 (wasm), 0 failed;
+`cargo test --test lint_oracle -- --ignored` byte-identical, zero rebless; `cargo test --release -p
+usfm_onion_wire -- --ignored` 4 + 2 green, zero golden diffs; `cargo test -p usfm_onion_wasm` 26
+green (run standalone per the tree constraint, before the packed gates were cleared); `npm run
+test:packed`/`test:packed:web` both green once cleared, pinned counts unchanged; `cargo fmt --check`
+clean on every touched crate; `pkg-bundler`/`pkg-web` restored via `git checkout --`, never committed.
+
+**Deviations:** none from the reviewer's packet.
+
+**Stops:** none.
+
+- Next: same as the previous entry — owner ruling on `synthetic_like`'s id gap (ITEM 3), otherwise
+  C3.
