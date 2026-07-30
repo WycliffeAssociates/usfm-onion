@@ -458,12 +458,13 @@ impl Braid {
     }
 
     /// Same as [`Self::effect`], plus the corpus-order signal only
-    /// [`Self::replace_corpus`] can produce (freeze §K.2a): the full new book
-    /// order, when the relative order of the books that persisted across the
-    /// call changed, `None` otherwise. A pure reorder rewrites no tokens — so
+    /// [`Self::replace_corpus`] can produce: the full new book order, when the
+    /// relative order of the books that persisted across the call changed,
+    /// `None` otherwise. A pure reorder rewrites no tokens — so
     /// `changed`/`removed` stay empty — but it does change `snapshot_id`
-    /// (order is part of identity, §J.4), and without this field that new
-    /// order was otherwise unobservable through `to_tokens`.
+    /// (order is part of the corpus's content-derived identity), and without
+    /// this field that new order was otherwise unobservable through
+    /// `to_tokens`.
     fn effect_with_reorder(
         &mut self,
         changed: Vec<Scope>,

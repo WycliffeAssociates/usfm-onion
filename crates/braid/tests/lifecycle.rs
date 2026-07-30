@@ -591,10 +591,9 @@ fn removing_a_chapter_reports_the_whole_book() {
 fn snapshot_identity_is_content_derived_and_order_sensitive() {
     // Same books, same bytes, different order: the id is over the *ordered*
     // per-book hashes, so it differs. Nothing was rewritten, so `changed` is
-    // empty — the two facts answer different questions. Freeze §K.2a:
-    // `reordered` is what makes the new order itself observable, and it is
-    // what makes this a non-no-op effect despite `changed`/`removed` both
-    // being empty.
+    // empty — the two facts answer different questions. `reordered` is what
+    // makes the new order itself observable, and it is what makes this a
+    // non-no-op effect despite `changed`/`removed` both being empty.
     let mut forward = braid();
     forward
         .replace_corpus(CorpusInput::new(vec![

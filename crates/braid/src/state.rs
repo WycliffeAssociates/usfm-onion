@@ -77,14 +77,15 @@ impl Scope {
 /// the id (order is part of identity) while a rename does not (it is not
 /// semantic content).
 ///
-/// `reordered` (freeze §K.2a) is the reorder's own observable: `Some(full new
-/// book order)` when the relative order of the books present both before and
-/// after the mutation changed, `None` otherwise — including the ordinary
-/// no-op case. Without it, a pure `[GEN, EXO] -> [EXO, GEN]` replace_corpus
-/// changed `snapshot_id` (order is part of §J.4 identity) while reporting an
-/// empty `changed`, so `is_noop` claimed nothing happened and the new order
-/// was unobservable through `to_tokens`. Only `replace_corpus` can produce a
-/// reorder today; every other verb always passes `None`.
+/// `reordered` is the reorder's own observable: `Some(full new book order)`
+/// when the relative order of the books present both before and after the
+/// mutation changed, `None` otherwise — including the ordinary no-op case.
+/// Without it, a pure `[GEN, EXO] -> [EXO, GEN]` replace_corpus changed
+/// `snapshot_id` (order is part of the corpus's content-derived identity)
+/// while reporting an empty `changed`, so `is_noop` claimed nothing happened
+/// and the new order was unobservable through `to_tokens`. Only
+/// `replace_corpus` can produce a reorder today; every other verb always
+/// passes `None`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MutationEffect {
