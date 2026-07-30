@@ -1024,6 +1024,12 @@ fn lint_options_into_native(value: LintOptions) -> NativeLintOptions {
             })
             .collect(),
         allow_implicit_chapter_content_verse: value.allow_implicit_chapter_content_verse,
+        // The wasm-facing `LintOptions` DTO has no declared-book field yet —
+        // this is core's seam for Phase C's `braid` (a direct Rust caller),
+        // not a wasm/JS surface addition. Every wasm-driven lint call keeps
+        // today's stateless behavior until a JS-facing field is deliberately
+        // added.
+        declared_book: None,
     }
 }
 
