@@ -2483,3 +2483,16 @@ frozen-descriptor-tree assertion passing silently within the same run.
 
 **Not done:** nothing outstanding — this is the closing round for the Phase B part 2 packed verify
 surface fix cycle.
+
+## 2026-07-30 — PHASE B CLOSED (reviewer verdict: dispatchable, no findings remain)
+
+- Part 2 round 4 passed clean-room review: descriptor tree frozen per verified book, mutation
+  throws, rematerialization stable; all comment corrections verified accurate. Final gates:
+  workspace 0 failed, packed equivalence 409 cases / 5,717,137 tokens, 715 chapter slices.
+- Phase B whole = finding wire codec (both trust rounds), packed verify surface, branded opaque
+  `VerifiedPacked`, pure-JS token materializer with selective {book, chapter} mode, Rust↔JS
+  equivalence gate, golden vectors, per-code corpus gate. Deferred onward per freeze: patch/fix
+  framing (§F.3 → Phase C), `reconcileFindings` (§G.2 → Phase C).
+- Next: Phase C (braid residency floor). C1 = core pull-forwards (declared-book lint context +
+  mismatch rule; §2.2#15 canonical-order re-key in core, oracle-gated; formatter id-minting per
+  the 2026-07-28 freeze adjudication).
