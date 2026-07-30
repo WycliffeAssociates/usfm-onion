@@ -482,6 +482,30 @@ pub trait FormattableToken: Clone {
     ) -> Self;
 }
 
+/// Attaches a fresh id to a token the formatter/fix-applier just synthesized,
+/// when a minter is supplied.
+///
+/// This is the seam the 2026-07-28 freeze adjudication calls for: core never
+/// invents an id itself (address-agnostic — ids come from a caller or from
+/// `assign_ids` at parse time, never fabricated mid-pipeline) and never uses
+/// randomness (`std` has none, and determinism is a format invariant, not an
+/// implementation detail). With no minter — every call site before this seam
+/// existed, and every call site today unless a caller opts in — a synthesized
+/// token keeps its historical no-id shape (`synthetic_like` itself never
+/// calls `set_id`). A caller that needs every resident token addressable
+/// (braid, from Phase C onward) supplies a minter that is a pure function of
+/// how many times it has already been called in this pass, e.g.
+/// `{book}-p{patch}-{n}` — reproducible across runs, unique per book by
+/// construction; ingest/apply validation remains the collision backstop.
+pub(crate) fn mint_synthetic_id<T: FormattableToken>(
+    token: &mut T,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) {
+    if let Some(mint) = minter.as_deref_mut() {
+        token.set_id(mint());
+    }
+}
+
 impl FormattableToken for FormatToken {
     fn id(&self) -> Option<&str> {
         self.id.as_deref()
@@ -582,7 +606,8 @@ pub fn format_mut_default<T: FormattableToken>(tokens: &mut Vec<T>) {
 }
 
 pub fn format_tokens<T: FormattableToken>(tokens: &mut Vec<T>, options: FormatOptions) {
-    format_tokens_owned(tokens, options);
+    let mut minter: Option<&mut dyn FnMut() -> String> = None;
+    format_tokens_owned(tokens, options, &mut minter);
 }
 
 pub fn format_tokens_profile<T: FormattableToken>(
@@ -590,7 +615,8 @@ pub fn format_tokens_profile<T: FormattableToken>(
     options: FormatOptions,
 ) -> (Vec<T>, FormatTimings) {
     let mut working = tokens.to_vec();
-    let profile = format_tokens_owned(&mut working, options);
+    let mut minter: Option<&mut dyn FnMut() -> String> = None;
+    let profile = format_tokens_owned(&mut working, options, &mut minter);
     (working, profile)
 }
 
@@ -599,6 +625,40 @@ pub fn format_usfm(source: &str, options: FormatOptions) -> String {
     let mut tokens = into_format_tokens(&parsed.tokens);
     format_tokens(&mut tokens, options);
     format_tokens_to_usfm(&tokens)
+}
+
+/// [`format`], but every token the formatter synthesizes (inserted structural
+/// linebreaks, a default `\p` after a bare chapter intro, a marker token
+/// recovered from malformed text) is minted a fresh id via `minter`. See
+/// [`mint_synthetic_id`] for the seam's contract; `format`/`format_tokens`
+/// are unchanged and still pass no minter.
+pub fn format_with_minter<T: FormattableToken + Clone>(
+    tokens: &[T],
+    options: FormatOptions,
+    minter: &mut dyn FnMut() -> String,
+) -> Vec<T> {
+    let mut working = tokens.to_vec();
+    format_tokens_with_minter(&mut working, options, minter);
+    working
+}
+
+/// [`format_mut`] with a synthetic-id minter — see [`format_with_minter`].
+pub fn format_mut_with_minter<T: FormattableToken>(
+    tokens: &mut Vec<T>,
+    options: FormatOptions,
+    minter: &mut dyn FnMut() -> String,
+) {
+    format_tokens_with_minter(tokens, options, minter);
+}
+
+/// [`format_tokens`] with a synthetic-id minter — see [`format_with_minter`].
+pub fn format_tokens_with_minter<T: FormattableToken>(
+    tokens: &mut Vec<T>,
+    options: FormatOptions,
+    minter: &mut dyn FnMut() -> String,
+) {
+    let mut minter: Option<&mut dyn FnMut() -> String> = Some(minter);
+    format_tokens_owned(tokens, options, &mut minter);
 }
 
 fn push_token_merging_text<T: FormattableToken>(tokens: &mut Vec<T>, token: T) {
@@ -633,11 +693,12 @@ where
 fn format_tokens_owned<T: FormattableToken>(
     tokens: &mut Vec<T>,
     options: FormatOptions,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) -> FormatTimings {
     let profile = FormatTimings::default();
     let mut scratch = Vec::new();
 
-    normalize_tokens_in_place(tokens, &mut scratch, options);
+    normalize_tokens_in_place(tokens, &mut scratch, options, &mut *minter);
 
     if options.bridge_consecutive_verse_markers
         || options.remove_orphan_empty_verse_before_contentful_verse
@@ -662,11 +723,21 @@ fn format_tokens_owned<T: FormattableToken>(
         if options.insert_default_paragraph_after_chapter_intro
             && needs_default_paragraph_after_chapter_intro(tokens.as_slice())
         {
-            rewrite_tokens(
+            // Inlined rather than routed through `rewrite_tokens`'s generic
+            // `FnMut` closure: a closure capturing `minter` (a `&mut Option<
+            // &mut dyn FnMut() -> String>`) by move would only be callable
+            // once, and reborrowing it back out on every call is exactly the
+            // friction `rewrite_tokens`'s single-call sites don't otherwise
+            // pay for. Same swap/clear shape `rewrite_tokens` uses.
+            std::mem::swap(tokens, &mut scratch);
+            tokens.clear();
+            tokens.reserve(scratch.len());
+            insert_default_paragraph_after_chapter_intro_into(
+                scratch.as_slice(),
                 tokens,
-                &mut scratch,
-                insert_default_paragraph_after_chapter_intro_into,
+                &mut *minter,
             );
+            scratch.clear();
         }
     }
 
@@ -675,7 +746,7 @@ fn format_tokens_owned<T: FormattableToken>(
     }
 
     if options.insert_structural_linebreaks {
-        insert_structural_linebreaks_in_place(tokens, &mut scratch);
+        insert_structural_linebreaks_in_place(tokens, &mut scratch, minter);
     }
 
     if options.collapse_consecutive_linebreaks {
@@ -693,6 +764,7 @@ fn normalize_tokens_in_place<T: FormattableToken>(
     tokens: &mut Vec<T>,
     scratch: &mut Vec<T>,
     options: FormatOptions,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) {
     let mut input = std::mem::take(tokens)
         .into_iter()
@@ -708,7 +780,7 @@ fn normalize_tokens_in_place<T: FormattableToken>(
         let next_after_next = input.get(index + 2).and_then(|token| token.as_ref());
 
         if options.recover_malformed_markers
-            && let Some(recovered) = recover_malformed_markers(&token)
+            && let Some(recovered) = recover_malformed_markers(&token, &mut *minter)
         {
             for recovered_token in recovered {
                 push_token_merging_text(tokens, recovered_token);
@@ -750,6 +822,7 @@ fn normalize_tokens_in_place<T: FormattableToken>(
 fn insert_structural_linebreaks_in_place<T: FormattableToken>(
     tokens: &mut Vec<T>,
     scratch: &mut Vec<T>,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) {
     std::mem::swap(tokens, scratch);
     tokens.clear();
@@ -771,7 +844,7 @@ fn insert_structural_linebreaks_in_place<T: FormattableToken>(
             && prev_out.is_some()
             && !prev_out.is_some_and(|t| t.kind() == TokenKind::Newline)
         {
-            tokens.push(new_newline_like(&token));
+            tokens.push(new_newline_like(&token, &mut *minter));
         }
 
         let kind = token.kind();
@@ -797,14 +870,17 @@ fn insert_structural_linebreaks_in_place<T: FormattableToken>(
 
         if needs_newline_after {
             let anchor = tokens.last().expect("pushed token should exist");
-            tokens.push(new_newline_like(anchor));
+            tokens.push(new_newline_like(anchor, &mut *minter));
         }
     }
 
     scratch.clear();
 }
 
-fn recover_malformed_markers<T: FormattableToken>(token: &T) -> Option<Vec<T>> {
+fn recover_malformed_markers<T: FormattableToken>(
+    token: &T,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) -> Option<Vec<T>> {
     if token.kind() != TokenKind::Text {
         return None;
     }
@@ -841,13 +917,15 @@ fn recover_malformed_markers<T: FormattableToken>(token: &T) -> Option<Vec<T>> {
         out.push(prefix);
     }
 
-    out.push(T::synthetic_like(
+    let mut recovered_marker = T::synthetic_like(
         Some(token),
         TokenKind::Marker,
         format!("\\{marker}"),
         Some(marker.clone()),
         token.sid().map(ToOwned::to_owned),
-    ));
+    );
+    mint_synthetic_id(&mut recovered_marker, minter);
+    out.push(recovered_marker);
 
     if rest.len() > 1 {
         let mut suffix = token.clone();
@@ -1167,6 +1245,7 @@ fn cleanup_bridge_enumerator_at<T: FormattableToken>(tokens: &mut [T], index: us
 fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(
     tokens: &[T],
     out: &mut Vec<T>,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) {
     let mut in_chapter_intro = false;
     let mut saw_para_marker_in_intro = false;
@@ -1208,13 +1287,15 @@ fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(
             }
 
             if is_verse_marker && !saw_para_marker_in_intro {
-                out.push(T::synthetic_like(
+                let mut default_paragraph = T::synthetic_like(
                     Some(token),
                     TokenKind::Marker,
                     "\\p".to_string(),
                     Some("p".to_string()),
                     token.sid().map(ToOwned::to_owned),
-                ));
+                );
+                mint_synthetic_id(&mut default_paragraph, &mut *minter);
+                out.push(default_paragraph);
                 saw_para_marker_in_intro = true;
             }
 
@@ -1387,14 +1468,19 @@ fn normalize_marker_whitespace_at_line_start_in_place<T: FormattableToken>(token
     }
 }
 
-fn new_newline_like<T: FormattableToken>(anchor: &T) -> T {
-    T::synthetic_like(
+fn new_newline_like<T: FormattableToken>(
+    anchor: &T,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) -> T {
+    let mut newline = T::synthetic_like(
         Some(anchor),
         TokenKind::Newline,
         "\n".to_string(),
         None,
         anchor.sid().map(ToOwned::to_owned),
-    )
+    );
+    mint_synthetic_id(&mut newline, minter);
+    newline
 }
 
 fn is_text_like(kind: TokenKind) -> bool {
@@ -2072,6 +2158,217 @@ mod tests {
             assert!(opts.collapse_consecutive_linebreaks);
             assert!(opts.normalize_marker_whitespace_at_line_start);
             assert!(opts.ensure_inline_separators);
+        }
+    }
+
+    /// A minter that counts its own calls — the shape the freeze adjudication
+    /// asks for (`{book}-p{patch}-{n}`, a pure function of call count).
+    fn counting_minter() -> impl FnMut() -> String {
+        let mut count: u32 = 0;
+        move || {
+            count += 1;
+            format!("synthetic-{count}")
+        }
+    }
+
+    /// With no minter — every call site before this seam existed, and every
+    /// call site today unless a caller opts in — synthesized tokens keep
+    /// their historical no-id shape. This is the byte-identity half of the
+    /// seam: nothing changes for `format_tokens`'s existing callers.
+    #[test]
+    fn format_tokens_without_a_minter_leaves_synthesized_tokens_with_no_id() {
+        // Triggers both structural-linebreak insertion (`\c 1\p\v 1 …` has no
+        // newlines between markers) and default-paragraph insertion (a verse
+        // directly after `\c 1` with no `\p`).
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        format_tokens(&mut tokens, FormatOptions::all_enabled());
+        assert!(
+            tokens.iter().all(|token| token.id.is_none()),
+            "no synthesized token should carry an id without a minter"
+        );
+    }
+
+    /// With a minter, every token the formatter synthesizes — an inserted
+    /// structural linebreak and a default `\p` after a bare chapter intro —
+    /// gets a fresh id. Pre-existing (non-synthetic) tokens are untouched.
+    #[test]
+    fn format_tokens_with_minter_mints_every_synthesized_token() {
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let tokens = into_format_tokens(&parsed.tokens);
+        let original_count = tokens.len();
+
+        let mut minter = counting_minter();
+        let mut minted = tokens.clone();
+        format_tokens_with_minter(&mut minted, FormatOptions::all_enabled(), &mut minter);
+
+        // Original tokens carried no id; the only tokens with one afterward
+        // are the ones the formatter created.
+        let with_id: Vec<_> = minted.iter().filter(|token| token.id.is_some()).collect();
+        assert!(
+            !with_id.is_empty(),
+            "this fixture must actually exercise synthesis, or the test proves nothing"
+        );
+        assert!(
+            minted.len() > original_count,
+            "synthesis must have added tokens"
+        );
+        for token in &with_id {
+            assert!(
+                token
+                    .id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("synthetic-")),
+                "every id must come from the supplied minter, not be invented"
+            );
+        }
+        // Minted ids are unique — one per synthesized token, in call order.
+        let mut ids: Vec<&str> = with_id.iter().filter_map(|t| t.id.as_deref()).collect();
+        let unique_count = {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len()
+        };
+        assert_eq!(unique_count, with_id.len());
+
+        // Formatted USFM text is identical whether or not a minter was
+        // supplied: minting only touches the id field, never source/kind/
+        // marker/text, so this is oracle-neutral by construction.
+        let mut unminted = tokens;
+        format_tokens(&mut unminted, FormatOptions::all_enabled());
+        assert_eq!(
+            format_tokens_to_usfm(&unminted),
+            format_tokens_to_usfm(&minted)
+        );
+    }
+
+    /// Two independent runs over the same input with freshly-constructed,
+    /// identically-behaved minters produce identical ids — the seam adds no
+    /// hidden nondeterminism (no clock, no randomness, just call count).
+    #[test]
+    fn format_tokens_with_minter_is_deterministic_across_runs() {
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let tokens = into_format_tokens(&parsed.tokens);
+
+        let mut first = tokens.clone();
+        format_tokens_with_minter(
+            &mut first,
+            FormatOptions::all_enabled(),
+            &mut counting_minter(),
+        );
+        let mut second = tokens;
+        format_tokens_with_minter(
+            &mut second,
+            FormatOptions::all_enabled(),
+            &mut counting_minter(),
+        );
+
+        let ids = |v: &[FormatToken]| v.iter().map(|t| t.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&first), ids(&second));
+    }
+
+    /// Direct unit test of the malformed-marker recovery path: a `Text`
+    /// token whose content embeds an unescaped marker the parser didn't
+    /// split out gets recovered into its own token, which is exactly as
+    /// synthetic as an inserted linebreak and must be minted the same way.
+    #[test]
+    fn recover_malformed_markers_mints_the_recovered_marker_token() {
+        let glued = FormatToken {
+            kind: TokenKind::Text,
+            text: "before\\q1 after".to_string(),
+            marker: None,
+            sid: None,
+            id: None,
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        };
+        let mut mint_fn = counting_minter();
+        let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
+        let recovered =
+            recover_malformed_markers(&glued, &mut minter).expect("embedded \\q1 must recover");
+        assert_eq!(recovered.len(), 3, "prefix text, marker, suffix text");
+        assert_eq!(recovered[0].text, "before");
+        assert!(
+            recovered[0].id.is_none(),
+            "the prefix clone is not synthetic"
+        );
+        assert_eq!(recovered[1].kind, TokenKind::Marker);
+        assert_eq!(recovered[1].marker.as_deref(), Some("q1"));
+        assert_eq!(
+            recovered[1].id.as_deref(),
+            Some("synthetic-1"),
+            "the recovered marker token is synthetic and must be minted"
+        );
+        assert_eq!(recovered[2].text, "after");
+    }
+
+    /// `apply_token_fix_with_minter`: an `InsertAfter` fix's new token is
+    /// synthetic and gets minted; a `ReplaceToken` fix's first replacement
+    /// reuses the target's own clone (its existing id, never re-minted),
+    /// while any additional replacement is synthetic and gets minted.
+    #[test]
+    fn apply_token_fix_with_minter_mints_only_the_synthesized_tokens() {
+        use crate::format::TokenTemplate;
+
+        let target = FormatToken {
+            kind: TokenKind::Marker,
+            text: "\\p".to_string(),
+            marker: Some("p".to_string()),
+            sid: None,
+            id: Some("GEN-3".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+        };
+        let tokens = vec![target.clone()];
+
+        let fix = TokenFixForTest::insert_after(
+            "GEN-3",
+            vec![TokenTemplate {
+                kind: TokenKind::Newline,
+                text: "\n".to_string(),
+                marker: None,
+                sid: None,
+            }],
+        );
+        let mut minter = counting_minter();
+        let mut minter_opt: Option<&mut dyn FnMut() -> String> = Some(&mut minter);
+        let result = crate::lint::apply_token_fix_with_minter(&tokens, &fix, &mut minter_opt);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[0].id.as_deref(),
+            Some("GEN-3"),
+            "target is untouched"
+        );
+        assert_eq!(
+            result[1].id.as_deref(),
+            Some("synthetic-1"),
+            "the inserted token is synthetic and must be minted"
+        );
+    }
+
+    /// Builds a `TokenFix::InsertAfter` for the test above without depending
+    /// on `lint_impl`'s private constructors.
+    struct TokenFixForTest;
+    impl TokenFixForTest {
+        fn insert_after(
+            target_token_id: &str,
+            insert: Vec<crate::format::TokenTemplate>,
+        ) -> crate::lint::TokenFix {
+            crate::lint::TokenFix::InsertAfter {
+                code: "test".to_string(),
+                label: "test".to_string(),
+                label_params: Default::default(),
+                target_token_id: target_token_id.to_string(),
+                insert,
+            }
         }
     }
 }

@@ -12,7 +12,9 @@ use crate::marker_defs::{
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
-use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind, UsfmToken};
+use crate::token::{
+    BookId, NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind, UsfmToken,
+};
 use crate::walker::WalkableToken;
 
 /// Public token-shape contract for `lint_tokens` and friends.
@@ -222,6 +224,17 @@ pub enum LintCode {
     /// because the fix is deterministic — uppercase it. `Warning`, anchored at
     /// the book-code token.
     BookCodeNotUppercase,
+    /// A `\id` book code that IS a canonical USFM identifier, but disagrees
+    /// with [`LintOptions::declared_book`] — the caller's out-of-band
+    /// authoritative book id. Requires a declared-book context; with none
+    /// (the default), this never fires and a valid-but-wrong `\id` produces
+    /// no finding, exactly like today. Distinct from [`Self::InvalidBookCode`]:
+    /// that fires when the code isn't canonical at all, independent of any
+    /// declared context, and takes priority over this one when both would
+    /// otherwise apply to the same token. `Warning` (the manifest book is
+    /// authoritative for residency; the source `\id` stays lintable content,
+    /// not a hard error), anchored at the book-code token.
+    BookIdMismatch,
 }
 
 impl LintCode {
@@ -263,6 +276,7 @@ impl LintCode {
             Self::ContentAfterBlankMarker => "content-after-blank-marker",
             Self::InvalidBookCode => "invalid-book-code",
             Self::BookCodeNotUppercase => "book-code-not-uppercase",
+            Self::BookIdMismatch => "book-id-mismatch",
         }
     }
 
@@ -343,6 +357,9 @@ impl LintCode {
             Self::BookCodeNotUppercase => {
                 "The \\id book code \"{code}\" must be uppercase: {uppercase}."
             }
+            Self::BookIdMismatch => {
+                "The \\id book code \"{found}\" does not match the declared book \"{expected}\"."
+            }
         }
     }
 
@@ -363,7 +380,8 @@ impl LintCode {
             | Self::DuplicateIdMarker
             | Self::IdMarkerNotAtFileStart
             | Self::InvalidBookCode
-            | Self::BookCodeNotUppercase => LintCategory::Document,
+            | Self::BookCodeNotUppercase
+            | Self::BookIdMismatch => LintCategory::Document,
             Self::EmptyParagraph
             | Self::VerseIsEmpty
             | Self::UnknownToken
@@ -398,7 +416,8 @@ impl LintCode {
             Self::EmptyParagraph
             | Self::MissingContentSpaceAfterCloseMarker
             | Self::InvalidBookCode
-            | Self::BookCodeNotUppercase => LintSeverity::Warning,
+            | Self::BookCodeNotUppercase
+            | Self::BookIdMismatch => LintSeverity::Warning,
             _ => LintSeverity::Error,
         }
     }
@@ -436,7 +455,8 @@ impl LintCode {
             | Self::VerseInSectionOrOtherParagraph
             | Self::ContentAfterBlankMarker
             | Self::InvalidBookCode
-            | Self::BookCodeNotUppercase => LintIssueType::Usfm,
+            | Self::BookCodeNotUppercase
+            | Self::BookIdMismatch => LintIssueType::Usfm,
         }
     }
 
@@ -562,6 +582,14 @@ pub struct LintOptions {
     pub disabled_codes: Vec<LintCode>,
     pub suppressed: Vec<LintSuppression>,
     pub allow_implicit_chapter_content_verse: bool,
+    /// The caller's out-of-band authoritative book id (e.g. a resident
+    /// manifest entry), if any. `None` (the default via [`Self::scoped`]) is
+    /// stateless lint exactly as before this field existed: no caller
+    /// constructs this any other way without opting in, so every existing
+    /// call site keeps `None` and [`LintCode::BookIdMismatch`] never fires.
+    /// `Some(book)` lets that rule fire when the source's own `\id` is a
+    /// valid-but-different canonical code.
+    pub declared_book: Option<BookId>,
 }
 
 impl LintOptions {
@@ -575,6 +603,7 @@ impl LintOptions {
             disabled_codes: Vec::new(),
             suppressed: Vec::new(),
             allow_implicit_chapter_content_verse: false,
+            declared_book: None,
         }
     }
 }
@@ -836,16 +865,21 @@ pub fn lint_tokens<T: LintableToken + Sync>(tokens: &[T], options: LintOptions) 
     #[cfg(target_arch = "wasm32")]
     let issues = collect_issues_serial(tokens, &options, &enabled);
 
-    finalize_issues(issues, &options)
+    finalize_issues(issues, tokens, &options)
 }
 
 /// Shared tail: dedupe, suppress, canonically sort, and summarize. Runs once
 /// after collection, so the serial and chapter-parallel collectors converge on
 /// byte-identical output here.
-fn finalize_issues(issues: Vec<LintIssue>, options: &LintOptions) -> LintResult {
+fn finalize_issues<T: LintableToken>(
+    issues: Vec<LintIssue>,
+    tokens: &[T],
+    options: &LintOptions,
+) -> LintResult {
     let unique = dedupe_issues(issues);
     let (mut issues, suppressed_count) = apply_suppressions(unique, &options.suppressed);
-    canonical_sort(&mut issues);
+    let positions = token_positions(tokens);
+    canonical_sort(&mut issues, &positions);
     let summary = summarize(&issues, suppressed_count);
 
     LintResult { issues, summary }
@@ -1044,6 +1078,22 @@ const WHITESPACE_CODES: &[LintCode] = &[
 ];
 
 pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec<T> {
+    let mut minter: Option<&mut dyn FnMut() -> String> = None;
+    apply_token_fix_with_minter(tokens, fix, &mut minter)
+}
+
+/// [`apply_token_fix`], but every token a `TokenFix` synthesizes (an
+/// `InsertAfter`, or a `ReplaceToken` with more than one replacement) is
+/// minted a fresh id via `minter`. The replacement/insert token that reuses
+/// the target's own clone (index 0 of a `ReplaceToken`) already has that
+/// token's id and is never re-minted. See
+/// [`crate::format::mint_synthetic_id`] for the seam's contract;
+/// `apply_token_fix` is unchanged and still passes no minter.
+pub fn apply_token_fix_with_minter<T: FormattableToken>(
+    tokens: &[T],
+    fix: &TokenFix,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) -> Vec<T> {
     let Some(index) = tokens
         .iter()
         .position(|token| token.id() == Some(fix.target_token_id()))
@@ -1060,7 +1110,7 @@ pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec
                 return next_tokens;
             }
             let replacement_tokens =
-                build_replacement_tokens(&anchor, replacements, ReplacementMode::Replace);
+                build_replacement_tokens(&anchor, replacements, ReplacementMode::Replace, minter);
             next_tokens.splice(index..=index, replacement_tokens);
         }
         TokenFix::DeleteToken { .. } => {
@@ -1071,7 +1121,7 @@ pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec
                 return next_tokens;
             }
             let insert_tokens =
-                build_replacement_tokens(&anchor, insert, ReplacementMode::InsertAfter);
+                build_replacement_tokens(&anchor, insert, ReplacementMode::InsertAfter, minter);
             next_tokens.splice(index + 1..index + 1, insert_tokens);
         }
     }
@@ -1105,19 +1155,22 @@ fn build_replacement_tokens<T: FormattableToken>(
     anchor: &T,
     templates: &[crate::format::TokenTemplate],
     mode: ReplacementMode,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) -> Vec<T> {
     let mut built = Vec::with_capacity(templates.len());
     for (index, template) in templates.iter().enumerate() {
         let mut token = if index == 0 && matches!(mode, ReplacementMode::Replace) {
             anchor.clone()
         } else {
-            T::synthetic_like(
+            let mut synthetic = T::synthetic_like(
                 Some(anchor),
                 template.kind,
                 template.text.clone(),
                 template.marker.clone(),
                 template.sid.clone(),
-            )
+            );
+            crate::format::mint_synthetic_id(&mut synthetic, &mut *minter);
+            synthetic
         };
         token.set_kind(template.kind);
         token.set_text(template.text.clone());
@@ -1234,20 +1287,34 @@ fn lint_structure_rules<T: LintableToken>(
 
         if token_kind == TokenKind::BookCode {
             let code = token.source().trim();
-            if !code.is_empty() && !crate::lexer::is_valid_book_code(code) {
-                let upper = code.to_uppercase();
-                if crate::lexer::is_valid_book_code(&upper) {
-                    if enabled.has(LintCode::BookCodeNotUppercase) {
+            if !code.is_empty() {
+                if !crate::lexer::is_valid_book_code(code) {
+                    let upper = code.to_uppercase();
+                    if crate::lexer::is_valid_book_code(&upper) {
+                        if enabled.has(LintCode::BookCodeNotUppercase) {
+                            issues.push(simple_issue(
+                                LintCode::BookCodeNotUppercase,
+                                message_params([("code", code.to_string()), ("uppercase", upper)]),
+                                token,
+                            ));
+                        }
+                    } else if enabled.has(LintCode::InvalidBookCode) {
                         issues.push(simple_issue(
-                            LintCode::BookCodeNotUppercase,
-                            message_params([("code", code.to_string()), ("uppercase", upper)]),
+                            LintCode::InvalidBookCode,
+                            message_params([("code", code.to_string())]),
                             token,
                         ));
                     }
-                } else if enabled.has(LintCode::InvalidBookCode) {
+                } else if enabled.has(LintCode::BookIdMismatch)
+                    && let Some(expected) = options.declared_book
+                    && expected.as_str() != code
+                {
                     issues.push(simple_issue(
-                        LintCode::InvalidBookCode,
-                        message_params([("code", code.to_string())]),
+                        LintCode::BookIdMismatch,
+                        message_params([
+                            ("expected", expected.as_str().to_string()),
+                            ("found", code.to_string()),
+                        ]),
                         token,
                     ));
                 }
@@ -2441,29 +2508,58 @@ fn marker_params(marker: &str) -> MessageParams {
     message_params([("marker", marker.to_string())])
 }
 
-/// Canonical output order for findings. Independent of the order rule groups
-/// happen to run in, so callers see a stable sequence and a chapter-parallel
-/// linter (which produces findings out of segment order) can sort to the same
-/// result. Ordered by primary source position, then the stable lint-code
-/// identifier, then related span; spanless document findings sort last. `token_id`
-/// / `marker` / `message` are pure tie-breakers for determinism. Deliberately
-/// NOT ordered by SID — duplicate, malformed, or decreasing references are valid
-/// linter inputs and must not drive output order.
-fn canonical_sort(issues: &mut [LintIssue]) {
-    fn span_key(span: Option<Span>) -> (u8, u32, u32) {
-        match span {
-            Some(span) => (0, span.start, span.end),
-            None => (1, u32::MAX, u32::MAX),
+/// Maps each token's `id()` string to its ordinal position within `tokens` —
+/// the slice this `lint_tokens` call was given. Built once per call and
+/// consulted only by [`canonical_sort`]; a token id string is never itself
+/// compared (see that function's doc). `.entry().or_insert()` keeps the
+/// first occurrence on the rare chance two tokens report the same id, the
+/// same "first use wins" convention the wire packing already uses for
+/// interning.
+fn token_positions<T: LintableToken>(tokens: &[T]) -> FxHashMap<String, u32> {
+    let mut positions = FxHashMap::default();
+    for (index, token) in tokens.iter().enumerate() {
+        if let Some(id) = token.id() {
+            positions.entry(id).or_insert(index as u32);
+        }
+    }
+    positions
+}
+
+/// Canonical output order for findings (§2.2#15). Independent of the order
+/// rule groups happen to run in, so callers see a stable sequence and a
+/// chapter-parallel linter (which produces findings out of segment order)
+/// sorts to the same result. Ordered by the primary token's position in the
+/// token stream, then the stable kebab-case lint code, then the related
+/// token's position; anchor-only findings (no primary token id at all, e.g.
+/// a missing `\id`) sort last.
+///
+/// Deliberately keyed on *position*, not byte span: position is defined
+/// identically for parsed tokens and for tokens a future caller supplies
+/// with no span at all, so resident lint order can equal stateless order
+/// without a caller-token type having to carry spans. Deliberately NOT
+/// comparing `token_id`/`related_token_id` strings, even as a tie-breaker:
+/// a token id is caller-opaque and may not compare the same way in Rust
+/// (UTF-8 byte order) as in a JS reconciler over the same data (UTF-16 code
+/// unit order); resolving ids to numeric positions up front and comparing
+/// only numbers keeps this order reproducible without a string comparator
+/// in either language. Deliberately NOT ordered by SID either — duplicate,
+/// malformed, or decreasing references are valid linter inputs and must not
+/// drive output order.
+fn canonical_sort(issues: &mut [LintIssue], positions: &FxHashMap<String, u32>) {
+    fn position_key(token_id: &Option<String>, positions: &FxHashMap<String, u32>) -> (u8, u32) {
+        match token_id.as_deref().and_then(|id| positions.get(id)) {
+            Some(&position) => (0, position),
+            None => (1, u32::MAX),
         }
     }
     issues.sort_by(|a, b| {
-        span_key(a.span)
-            .cmp(&span_key(b.span))
+        position_key(&a.token_id, positions)
+            .cmp(&position_key(&b.token_id, positions))
             .then_with(|| a.code.code().cmp(b.code.code()))
-            .then_with(|| span_key(a.related_span).cmp(&span_key(b.related_span)))
-            .then_with(|| a.token_id.cmp(&b.token_id))
-            .then_with(|| a.marker.cmp(&b.marker))
-            .then_with(|| a.message.cmp(&b.message))
+            .then_with(|| {
+                position_key(&a.related_token_id, positions)
+                    .cmp(&position_key(&b.related_token_id, positions))
+            })
     });
 }
 
@@ -2577,6 +2673,7 @@ mod tests {
         LintCode::ContentAfterBlankMarker,
         LintCode::InvalidBookCode,
         LintCode::BookCodeNotUppercase,
+        LintCode::BookIdMismatch,
     ];
 
     /// Compile-time exhaustiveness anchor: adding a `LintCode` variant breaks
@@ -2614,7 +2711,8 @@ mod tests {
             | LintCode::VerseInSectionOrOtherParagraph
             | LintCode::ContentAfterBlankMarker
             | LintCode::InvalidBookCode
-            | LintCode::BookCodeNotUppercase => {}
+            | LintCode::BookCodeNotUppercase
+            | LintCode::BookIdMismatch => {}
         }
     }
 
@@ -2676,6 +2774,7 @@ mod tests {
                         disabled_codes: disabled.clone(),
                         suppressed: Vec::new(),
                         allow_implicit_chapter_content_verse: false,
+                        declared_book: None,
                     };
                     let bitmask = EnabledCodes::new(&options);
 
@@ -3221,6 +3320,109 @@ mod tests {
         }
     }
 
+    /// Gate 0D probe D: with no declared-book context (the default —
+    /// `LintOptions::scoped` never sets one), a valid-but-different-from-any-
+    /// expectation `\id` produces no finding at all. This is the "stateless
+    /// callers retain current behavior" half of the declared-book seam.
+    #[test]
+    fn no_declared_book_context_leaves_a_valid_but_wrong_code_unflagged() {
+        let result = lint_usfm(
+            "\\id 2CO\n\\c 1\n\\v 1 text",
+            LintOptions::scoped(LintScope::Book),
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch),
+            "BookIdMismatch must never fire without a declared_book context"
+        );
+    }
+
+    /// Gate 0D probe C row 4: a declared book that disagrees with a valid
+    /// source `\id` — the gap the declared-book context exists to close.
+    #[test]
+    fn declared_book_context_fires_mismatch_for_a_valid_but_different_code() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("1CO").expect("1CO is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_usfm("\\id 2CO\n\\c 1\n\\v 1 text", options);
+        let issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::BookIdMismatch)
+            .expect("a declared book disagreeing with a valid \\id must fire BookIdMismatch");
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert_eq!(issue.category, LintCategory::Document);
+        assert_eq!(
+            issue.message_params.get("expected").map(String::as_str),
+            Some("1CO")
+        );
+        assert_eq!(
+            issue.message_params.get("found").map(String::as_str),
+            Some("2CO")
+        );
+    }
+
+    #[test]
+    fn declared_book_context_does_not_fire_when_codes_match() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("GEN").expect("GEN is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\v 1 text", options);
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch)
+        );
+    }
+
+    /// `InvalidBookCode` takes priority: a code that fails canonical
+    /// validation altogether is a different problem than "wrong book", and a
+    /// declared context must not turn on a second finding for the same token.
+    #[test]
+    fn declared_book_context_still_prioritizes_invalid_book_code() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("GEN").expect("GEN is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_usfm("\\id ZZZ\n\\c 1\n\\v 1 text", options);
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::InvalidBookCode)
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch),
+            "an already-invalid code must not also fire BookIdMismatch"
+        );
+    }
+
+    /// `BookIdMismatch` is `LintCategory::Document`, so it inherits the same
+    /// chapter-scope suppression `InvalidBookCode`/`BookCodeNotUppercase`
+    /// already get — a chapter-grain caller must not get book-head behavior.
+    #[test]
+    fn declared_book_context_is_suppressed_in_chapter_scope() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("1CO").expect("1CO is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Chapter(1))
+        };
+        let result = lint_usfm("\\id 2CO\n\\c 1\n\\v 1 text", options);
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch)
+        );
+    }
+
     #[test]
     fn unknown_markers_do_not_also_report_context_errors() {
         let result = lint_usfm(
@@ -3616,10 +3818,12 @@ mod tests {
             let parsed = parse(&source);
             let serial = finalize_issues(
                 collect_issues_serial(&parsed.tokens, &options, &enabled),
+                &parsed.tokens,
                 &options,
             );
             let partitioned = finalize_issues(
                 collect_issues_partitioned(&parsed.tokens, &options, &enabled),
+                &parsed.tokens,
                 &options,
             );
             assert_eq!(

@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::marker_defs::{
     MarkerDefKind, MarkerFamily, MarkerIndex, StructuralMarkerInfo, resolve_marker_metadata,
@@ -1381,6 +1381,18 @@ impl std::fmt::Debug for BookId {
 impl Serialize for BookId {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.as_str())
+    }
+}
+
+/// Mirrors [`Self::serialize`]: a 3-byte ASCII-alphanumeric string, validated
+/// the same way [`Self::from_str`] validates one. Added for the declared-book
+/// lint context (`LintOptions::declared_book`), the first `BookId` field on a
+/// type that also derives `Deserialize`.
+impl<'de> Deserialize<'de> for BookId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        BookId::from_str(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid BookId: {s:?}")))
     }
 }
 
