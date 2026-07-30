@@ -1,0 +1,5 @@
+{
+  "name": "whitespace-fix-patch",
+  "kind": "good",
+  "proves": "one token carrying two different fixes (missing-whitespace-before-marker and missing-tag-end-delimiter-after-marker), so the patch table stores two records, their rows, and the fix strings interned in the finding-section dictionary"
+}

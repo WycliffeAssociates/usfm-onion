@@ -227,10 +227,21 @@ fn corpus_producible_codes() -> Vec<LintCode> {
     .to_vec()
 }
 
+/// The three codes that attach a `TokenFix`, with the exact number of fixes each
+/// produces over this corpus — the C4 census figures. Asserting the counts, not
+/// merely "at least one", is what makes a fix that silently stopped being
+/// attached (or stopped round-tripping) fail here instead of passing quietly
+/// behind the 60,000 findings that carry none.
+const CORPUS_FIX_COUNTS: [(LintCode, usize); 3] = [
+    (LintCode::MissingWhitespaceBeforeMarker, 48),
+    (LintCode::MissingHorizontalWhitespaceAfterMarkerName, 32),
+    (LintCode::MissingTagEndDelimiterAfterMarker, 12),
+];
+
 /// Gate 0D §2's per-`LintCode` semantic conformance gate: every finding the
 /// full corpus (`testData` + `en_ult` + `en_ulb`) produces must round-trip
 /// through [`encode_book`]/[`decode_book`] byte-for-byte-equivalent to
-/// `LintIssue` (every field but `fix`, which §F.3 defers). Counts are
+/// `LintIssue` — every field, `fix` included. Counts are
 /// per-code, not just a total, so a code that silently stopped round-tripping
 /// (while others kept the total non-zero) cannot hide.
 #[test]
@@ -239,6 +250,7 @@ fn corpus_findings_round_trip_per_lint_code() {
     let book = BookId::from_str("GEN").expect("test book code");
     let mut seen = std::collections::BTreeMap::<LintCode, usize>::new();
     let mut round_tripped = std::collections::BTreeMap::<LintCode, usize>::new();
+    let mut fixes = std::collections::BTreeMap::<LintCode, usize>::new();
     let mut total = 0usize;
 
     for path in corpus_paths() {
@@ -265,6 +277,9 @@ fn corpus_findings_round_trip_per_lint_code() {
         );
         for (original, decoded) in original.iter().zip(&decoded) {
             *seen.entry(original.code).or_default() += 1;
+            if original.fix.is_some() {
+                *fixes.entry(original.code).or_default() += 1;
+            }
             if issue_round_trips(original, decoded) {
                 *round_tripped.entry(original.code).or_default() += 1;
             } else {
@@ -281,9 +296,29 @@ fn corpus_findings_round_trip_per_lint_code() {
     for (code, count) in &seen {
         println!("{code:?}: {count} (round-tripped {})", round_tripped[code]);
     }
+    for (code, count) in &fixes {
+        println!("fix {code:?}: {count}");
+    }
     println!("total findings={total}");
 
     assert!(total > 0, "corpus must exercise the finding codec");
+    // Every fix in the corpus round-tripped (`issue_round_trips` compares
+    // `fix`, and a mismatch panics above), and it is the census's exact set.
+    assert_eq!(
+        fixes.len(),
+        CORPUS_FIX_COUNTS.len(),
+        "only the three census codes may attach a fix"
+    );
+    let mut fix_total = 0usize;
+    for (code, expected) in CORPUS_FIX_COUNTS {
+        assert_eq!(
+            fixes.get(&code).copied().unwrap_or(0),
+            expected,
+            "{code:?} fix count changed from the C4 census"
+        );
+        fix_total += expected;
+    }
+    assert_eq!(fix_total, 92, "the census total");
     for code in corpus_producible_codes() {
         assert!(
             seen.get(&code).copied().unwrap_or(0) > 0,

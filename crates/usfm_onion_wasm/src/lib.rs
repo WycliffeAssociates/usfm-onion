@@ -2012,6 +2012,63 @@ mod tests {
         assert_eq!(mapped.message_params.get("found"), Some(&"3".to_string()));
     }
 
+    /// The packed verify surface's findings now carry their fix, which is the
+    /// wasm-facing half of the Phase C finding-and-patch gate: the whole chain
+    /// (core lint -> wire patch table -> checked decode -> DTO mapping) has to
+    /// hold for a consumer's fix button to have anything to press.
+    #[test]
+    fn verify_packed_book_returns_findings_with_their_fix() {
+        // One `\p` jammed onto the text: `missing-whitespace-before-marker`
+        // with a concrete remedy.
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n";
+        let parsed = native_parse(source);
+        let issues = usfm_onion::lint::lint_tokens(
+            &parsed.tokens,
+            usfm_onion::lint::LintOptions::scoped(usfm_onion::lint::LintScope::Book),
+        )
+        .issues;
+        let packed = usfm_onion_wire::finding_codec::encode_book(
+            usfm_onion::token::BookId::from_str("GEN").unwrap(),
+            source,
+            &parsed.tokens,
+            &issues,
+        )
+        .expect("encodes");
+
+        let outcome = wasm_verify_packed_book(&packed, source.as_bytes());
+        let PackedBookOutcome::Verified { findings, .. } = outcome else {
+            panic!("a container this crate just encoded must verify");
+        };
+        let fixed = findings
+            .iter()
+            .filter_map(|finding| finding.fix.as_ref())
+            .collect::<Vec<_>>();
+        assert_eq!(fixed.len(), 1, "one finding carries a fix");
+        let TokenFix::ReplaceToken {
+            code,
+            target_token_id,
+            replacements,
+            label_params,
+            ..
+        } = fixed[0]
+        else {
+            panic!("core's whitespace remedy is a ReplaceToken: {:?}", fixed[0]);
+        };
+        assert_eq!(code, "insert-whitespace-before-marker");
+        assert!(label_params.is_empty());
+        assert_eq!(replacements.len(), 1);
+        assert_eq!(replacements[0].text, "\n\\p");
+        assert_eq!(replacements[0].marker.as_deref(), Some("p"));
+        // The target is addressed by the same token id the DTO tokens carry, so
+        // a consumer can find it in the array it already holds.
+        assert!(
+            map_tokens(&parsed.tokens)
+                .iter()
+                .any(|token| token.id.as_str() == target_token_id),
+            "the fix's target names one of this book's tokens"
+        );
+    }
+
     // --- DiffOptions / textDiff wire threading (Gate 4) ---
     //
     // `DiffOptions`'s `text_diff` field is intentionally private (mirroring

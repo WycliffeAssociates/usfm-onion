@@ -12,8 +12,8 @@ use usfm_onion::token::BookId;
 use crate::container::{ElementWidth, FieldPayload, Section, SectionPayload, SectionVariant};
 use crate::error::{DecodeError, EncodeError};
 use crate::schema::{
-    FINDING_SECTION_RULES_VERSION, LintCodeTag, SectionKind, finding_field, finding_flag,
-    param_contract,
+    FINDING_SECTION_RULES_VERSION, LintCodeTag, PatchOpTag, SectionKind, TokenKindTag,
+    finding_field, finding_flag, param_contract,
 };
 use crate::token_payload::{StringDictionary, StringDictionaryBuilder};
 
@@ -23,7 +23,11 @@ const OVERFLOW_LEN: usize = 8;
 const MARKER_REF_LEN: usize = 8;
 const PAYLOAD_ROW_LEN: usize = 8;
 const PAYLOAD_PAIR_LEN: usize = 8;
+const PATCH_RECORD_LEN: usize = 24;
+const PATCH_ROW_LEN: usize = 20;
 const TOKEN_NONE: u32 = u32::MAX;
+/// `patch_id` and every patch-row string column share one "absent" sentinel.
+const INDEX_NONE: u32 = u32::MAX;
 
 /// The token-section fact required to validate finding token indices.  Source
 /// bytes and catalog lookup intentionally remain outside this structural layer.
@@ -42,6 +46,33 @@ pub(crate) enum MarkerRef {
     Absent,
 }
 
+/// A replacement token a patch row places, as stored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TemplateRef<'wire> {
+    pub kind: TokenKindTag,
+    pub text: &'wire str,
+    pub marker: Option<&'wire str>,
+    pub sid: Option<&'wire str>,
+}
+
+/// One checked patch row: an op, a token position, and what it places.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PatchRowRef<'wire> {
+    pub op: PatchOpTag,
+    pub position: u32,
+    /// Present for every op but `Delete`, which places nothing.
+    pub template: Option<TemplateRef<'wire>>,
+}
+
+/// One checked patch: the fix's own identifying strings and its row run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FixRef<'wire> {
+    pub code: &'wire str,
+    pub label: &'wire str,
+    pub label_params: Vec<(&'wire str, &'wire str)>,
+    pub rows: Vec<PatchRowRef<'wire>>,
+}
+
 /// One checked common row with its record-aligned sidecar values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FindingRow<'wire> {
@@ -56,6 +87,7 @@ pub(crate) struct FindingRow<'wire> {
     pub related: Option<(u32, u32, u32)>,
     pub marker: MarkerRef,
     pub params: Option<Vec<(&'wire str, &'wire str)>>,
+    pub patch: Option<FixRef<'wire>>,
 }
 
 /// Borrowed, fully checked finding-section columns.  This is intentionally a
@@ -83,37 +115,52 @@ impl<'wire> FindingColumns<'wire> {
                 found: section.header.rules_version,
             });
         }
-        // Patch framing is deliberately deferred.  Rejecting both ids prevents
-        // a newer producer from being mistaken for a v1 section with no fix.
-        if section.field(finding_field::PATCH_ID).is_some()
-            || section.field(finding_field::PATCH_TABLE).is_some()
-        {
-            return Err(DecodeError::InvalidSection);
-        }
-
         let count = section.header.record_count;
         let common = per_row(section, finding_field::COMMON_ROW, count)?;
         let related = optional_per_row(section, finding_field::RELATED_TOKEN_IDX, count)?;
         let overflow = optional_per_row(section, finding_field::OVERFLOW_SPAN, count)?;
         let payload_indices = optional_per_row(section, finding_field::MESSAGE_PAYLOAD_IDX, count)?;
         let marker_refs = optional_per_row(section, finding_field::MARKER_REF, count)?;
+        let patch_indices = optional_per_row(section, finding_field::PATCH_ID, count)?;
 
+        // The string dictionary and the payload table serve two users: message
+        // parameters (field 3) and patch strings (field 6). They are present when
+        // either is, and absent only when neither is — a section carrying one
+        // without the storage it indexes is refused rather than partially read.
+        let patch_field = section.field(finding_field::PATCH_TABLE);
+        if patch_indices.is_some() != patch_field.is_some() {
+            return Err(DecodeError::InvalidSection);
+        }
         let payloads = match (
-            payload_indices,
+            payload_indices.is_some() || patch_field.is_some(),
             section.field(finding_field::STRING_DICTIONARY),
             section.field(finding_field::MESSAGE_PAYLOAD_TABLE),
         ) {
-            (None, None, None) => None,
-            (Some(indices), Some(strings), Some(table)) => {
-                Some(PayloadTable::from_fields(indices, *strings, *table)?)
-            }
+            (false, None, None) => None,
+            (true, Some(strings), Some(table)) => Some(PayloadTable::from_fields(
+                payload_indices,
+                *strings,
+                *table,
+            )?),
             _ => return Err(DecodeError::InvalidSection),
+        };
+        let patches = match (patch_field, payloads.as_ref()) {
+            (None, _) => None,
+            (Some(field), Some(payloads)) => Some(PatchTable::from_field(
+                patch_indices.ok_or(DecodeError::InvalidSection)?,
+                *field,
+                payloads,
+                inputs.token_count,
+            )?),
+            // A patch table always needs the dictionary its strings live in.
+            (Some(_), None) => return Err(DecodeError::InvalidSection),
         };
 
         let mut any_related = false;
         let mut any_overflow = false;
         let mut any_payload = false;
         let mut any_marker_override = false;
+        let mut any_patch = false;
         let mut rows =
             Vec::with_capacity(usize::try_from(count).map_err(|_| DecodeError::OffsetOverflow)?);
 
@@ -132,7 +179,7 @@ impl<'wire> FindingColumns<'wire> {
                     found: u32::from(flags),
                 });
             }
-            if record[15] != 0 || flags & finding_flag::FIX != 0 {
+            if record[15] != 0 {
                 return Err(DecodeError::InvalidSection);
             }
 
@@ -223,6 +270,21 @@ impl<'wire> FindingColumns<'wire> {
                 }
             };
 
+            // The flag and the column must agree in both directions: the flag
+            // alone is not the authority (the sentinel still applies within the
+            // column) and neither is the column.
+            let fix_flag = flags & finding_flag::FIX != 0;
+            let patch = match (fix_flag, patches.as_ref()) {
+                (false, None) => None,
+                (false, Some(patches)) if patches.index_at(row)? == INDEX_NONE => None,
+                (true, Some(patches)) => {
+                    any_patch = true;
+                    let payloads = payloads.as_ref().ok_or(DecodeError::InvalidSection)?;
+                    Some(patches.fix(row, payloads)?)
+                }
+                _ => return Err(DecodeError::InvalidSection),
+            };
+
             rows.push(FindingRow {
                 token_idx,
                 offset,
@@ -235,7 +297,11 @@ impl<'wire> FindingColumns<'wire> {
                 related: related_value,
                 marker,
                 params,
+                patch,
             });
+        }
+        if patch_indices.is_some() != any_patch {
+            return Err(DecodeError::InvalidSection);
         }
         if related.is_some() != any_related
             || overflow.is_some() != any_overflow
@@ -273,6 +339,33 @@ pub(crate) struct FindingRowInput {
     pub related: Option<(u32, u32, u32)>,
     pub marker: MarkerRef,
     pub params: Option<BTreeMap<String, String>>,
+    pub patch: Option<FixInput>,
+}
+
+/// Builder input for one replacement token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TemplateInput {
+    pub kind: TokenKindTag,
+    pub text: String,
+    pub marker: Option<String>,
+    pub sid: Option<String>,
+}
+
+/// Builder input for one patch row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PatchRowInput {
+    pub op: PatchOpTag,
+    pub position: u32,
+    pub template: Option<TemplateInput>,
+}
+
+/// Builder input for one finding's fix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FixInput {
+    pub code: String,
+    pub label: String,
+    pub label_params: BTreeMap<String, String>,
+    pub rows: Vec<PatchRowInput>,
 }
 
 /// Owned finding columns that can lend a `SectionPayload` to the generic
@@ -289,6 +382,9 @@ pub(crate) struct FindingSectionBuffers {
     overflow: Option<Vec<u8>>,
     payload_indices: Option<Vec<u8>>,
     marker_refs: Option<Vec<u8>>,
+    patch_indices: Option<Vec<u8>>,
+    patch_table: Option<Vec<u8>>,
+    patch_count: u32,
     strings: Option<Vec<u8>>,
     string_count: u32,
     payload_table: Option<Vec<u8>>,
@@ -314,6 +410,12 @@ impl FindingSectionBuffers {
         let mut overflow = vec![0; rows.len().saturating_mul(OVERFLOW_LEN)];
         let mut payload_indices = vec![0; rows.len().saturating_mul(4)];
         let mut marker_refs = vec![0; rows.len().saturating_mul(MARKER_REF_LEN)];
+        // The sentinel, not zero, is the filler here: zero is a legal patch
+        // index, so an unset entry has to say "no patch" explicitly.
+        let mut patch_indices: Vec<u8> = INDEX_NONE.to_le_bytes().repeat(rows.len()).to_vec();
+        let mut patch_records: Vec<u8> = Vec::new();
+        let mut patch_rows: Vec<u8> = Vec::new();
+        let mut has_patch = false;
         let mut has_related = false;
         let mut has_overflow = false;
         let mut has_payload = false;
@@ -366,6 +468,10 @@ impl FindingSectionBuffers {
                 flags |= finding_flag::OVERFLOW;
                 has_overflow = true;
             }
+            if row.patch.is_some() {
+                flags |= finding_flag::FIX;
+                has_patch = true;
+            }
 
             common.extend_from_slice(&row.token_idx.unwrap_or(TOKEN_NONE).to_le_bytes());
             common.extend_from_slice(&(row.offset.min(u32::from(u16::MAX)) as u16).to_le_bytes());
@@ -393,28 +499,72 @@ impl FindingSectionBuffers {
                     .copy_from_slice(&row.len.to_le_bytes());
             }
             if let Some(params) = &row.params {
-                let payload_index = u32::try_from(payload_rows.len() / PAYLOAD_ROW_LEN)
-                    .map_err(|_| unrepresentable(book, row.code))?;
+                let payload_index =
+                    push_payload_row(&mut payload_rows, &mut payload_pairs, &mut strings, params)
+                        .map_err(|_| unrepresentable(book, row.code))?;
                 payload_indices[row_index * 4..row_index * 4 + 4]
                     .copy_from_slice(&payload_index.to_le_bytes());
-                let first_pair = u32::try_from(payload_pairs.len() / PAYLOAD_PAIR_LEN)
+            }
+            if let Some(patch) = &row.patch {
+                let index = u32::try_from(patch_records.len() / PATCH_RECORD_LEN)
                     .map_err(|_| unrepresentable(book, row.code))?;
-                let pair_count =
-                    u32::try_from(params.len()).map_err(|_| unrepresentable(book, row.code))?;
-                payload_rows.extend_from_slice(&first_pair.to_le_bytes());
-                payload_rows.extend_from_slice(&pair_count.to_le_bytes());
-                // BTreeMap iteration is the documented canonical key order.
-                for (key, value) in params {
-                    let key_index = strings
-                        .intern(key)
-                        .map_err(|_| unrepresentable(book, row.code))?;
-                    let value_index = strings
-                        .intern(value)
-                        .map_err(|_| unrepresentable(book, row.code))?;
-                    payload_pairs.extend_from_slice(&key_index.to_le_bytes());
-                    payload_pairs.extend_from_slice(&value_index.to_le_bytes());
+                patch_indices[row_index * 4..row_index * 4 + 4]
+                    .copy_from_slice(&index.to_le_bytes());
+                let first_row = u32::try_from(patch_rows.len() / PATCH_ROW_LEN)
+                    .map_err(|_| unrepresentable(book, row.code))?;
+                let row_count =
+                    u32::try_from(patch.rows.len()).map_err(|_| unrepresentable(book, row.code))?;
+                let code = strings
+                    .intern(&patch.code)
+                    .map_err(|_| unrepresentable(book, row.code))?;
+                let label = strings
+                    .intern(&patch.label)
+                    .map_err(|_| unrepresentable(book, row.code))?;
+                // A fix with no label parameters still gets a payload row, so a
+                // reader has one shape to handle rather than a sentinel branch.
+                let label_params = push_payload_row(
+                    &mut payload_rows,
+                    &mut payload_pairs,
+                    &mut strings,
+                    &patch.label_params,
+                )
+                .map_err(|_| unrepresentable(book, row.code))?;
+                patch_records.extend_from_slice(&first_row.to_le_bytes());
+                patch_records.extend_from_slice(&row_count.to_le_bytes());
+                patch_records.extend_from_slice(&code.to_le_bytes());
+                patch_records.extend_from_slice(&label.to_le_bytes());
+                patch_records.extend_from_slice(&label_params.to_le_bytes());
+                patch_records.extend_from_slice(&0u32.to_le_bytes());
+
+                for patch_row in &patch.rows {
+                    let (kind, text, marker, sid) = match (&patch_row.template, patch_row.op) {
+                        (Some(template), op) if op.places_a_token() => (
+                            template.kind.as_u8(),
+                            strings
+                                .intern(&template.text)
+                                .map_err(|_| unrepresentable(book, row.code))?,
+                            intern_optional(&mut strings, template.marker.as_deref())
+                                .map_err(|_| unrepresentable(book, row.code))?,
+                            intern_optional(&mut strings, template.sid.as_deref())
+                                .map_err(|_| unrepresentable(book, row.code))?,
+                        ),
+                        (None, PatchOpTag::Delete) => (0, INDEX_NONE, INDEX_NONE, INDEX_NONE),
+                        // A placing op with nothing to place, or a delete
+                        // carrying a template, is not a patch this format can
+                        // store — and silently dropping either half would change
+                        // what the fix does.
+                        _ => return Err(unrepresentable(book, row.code)),
+                    };
+                    patch_rows.push(patch_row.op.as_u8());
+                    patch_rows.push(kind);
+                    patch_rows.extend_from_slice(&0u16.to_le_bytes());
+                    patch_rows.extend_from_slice(&patch_row.position.to_le_bytes());
+                    patch_rows.extend_from_slice(&text.to_le_bytes());
+                    patch_rows.extend_from_slice(&marker.to_le_bytes());
+                    patch_rows.extend_from_slice(&sid.to_le_bytes());
                 }
             }
+
             let encoded_marker = encode_marker_ref(row.marker, source_len, book, row.code)?;
             if encoded_marker != [0; MARKER_REF_LEN] {
                 has_marker_override = true;
@@ -429,12 +579,25 @@ impl FindingSectionBuffers {
                 code: u8::MAX,
             }
         })?;
-        let payload_table = has_payload.then(|| {
+        // The dictionary and the payload table have two users; either one brings
+        // both along.
+        let needs_strings = has_payload || has_patch;
+        let payload_table = needs_strings.then(|| {
             payload_rows.extend_from_slice(&payload_pairs);
             payload_rows
         });
-        let string_count = if has_payload { strings.len() } else { 0 };
-        let string_bytes = has_payload.then(|| strings.bytes());
+        let string_count = if needs_strings { strings.len() } else { 0 };
+        let string_bytes = needs_strings.then(|| strings.bytes());
+        let patch_count = u32::try_from(patch_records.len() / PATCH_RECORD_LEN).map_err(|_| {
+            EncodeError::UnrepresentablePayload {
+                book,
+                code: u8::MAX,
+            }
+        })?;
+        let patch_table = has_patch.then(|| {
+            patch_records.extend_from_slice(&patch_rows);
+            patch_records
+        });
         Ok(Self {
             book,
             source_hash,
@@ -445,6 +608,9 @@ impl FindingSectionBuffers {
             overflow: has_overflow.then_some(overflow),
             payload_indices: has_payload.then_some(payload_indices),
             marker_refs: has_marker_override.then_some(marker_refs),
+            patch_indices: has_patch.then_some(patch_indices),
+            patch_table,
+            patch_count,
             strings: string_bytes,
             string_count,
             payload_table,
@@ -492,6 +658,22 @@ impl FindingSectionBuffers {
                 bytes,
             });
         }
+        if let Some(bytes) = &self.patch_indices {
+            fields.push(FieldPayload {
+                id: finding_field::PATCH_ID,
+                width: ElementWidth::Four,
+                count: self.record_count,
+                bytes,
+            });
+        }
+        if let Some(bytes) = &self.patch_table {
+            fields.push(FieldPayload {
+                id: finding_field::PATCH_TABLE,
+                width: ElementWidth::Variable,
+                count: self.patch_count,
+                bytes,
+            });
+        }
         if let Some(bytes) = &self.strings {
             fields.push(FieldPayload {
                 id: finding_field::STRING_DICTIONARY,
@@ -519,6 +701,41 @@ impl FindingSectionBuffers {
             record_count: self.record_count,
             fields,
         }
+    }
+}
+
+/// Appends one payload row plus its pairs, returning the row's index.
+///
+/// Shared by message parameters and patch label parameters so both users write
+/// the one framing — and so the row/pair partition stays contiguous no matter
+/// which of them appended last. `BTreeMap` iteration is the documented canonical
+/// key order, which is what makes the bytes reproducible without a comparator at
+/// read time.
+fn push_payload_row(
+    rows: &mut Vec<u8>,
+    pairs: &mut Vec<u8>,
+    strings: &mut StringDictionaryBuilder,
+    params: &BTreeMap<String, String>,
+) -> Result<u32, ()> {
+    let index = u32::try_from(rows.len() / PAYLOAD_ROW_LEN).map_err(|_| ())?;
+    let first_pair = u32::try_from(pairs.len() / PAYLOAD_PAIR_LEN).map_err(|_| ())?;
+    let pair_count = u32::try_from(params.len()).map_err(|_| ())?;
+    rows.extend_from_slice(&first_pair.to_le_bytes());
+    rows.extend_from_slice(&pair_count.to_le_bytes());
+    for (key, value) in params {
+        let key_index = strings.intern(key).map_err(|_| ())?;
+        let value_index = strings.intern(value).map_err(|_| ())?;
+        pairs.extend_from_slice(&key_index.to_le_bytes());
+        pairs.extend_from_slice(&value_index.to_le_bytes());
+    }
+    Ok(index)
+}
+
+/// Interns an optional string, using the shared absent sentinel for `None`.
+fn intern_optional(strings: &mut StringDictionaryBuilder, value: Option<&str>) -> Result<u32, ()> {
+    match value {
+        None => Ok(INDEX_NONE),
+        Some(value) => strings.intern(value).map_err(|_| ()),
     }
 }
 
@@ -675,7 +892,9 @@ fn decoded_params_match_contract(
 }
 
 struct PayloadTable<'wire> {
-    indices: &'wire [u8],
+    /// The per-finding message-payload column (field 3), when the section has
+    /// one. A section whose only payload user is the patch table has none.
+    indices: Option<&'wire [u8]>,
     strings: StringDictionary<'wire>,
     rows: &'wire [u8],
     pairs: &'wire [u8],
@@ -684,7 +903,7 @@ struct PayloadTable<'wire> {
 
 impl<'wire> PayloadTable<'wire> {
     fn from_fields(
-        indices: &'wire [u8],
+        indices: Option<&'wire [u8]>,
         strings: crate::container::SectionField<'wire>,
         table: crate::container::SectionField<'wire>,
     ) -> Result<Self, DecodeError> {
@@ -732,7 +951,7 @@ impl<'wire> PayloadTable<'wire> {
         if expected_first != pair_count {
             return Err(DecodeError::InvalidSection);
         }
-        for index in indices.chunks_exact(4) {
+        for index in indices.unwrap_or_default().chunks_exact(4) {
             if u32::from_le_bytes(index.try_into().map_err(|_| DecodeError::Truncated)?)
                 >= table.count
             {
@@ -748,14 +967,10 @@ impl<'wire> PayloadTable<'wire> {
         })
     }
 
-    fn params(&self, row: u32) -> Result<Vec<(&'wire str, &'wire str)>, DecodeError> {
-        let payload_index = u32_at(
-            self.indices,
-            usize::try_from(row)
-                .map_err(|_| DecodeError::OffsetOverflow)?
-                .checked_mul(4)
-                .ok_or(DecodeError::OffsetOverflow)?,
-        )?;
+    /// The key/value pairs of one payload row, addressed directly rather than
+    /// through the per-finding column — which is how a patch record reaches its
+    /// label parameters.
+    fn pairs_at(&self, payload_index: u32) -> Result<Vec<(&'wire str, &'wire str)>, DecodeError> {
         if payload_index >= self.count {
             return Err(DecodeError::InvalidSection);
         }
@@ -782,13 +997,196 @@ impl<'wire> PayloadTable<'wire> {
         Ok(out)
     }
 
-    fn is_zero_filler(&self, row: u32) -> Result<bool, DecodeError> {
-        let offset = usize::try_from(row)
-            .map_err(|_| DecodeError::OffsetOverflow)?
-            .checked_mul(4)
-            .ok_or(DecodeError::OffsetOverflow)?;
-        Ok(u32_at(self.indices, offset)? == 0)
+    fn params(&self, row: u32) -> Result<Vec<(&'wire str, &'wire str)>, DecodeError> {
+        let indices = self.indices.ok_or(DecodeError::InvalidSection)?;
+        self.pairs_at(u32_at(indices, index_offset(row)?)?)
     }
+
+    fn is_zero_filler(&self, row: u32) -> Result<bool, DecodeError> {
+        let indices = self.indices.ok_or(DecodeError::InvalidSection)?;
+        Ok(u32_at(indices, index_offset(row)?)? == 0)
+    }
+
+    fn string(&self, index: u32) -> Result<&'wire str, DecodeError> {
+        self.strings.get(index).ok_or(DecodeError::InvalidSection)
+    }
+
+    /// A patch-row string column, where `u32::MAX` means the template does not
+    /// carry that field at all.
+    fn optional_string(&self, index: u32) -> Result<Option<&'wire str>, DecodeError> {
+        match index {
+            INDEX_NONE => Ok(None),
+            index => self.string(index).map(Some),
+        }
+    }
+}
+
+/// The patch table: per-finding addressing column, fixed patch records, and the
+/// flat row array those records partition.
+///
+/// Everything is validated on construction — op and kind discriminants, reserved
+/// bytes, string indices, the record/row partition, token positions, and the
+/// dense addressing column — so materializing a fix afterwards cannot fail on
+/// anything a hostile producer chose.
+struct PatchTable<'wire> {
+    indices: &'wire [u8],
+    records: &'wire [u8],
+    rows: &'wire [u8],
+    count: u32,
+    token_count: u32,
+}
+
+impl<'wire> PatchTable<'wire> {
+    fn from_field(
+        indices: &'wire [u8],
+        field: crate::container::SectionField<'wire>,
+        payloads: &PayloadTable<'wire>,
+        token_count: u32,
+    ) -> Result<Self, DecodeError> {
+        let records_len = usize::try_from(u64::from(field.count) * PATCH_RECORD_LEN as u64)
+            .map_err(|_| DecodeError::OffsetOverflow)?;
+        let (records, rows) = field
+            .bytes
+            .split_at_checked(records_len)
+            .ok_or(DecodeError::Truncated)?;
+        if rows.len() % PATCH_ROW_LEN != 0 || field.count == 0 {
+            // An empty table is not a legal way to say "no patches": the field
+            // is then simply absent.
+            return Err(DecodeError::InvalidSection);
+        }
+        let row_total =
+            u32::try_from(rows.len() / PATCH_ROW_LEN).map_err(|_| DecodeError::OffsetOverflow)?;
+
+        let mut expected_first = 0u32;
+        for index in 0..field.count {
+            let record = record_at(records, index, PATCH_RECORD_LEN)?;
+            let first = u32_at(record, 0)?;
+            let count = u32_at(record, 4)?;
+            // The same partition rule the payload table uses: contiguous,
+            // ascending, together covering exactly the row array.
+            if first != expected_first {
+                return Err(DecodeError::InvalidSection);
+            }
+            expected_first = expected_first
+                .checked_add(count)
+                .ok_or(DecodeError::OffsetOverflow)?;
+            if expected_first > row_total {
+                return Err(DecodeError::InvalidSection);
+            }
+            payloads.string(u32_at(record, 8)?)?;
+            payloads.string(u32_at(record, 12)?)?;
+            payloads.pairs_at(u32_at(record, 16)?)?;
+            if u32_at(record, 20)? != 0 {
+                return Err(DecodeError::InvalidSection);
+            }
+            for row in first..expected_first {
+                decode_patch_row(record_at(rows, row, PATCH_ROW_LEN)?, payloads, token_count)?;
+            }
+        }
+        if expected_first != row_total {
+            return Err(DecodeError::InvalidSection);
+        }
+
+        // The addressing column is dense and ascending: the non-sentinel values,
+        // in row order, are exactly 0..count. That is the one canonical form an
+        // encoder can produce, so anything else is a table this decoder would be
+        // guessing about.
+        let mut expected = 0u32;
+        for index in indices.chunks_exact(4) {
+            let value = u32::from_le_bytes(index.try_into().map_err(|_| DecodeError::Truncated)?);
+            if value == INDEX_NONE {
+                continue;
+            }
+            if value != expected {
+                return Err(DecodeError::InvalidSection);
+            }
+            expected += 1;
+        }
+        if expected != field.count {
+            return Err(DecodeError::InvalidSection);
+        }
+
+        Ok(Self {
+            indices,
+            records,
+            rows,
+            count: field.count,
+            token_count,
+        })
+    }
+
+    fn index_at(&self, row: u32) -> Result<u32, DecodeError> {
+        u32_at(self.indices, index_offset(row)?)
+    }
+
+    fn fix(&self, row: u32, payloads: &PayloadTable<'wire>) -> Result<FixRef<'wire>, DecodeError> {
+        let index = self.index_at(row)?;
+        if index >= self.count {
+            return Err(DecodeError::InvalidSection);
+        }
+        let record = record_at(self.records, index, PATCH_RECORD_LEN)?;
+        let first = u32_at(record, 0)?;
+        let count = u32_at(record, 4)?;
+        let mut patch_rows = Vec::with_capacity(count as usize);
+        for row in first..first.saturating_add(count) {
+            patch_rows.push(decode_patch_row(
+                record_at(self.rows, row, PATCH_ROW_LEN)?,
+                payloads,
+                self.token_count,
+            )?);
+        }
+        Ok(FixRef {
+            code: payloads.string(u32_at(record, 8)?)?,
+            label: payloads.string(u32_at(record, 12)?)?,
+            label_params: payloads.pairs_at(u32_at(record, 16)?)?,
+            rows: patch_rows,
+        })
+    }
+}
+
+/// One patch row, checked and resolved.
+fn decode_patch_row<'wire>(
+    bytes: &[u8],
+    payloads: &PayloadTable<'wire>,
+    token_count: u32,
+) -> Result<PatchRowRef<'wire>, DecodeError> {
+    let op = PatchOpTag::from_u8(bytes[0]).ok_or(DecodeError::InvalidDiscriminant)?;
+    let position = u32_at(bytes, 4)?;
+    if u16_at(bytes, 2)? != 0 {
+        return Err(DecodeError::InvalidSection);
+    }
+    if position >= token_count {
+        return Err(DecodeError::InvalidSection);
+    }
+    let text = payloads.optional_string(u32_at(bytes, 8)?)?;
+    let marker = payloads.optional_string(u32_at(bytes, 12)?)?;
+    let sid = payloads.optional_string(u32_at(bytes, 16)?)?;
+    let template = match (op.places_a_token(), text) {
+        // A placed token is exactly its four template fields, and text is the
+        // one that is never absent — an empty replacement text is a legal empty
+        // string, not a missing column.
+        (true, Some(text)) => Some(TemplateRef {
+            kind: TokenKindTag::from_u8(bytes[1]).ok_or(DecodeError::InvalidDiscriminant)?,
+            text,
+            marker,
+            sid,
+        }),
+        (false, None) if bytes[1] == 0 && marker.is_none() && sid.is_none() => None,
+        _ => return Err(DecodeError::InvalidSection),
+    };
+    Ok(PatchRowRef {
+        op,
+        position,
+        template,
+    })
+}
+
+/// Byte offset of one row's entry in a `u32` addressing column.
+fn index_offset(row: u32) -> Result<usize, DecodeError> {
+    usize::try_from(row)
+        .map_err(|_| DecodeError::OffsetOverflow)?
+        .checked_mul(4)
+        .ok_or(DecodeError::OffsetOverflow)
 }
 
 #[cfg(test)]
@@ -816,6 +1214,7 @@ mod tests {
             related: None,
             marker: MarkerRef::AnchoredToken,
             params: None,
+            patch: None,
         }
     }
     fn section(rows: &[FindingRowInput]) -> FindingSectionBuffers {

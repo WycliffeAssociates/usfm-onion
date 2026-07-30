@@ -100,6 +100,11 @@ fn good_vectors() -> Vec<GoodVector> {
             proves: "unknown-marker's marker is recovered from the anchored token's own descriptor (MarkerRef::AnchoredToken), zero marker-ref bytes",
         },
         GoodVector {
+            name: "whitespace-fix-patch",
+            source: "\\id GEN\n\\c 1\n\\p\n\\v 1 should have error\\p\\nd testing \\nd*\n",
+            proves: "one token carrying two different fixes (missing-whitespace-before-marker and missing-tag-end-delimiter-after-marker), so the patch table stores two records, their rows, and the fix strings interned in the finding-section dictionary",
+        },
+        GoodVector {
             name: "book-code-not-uppercase-remedy",
             source: "\\id php Philippians\n",
             proves: "book-code-not-uppercase's uppercase remedy is a message-parameter value absent from the source and not a catalog marker — proof field 7/8 (message payload table) is load-bearing, not cosmetic",
@@ -212,6 +217,72 @@ pub(crate) fn restamp_container(bytes: &mut [u8]) {
         .copy_from_slice(&checksum.to_le_bytes());
 }
 
+/// The absolute byte offset of one finding-section field's payload.
+fn field_offset(bytes: &[u8], field_id: u16) -> usize {
+    let container = crate::container::read_container(bytes).expect("base vector is well-formed");
+    let section = container.section(1).expect("finding section").unwrap();
+    let field = section
+        .field(field_id)
+        .expect("base vector carries this field");
+    field.bytes.as_ptr() as usize - bytes.as_ptr() as usize
+}
+
+/// Rewrites the first patch row's bytes, then restamps both checksums so what is
+/// under test is the patch table's own validation rather than the checksum.
+fn corrupt_first_patch_row(bytes: &mut [u8], edit: impl FnOnce(&mut [u8])) {
+    let (offset, _) = section_bounds(bytes)[1];
+    // The row array follows the fixed-size records, whose count is the field's
+    // own element count.
+    let table = field_offset(bytes, crate::schema::finding_field::PATCH_TABLE);
+    let records = {
+        let container = crate::container::read_container(bytes).expect("well-formed");
+        let section = container.section(1).unwrap().unwrap();
+        section
+            .field(crate::schema::finding_field::PATCH_TABLE)
+            .unwrap()
+            .count as usize
+    };
+    let row = table + records * 24;
+    edit(&mut bytes[row..row + 20]);
+    restamp_section(bytes, offset);
+    restamp_container(bytes);
+}
+
+#[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
+fn unknown_patch_op(bytes: &mut Vec<u8>) {
+    corrupt_first_patch_row(bytes, |row| row[0] = 9);
+}
+
+#[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
+fn nonzero_patch_row_reserved(bytes: &mut Vec<u8>) {
+    corrupt_first_patch_row(bytes, |row| row[2] = 1);
+}
+
+#[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
+fn patch_row_position_out_of_range(bytes: &mut Vec<u8>) {
+    corrupt_first_patch_row(bytes, |row| {
+        row[4..8].copy_from_slice(&0xfffe_fffeu32.to_le_bytes())
+    });
+}
+
+#[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
+fn patch_index_column_not_dense(bytes: &mut Vec<u8>) {
+    let (offset, _) = section_bounds(bytes)[1];
+    let column = field_offset(bytes, crate::schema::finding_field::PATCH_ID);
+    // Every non-sentinel entry must be the next dense index; find the first real
+    // one and skip a number.
+    for row in 0.. {
+        let at = column + row * 4;
+        let value = u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        if value != u32::MAX {
+            bytes[at..at + 4].copy_from_slice(&(value + 1).to_le_bytes());
+            break;
+        }
+    }
+    restamp_section(bytes, offset);
+    restamp_container(bytes);
+}
+
 fn malformed_vectors() -> Vec<MalformedVector> {
     vec![
         MalformedVector {
@@ -248,6 +319,34 @@ fn malformed_vectors() -> Vec<MalformedVector> {
             corrupt: out_of_range_token_idx,
             expected: DecodeError::InvalidSection,
             proves: "a common row's token_idx naming no token in the paired section rejects rather than reading out of bounds",
+        },
+        MalformedVector {
+            name: "unknown-patch-op",
+            base: "whitespace-fix-patch",
+            corrupt: unknown_patch_op,
+            expected: DecodeError::InvalidDiscriminant,
+            proves: "a patch row's op byte outside the frozen insert/replace/delete set rejects rather than defaulting to one of them",
+        },
+        MalformedVector {
+            name: "nonzero-patch-row-reserved",
+            base: "whitespace-fix-patch",
+            corrupt: nonzero_patch_row_reserved,
+            expected: DecodeError::InvalidSection,
+            proves: "a patch row's reserved half-word must be zero; a nonzero value is a future producer's field this build cannot honour",
+        },
+        MalformedVector {
+            name: "patch-row-position-out-of-range",
+            base: "whitespace-fix-patch",
+            corrupt: patch_row_position_out_of_range,
+            expected: DecodeError::InvalidSection,
+            proves: "a patch row naming a token position the paired token section does not have rejects rather than resolving a target id out of bounds",
+        },
+        MalformedVector {
+            name: "patch-index-column-not-dense",
+            base: "whitespace-fix-patch",
+            corrupt: patch_index_column_not_dense,
+            expected: DecodeError::InvalidSection,
+            proves: "the patch addressing column is dense and ascending; a skipped index leaves a record no finding claims and rejects",
         },
         MalformedVector {
             name: "nonzero-related-reserved",
@@ -361,8 +460,7 @@ fn finding_goldens_decode_and_match_lint() {
         );
 
         let parsed = parse(&committed_source);
-        let mut original =
-            lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book)).issues;
+        let mut original = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book)).issues;
         if vector.name == "several-codes" {
             original.push(hand_built_invalid_number_range(&committed_source));
         }

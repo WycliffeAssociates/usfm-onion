@@ -556,6 +556,43 @@ pub mod token_field {
     pub const POSITIONAL_ID_EXCLUSIVE: [u16; 2] = [TOKEN_ID_INDEX, TOKEN_ID_DICTIONARY];
 }
 
+/// Flat patch-edit op discriminants, frozen by the Phase 0 freeze (§5.2) in the
+/// plan's own declaration order. Stable identifiers only: they say nothing about
+/// the order rows are applied in.
+///
+/// A row's position always addresses the token stream of the snapshot the patch
+/// was resolved against — never the post-patch stream — so `Insert` means "place
+/// this template immediately after that token", and several `Insert` rows at one
+/// position place in row order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum PatchOpTag {
+    Insert = 0,
+    Replace = 1,
+    Delete = 2,
+}
+
+impl PatchOpTag {
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Insert),
+            1 => Some(Self::Replace),
+            2 => Some(Self::Delete),
+            _ => None,
+        }
+    }
+
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// Whether this op places a token, and therefore must carry a template.
+    /// `Delete` is the only one that must not.
+    pub const fn places_a_token(self) -> bool {
+        !matches!(self, Self::Delete)
+    }
+}
+
 /// Finding-section field ids.
 pub mod finding_field {
     use super::FieldSpec;
@@ -574,7 +611,27 @@ pub mod finding_field {
     /// explicitly-absent. Renamed from the original `u32` string-index field when
     /// the evidence showed no finding-section string dictionary is needed.
     pub const MARKER_REF: u16 = 4;
+    /// `patch_id[N]:u32` — the index into this section's patch table (field 6)
+    /// of the row's fix, or `u32::MAX` for a row with no fix.
     pub const PATCH_ID: u16 = 5;
+    /// The patch table: `count` fixed 24-byte patch records followed by the flat
+    /// row array they partition, the same two-array shape the message payload
+    /// table uses.
+    ///
+    /// Patch record: `{first_row:u32, row_count:u32, code:u32, label:u32,
+    /// label_params:u32}` plus `reserved:u32`. The three string columns index
+    /// field 7; `label_params` indexes field 8's payload rows (a fix with no
+    /// label parameters points at a zero-length row rather than a sentinel, so
+    /// the reader has one shape to handle). Records partition the row array
+    /// exactly: `first_row` is contiguous and ascending and the counts sum to the
+    /// row total.
+    ///
+    /// Patch row: `{op:u8, kind:u8, reserved:u16, position:u32, text:u32,
+    /// marker:u32, sid:u32}`. `op` is a [`PatchOpTag`]; `kind` is a
+    /// [`TokenKindTag`]; `text`/`marker`/`sid` index field 7, with `u32::MAX`
+    /// meaning absent. A `Delete` row places nothing, so all three are absent and
+    /// `kind` is zero; every other op must carry at least a text index. Both
+    /// `reserved` fields MUST be zero on encode and rejected non-zero on decode.
     pub const PATCH_TABLE: u16 = 6;
     /// Generic UTF-8 dictionary for message parameter keys and values.
     pub const STRING_DICTIONARY: u16 = 7;
@@ -1163,13 +1220,19 @@ mod tests {
         let container = read_container(&bytes).unwrap();
         let header = *container.header();
         assert_eq!(&bytes[container_header::MAGIC..4], &CONTAINER_MAGIC);
-        assert_eq!(u16_at(container_header::FORMAT_VERSION), header.format_version);
+        assert_eq!(
+            u16_at(container_header::FORMAT_VERSION),
+            header.format_version
+        );
         assert_eq!(
             usize::from(u16_at(container_header::HEADER_LEN)),
             CONTAINER_HEADER_LEN
         );
         assert_eq!(u32_at(container_header::FLAGS), header.flags);
-        assert_eq!(u32_at(container_header::SECTION_COUNT), header.section_count);
+        assert_eq!(
+            u32_at(container_header::SECTION_COUNT),
+            header.section_count
+        );
         assert_eq!(u64_at(container_header::TOC_OFFSET), header.toc_offset);
         assert_eq!(u64_at(container_header::CHECKSUM), header.checksum);
         assert_eq!(u64_at(container_header::SNAPSHOT_ID), snapshot_id);
@@ -1185,7 +1248,10 @@ mod tests {
             &bytes[toc + toc_entry::BOOK..toc + toc_entry::BOOK + 3],
             entry.book.as_str().as_bytes()
         );
-        assert_eq!(u16_at(toc + toc_entry::SECTION_VERSION), entry.section_version);
+        assert_eq!(
+            u16_at(toc + toc_entry::SECTION_VERSION),
+            entry.section_version
+        );
         assert_eq!(u16_at(toc + toc_entry::FLAGS), entry.flags);
         assert_eq!(u64_at(toc + toc_entry::OFFSET), entry.offset);
         assert_eq!(u64_at(toc + toc_entry::BYTE_LEN), entry.byte_len);
@@ -1202,7 +1268,10 @@ mod tests {
             u16_at(at + section_header::RULES_VERSION),
             section.header.rules_version
         );
-        assert_eq!(bytes[at + section_header::KIND], section.header.kind.as_u8());
+        assert_eq!(
+            bytes[at + section_header::KIND],
+            section.header.kind.as_u8()
+        );
         assert_eq!(bytes[at + section_header::FLAGS], section.header.flags);
         assert_eq!(
             &bytes[at + section_header::BOOK..at + section_header::BOOK + 3],
@@ -1232,7 +1301,10 @@ mod tests {
             u64_at(at + section_header::SECTION_LEN),
             section.header.section_len
         );
-        assert_eq!(u64_at(at + section_header::CHECKSUM), section.header.checksum);
+        assert_eq!(
+            u64_at(at + section_header::CHECKSUM),
+            section.header.checksum
+        );
         assert_eq!(
             u64_at(at + section_header::SOURCE_LEN),
             section.header.source_len
@@ -1247,12 +1319,18 @@ mod tests {
         for (index, field) in section.fields().iter().enumerate() {
             let row = at + SECTION_HEADER_LEN + index * DIRECTORY_ENTRY_LEN;
             assert_eq!(u16_at(row + directory_entry::FIELD_ID), field.id);
-            assert_eq!(bytes[row + directory_entry::ELEMENT_WIDTH], field.width.as_u8());
+            assert_eq!(
+                bytes[row + directory_entry::ELEMENT_WIDTH],
+                field.width.as_u8()
+            );
             assert_eq!(
                 bytes[row + directory_entry::FLAGS] & FIELD_FLAG_REQUIRED != 0,
                 field.required
             );
-            assert_eq!(u32_at(row + directory_entry::BYTE_LEN) as usize, field.bytes.len());
+            assert_eq!(
+                u32_at(row + directory_entry::BYTE_LEN) as usize,
+                field.bytes.len()
+            );
             assert_eq!(u32_at(row + directory_entry::COUNT), field.count);
             // The offset is section-relative; following it must land on this
             // field's own payload.
@@ -1300,10 +1378,7 @@ mod tests {
         // Marker descriptor: name index resolves in the string dictionary.
         let strings = field(token_field::STRING_DICTIONARY);
         let string_at = |index: u32| {
-            let count = section
-                .field(token_field::STRING_DICTIONARY)
-                .unwrap()
-                .count as usize;
+            let count = section.field(token_field::STRING_DICTIONARY).unwrap().count as usize;
             let starts = &strings[..count * layout::STRING_DICTIONARY_ENTRY_LEN];
             let data = &strings[count * layout::STRING_DICTIONARY_ENTRY_LEN..];
             let start = u32_at(starts, index as usize * 4) as usize;
@@ -1319,7 +1394,10 @@ mod tests {
             string_at(u32_at(descriptors, descriptor_record::NAME_INDEX)),
             "id"
         );
-        assert_eq!(descriptors[descriptor_record::FLAGS] & DESCRIPTOR_FLAGS_KNOWN, 0);
+        assert_eq!(
+            descriptors[descriptor_record::FLAGS] & DESCRIPTOR_FLAGS_KNOWN,
+            0
+        );
 
         // Number record: `1-2` has a meaningful end, so both the flag and the
         // end column are exercised.
@@ -1339,7 +1417,10 @@ mod tests {
 
         // Book-code record.
         let book_codes = field(token_field::BOOK_CODE_RECORDS);
-        assert_eq!(string_at(u32_at(book_codes, book_code_record::CODE_INDEX)), "GEN");
+        assert_eq!(
+            string_at(u32_at(book_codes, book_code_record::CODE_INDEX)),
+            "GEN"
+        );
         assert_eq!(
             book_codes[book_code_record::FLAGS] & BOOK_CODE_FLAG_VALID,
             BOOK_CODE_FLAG_VALID
@@ -1355,12 +1436,24 @@ mod tests {
         assert_eq!(u32_at(rows, attribute_row::ENTRY_COUNT), 1);
         let list_start = u32_at(rows, attribute_row::LIST_START) as usize;
         let list_len = u32_at(rows, attribute_row::LIST_LEN) as usize;
-        assert_eq!(&source[list_start..list_start + list_len], "|lemma=\"charis\"");
-        assert_eq!(string_at(u32_at(entries, attribute_entry::KEY_INDEX)), "lemma");
-        assert_eq!(string_at(u32_at(entries, attribute_entry::VALUE_INDEX)), "charis");
+        assert_eq!(
+            &source[list_start..list_start + list_len],
+            "|lemma=\"charis\""
+        );
+        assert_eq!(
+            string_at(u32_at(entries, attribute_entry::KEY_INDEX)),
+            "lemma"
+        );
+        assert_eq!(
+            string_at(u32_at(entries, attribute_entry::VALUE_INDEX)),
+            "charis"
+        );
         let span_start = u32_at(entries, attribute_entry::SPAN_START) as usize;
         let span_len = u32_at(entries, attribute_entry::SPAN_LEN) as usize;
-        assert_eq!(&source[span_start..span_start + span_len], "lemma=\"charis\"");
+        assert_eq!(
+            &source[span_start..span_start + span_len],
+            "lemma=\"charis\""
+        );
         assert_eq!(entries[attribute_entry::FLAGS] & ATTRIBUTE_FLAG_DEFAULT, 0);
     }
 

@@ -1,0 +1,7 @@
+{
+  "name": "patch-index-column-not-dense",
+  "kind": "malformed",
+  "base": "whitespace-fix-patch",
+  "expectedError": "InvalidSection",
+  "proves": "the patch addressing column is dense and ascending; a skipped index leaves a record no finding claims and rejects"
+}

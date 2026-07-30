@@ -8,9 +8,14 @@
 //! `token_id`/span/SID/marker) and the rule catalog (to rebuild `message` and
 //! validate `message_params`). This module is that seam.
 //!
-//! Scope: `LintIssue.fix` is never encoded. Common-row flag bit 5 (`fix`)
-//! always stays clear, and decode always produces `fix: None` — codes with a
-//! `TokenFix` lose it on a wire round trip, every other field round-trips.
+//! `LintIssue.fix` is carried too: a fix is flattened into the token operations
+//! the patch table stores (an op, a position in this section's token stream, and
+//! the replacement template) and rebuilt from them on the way back. The
+//! flattening rule is deliberately *not* shared with braid's own resolution of
+//! the same fixes — the crates do not depend on each other in either direction,
+//! and each side is pinned by its own bijectivity gate against `TokenFix`, so
+//! they agree by construction rather than by delegation (the same judgment call
+//! `canonical_order` records below, owner-endorsed).
 //!
 //! `message` is rebuilt **only** via [`LintCode::render_message`] — never a
 //! wire-local template renderer — so the English text a decoder produces can
@@ -24,16 +29,18 @@
 
 use std::collections::BTreeMap;
 
-use usfm_onion::lint::{LintCode, LintIssue, MessageParams, NO_TOKEN_POSITION};
-use usfm_onion::token::{BookId, Sid, Span, Token};
+use usfm_onion::format::TokenTemplate;
+use usfm_onion::lint::{LintCode, LintIssue, MessageParams, NO_TOKEN_POSITION, TokenFix};
+use usfm_onion::token::{BookId, Sid, Span, Token, TokenKind};
 
 use crate::catalog::{catalog_marker_name, catalog_ordinal};
 use crate::container::{read_container, write_container};
 use crate::error::{DecodeError, EncodeError};
 use crate::finding_section::{
-    FindingColumns, FindingDecodeInputs, FindingRowInput, FindingSectionBuffers, MarkerRef,
+    FindingColumns, FindingDecodeInputs, FindingRowInput, FindingSectionBuffers, FixInput, FixRef,
+    MarkerRef, PatchRowInput, TemplateInput,
 };
-use crate::schema::{LintCodeTag, SectionKind, param_contract};
+use crate::schema::{LintCodeTag, PatchOpTag, SectionKind, TokenKindTag, param_contract};
 use crate::token_codec::{
     DecodedTokens, anchor_fidelity, decode_token_section, encode_token_section,
 };
@@ -390,6 +397,11 @@ fn issue_to_row(
         }
     };
 
+    let patch = match &issue.fix {
+        None => None,
+        Some(fix) => Some(fix_input(fix, resolver).ok_or_else(err)?),
+    };
+
     let params = if param_contract(LintCodeTag::from(code)).is_some() {
         Some(issue.message_params.clone())
     } else if issue.message_params.is_empty() {
@@ -410,7 +422,159 @@ fn issue_to_row(
         related,
         marker,
         params,
+        patch,
     })
+}
+
+/// Flattens one fix into the rows the patch table stores.
+///
+/// Every row addresses the fix's target token — the only address a `TokenFix`
+/// carries — so a fix naming a token this section does not hold has no
+/// representation and refuses rather than encoding a position that means
+/// something else. A multi-template replacement becomes one `Replace` followed by
+/// `Insert`s at the same position, which is how the whole fix stays one
+/// contiguous row run.
+fn fix_input(fix: &TokenFix, resolver: &BTreeMap<&str, u32>) -> Option<FixInput> {
+    let position = *resolver.get(fix.target_token_id())?;
+    let (code, label, label_params, rows) = match fix {
+        TokenFix::ReplaceToken {
+            code,
+            label,
+            label_params,
+            replacements,
+            ..
+        } => (
+            code,
+            label,
+            label_params,
+            replacements
+                .iter()
+                .enumerate()
+                .map(|(index, template)| PatchRowInput {
+                    op: if index == 0 {
+                        PatchOpTag::Replace
+                    } else {
+                        PatchOpTag::Insert
+                    },
+                    position,
+                    template: Some(template_input(template)),
+                })
+                .collect(),
+        ),
+        TokenFix::DeleteToken {
+            code,
+            label,
+            label_params,
+            ..
+        } => (
+            code,
+            label,
+            label_params,
+            vec![PatchRowInput {
+                op: PatchOpTag::Delete,
+                position,
+                template: None,
+            }],
+        ),
+        TokenFix::InsertAfter {
+            code,
+            label,
+            label_params,
+            insert,
+            ..
+        } => (
+            code,
+            label,
+            label_params,
+            insert
+                .iter()
+                .map(|template| PatchRowInput {
+                    op: PatchOpTag::Insert,
+                    position,
+                    template: Some(template_input(template)),
+                })
+                .collect(),
+        ),
+    };
+    Some(FixInput {
+        code: code.clone(),
+        label: label.clone(),
+        label_params: label_params.clone(),
+        rows,
+    })
+}
+
+fn template_input(template: &TokenTemplate) -> TemplateInput {
+    TemplateInput {
+        kind: TokenKindTag::from(template.kind),
+        text: template.text.clone(),
+        marker: template.marker.clone(),
+        sid: template.sid.clone(),
+    }
+}
+
+/// Rebuilds one fix from its stored rows.
+///
+/// The row shapes this accepts are exactly the ones [`fix_input`] produces: one
+/// `Delete`, a `Replace` with any number of trailing `Insert`s, or `Insert`s
+/// alone. Every row must name the same token, since that token is the fix's
+/// target and a run naming two of them would not be one fix. Anything else is a
+/// table this decoder would have to guess about.
+fn decode_fix(fix: &FixRef<'_>, token_ids: &[String]) -> Result<TokenFix, DecodeError> {
+    let first = fix.rows.first().ok_or(DecodeError::InvalidSection)?;
+    if fix.rows.iter().any(|row| row.position != first.position) {
+        return Err(DecodeError::InvalidSection);
+    }
+    let target_token_id = token_ids
+        .get(first.position as usize)
+        .cloned()
+        .ok_or(DecodeError::InvalidSection)?;
+    let code = fix.code.to_owned();
+    let label = fix.label.to_owned();
+    let label_params: MessageParams = fix
+        .label_params
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect();
+    let templates = || -> Result<Vec<TokenTemplate>, DecodeError> {
+        fix.rows
+            .iter()
+            .map(|row| {
+                let template = row.template.as_ref().ok_or(DecodeError::InvalidSection)?;
+                Ok(TokenTemplate {
+                    kind: TokenKind::from(template.kind),
+                    text: template.text.to_owned(),
+                    marker: template.marker.map(str::to_owned),
+                    sid: template.sid.map(str::to_owned),
+                })
+            })
+            .collect()
+    };
+    let trailing_inserts = fix.rows[1..].iter().all(|row| row.op == PatchOpTag::Insert);
+
+    match first.op {
+        PatchOpTag::Replace if trailing_inserts => Ok(TokenFix::ReplaceToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            replacements: templates()?,
+        }),
+        PatchOpTag::Insert if trailing_inserts => Ok(TokenFix::InsertAfter {
+            code,
+            label,
+            label_params,
+            target_token_id,
+            insert: templates()?,
+        }),
+        PatchOpTag::Delete if fix.rows.len() == 1 => Ok(TokenFix::DeleteToken {
+            code,
+            label,
+            label_params,
+            target_token_id,
+        }),
+        _ => Err(DecodeError::InvalidSection),
+    }
 }
 
 /// Rebuilds `LintIssue` values from checked finding-section rows, resolving
@@ -530,11 +694,11 @@ pub(crate) fn decode_findings(
             related_token_id,
             sid,
             marker,
-            // Patch/fix framing is not encoded at all — a section carrying
-            // either the patch-id or patch-table field is rejected outright
-            // by the structural decoder before rows are even read — so every
-            // decoded issue's fix is unconditionally absent.
-            fix: None,
+            fix: row
+                .patch
+                .as_ref()
+                .map(|patch| decode_fix(patch, token_ids))
+                .transpose()?,
             // Core records these positions at the moment a rule creates the
             // finding, from the token's own index in the slice `lint_tokens`
             // was given. The row's own token index (already a checked,
@@ -577,11 +741,9 @@ fn resolve_span(token_span: Span, offset: u32, len: u32) -> Result<Span, DecodeE
 }
 
 /// Whether `decoded` is what a semantic round trip of `original` must
-/// produce: every `LintIssue` field equal except `fix`, which is never
-/// encoded (`decoded.fix` must be `None` regardless of what `original`
-/// carried).
+/// produce: every `LintIssue` field equal, `fix` included.
 pub fn issue_round_trips(original: &LintIssue, decoded: &LintIssue) -> bool {
-    decoded.fix.is_none()
+    original.fix == decoded.fix
         && original.code == decoded.code
         && original.category == decoded.category
         && original.severity == decoded.severity
@@ -834,6 +996,327 @@ mod tests {
         let decoded = decode_book(&bytes, source).unwrap();
         assert_eq!(decoded.len(), 1);
         assert!(issue_round_trips(issue, &decoded[0]));
+    }
+
+    /// Builds a finding carrying `fix`, anchored on a real token of `source`.
+    fn issue_with_fix(source: &str, anchor: &Token<'_>, fix: TokenFix) -> LintIssue {
+        use usfm_onion::LintableToken;
+        let _ = source;
+        let params = MessageParams::from([("marker".to_string(), "p".to_string())]);
+        LintIssue {
+            code: LintCode::MissingWhitespaceBeforeMarker,
+            category: LintCode::MissingWhitespaceBeforeMarker.category(),
+            severity: LintCode::MissingWhitespaceBeforeMarker.severity(),
+            issue_type: LintCode::MissingWhitespaceBeforeMarker.issue_type(),
+            template: LintCode::MissingWhitespaceBeforeMarker.template(),
+            message: LintCode::MissingWhitespaceBeforeMarker.render_message(&params),
+            message_params: params,
+            span: Some(anchor.span),
+            related_span: None,
+            token_id: anchor.id(),
+            related_token_id: None,
+            sid: anchor.sid.map(|sid| sid.to_string()),
+            marker: Some("p".to_string()),
+            fix: Some(fix),
+            position: NO_TOKEN_POSITION,
+            related_position: NO_TOKEN_POSITION,
+        }
+    }
+
+    fn template(
+        kind: TokenKind,
+        text: &str,
+        marker: Option<&str>,
+        sid: Option<&str>,
+    ) -> TokenTemplate {
+        TokenTemplate {
+            kind,
+            text: text.to_string(),
+            marker: marker.map(str::to_owned),
+            sid: sid.map(str::to_owned),
+        }
+    }
+
+    /// All three frozen `TokenFix` variants, plus the multi-template shape no
+    /// core rule produces. Only single-replacement `ReplaceToken` has a producer
+    /// (Gate 0D §2.2, re-confirmed by the C4 census), so the other three shapes
+    /// are hand-built here or they are never exercised at all.
+    #[test]
+    fn every_token_fix_variant_round_trips() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 body\n";
+        let parsed = parse(source);
+        let anchor = parsed
+            .tokens
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .expect("the paragraph marker");
+        let target = {
+            use usfm_onion::LintableToken;
+            anchor.id().expect("parsed tokens carry ids")
+        };
+        let params = MessageParams::from([("where".to_string(), "before".to_string())]);
+
+        let fixes = vec![
+            TokenFix::ReplaceToken {
+                code: "insert-whitespace-before-marker".to_string(),
+                label: "InsertWhitespaceBeforeMarker".to_string(),
+                label_params: MessageParams::default(),
+                target_token_id: target.clone(),
+                replacements: vec![template(
+                    TokenKind::Marker,
+                    "\n\\p",
+                    Some("p"),
+                    Some("GEN 1"),
+                )],
+            },
+            // Several replacements: one replace row followed by inserts at the
+            // same position, all in one contiguous run.
+            TokenFix::ReplaceToken {
+                code: "split-marker".to_string(),
+                label: "SplitMarker".to_string(),
+                label_params: params.clone(),
+                target_token_id: target.clone(),
+                replacements: vec![
+                    template(TokenKind::Newline, "\n", None, None),
+                    template(TokenKind::Marker, "\\p", Some("p"), None),
+                    template(TokenKind::Text, "", None, None),
+                ],
+            },
+            TokenFix::DeleteToken {
+                code: "drop-marker".to_string(),
+                label: "DropMarker".to_string(),
+                label_params: params.clone(),
+                target_token_id: target.clone(),
+            },
+            TokenFix::InsertAfter {
+                code: "add-newline".to_string(),
+                label: "AddNewline".to_string(),
+                label_params: MessageParams::default(),
+                target_token_id: target.clone(),
+                insert: vec![
+                    template(TokenKind::Newline, "\n", None, None),
+                    template(TokenKind::Text, "inserted", None, Some("GEN 1")),
+                ],
+            },
+        ];
+
+        for fix in fixes {
+            let issue = issue_with_fix(source, anchor, fix.clone());
+            let bytes = encode_book(
+                book("GEN"),
+                source,
+                &parsed.tokens,
+                std::slice::from_ref(&issue),
+            )
+            .unwrap_or_else(|error| panic!("{fix:?} encodes: {error:?}"));
+            let decoded = decode_book(&bytes, source).expect("decodes");
+            assert_eq!(decoded.len(), 1);
+            assert_eq!(decoded[0].fix.as_ref(), Some(&fix));
+            assert!(issue_round_trips(&issue, &decoded[0]));
+            // Determinism: the same fix always writes the same bytes.
+            assert_eq!(
+                bytes,
+                encode_book(
+                    book("GEN"),
+                    source,
+                    &parsed.tokens,
+                    std::slice::from_ref(&issue)
+                )
+                .unwrap()
+            );
+        }
+    }
+
+    /// A fix's only address is its target token id. One naming a token this
+    /// section does not hold has no position to store, so it refuses rather than
+    /// writing a position that means a different token.
+    #[test]
+    fn a_fix_naming_a_foreign_token_refuses_to_encode() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 body\n";
+        let parsed = parse(source);
+        let anchor = parsed
+            .tokens
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .unwrap();
+        let issue = issue_with_fix(
+            source,
+            anchor,
+            TokenFix::DeleteToken {
+                code: "drop".to_string(),
+                label: "Drop".to_string(),
+                label_params: MessageParams::default(),
+                target_token_id: "some-other-books-token".to_string(),
+            },
+        );
+        assert!(matches!(
+            encode_book(
+                book("GEN"),
+                source,
+                &parsed.tokens,
+                std::slice::from_ref(&issue)
+            ),
+            Err(EncodeError::UnrepresentablePayload { .. })
+        ));
+    }
+
+    /// Semantic mutations of the patch table itself, each restamped so the
+    /// checksum cannot be what catches them. Every one must be a typed error
+    /// rather than a fix that quietly means something else.
+    #[test]
+    fn restamped_hostile_patch_tables_yield_typed_errors() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 body\n";
+        let parsed = parse(source);
+        let anchor = parsed
+            .tokens
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .unwrap();
+        let target = {
+            use usfm_onion::LintableToken;
+            anchor.id().unwrap()
+        };
+        let issue = issue_with_fix(
+            source,
+            anchor,
+            TokenFix::ReplaceToken {
+                code: "insert-whitespace-before-marker".to_string(),
+                label: "InsertWhitespaceBeforeMarker".to_string(),
+                label_params: MessageParams::default(),
+                target_token_id: target,
+                replacements: vec![template(TokenKind::Marker, "\n\\p", Some("p"), None)],
+            },
+        );
+        let base = encode_book(
+            book("GEN"),
+            source,
+            &parsed.tokens,
+            std::slice::from_ref(&issue),
+        )
+        .unwrap();
+
+        let table_offset = |bytes: &[u8]| {
+            let container = read_container(bytes).unwrap();
+            let section = container.section(1).unwrap().unwrap();
+            let field = section
+                .field(crate::schema::finding_field::PATCH_TABLE)
+                .unwrap();
+            field.bytes.as_ptr() as usize - bytes.as_ptr() as usize
+        };
+        // Read before any corruption: locating a section means reading the
+        // container, and a corrupted one no longer reads.
+        let section_offset = crate::finding_goldens::section_bounds(&base)[1].0;
+        let restamp = |bytes: &mut Vec<u8>| {
+            restamp_section(bytes, section_offset);
+            restamp_container(bytes);
+        };
+
+        // (a) the record's row run does not start where the partition requires.
+        {
+            let mut bytes = base.clone();
+            let at = table_offset(&bytes);
+            bytes[at..at + 4].copy_from_slice(&1u32.to_le_bytes());
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (b) the record's row count runs past the row array.
+        {
+            let mut bytes = base.clone();
+            let at = table_offset(&bytes);
+            bytes[at + 4..at + 8].copy_from_slice(&9u32.to_le_bytes());
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (c) the record's label-params row index names no payload row.
+        {
+            let mut bytes = base.clone();
+            let at = table_offset(&bytes);
+            bytes[at + 16..at + 20].copy_from_slice(&99u32.to_le_bytes());
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (d) the record's reserved word is nonzero.
+        {
+            let mut bytes = base.clone();
+            let at = table_offset(&bytes);
+            bytes[at + 20] = 1;
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (e) a code/label string index names nothing in the dictionary.
+        {
+            let mut bytes = base.clone();
+            let at = table_offset(&bytes);
+            bytes[at + 8..at + 12].copy_from_slice(&77u32.to_le_bytes());
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (f) a replace row with no text index: a placing op that places
+        // nothing is not a fix, it is half of one.
+        {
+            let mut bytes = base.clone();
+            let row = table_offset(&bytes) + 24;
+            bytes[row + 8..row + 12].copy_from_slice(&u32::MAX.to_le_bytes());
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (g) a delete row still carrying a template.
+        {
+            let mut bytes = base.clone();
+            let row = table_offset(&bytes) + 24;
+            bytes[row] = crate::schema::PatchOpTag::Delete.as_u8();
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (h) the fix flag cleared while the column still names a record: the
+        // flag and the column are both authoritative, and disagreement is a
+        // section this decoder will not guess about.
+        {
+            let mut bytes = base.clone();
+            let container = read_container(&bytes).unwrap();
+            let row_offset = {
+                let section = container.section(1).unwrap().unwrap();
+                let field = section
+                    .field(crate::schema::finding_field::COMMON_ROW)
+                    .unwrap();
+                field.bytes.as_ptr() as usize - bytes.as_ptr() as usize
+            };
+            drop(container);
+            bytes[row_offset + 14] &= !crate::schema::finding_flag::FIX;
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
     }
 
     /// Corruption battery, part 1: every prefix of a real encoded book must
