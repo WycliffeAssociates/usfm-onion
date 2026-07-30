@@ -2873,3 +2873,91 @@ deviation — no code was written that could deviate.
 - Next: owner ruling wanted on `synthetic_like`'s id gap before C4's patch path
   can be built over resident tokens; otherwise C3 (whole-dirty-book `lint()`,
   boundary 1 from the previous entry now resolved by this entry's ITEM 1).
+
+## 2026-07-30 — Combined C2/F1 clean-room fix round: 2 P1 + 2 P2 landed
+
+Clean-room review of the F1/C2-follow-ups packet above came back BLOCKED with two P1s and two P2s.
+All four fixed in this round.
+
+**P1-1 — wasm format/fix legs erased edited structured attributes.** F1's own conversion only ever
+copied `attributeSource` and unconditionally returned `attributes: Vec::new()` on the way back out,
+so the frozen DTO contract (an editor that edits an attribute's structured value clears
+`attributeSource`, making `attributes` authoritative from then on) was silently violated the moment
+a token went through `formatTokens`/`applyTokenFix`/`mergeDiffBlocks`/`revertDiffBlock` — all of
+which share the same two conversion functions, `token_value_to_format_token` and `map_format_token`.
+Root cause was one level deeper than the wasm boundary: `FormatToken` itself had nowhere to hold a
+structured attribute list (its `SerializableToken::attributes()` unconditionally returned `&[]`),
+so there was nothing for the wasm conversions to carry even if they tried. Fixed by giving
+`FormatToken` a second field, `attributes: Vec<OwnedAttribute>`, alongside the existing
+`attribute_source: Option<String>` — mirroring `dto::Token`'s own two-field shape — and wiring it
+through `From<&Token<'a>> for FormatToken` and `SerializableToken::attributes()`. The existing
+closer-rule reconstruct algorithm (`tokens_to_usfm_reconstruct`, reused by `format_tokens_to_usfm`)
+already falls back to `format_attribute_list(attributes())` whenever `attribute_list()` is `None`
+— that fallback is what makes an edited attribute survive once the field carrying it exists.
+`OwnedAttribute` gained a `Serialize` derive (had none; `FormatToken` derives `Serialize` and
+needed its new field to satisfy that). wasm's `token_value_to_format_token`/`map_format_token` gain
+matching `wire_attribute_to_owned`/`owned_attribute_to_wire` helpers; the wire `AttributeItem`'s
+required `span` has no analog on `OwnedAttribute` (which carries no per-attribute position at all),
+so the owning token's own span stands in on the way out — best-effort, like every other span on a
+`FormatToken` after a format pass, not byte-exact. Audited every format/fix/merge/revert leg
+(`apply_token_fix`, `revert_diff_block`, `formatTokens`, `formatTokensMut`, `mergeDiffBlocks`,
+`normalizeTokenSids`): all but `normalizeTokenSids` route through the same two conversions and are
+covered by this one fix; `normalizeTokenSids` never touches attributes (it only stamps `sid`) and
+`map_walk_token`/`WalkToken` were already out of scope (no attribute field exists there at all).
+Regression tests added at both layers: `src/format/mod.rs`'s
+`format_preserves_a_structurally_edited_attribute` (native) and
+`crates/usfm_onion_wasm/src/lib.rs`'s `format_tokens_preserves_a_structurally_edited_attribute`
+(wasm, the reviewer's exact transition — parse `\w word|note="a"\w*`, edit the structured value to
+`"b"`, clear `attributeSource`, `formatTokens` — attribute survives as `note="b"`). The
+`attributes/format-tokens.json` golden legitimately changed (the `\w` token's `attributes` array is
+now populated alongside its `attributeSource`, exactly the plan's own predicted consequence);
+regenerated via `golden:wasm:update`, verified via `git status` that only this one file moved, and
+reported here explicitly rather than folded silently into the fix commit.
+
+**P1-2 — pure corpus reorder was a contract violation.** `replace_corpus([GEN, EXO]) ->
+replace_corpus([EXO, GEN])` changed `snapshot_id` (order is part of §J.4 identity) while reporting
+an empty `changed`, so `is_noop()` claimed nothing happened and the new order was unobservable
+through `to_tokens`. Owner-contract amendment (proxy-ruled), recorded as freeze §K.2a:
+`MutationEffect` gains `reordered: Option<Vec<BookId>>` — `Some(full new book order)` when the
+relative order of the books present both before and after a mutation changed, `None` otherwise;
+`is_noop` becomes `changed.is_empty() && removed.is_empty() && reordered.is_none()`. Only
+`replace_corpus` can produce a reorder (the only verb that can permute existing resident order —
+`update_book` only replaces in place or appends, and every other verb only removes or leaves order
+untouched), computed there by comparing the relative order of retained books before/after (additions
+and removals alone do not count as a reorder — those are already observable via `changed`/`removed`).
+`effect()`'s existing call sites are untouched; a new `effect_with_reorder` sibling backs both it
+(`reordered: None`) and `replace_corpus` (`reordered: <computed>`). Serializes as usual under the
+`serde` feature (plain derive, no new attribute needed). Regression: extended the existing
+`snapshot_identity_is_content_derived_and_order_sensitive` test (already the reviewer's exact
+`[GEN, EXO] -> [EXO, GEN]` case) to assert `reordered == Some([EXO, GEN])` and `!is_noop()`, plus a
+second resubmission of the identical order asserting `reordered == None` and `is_noop()` (the
+genuine no-op case).
+
+**P2-3 — transient plan-label comments stripped, rationale kept.** `crates/braid/Cargo.toml`'s
+`serde` feature comment no longer cites `epic §2.2#13/#18`; `crates/braid/tests/lifecycle.rs`'s CRLF
+comment no longer cites `epic §2.2#16`; `src/format/mod.rs`'s attribute round-trip test comment no
+longer opens with "The F1 gate:". Same cleanup applied proactively to comment text newly written in
+this same round (a "Regression for the F1/C2 clean-room P1" comment in
+`crates/usfm_onion_wasm/src/lib.rs`) rather than landing a fresh instance of the same defect.
+
+**P2-4 — canonical-docs staleness deferred, not fixed.** `docs/usfm-onion.html` still does not
+describe the resident subsystem. Ruling: explicit publication-phase deferral — the public braid
+surface is still moving through C3/C4, so documenting it now would go stale twice. One-line deferral
+note added at `plans/approved/braid/braid-epic.md`'s Phase F header (where the epic tracks
+publication/wasm-package work); this ledger entry is the accompanying record. `docs/usfm-onion.html`
+itself is untouched.
+
+**Gates:** `cargo test --workspace` 279 (core) + 27 (braid) + 176 (wire) + 26 (wasm), 0 failed;
+`cargo test --test lint_oracle -- --ignored` byte-identical, zero rebless; `cargo test --release -p
+usfm_onion_wire -- --ignored` 4 + 2 green, zero golden diffs; `npm run test:packed` and
+`test:packed:web` both green, pinned counts unchanged — 409 cases / 5,717,137 tokens / 715 chapter
+slices, run both before and after the golden update to confirm the attribute fixture's own bless
+did not shift them; `cargo fmt --check` clean on every touched crate; `pkg-bundler`/`pkg-web`
+restored via `git checkout --` after every wasm dev build, never committed.
+
+**Deviations:** none from the reviewer's packet.
+
+**Stops:** none.
+
+- Next: same as the previous entry — owner ruling on `synthetic_like`'s id gap (ITEM 3), otherwise
+  C3.
