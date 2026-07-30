@@ -1463,3 +1463,74 @@ finding boundary (I.5) are the two shapes the respec exists to pin. The Rust hal
 - **§8.1 respec note:** the receipt (and brand) may return as soon as trust checks pass; braid's
   Phase C seeding continues inside wasm afterwards, so JS materialization and braid seeding run
   concurrently. The respec must state this so Phase C does not serialize them.
+
+---
+
+## Adjudication — 2026-07-30 (Phase C, C1 packet): new stable LintCode 32 + API ledger append
+
+Executes Phase C step 1 (§10): the separately-blessed core declared-book lint context and
+mismatch rule, plus §2.2#15's canonical-order re-key, plus the 2026-07-28 formatter id-minting
+seam. This section appends to, and does not renumber, table 1 and the §7 API ledger above.
+
+### Table 1 append — `LintCode` → stable `u8`
+
+| `u8` | kebab code string | variant |
+| ---: | --- | --- |
+| 32 | `book-id-mismatch` | `BookIdMismatch` |
+
+Row count now **33**. Category `Document`, severity `Warning`, issue type `Usfm` — same
+classification as `InvalidBookCode`/`BookCodeNotUppercase`, its siblings in `lint_structure_rules`.
+Message params (extends table 5.3): `{ expected: string, found: string }`, both free-form (no
+closed domain) — the declared book and the source's own valid-but-different `\id`, respectively.
+`InvalidBookCode` takes priority when the code isn't canonical at all, independent of any declared
+context; the two never fire on the same token.
+
+### `LintOptions` field append
+
+`declared_book: Option<BookId>`, defaulting to `None` via `LintOptions::scoped` (§2.2#12's blessed
+shape from the Gate 0D ledger). `None` is stateless lint exactly as before this field existed —
+proven by the lint oracle (`tests/lint_oracle_baseline.txt`) staying byte-identical with no rebless.
+`Some(book)` lets `BookIdMismatch` fire when the source's own `\id` is a valid-but-different
+canonical code. Not yet exposed on the wasm-facing `LintOptions` DTO (`usfm_onion_wasm`'s own
+struct) — that conversion hardcodes `None`; Phase C's `braid` is the first real caller, as a direct
+Rust dependency, not through wasm.
+
+### §2.2#15 canonical-order re-key — confirmed, not amended
+
+Implemented as specified: `canonical_sort`'s primary/tertiary keys move from byte span to the
+primary/related token's ordinal position in the token stream (a one-time `token_positions` map,
+`token_id` string -> position, built once per `lint_tokens` call). Verified oracle-neutral as the
+freeze predicted: `lint_oracle_is_stable` and `partitioned_matches_serial_over_corpora` both pass
+byte-identical with zero rebless. `usfm_onion_wire::finding_codec::canonical_order` already used
+this exact 3-key shape (position, kebab code, related position) before this packet; core and wire
+now agree by construction. Not consolidated into shared code — see the cross-referenced doc
+comments on both functions for why (independently pinned by separate gates; wire's version is
+deliberately more generic than core's needs).
+
+### Formatter/fix synthetic-id minting seam — implemented per the 2026-07-28 adjudication
+
+`usfm_onion::format::{format_tokens_with_minter, format_with_minter, format_mut_with_minter}` and
+`usfm_onion::lint::apply_token_fix_with_minter` accept an optional `&mut dyn FnMut() -> String`.
+Every token the formatter or a `TokenFix` synthesizes is minted a fresh id through it (via the new
+`format::mint_synthetic_id`, `pub(crate)`); with no minter, synthesized tokens keep their historical
+no-id shape and the existing `format_tokens`/`apply_token_fix` entry points are unchanged. No new
+public trait — the seam is a plain closure, per the adjudication's "trait/closure" either-or wording.
+Scoped to the seam and its own tests only; `braid` (Phase C's next packet) is the first real caller.
+
+### API ledger append — new public core exports
+
+| name | crate | surface | rationale |
+| --- | --- | --- | --- |
+| `usfm_onion::lint::LintCode::BookIdMismatch` (variant) | core | rust + generated TS | new stable code 32, above |
+| `usfm_onion::lint::LintOptions::declared_book: Option<BookId>` (field) | core | rust | the declared-book context seam |
+| `usfm_onion::token::BookId: Deserialize` (new impl) | core | rust | required by the field above; mirrors the existing `Serialize` (3-char string), the first `Deserialize`-deriving struct to hold a `BookId` |
+| `usfm_onion::format::format_tokens_with_minter`, `format_with_minter`, `format_mut_with_minter` | core | rust | the id-minting seam |
+| `usfm_onion::format::mint_synthetic_id` (`pub(crate)`, not a public export — listed for completeness since it's the seam's shared helper) | core | rust (crate-internal) | — |
+| `usfm_onion::lint::apply_token_fix_with_minter` | core | rust | the id-minting seam, fix-application side |
+| `usfm_onion_wire::dto::LintCode::BookIdMismatch` (variant) | wire | rust + generated TS (tsify) | mirrors the core variant, both `From` conversions |
+| `usfm_onion_wire::schema::LintCodeTag::BookIdMismatch = 32` | wire | rust | the frozen wire-side stable tag |
+
+Eight new items (six core, two wire); zero deletions, zero renumbers. `LINT_CODE_TABLE` widened
+32->33; `PARAM_CONTRACTS` gained one entry (24->25); `js/wire-schema.js`'s generated `LINT_CODES`
+and `PARAM_CONTRACTS` regenerated to match; the checked-in import-shape pin
+(`scripts/test-wire-schema-import.mjs`) updated to the new counts.
