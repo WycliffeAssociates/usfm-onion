@@ -3023,3 +3023,12 @@ clean on every touched crate; `pkg-bundler`/`pkg-web` restored via `git checkout
 
 - Next: same as the previous entry — owner ruling on `synthetic_like`'s id gap (ITEM 3), otherwise
   C3.
+
+## 2026-07-30 — C2/F1 batch CLOSED (reviewer verdict: dispatchable, no findings)
+
+- Span-fix round confirmed: AttributeItem.span Option is the honest shape, no fabricated
+  fallback remains, golden change legitimate and span-only, all conversion legs corrected.
+  Reviewer notes the checked-in pkg declarations still show required span — consistent with the
+  defer-pkg-regeneration-until-Phase-F policy; scratch build proves publication emits span?.
+- Next: C3+C4 combined packet (owner-approved), single clean-room review at the end; C4's
+  92-fix census runs FIRST as the early stop-detector against freeze §J.
