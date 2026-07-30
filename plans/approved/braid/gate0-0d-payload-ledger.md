@@ -503,3 +503,83 @@ payload that genuinely cannot round-trip today is `attributes`/`attributeSource`
 
 Two specification gaps that are not stops: **D2** (fidelity bit needs the number token's source
 text) and **D3** (no "finding has no SID" encoding).
+
+---
+
+## 9. C4 fix census — 2026-07-30 (Phase C, C3/C4 packet, item 0)
+
+The C4 evidence pass required before patch resolution is designed: every `TokenFix` the full corpus
+(`testData` + `en_ult` + `en_ulb`, 395 files) produces, censused against freeze §J.1's
+token-operation row shape. Collected with a throwaway `examples/fix_census.rs` (deleted after the
+run, per the evidence-only rule) at branch `braid`, HEAD `50537f4`.
+
+**92 fixes**, matching the count §2.2 predicted, and matching the packet's expected split exactly:
+
+| stable code | kebab code | fixes | testData | en_ult | en_ulb |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 24 | `missing-whitespace-before-marker` | 48 | 42 | 6 | 0 |
+| 25 | `missing-horizontal-whitespace-after-marker-name` | 32 | 19 | 13 | 0 |
+| 26 | `missing-tag-end-delimiter-after-marker` | 12 | 11 | 0 | 1 |
+
+Zero findings on those three codes carry `fix: None`, so "the code fires" and "a fix exists" are the
+same predicate for them in this corpus (the `!prefix.is_empty() && token.id().is_some()` guard from
+§2.2 never excluded one).
+
+### 9.1 Payload shape — every field, as observed
+
+| property | observed |
+| --- | --- |
+| variant | `ReplaceToken` 92/92; `DeleteToken` 0; `InsertAfter` 0 (§2.2's producer census holds) |
+| `replacements.len()` | **1** for all 92 — no fix expands one token into several |
+| `label_params` | **empty** for all 92 (`{0: 92}`) |
+| `label` | exactly three values: `InsertWhitespaceBeforeMarker` (48), `InsertWhitespaceAfterMarkerName` (32), `InsertTagEndDelimiterAfterMarker` (12); max 32 bytes |
+| `code` | three values, max 37 bytes — **not the finding's own lint code**: 0 of 92 match `LintIssue.code.code()`. The fix code is a *remedy* name (`insert-whitespace-before-marker`, `insert-whitespace-after-marker-name`, `insert-tag-end-delimiter-after-marker`), one per producing rule code. Consequence recorded below. |
+| `target_token_id` | resolves to a real token position in the linted stream 92/92, and **equals the finding's own `token_id` 92/92** |
+| template `kind` | `Marker` 92/92 |
+| template `text` | 24 distinct values, max **6 bytes** (e.g. `"\n\\p "`, `"\\s1 "`) — the replacement is the target marker's source with the missing whitespace/delimiter inserted |
+| template `marker` | always `Some(name)`, 16 distinct names (`p` 18, `q` 17, `m` 15, `d` 11, `s1` 9, `q1` 6, …) |
+| template `sid` | always `Some(formatted sid)`, 41 distinct values — the anchor token's own sid, carried verbatim |
+
+### 9.2 Flattening into §J.1 rows — clean, no contradiction
+
+Every one of the 92 flattens to exactly **one** row `{op: replace, token position, template
+payload}`: `ReplaceToken` with one replacement is a single-position replace, the position is the
+target token's index in the book's token stream (always resolvable, always the finding's own
+position), and the template payload is the four fields `{kind, text, marker, sid}` — all four
+present, none empty, none unbounded (6-byte texts).
+
+No fix in the corpus produces a multi-row patch, so multi-row runs, row ordering, and
+within-patch overlap are **hand-fixture-only concerns** in v1 — as are `DeleteToken` and
+`InsertAfter`, restating §2.2/D4. The row-run framing (§J.1's first/count addressing) is still
+required: it is what makes a multi-replacement `ReplaceToken` or a future multi-op fix expressible
+without a format change.
+
+### 9.3 Two findings can target the same token — proof that patch identity must be snapshot-bound
+
+Six same-position collisions across four fixture files, each a *different* rule code proposing a
+*different* whole-token replacement for the same token:
+
+| file | target | colliding codes (and their replacement texts) |
+| --- | --- | --- |
+| `testData/paratextTests/MarkersMissingSpace/origin.usfm` | `GEN-11` | `MissingTagEndDelimiterAfterMarker` (`"\\p "`) vs `MissingWhitespaceBeforeMarker` (`"\n\\p"`) |
+| `testData/paratextTests/NoErrorsPartiallyEmptyBook/origin.usfm` | `GEN-27` | `MissingHorizontalWhitespaceAfterMarkerName` (`"\\s1 "`) vs `MissingWhitespaceBeforeMarker` (`"\n\\s1"`) |
+| `testData/usfmjsTests/mat-4-6/origin.usfm` | `MAT-251` | `MissingTagEndDelimiterAfterMarker` (`"\\q "`) vs `MissingWhitespaceBeforeMarker` (`"\n\\q"`) |
+| `testData/usfmjsTests/acts-1-20.aligned/origin.usfm` (and its `.crammed.oldformat` twin) | `ACT-118` | same pair as above |
+
+These are not overlapping rows *within* one patch — each fix is its own patch — so they do not
+create an intra-patch overlap case. They are the reason §J.2's snapshot-bound `PatchId` and §J.6's
+"snapshot id AND target book source hash must match" are load-bearing rather than belt-and-braces:
+applying either fix rewrites the book, which changes the book hash and the corpus `SnapshotId`, so
+the sibling patch is *correctly* rejected as stale and the caller re-lints. Applying both blind
+would silently drop one edit. Max fixes in a single book: 19.
+
+### 9.4 Verdict against §J, and the one consequence for §J.3
+
+**No census result contradicts §J, §K, or §L.** J.1's row shape fits all 92 with room to spare; J.2
+and J.6 are validated by §9.3; J.3's string interning covers every string these payloads carry.
+
+One consequence for the encoder, recorded because it is easy to get wrong: `TokenFix.code` is a free
+`String` that is **never** the finding's `LintCode` (0/92), so it must be interned like any other
+patch string. It cannot be recovered from the finding's own code column, and the three observed
+values are a producer coincidence, not a contract — `TokenFix`'s field is typed `String` and any
+future rule may pick any value.
