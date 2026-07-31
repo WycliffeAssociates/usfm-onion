@@ -442,7 +442,7 @@ fn format_token_with_identity(token: &Token<'_>) -> FormatToken {
 }
 
 fn format_sid(sid: Sid) -> String {
-    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
+    sid.to_string()
 }
 
 fn format_token_id(id: TokenId<'_>) -> String {

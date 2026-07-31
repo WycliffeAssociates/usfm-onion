@@ -1158,7 +1158,7 @@ impl SerializableToken for Token {
 /// included via `verse_locator`). Shared so the wasm crate's native-token
 /// identity path and this DTO conversion produce byte-identical sids.
 pub fn format_sid(sid: NativeSid) -> String {
-    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
+    sid.to_string()
 }
 
 /// Decodes USFM-wire escapes in an attribute value so JS consumers see the

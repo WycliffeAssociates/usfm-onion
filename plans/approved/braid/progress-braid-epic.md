@@ -4032,3 +4032,59 @@ Gates: `cargo test --workspace` 619 passed / 0 failed; oracle `--ignored` byte-i
 release ignored braid 3 / wire 5+2 / wasm 1; `test:packed` and `test:packed:web` 410 cases /
 5,717,153 tokens with the new field carried by both materializers; `cargo fmt --all --check`
 clean.
+
+## 2026-07-31 — RFC 2: one spelling for a canonical anchor (owner-ruled `C:0`)
+
+The divergence the `from_parts` work surfaced, closed. Census first, because it changed
+which direction was cheap: **eight** places turned a `Sid` into text, and seven of them
+already printed `chapter:locator` unconditionally. Core's `Display` — with its verse-zero
+special case printing `"GEN 1"` — was the lone outlier, so the owner's canonical choice
+(`"GEN 1:0"`, verse zero explicit) meant changing the authority and letting six
+hand-rolled copies delegate to it rather than editing seven call sites to match a bare form.
+
+| site | before | after |
+| --- | --- | --- |
+| `usfm_onion::token::Display for Sid` | `"GEN 1"` when verse is zero | **the one authority**, always `chapter:locator` |
+| `lint_impl::format_sid` | already delegated | unchanged |
+| `token::DiffableToken::sid_string` (OwnedToken) | hand-rolled | delegates |
+| `api.rs`, `usj/export.rs`, `diff/mod.rs` (×2) | hand-rolled | delegate |
+| `usfm_onion_wire::dto::format_sid` | hand-rolled | delegates; name kept, since the wasm crate re-exports it |
+| `js/packed.js` | hand-rolled | unchanged — it already printed `C:0`, and JS cannot call Rust, so this is a second implementation by necessity, pinned by the cross-language equivalence gate |
+
+`vref.rs`'s `verse_ref` is deliberately **not** in that table: it builds a key from the
+verbatim verse *lexeme* so sequences (`1,3`) survive, and it can never produce verse zero.
+Documented as such rather than "fixed".
+
+`Sid::parse` still accepts the bare historical form and re-prints it canonically, so
+content recorded under the old spelling reads back while nothing emits it again. That
+acceptance is ingest-only and asserted in both directions.
+
+**What moved, consumer-visibly:** `OwnedToken.sid` (which also closes the resident-versus-DTO
+mismatch: the same token used to say `"GEN 0"` resident and `"GEN 0:0"` at the boundary),
+`LintIssue.sid`, and USJ/USX/diff sid strings — chapter-level anchors only. **Unaffected:**
+VREF keys (lexeme-built, verse-only), `to_usfm` bytes (a sid is not source text), packed
+container bytes (structured SIDs; the string is derived on decode), and every
+token/cst/usj/usx/vref/html hash in the oracle.
+
+**Two blessings, both approved and characterized before committing:**
+
+1. `tests/lint_oracle_baseline.txt` — **124 changed lines out of 4,398, line count identical**,
+   every delta a `sid` field gaining `:0`, verified programmatically; zero findings added,
+   removed, or reordered; no hash line touched. Checked LF-clean before commit (`grep -c $'\r'`
+   = 0), because this baseline was silently CRLF-tainted by a past bless.
+2. `crates/usfm_onion_wasm/golden/outputs/lint-violations/lint.json` — two sids, `"GEN 1"` →
+   `"GEN 1:0"`.
+
+### Recorded deviation — `ApiResult`'s tag
+
+The epic's §8.2 sketch writes `{ok:true,value:T} | {ok:false,error:E}`. The resident class
+emits `{status:"ok",value:T} | {status:"error",error:E}` instead: a boolean tag cannot narrow
+a union in TypeScript, so `ok:boolean` would force every consumer to assert the other field,
+and the crate already has a string-tagged outcome type (`PackedBookOutcome`'s `status`).
+Matching the existing convention beats inventing a third.
+
+### Also recorded — a gate that existed and was not run
+
+`attributeOffset` landed with the inbound boundary and I ran `test:packed` but not
+`golden:wasm`, leaving four snapshots stale; caught and re-blessed in its own commit
+(`49eb6f9`). A gate that exists but was not run counts as failed.

@@ -1610,7 +1610,7 @@ impl crate::diff::DiffableToken for OwnedToken {
 
     fn sid_string(&self) -> Option<String> {
         self.parsed_sid
-            .map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator()))
+            .map(|sid| sid.to_string())
             .or_else(|| self.sid().map(ToOwned::to_owned))
     }
 
@@ -2181,13 +2181,20 @@ fn parse_sid_number(text: &str) -> Option<u16> {
     text.parse().ok()
 }
 
+/// The one place a `Sid` becomes text.
+///
+/// Every other formatter in this workspace delegates here. There used to be
+/// several hand-rolled copies, and they disagreed about one case — a chapter-level
+/// anchor, where the verse is zero — so the same token could report `"GEN 1"`
+/// resident and `"GEN 1:0"` at the boundary. The canonical spelling is the explicit
+/// one: pre-verse material in a chapter names verse zero, and a reader should not
+/// have to know that a missing locator means the same thing.
+///
+/// [`Sid::parse`] still accepts the bare form, because this library used to write
+/// it and content recorded then must still read back. Nothing emits it again.
 impl std::fmt::Display for Sid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.verse == 0 {
-            write!(f, "{} {}", self.book, self.chapter)
-        } else {
-            write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())
-        }
+        write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())
     }
 }
 
@@ -2728,22 +2735,30 @@ mod from_parts_tests {
     /// Every anchor this library writes must read back as the same value, and
     /// anything it would never write must not read back at all. A boundary that
     /// accepted a repaired anchor would be pointing somewhere nobody named.
-    /// Both spellings this library writes read back as the same anchor, and the
-    /// re-print is always this type's own — which is how a boundary's spelling
-    /// converges on the resident one instead of adding a second.
+    /// A chapter-level anchor has one spelling now — the explicit `C:0` — and the
+    /// bare form this library used to write still reads, because content recorded
+    /// then must still round-trip. Acceptance is ingest-only; nothing emits it.
     #[test]
-    fn either_spelling_of_a_chapter_anchor_parses_to_one_value() {
+    fn a_chapter_anchor_has_one_spelling_and_accepts_the_historical_one() {
         let book = BookId::from_str("GEN").unwrap();
-        for (dto_spelling, canonical) in [
-            ("GEN 0:0", Sid::new(book, 0, 0)),
-            ("GEN 1:0", Sid::new(book, 1, 0)),
+        for (chapter, canonical, historical) in [
+            (0u16, "GEN 0:0", "GEN 0"),
+            (1, "GEN 1:0", "GEN 1"),
+            (150, "GEN 150:0", "GEN 150"),
         ] {
-            assert_eq!(Sid::parse(dto_spelling), Some(canonical));
-            assert_eq!(Sid::parse(&canonical.to_string()), Some(canonical));
-            assert_ne!(
-                canonical.to_string(),
-                dto_spelling,
-                "this test is only meaningful while the two spellings differ"
+            let sid = Sid::new(book, chapter, 0);
+            assert_eq!(sid.to_string(), canonical, "one canonical spelling");
+            assert_eq!(Sid::parse(canonical), Some(sid));
+            assert_eq!(
+                Sid::parse(historical),
+                Some(sid),
+                "{historical} is this library's own older output"
+            );
+            // And re-printing what was ingested converges on the canonical form,
+            // which is what keeps the older spelling from propagating.
+            assert_eq!(
+                Sid::parse(historical).expect("parses").to_string(),
+                canonical
             );
         }
     }
@@ -2791,15 +2806,15 @@ mod from_parts_tests {
         // The case `from_format_token` cannot serve: a book code with no anchor
         // token to borrow a payload from.
         let token = OwnedToken::from_parts(OwnedTokenParts {
-            sid: Some("GEN 0"),
+            sid: Some("GEN 0:0"),
             book_code: Some(("GEN", true)),
             ..parts("editor-1", TokenKind::BookCode, "GEN")
         })
         .expect("a book code carries its own payload");
         assert_eq!(token.id().as_str(), "editor-1");
         assert_eq!(token.source(), "GEN");
-        assert_eq!(token.sid(), Some("GEN 0"));
-        assert_eq!(token.parsed_sid(), Sid::parse("GEN 0"));
+        assert_eq!(token.sid(), Some("GEN 0:0"));
+        assert_eq!(token.parsed_sid(), Sid::parse("GEN 0:0"));
         let code = token.book_code().expect("book code payload");
         assert_eq!(&*code.code, "GEN");
         assert!(code.is_valid);

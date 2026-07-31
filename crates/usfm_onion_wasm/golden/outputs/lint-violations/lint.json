@@ -11,7 +11,7 @@
           {
             "kind": "marker",
             "marker": "p",
-            "sid": "GEN 1",
+            "sid": "GEN 1:0",
             "text": "\\p "
           }
         ],
@@ -25,7 +25,7 @@
         "marker": "p"
       },
       "severity": "error",
-      "sid": "GEN 1",
+      "sid": "GEN 1:0",
       "span": {
         "end": 15,
         "start": 13

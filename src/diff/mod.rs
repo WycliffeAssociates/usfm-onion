@@ -22,9 +22,7 @@ impl SidKey<'_> {
     /// old per-token `DiffableToken::sid_string().unwrap_or_default()`.
     fn to_sid_string(&self) -> String {
         match self {
-            SidKey::Compact(sid) => {
-                format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
-            }
+            SidKey::Compact(sid) => sid.to_string(),
             SidKey::Text(text) => (*text).to_owned(),
             SidKey::Empty => String::new(),
         }
@@ -96,8 +94,7 @@ pub trait DiffableToken: Clone {
 
 impl<'a> DiffableToken for Token<'a> {
     fn sid_string(&self) -> Option<String> {
-        self.sid
-            .map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator()))
+        self.sid.map(|sid| sid.to_string())
     }
 
     fn sid_key(&self) -> SidKey<'_> {
