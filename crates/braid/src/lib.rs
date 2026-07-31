@@ -49,7 +49,7 @@ use crate::format_patch::{PreparedFormatBook, PreparedFormatPatch};
 use crate::lint::accumulate;
 use crate::patch::ResolvedFix;
 
-pub use crate::baseline::BaselineError;
+pub use crate::baseline::{BaselineError, SetBaselineError};
 pub use crate::error::{FormatError, IngestError, PatchError, ScopeError};
 pub use crate::format_patch::{FormatPatchError, FormatPatchId, PatchPreparation};
 pub use crate::input::{
@@ -524,44 +524,29 @@ impl Braid {
     /// the reference point `is_dirty`/`diff_baseline` compare current content
     /// against.
     ///
-    /// Validated through the same input path as current data
-    /// (`BookState::build`), so a malformed candidate is refused with the
-    /// corpus, every baseline, and every current book exactly as they were.
-    /// When the named book is already resident, only its baseline slot
-    /// changes: current tokens, hashes, dirty stamps, and the corpus snapshot
-    /// id are untouched, so the returned effect is always the no-op shape.
-    /// When the named book has no current content yet, it is installed fresh
-    /// — the same fallback `update_book` uses for a book it has not seen
-    /// before — with its baseline set to that same content, since there is
-    /// nothing yet for it to have diverged from; that case *does* report the
-    /// new book in `changed`, because current content genuinely came into
-    /// existence.
-    pub fn set_baseline(&mut self, replacement: BookInput) -> Result<MutationEffect, IngestError> {
-        let candidate = BookState::build(replacement)?;
-        let baseline = BaselineState::of(&candidate);
-
-        match self.index_of(candidate.book) {
-            Some(index) => {
-                self.books[index].baseline = Some(baseline);
-                Ok(self.effect(Vec::new(), Vec::new()))
-            }
-            None => {
-                if let Some(other) = self
-                    .books
-                    .iter()
-                    .find(|book| book.source_key == candidate.source_key)
-                {
-                    return Err(IngestError::DuplicateSourceKey {
-                        source: other.source_key.clone(),
-                    });
-                }
-                let mut installed = candidate;
-                installed.baseline = Some(baseline);
-                let book = installed.book;
-                self.books.push(installed);
-                Ok(self.effect(vec![Scope::book(book)], Vec::new()))
-            }
-        }
+    /// Never an ingest verb: it only ever touches an existing resident
+    /// book's baseline slot, and always leaves current tokens, hashes,
+    /// dirty stamps, and the corpus snapshot id exactly as they were —
+    /// unconditionally, not just on the happy path. A caller must be able to
+    /// rely on that regardless of whether the named book turns out to be a
+    /// typo or one that has since been removed, so a book braid does not
+    /// hold is refused rather than silently added; there is nowhere else a
+    /// baseline could attach to. The candidate is still validated through
+    /// the same input path as current data (`BookState::build`), so a
+    /// malformed candidate is refused the same way, with every resident
+    /// book and every baseline exactly as they were. The returned effect on
+    /// success is always the no-op shape, since only the baseline slot
+    /// changes.
+    pub fn set_baseline(
+        &mut self,
+        replacement: BookInput,
+    ) -> Result<MutationEffect, SetBaselineError> {
+        let index = self
+            .index_of(replacement.book())
+            .ok_or(SetBaselineError::BookNotResident(replacement.book()))?;
+        let candidate = BookState::build(replacement).map_err(SetBaselineError::Invalid)?;
+        self.books[index].baseline = Some(BaselineState::of(&candidate));
+        Ok(self.effect(Vec::new(), Vec::new()))
     }
 
     /// Drops one book's baseline. Absent is a no-op — the requested end state

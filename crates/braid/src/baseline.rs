@@ -7,10 +7,10 @@
 //! or clearing a baseline never touches current tokens, hashes, dirty stamps,
 //! or the corpus snapshot id — only the book's own baseline slot changes.
 
-use usfm_onion::token::{LineEnding, OwnedToken};
+use usfm_onion::token::{BookId, LineEnding, OwnedToken};
 
 use crate::corpus::{BookState, ChapterRun};
-use crate::error::ScopeError;
+use crate::error::{IngestError, ScopeError};
 use crate::state::SourceHash;
 
 /// One book's declared baseline: the same facts a resident book's current
@@ -50,9 +50,7 @@ impl BaselineState {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BaselineError {
     Scope(ScopeError),
-    MissingBaseline {
-        books: Vec<usfm_onion::token::BookId>,
-    },
+    MissingBaseline { books: Vec<BookId> },
 }
 
 impl std::fmt::Display for BaselineError {
@@ -73,3 +71,43 @@ impl From<ScopeError> for BaselineError {
         Self::Scope(value)
     }
 }
+
+/// A baseline declaration that could not be installed.
+///
+/// Kept separate from [`crate::IngestError`] rather than adding a variant to
+/// it: `IngestError` describes a rejected *candidate mutation* — every one of
+/// its variants is about the content just supplied. "This book is not
+/// currently resident" is not a fact about the candidate at all; it is a
+/// precondition of `set_baseline` itself, which never introduces a book into
+/// the corpus and never touches current content — only an existing book's
+/// baseline slot. Folding it into `IngestError` would give every other
+/// ingest verb a variant that names a failure mode they cannot produce.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum SetBaselineError {
+    /// Braid holds no current content for this book. A baseline is auxiliary
+    /// state on an existing resident book, never a way to introduce one —
+    /// callers must be able to rely on `set_baseline` leaving current
+    /// content, hashes, and the corpus snapshot id untouched unconditionally,
+    /// including when the named book is a typo or has since been removed.
+    BookNotResident(BookId),
+    /// The candidate itself failed the same validation any current-data
+    /// ingest goes through (malformed input, a duplicate token id within it).
+    Invalid(IngestError),
+}
+
+impl std::fmt::Display for SetBaselineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BookNotResident(book) => {
+                write!(
+                    f,
+                    "book {book} has no current content to attach a baseline to"
+                )
+            }
+            Self::Invalid(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl std::error::Error for SetBaselineError {}

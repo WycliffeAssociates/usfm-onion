@@ -8,7 +8,7 @@
 
 use braid::{
     BaselineError, BookInput, BookTokensInput, Braid, BraidConfig, ChapterLabel, ChapterTarget,
-    CorpusInput, CorpusScope, LineEnding, ScopeError, ScopedOutput, SourceKey,
+    CorpusInput, CorpusScope, LineEnding, ScopeError, ScopedOutput, SetBaselineError, SourceKey,
 };
 use usfm_onion::diff::diff_skeleton;
 use usfm_onion::lint::{LintOptions, LintScope};
@@ -406,19 +406,48 @@ fn chapter_scoped_diff_missing_baseline_run_is_typed_missing() {
 }
 
 #[test]
-fn a_book_with_no_current_content_installs_fresh_with_a_matching_baseline() {
-    // set_baseline on a book that is not yet resident behaves like
-    // update_book's own fallback: it installs the book (current content
-    // genuinely came into existence, so `changed` names it) with its
-    // baseline set to that same content, since nothing yet diverges from it.
-    let mut resident = braid();
-    let effect = resident
+fn set_baseline_on_a_book_with_no_current_content_is_rejected_atomically() {
+    // set_baseline is never an ingest verb: a book braid does not currently
+    // hold has nowhere for a baseline to attach, so the call must report
+    // absence rather than silently adding a resident book — a caller has to
+    // be able to rely on set_baseline never changing current content or
+    // corpus identity, including when the named book is a typo or one that
+    // has since been removed.
+    for lane in LANES {
+        let mut resident = braid();
+        let before_snapshot = resident.expected_snapshot_id();
+        let before_books = resident.books();
+
+        let result = resident.set_baseline(lane.book("GEN", GEN_SOURCE));
+        assert_eq!(
+            result,
+            Err(SetBaselineError::BookNotResident(id("GEN"))),
+            "{lane:?}"
+        );
+
+        assert_eq!(resident.expected_snapshot_id(), before_snapshot, "{lane:?}");
+        assert_eq!(resident.books(), before_books, "{lane:?}");
+        assert_eq!(
+            resident.is_dirty(CorpusScope::Book(id("GEN"))),
+            Err(ScopeError::BookNotFound(id("GEN"))),
+            "{lane:?}: still no such resident book, not merely 'not dirty'"
+        );
+    }
+}
+
+#[test]
+fn set_baseline_on_a_book_not_resident_leaves_other_baselines_untouched() {
+    // The rejection is scoped to the mistaken target: an unrelated book's
+    // own already-declared baseline is not disturbed by a sibling call
+    // naming a book braid does not hold.
+    let mut resident = seeded(Lane::Parsed);
+    resident
         .set_baseline(Lane::Parsed.book("GEN", GEN_SOURCE))
         .unwrap();
-    assert_eq!(effect.changed, vec![braid::Scope::book(id("GEN"))]);
-    assert_eq!(
-        single_str(resident.to_usfm(CorpusScope::Book(id("GEN")))),
-        GEN_SOURCE
-    );
+    assert!(!resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap());
+
+    let result =
+        resident.set_baseline(Lane::Parsed.book("LEV", "\\id LEV\n\\c 1\n\\p\n\\v 1 a.\n"));
+    assert_eq!(result, Err(SetBaselineError::BookNotResident(id("LEV"))));
     assert!(!resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap());
 }

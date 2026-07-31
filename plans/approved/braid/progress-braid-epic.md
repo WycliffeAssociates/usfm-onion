@@ -3690,3 +3690,56 @@ Gates: `cargo test --workspace` green (braid 60); `cargo test --release
 braid -p usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `cargo fmt
 --all -- --check` clean (after `cargo fmt --all`, which reformatted the two
 touched files).
+
+## 2026-07-31 — Owner adjudication on two flagged Phase E decisions
+
+1. **Format-patch table separation from the lint-fix `Patch`/`PatchRow` table:
+   RATIFIED.** No code change; recorded so the freeze appendix can cite it —
+   resident-only in v1 (never wire field 6), separate ordinal spaces that
+   never address each other.
+2. **`set_baseline` installing an absent book as a fresh current book:
+   REVERSED.** The epic's own gate — "baseline mutation cannot change current
+   state" — is unconditional, and the install branch broke exactly that: it
+   created residency, moved the snapshot id, and reported a changed scope.
+   Owner's reasoning: `set_baseline` must never be an ingest verb. A caller
+   has to be able to reason that a baseline operation leaves current tokens
+   and corpus identity untouched, full stop — including when the named book
+   is a typo or one that has since been removed, not merely on the intended
+   path. A cold-open "install and declare baseline atomically" convenience,
+   if ever wanted, belongs on the restore/ingest surface, not folded into
+   this one.
+
+Implemented the reversal in `crates/braid/src/{baseline.rs,lib.rs}`:
+
+- Removed the install branch entirely. `set_baseline` now looks up the named
+  book's current index first and returns a typed rejection if absent,
+  touching nothing.
+- New dedicated error type `SetBaselineError { BookNotResident(BookId),
+  Invalid(IngestError) }` in `baseline.rs`, chosen over extending
+  `IngestError` with a not-resident variant: `IngestError` describes a
+  rejected *candidate mutation* — every existing variant is a fact about the
+  content just supplied. "This book has no current content" is not a fact
+  about the candidate; it is a precondition of `set_baseline` itself, which
+  never introduces a book and never touches current content. Folding it into
+  `IngestError` would give every other ingest verb (`replace_corpus`,
+  `update_book`, ...) a variant only `set_baseline` can produce. The
+  dedicated enum still composes `IngestError` for the one failure mode that
+  genuinely is a candidate-validation problem (`Invalid`), so a malformed
+  baseline candidate is still reported precisely.
+- `set_baseline`'s signature is now `Result<MutationEffect, SetBaselineError>`;
+  doc comment rewritten to state the "never an ingest verb, unconditionally"
+  contract directly rather than describing the removed fallback.
+
+`crates/braid/tests/baseline.rs`: replaced
+`a_book_with_no_current_content_installs_fresh_with_a_matching_baseline` with
+`set_baseline_on_a_book_with_no_current_content_is_rejected_atomically` (both
+lanes; proves the typed rejection and that snapshot id, `books()`, and
+`is_dirty`'s own `BookNotFound` all read exactly as before the call) and added
+`set_baseline_on_a_book_not_resident_leaves_other_baselines_untouched` (a
+sibling book's already-declared baseline survives a rejected call naming a
+different, absent book). 15 → 16 tests.
+
+Gates: `cargo test --workspace` green (braid 62); `cargo test --release
+--test lint_oracle -- --ignored` byte-identical; `cargo test --release -p
+braid -p usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `cargo fmt
+--all -- --check` clean.
