@@ -3108,3 +3108,47 @@ above now unblocks — with the ordinal-bridging task from §N.2 as its first pa
 - Pre-existing USJ/USX ignored-test failures: owner-dispositioned as expected — USJ/USX are not
   intended to be lossless given the nature of their keys; the two `#[ignore]`d "lossless" tests
   overclaim. No chase; noted here so the red `--ignored` core gate has a recorded explanation.
+
+## 2026-07-31 — C3/C4 clean-room fix round: three P1s landed
+
+Reviewer verdict on the C3/C4 batch was NOT DISPATCHABLE with three P1s, all confirmed by triage.
+Fixed in three commits, each with the regression the reviewer asked for.
+
+- **`3fb293b` P1-1 — preview never mints.** `preview_patch` shared apply's code path, so it invoked
+  the handle-held minter: two previews of a synthesizing patch would disagree, and every preview
+  would spend ids out of the application's own space (invisible today only because no corpus fix
+  synthesizes). Per the proxy ruling — minting is admission to residency, and a preview is never
+  admitted — the pass is now split from the admission: `applied_working` is a pure `&self`
+  projection with no minter, shared verbatim by both verbs, and `admit` is the single place the
+  minter is invoked (the §L post-pass sweep, with the conversion checkpoint behind it).
+  `preview_patch` therefore takes `&self` and **returns `Vec<FormatToken>`** — the id-optional
+  working type. Chosen over placeholder ids: `Vec<OwnedToken>` structurally requires real
+  `StableTokenId`s, and fabricating ids that *look* resident is precisely the confusion the split
+  exists to prevent. A survivor carries the resident id it already had; a token the fix would
+  synthesize carries `None` until an apply grants one.
+- **`2d15a6a` P1-2 — the seed manifest validates first.** `restore_corpus` checked uniqueness on
+  already-built, already-filtered candidates, so the reviewer's repro (a valid GEN record plus a
+  mismatched GEN record) seeded one and reported the other instead of refusing atomically. Uniqueness
+  now runs on the manifest exactly as supplied, before anything reads a record; the rule moved to
+  `validate_unique_keys` over `(book, source key)` pairs so the corpus and seed paths share one
+  implementation. Both regressions added (duplicate book, duplicate source key, each with one record
+  that would have been content-rejected).
+- **`d3ea87e` P1-3 — a fix that edits nothing is refused.** Typed refusal at encode on the wide-SID
+  precedent: new `EncodeError::EmptyFix`, raised by the semantic encoder *and* the section writer, so
+  no path can lay out what the decoder refuses. The decoder now rejects a zero-row record explicitly,
+  per record, instead of failing later in materialization. Braid's resolution refuses the same shape
+  by making it unrepresentable — `ResolvedFix::new` returns `None`, so "a patch has at least one row"
+  is a property of the type. **Deviation from the ruling's wording, flagged:** braid's refusal is
+  structural rather than a typed error, because the only boundary that resolves fixes is `lint()`,
+  which is infallible by construction (no `LintError` producer) — there is no `Result` to carry one,
+  and a `debug_assert` plus unrepresentability is stronger than an error that cannot be returned.
+
+### Gates after the round
+
+Workspace suite green: core 282, braid 50 (6 lib + 27 lifecycle + 10 resident lint + 7 patches),
+wire 183, wasm 27. Lint oracle `--ignored` byte-identical. Release ignored: braid corpus 3, wire lib 4
++ corpus 2 (62,948 findings, 92 fixes, per-code counts still 48/32/12). `npm run test:packed` and
+`test:packed:web` both pass at 410 cases / 5,717,153 tokens; **malformed goldens 15 → 16** (the new
+`zero-row-patch-record` vector), good goldens unchanged at 15, no existing golden's bytes changed.
+Golden generators re-run. `pkg-bundler`/`pkg-web` are owner-modified and were left that way — never
+committed, per the standing ruling.
