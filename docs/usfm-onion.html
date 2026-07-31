@@ -261,6 +261,7 @@
 
   <h2>Surfaces</h2>
   <a href="#rust-facade">Rust facade</a>
+  <a href="#resident">Resident corpus</a>
   <a href="#wasm-surface">WASM surface</a>
   <a href="#token-shape">JS token shape</a>
   <a href="#stability">Stability contracts</a>
@@ -703,9 +704,106 @@ ctx.<span class="fn">note_depth</span>() -&gt; <span class="ty">usize</span></co
 </section>
 
 <section id="wasm-surface">
+<h2>Resident corpus<a class="anchor" href="#resident">#</a></h2>
+
+<p>Everything above this section is <em>stateless</em>: you hand it a string or a token array and it
+hands back an answer. That is the right shape for a one-shot conversion and the wrong shape for an
+editor, which holds a whole project open, changes one chapter at a time, and needs to know what moved.
+The resident subsystem is the stateful half.</p>
+
+<p>Four crates, one direction of dependency, and no crate learns another's job:</p>
+
+<table>
+  <tr><th>Crate</th><th>Owns</th><th>Never owns</th></tr>
+  <tr><td><code>usfm_onion</code></td><td>USFM semantics: lexer, parser, tokens, lint rules, format, diff, projections</td><td>resident state, byte layouts, JS shapes</td></tr>
+  <tr><td><code>usfm_onion_wire</code></td><td>The packed container format, its checked codec, the trust boundary, and the boundary DTOs</td><td>lifecycle, dirty state, rule execution</td></tr>
+  <tr><td><code>braid</code></td><td>The resident corpus: ordered books, validated mutation, hashes, staleness, snapshots, patches, baselines</td><td>byte layouts, IO, scheduling</td></tr>
+  <tr><td><code>usfm_onion_wasm</code></td><td>The JS boundary, and the <em>composition</em> of the two crates that must not know each other</td><td>a second copy of anything</td></tr>
+</table>
+
+<p><code>braid</code> depends on <code>usfm_onion</code> and never on <code>usfm_onion_wire</code>: a resident
+corpus does not know what a byte offset is. So composing them — publishing a corpus as packed bytes,
+or seeding one from packed bytes — happens in the wasm crate, which is the only layer permitted to
+know both.</p>
+
+<h3>The caller contract</h3>
+
+<p>Mutate, then hydrate what changed:</p>
+
+<pre><code>const effect = braid.updateChapter(target, { kind: "tokens", tokens });
+if (effect.status === "ok") {
+  for (const scope of braid.toTokens(effect.value.changed).value) {
+    // reconcile scope.tokens
+  }
+}</code></pre>
+
+<p>Every mutating verb applies before it returns, so a read after a mutation is always consistent, and
+a rejected mutation leaves state provably untouched — same snapshot id, same per-book hashes. Effects
+are plain values, not subscriptions: nothing tracks per-consumer cursors. A consumer that defers
+hydration keeps its own pending list, and <code>toTokens</code> normalizes whatever it is handed
+(duplicates collapse, a whole-book scope absorbs that book's chapter scopes), so naive accumulation
+across several effects is always correct.</p>
+
+<p>Tokens enter in exactly three places — <code>replaceCorpus</code>, <code>updateBook</code>,
+<code>updateChapter</code> — the moments the caller knows something the corpus does not. No other verb
+accepts caller tokens. Source bytes, hashes, and chapter runs are always derived from tokens, never the
+other way round.</p>
+
+<h3>Identity</h3>
+
+<table>
+  <tr><th>Stamp</th><th>Covers</th><th>Why it exists</th></tr>
+  <tr><td><code>snapshotId</code></td><td>The ordered per-book source hashes, and nothing else</td><td>Corpus identity. Deterministic across processes: the same bytes in the same order always give the same id, so a publication and a restore agree without coordinating.</td></tr>
+  <tr><td><code>sourceHash</code></td><td>One book's exact bytes</td><td>Binds a packed section to the source its spans index into.</td></tr>
+  <tr><td><code>tokenIdentity</code></td><td>Everything a book's tokens carry that its bytes do not</td><td>A book's bytes are its tokens' text concatenated, so byte-identical content can carry entirely different stable ids, anchors, or attribute spellings. A consumer caching anything token-derived keys on this, not on the source hash.</td></tr>
+</table>
+
+<p>Lint results additionally carry a configuration fingerprint and a rule-engine stamp. A cached result
+is adopted only when all of them agree; the engine stamp includes the crate version, so a release
+invalidates every warm cache by design rather than risking a stale finding.</p>
+
+<h3>Explicit recompute</h3>
+
+<p><code>lint()</code> is the only verb that runs rules, and it runs them for exactly the books whose
+content or configuration changed. A clean corpus runs none. No mutation lints implicitly, and no effect
+carries findings — findings are always something you asked for. The same is true of
+<code>vrefIndex(scope)</code>, which caches per chapter run: after a one-chapter edit, reading the whole
+book's verse index recomputes that chapter and takes the rest from cache.</p>
+
+<h3>Fixes and formatting are patches</h3>
+
+<p>A lint finding may carry a fix. Braid resolves it against the current snapshot into a patch — a run
+of token operations addressed by <code>(snapshot, ordinal)</code> — which you can inspect, preview, or
+apply. Preview is a pure projection and mints nothing; identity is granted only when a token becomes
+resident. Staleness falls out of the identity: a patch resolved against a corpus that has since moved is
+refused rather than applied to the wrong tokens, which matters because two findings can legitimately
+propose different edits to the same token. Formatting works the same way, at scope grain.</p>
+
+<h3>Publication and warm open</h3>
+
+<p>A resident corpus publishes as one packed container: token and finding sections per book, the
+snapshot id, and — when the findings are meant to be reusable — the stamps that license reusing them.
+Republication reuses the encoded sections of books that did not change, splicing them rather than
+re-encoding, and a reused section is re-validated before adoption, so reuse never means trust.</p>
+
+<p><code>restoreCorpus</code> is the reverse: verify the bytes, seed the corpus, and skip the lex and
+parse entirely. Residency and lint-priming are independent — a book whose cached findings cannot be
+adopted still seeds, and is simply awaiting recompute.</p>
+
 <h2>WASM surface<a class="anchor" href="#wasm-surface">#</a></h2>
 
 <p><code>crates/usfm_onion_wasm</code> wraps the library for browser and Node consumers. Every public type is <code>tsify</code>-derived — TypeScript declarations come straight from the Rust definitions.</p>
+
+<p>The stateless exports below take caller-owned strings and tokens. The resident
+<code>Braid</code> class (see <a href="#resident">Resident corpus</a>) takes resident scopes and never
+arbitrary external tokens. That split is deliberate even where both reach the same core function,
+because "operate on what I gave you" and "operate on what you are holding" are different promises.</p>
+
+<p>Verbs that can be refused return a tagged result rather than throwing:
+<code>{ status: "ok", value } | { status: "error", error }</code>, with a discriminated error union a
+consumer switches on. Exceptions are reserved for programmer errors. Declarations name a per-verb alias
+(<code>PatchMutationOutcome</code> and friends) because wasm-bindgen erases a generic's parameters in a
+method signature; each alias resolves to the instantiated result type.</p>
 
 <table>
   <tr><th>JS name</th><th>Shape</th><th>Notes</th></tr>

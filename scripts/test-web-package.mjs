@@ -236,3 +236,67 @@ assert.equal(formatMeta.length, formatRules.length);
 assert.ok(formatMeta.every((m) => m.code && m.labelKey));
 
 console.log(`${target} package smoke test passed`);
+
+// --- module worker and buffer transfer -------------------------------------
+//
+// Two things the published package must survive that a main-thread import does not
+// exercise: initialising inside a module worker (where the editor runs it, off the
+// interaction thread), and having a packed buffer handed across that boundary. The
+// bytes are a real checked-in container, so what the worker verifies is a genuine
+// publication rather than a synthetic buffer.
+//
+// A `Uint8Array` from wasm is a view onto wasm memory, so transferring its own buffer
+// would detach wasm's heap; the package's contract is that a caller copies first. This
+// asserts the copy detaches on the sending side and arrives intact.
+{
+  const { Worker } = await import("node:worker_threads");
+  const goldenDir = path.join(rootDir, "crates/usfm_onion_wire/golden/finding");
+  const packedBytes = new Uint8Array(
+    await readFile(path.join(goldenDir, "whitespace-fix-patch.bin")),
+  );
+  const sourceBytes = new Uint8Array(
+    await readFile(path.join(goldenDir, "whitespace-fix-patch.usfm")),
+  );
+
+  const init =
+    target === "web"
+      ? `await wasm.default({ module_or_path: await readFile(${JSON.stringify(wasmPath)}) });`
+      : "";
+  const worker = new Worker(
+    `
+    import { readFile } from "node:fs/promises";
+    import { parentPort } from "node:worker_threads";
+    const wasm = await import(${JSON.stringify(packageUrl)});
+    ${init}
+    parentPort.on("message", ({ packed, source }) => {
+      const outcome = wasm.verifyPackedBook(new Uint8Array(packed), new Uint8Array(source));
+      parentPort.postMessage({
+        status: outcome.status,
+        book: outcome.status === "verified" ? outcome.receipt.book : null,
+        findings: outcome.status === "verified" ? outcome.findings.length : null,
+        fixes:
+          outcome.status === "verified"
+            ? outcome.findings.filter((finding) => finding.fix !== undefined).length
+            : null,
+      });
+    });
+  `,
+    { eval: true },
+  );
+
+  const packed = packedBytes.slice().buffer;
+  const sourceBuffer = sourceBytes.slice().buffer;
+  const reply = await new Promise((resolve, reject) => {
+    worker.once("message", resolve);
+    worker.once("error", reject);
+    worker.postMessage({ packed, source: sourceBuffer }, [packed, sourceBuffer]);
+  });
+  await worker.terminate();
+
+  assert.equal(packed.byteLength, 0, "a transferred buffer is detached on the sending side");
+  assert.equal(reply.status, "verified", "the worker verifies the transferred container");
+  assert.equal(reply.book, "GEN");
+  assert.ok(reply.findings > 0, "the worker sees the container's findings");
+  assert.ok(reply.fixes > 0, "and the fixes they carry survive the boundary too");
+  console.log(`${target}: module worker initialises and verifies a transferred packed buffer`);
+}

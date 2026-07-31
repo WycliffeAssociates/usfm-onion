@@ -4421,3 +4421,39 @@ Gated inside the packed equivalence run over findings the boundary actually emit
 than hand-built ones (410 cases, now `+ 3 findings reconciled`): unchanged pass returns the
 same array, one edited finding is fresh while every sibling keeps its identity, and a
 re-anchored finding is a different finding.
+
+## 2026-07-31 — Phase F close: worker/transfer gate, version 0.1.0, packages committed, docs
+
+**Module worker and buffer transfer** (`scripts/test-web-package.mjs`, both targets). The two
+things a main-thread import never exercises: initialising the published package inside a module
+worker — where an editor actually runs it, off the interaction thread — and having a packed
+buffer handed across that boundary. The bytes are a real checked-in golden container, so what
+the worker verifies is a genuine publication rather than a synthetic buffer, and the assertions
+cover the whole path: the sending side's buffer is detached (proving a real transfer, not a
+copy), the worker verifies the container, and the findings *and their fixes* survive. The
+package's contract that a caller copies a wasm-returned `Uint8Array` before transferring is
+what the test performs — transferring the view's own buffer would detach wasm's heap.
+
+**Version 0.1.0**, workspace crates and npm together. Minor rather than patch: the resident
+surface is new API, and three shapes changed for consumers (`VrefIndex` is now ordered pairs,
+`Token` gained `attributeOffset`, and a chapter-level sid now spells itself `GEN 1:0`). The
+engine stamp derives from the crate version, so **every warm lint cache built under 0.0.9 is
+refused after this bump** — by design, not by accident. Asserted rather than left implicit:
+`a_version_bump_invalidates_every_cache_built_under_the_old_one` pins that the stamp moves with
+the version and that it is the version doing it, so whoever bumps next is told by a test name
+that old caches will be recomputed. (That test lives in `crates/braid/src/stamps.rs`, the one
+file outside my lane I touched this packet, because the assertion has no other sensible home.)
+
+**`pkg-bundler` and `pkg-web` are committed as reviewed artifacts**, ending the
+knowingly-stale-pkg state Phase F was told to close. Both are release builds carrying the
+VrefIndex tuple shape, `attributeOffset`, the sid spelling, the 18-verb `Braid` class with its
+typed outcome aliases, `vrefIndex`, and `restoreCorpus`. Declarations: 1,182 lines (bundler) /
+1,287 (web); wasm binary 1,593,244 bytes both targets.
+
+**Canonical docs** gain a *Resident corpus* section, which the 2026-07-30 deferral note reserved
+for this phase: the four-crate table with each crate's "never owns" column, why composition lives
+in the wasm crate (braid must not learn byte layouts), the mutate-then-hydrate contract with the
+three places tokens may enter, the three identity stamps and what each is for, explicit recompute,
+patches as snapshot-bound token operations, and publication/warm-open. The WASM section now states
+the stateless-versus-resident split and the tagged-result convention, including why declarations
+name per-verb aliases (wasm-bindgen erases a generic's parameters in a method signature).

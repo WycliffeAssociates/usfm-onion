@@ -1,5 +1,388 @@
 /* @ts-self-types="./usfm_onion_web.d.ts" */
 
+/**
+ * The resident corpus handle.
+ */
+export class Braid {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        BraidFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_braid_free(ptr, 0);
+    }
+    /**
+     * Applies a prepared format patch. All-or-nothing across every book it covers.
+     * @param {FormatPatchId} id
+     * @returns {FormatMutationOutcome}
+     */
+    applyFormatPatch(id) {
+        const ret = wasm.braid_applyFormatPatch(this.__wbg_ptr, addHeapObject(id));
+        return takeObject(ret);
+    }
+    /**
+     * Applies a patch as an ordinary mutation, atomically.
+     * @param {PatchId} id
+     * @returns {PatchMutationOutcome}
+     */
+    applyPatch(id) {
+        const ret = wasm.braid_applyPatch(this.__wbg_ptr, addHeapObject(id));
+        return takeObject(ret);
+    }
+    /**
+     * Resident books with their derived stamps, in corpus order.
+     * @returns {BookEntry[]}
+     */
+    books() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.braid_books(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export4(r0, r1 * 4, 4);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Books whose findings are stale, in corpus order. Derived from authoritative
+     * stamps rather than drained from a queue, so reading it twice is safe.
+     * @returns {string[]}
+     */
+    booksAwaitingLint() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.braid_booksAwaitingLint(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export4(r0, r1 * 4, 4);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * One book's chapter-run labels in source order, duplicates included.
+     * @param {string} book
+     * @returns {ChapterLabelsOutcome}
+     */
+    chapterLabels(book) {
+        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_chapterLabels(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Drops every resident book. Clearing an empty corpus is a no-op.
+     * @returns {MutationEffect}
+     */
+    clear() {
+        const ret = wasm.braid_clear(this.__wbg_ptr);
+        return takeObject(ret);
+    }
+    /**
+     * Forgets one book's baseline. Clearing an absent one is a no-op.
+     * @param {string} book
+     * @returns {MutationOutcome}
+     */
+    clearBaseline(book) {
+        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_clearBaseline(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * The resident diff against the baseline.
+     * @param {CorpusScope} scope
+     * @returns {DiffBaselineOutcome}
+     */
+    diffBaseline(scope) {
+        const ret = wasm.braid_diffBaseline(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+    /**
+     * The corpus's content-derived identity, as a 16-digit hex string.
+     *
+     * Hex rather than a number because the value is 64 bits: a JS `number` cannot
+     * hold it without silently rounding, and a `bigint` does not survive every
+     * structured clone a worker boundary performs.
+     * @returns {string}
+     */
+    expectedSnapshotId() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.braid_expectedSnapshotId(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Whether a scope differs from its baseline, by exact serialized equality.
+     * @param {CorpusScope} scope
+     * @returns {DirtyOutcome}
+     */
+    isDirty(scope) {
+        const ret = wasm.braid_isDirty(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+    /**
+     * Recomputes every book awaiting it and returns the complete snapshot.
+     *
+     * The only recompute verb, and always explicit: no mutation lints implicitly
+     * and no effect carries findings. Exactly the stale books run rules — a clean
+     * corpus runs none.
+     * @returns {LintSnapshot}
+     */
+    lint() {
+        const ret = wasm.braid_lint(this.__wbg_ptr);
+        return takeObject(ret);
+    }
+    /**
+     * Creates an empty handle bound to the application's own id minter.
+     *
+     * The minter is a JS callback returning a string, held for the life of the
+     * handle: core never invents a token id, so every token a fix or format pass
+     * synthesizes gets one from here. Speed, spelling, and collision resistance
+     * are the application's trade — uniqueness is not assumed but enforced at the
+     * residency boundary, where a collision is a typed rejection rather than a
+     * corrupted book.
+     *
+     * Throws only for a programmer error: a minter that throws, or one that
+     * returns something other than a string.
+     * @param {BraidConfig} config
+     * @param {Function} minter
+     */
+    constructor(config, minter) {
+        const ret = wasm.braid_new(addHeapObject(config), addHeapObject(minter));
+        this.__wbg_ptr = ret >>> 0;
+        BraidFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * One patch by id, refusing a stale or unknown one.
+     * @param {PatchId} id
+     * @returns {PatchOutcome}
+     */
+    patch(id) {
+        const ret = wasm.braid_patch(this.__wbg_ptr, addHeapObject(id));
+        return takeObject(ret);
+    }
+    /**
+     * Every patch of the current snapshot, in corpus order and then each book's own
+     * canonical finding order — which is what assigns each one its ordinal.
+     *
+     * A book awaiting recompute contributes none: its stored positions address the
+     * token stream it held when its findings were computed.
+     * @returns {Patch[]}
+     */
+    patches() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.braid_patches(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export4(r0, r1 * 4, 4);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Prepares a formatting pass over a scope without applying it.
+     * @param {CorpusScope} scope
+     * @param {FormatOptions | null} [options]
+     * @returns {FormatPreparationOutcome}
+     */
+    prepareFormatPatch(scope, options) {
+        const ret = wasm.braid_prepareFormatPatch(this.__wbg_ptr, addHeapObject(scope), isLikeNone(options) ? 0 : addHeapObject(options));
+        return takeObject(ret);
+    }
+    /**
+     * The token stream the patch would produce, without applying it.
+     *
+     * A preview is a projection and is never admitted to residency, so it mints
+     * nothing: a surviving token carries the id it already had, and a token the fix
+     * would synthesize carries none until an apply grants it one.
+     * @param {PatchId} id
+     * @returns {PatchPreviewOutcome}
+     */
+    previewPatch(id) {
+        const ret = wasm.braid_previewPatch(this.__wbg_ptr, addHeapObject(id));
+        return takeObject(ret);
+    }
+    /**
+     * Removes a book. Removing an absent book is a no-op, not an error: the
+     * requested end state already holds.
+     * @param {string} book
+     * @returns {MutationOutcome}
+     */
+    removeBook(book) {
+        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_removeBook(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Removes one chapter run's tokens from its book. The effect is whole-book:
+     * the address the caller used no longer exists.
+     * @param {ChapterTarget} target
+     * @returns {ScopedMutationOutcome}
+     */
+    removeChapter(target) {
+        const ret = wasm.braid_removeChapter(this.__wbg_ptr, addHeapObject(target));
+        return takeObject(ret);
+    }
+    /**
+     * Replaces the whole corpus with a validated candidate.
+     *
+     * Every book is built, validated, and hashed before resident state is touched,
+     * so a rejection leaves the corpus, its stamps, and its identity exactly as
+     * they were.
+     * @param {CorpusInput} corpus
+     * @returns {MutationOutcome}
+     */
+    replaceCorpus(corpus) {
+        const ret = wasm.braid_replaceCorpus(this.__wbg_ptr, addHeapObject(corpus));
+        return takeObject(ret);
+    }
+    /**
+     * Seeds the whole corpus from packed bytes plus the sources they were bound to
+     * — the warm cold-open.
+     *
+     * Composed here because this is the only layer allowed to know both halves: the
+     * bytes are verified and decoded by the wire codec, and the results are handed
+     * to the resident corpus, which never sees a packed byte itself. Verification is
+     * the full trust boundary — structure, both checksums, exact source length and
+     * content hash, the catalog stamp, every discriminant and index — so a container
+     * that does not check out is refused before anything is installed.
+     *
+     * A book whose cached findings cannot be adopted still seeds: residency and
+     * lint-priming are independent facts, so that book arrives with no lex or parse
+     * and is simply awaiting recompute.
+     * @param {RestoreRecord[]} records
+     * @returns {RestoreOutcome}
+     */
+    restoreCorpus(records) {
+        const ptr0 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Records one book's baseline — the state later comparisons are against.
+     *
+     * Only for a book that is already resident: a baseline is what the *current*
+     * state is compared against, so installing one for a book with no current
+     * state would invent the comparison rather than record it.
+     * @param {BookInput} book
+     * @returns {BaselineMutationOutcome}
+     */
+    setBaseline(book) {
+        const ret = wasm.braid_setBaseline(this.__wbg_ptr, addHeapObject(book));
+        return takeObject(ret);
+    }
+    /**
+     * Current tokens for the requested scopes — the single hydration verb.
+     *
+     * Returns current truth, not state as of any earlier effect. The input is
+     * normalized first (duplicates collapse, a whole-book scope absorbs that
+     * book's chapter scopes), so concatenating several effects' `changed` lists is
+     * always correct.
+     * @param {Scope[]} scopes
+     * @returns {ScopeTokensOutcome}
+     */
+    toTokens(scopes) {
+        const ptr0 = passArrayJsValueToWasm0(scopes, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_toTokens(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * The exact bytes a scope would be saved as.
+     * @param {CorpusScope} scope
+     * @returns {UsfmOutcome}
+     */
+    toUsfm(scope) {
+        const ret = wasm.braid_toUsfm(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+    /**
+     * Replaces one book, or appends it when it is not resident yet.
+     *
+     * Whole-book replacement is the structural escape hatch: chapter insertion,
+     * deletion, reordering, and duplicate resolution all go through here.
+     * @param {BookInput} book
+     * @returns {MutationOutcome}
+     */
+    updateBook(book) {
+        const ret = wasm.braid_updateBook(this.__wbg_ptr, addHeapObject(book));
+        return takeObject(ret);
+    }
+    /**
+     * Replaces exactly one existing chapter run with the caller's content.
+     *
+     * The replacement must be that same one run: no matching run is not found,
+     * several is ambiguous, and content that is a different or additional chapter
+     * is a label mismatch. The book's stored line ending is inherited.
+     * @param {ChapterTarget} target
+     * @param {ChapterInput} replacement
+     * @returns {MutationOutcome}
+     */
+    updateChapter(target, replacement) {
+        const ret = wasm.braid_updateChapter(this.__wbg_ptr, addHeapObject(target), addHeapObject(replacement));
+        return takeObject(ret);
+    }
+    /**
+     * Replaces the resident configuration.
+     *
+     * No tokens are rewritten, so nothing needs re-pulling and the identity — which
+     * covers source bytes only — is unchanged. What changes is staleness: every
+     * book is marked for recompute, because the configuration its cached findings
+     * were produced under no longer applies.
+     * @param {BraidConfig} config
+     * @returns {MutationEffect}
+     */
+    updateConfig(config) {
+        const ret = wasm.braid_updateConfig(this.__wbg_ptr, addHeapObject(config));
+        return takeObject(ret);
+    }
+    /**
+     * Every verse's lossless text projection for a scope, in document order.
+     *
+     * The resident answer to what the stateless projection computes from scratch:
+     * identical entries, but a read after a one-chapter edit recomputes only that
+     * chapter and takes the rest from cache — which is what makes this callable on
+     * a keystroke instead of once a document.
+     *
+     * Entries are `[sid, projection]` pairs in first-seen token order, the same
+     * shape the stateless `vrefIndexUsfm`/`vrefIndexTokens` exports return: one
+     * authoritative sequence, since an object keyed by sid enumerates its keys
+     * sorted and would silently reorder a document that is deliberately not.
+     * @param {CorpusScope} scope
+     * @returns {VrefIndexOutcome}
+     */
+    vrefIndex(scope) {
+        const ret = wasm.braid_vrefIndex(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+}
+if (Symbol.dispose) Braid.prototype[Symbol.dispose] = Braid.prototype.free;
+
 export class ParsedUsfm {
     static __wrap(ptr) {
         ptr = ptr >>> 0;
@@ -678,6 +1061,33 @@ export function tokensToUsfm(tokens) {
 }
 
 /**
+ * The packed trust boundary: verifies one book's container against its exact
+ * source and returns the receipt plus that book's findings.
+ *
+ * This runs the whole Rust boundary — container/section structure, both
+ * integrity checksums, exact source length and XXH3 content hash, the
+ * marker-catalog stamp, every discriminant, index range, and reserved byte.
+ * Nothing but tokens is left for the caller to materialize, and no token
+ * object crosses this boundary. Findings are materialized here so
+ * `LintIssue.message` keeps a single renderer (core's), in a single language.
+ *
+ * `source` is bytes rather than a string so the caller can hand over the same
+ * buffer it read from disk without a UTF-16 round trip; non-UTF-8 source is a
+ * rejection, not a panic.
+ * @param {Uint8Array} packed
+ * @param {Uint8Array} source
+ * @returns {PackedBookOutcome}
+ */
+export function verifyPackedBook(packed, source) {
+    const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(source, wasm.__wbindgen_export);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.verifyPackedBook(ptr0, len0, ptr1, len1);
+    return takeObject(ret);
+}
+
+/**
  * Build the vref index from an existing token stream (the editor's live
  * path) — same rehydration as `lintTokens`, no reparse. Segment ids match
  * the tokens passed in, so they line up with the editor's DOM `data-id`s.
@@ -716,6 +1126,13 @@ function __wbg_get_imports() {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
+        __wbg___wbindgen_debug_string_5398f5bb970e0daa: function(arg0, arg1) {
+            const ret = debugString(getObject(arg1));
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
         __wbg___wbindgen_is_string_7ef6b97b02428fae: function(arg0) {
             const ret = typeof(getObject(arg0)) === 'string';
             return ret;
@@ -735,6 +1152,10 @@ function __wbg_get_imports() {
         __wbg___wbindgen_throw_6ddd609b62940d55: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
+        __wbg_call_e133b57c9155d22c: function() { return handleError(function (arg0, arg1) {
+            const ret = getObject(arg0).call(getObject(arg1));
+            return addHeapObject(ret);
+        }, arguments); },
         __wbg_new_49d5571bd3f0c4d4: function() {
             const ret = new Map();
             return addHeapObject(ret);
@@ -784,6 +1205,9 @@ function __wbg_get_imports() {
     };
 }
 
+const BraidFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_braid_free(ptr >>> 0, 1));
 const ParsedUsfmFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_parsedusfm_free(ptr >>> 0, 1));
@@ -804,6 +1228,71 @@ function _assertClass(instance, klass) {
     if (!(instance instanceof klass)) {
         throw new Error(`expected instance of ${klass.name}`);
     }
+}
+
+function debugString(val) {
+    // primitive types
+    const type = typeof val;
+    if (type == 'number' || type == 'boolean' || val == null) {
+        return  `${val}`;
+    }
+    if (type == 'string') {
+        return `"${val}"`;
+    }
+    if (type == 'symbol') {
+        const description = val.description;
+        if (description == null) {
+            return 'Symbol';
+        } else {
+            return `Symbol(${description})`;
+        }
+    }
+    if (type == 'function') {
+        const name = val.name;
+        if (typeof name == 'string' && name.length > 0) {
+            return `Function(${name})`;
+        } else {
+            return 'Function';
+        }
+    }
+    // objects
+    if (Array.isArray(val)) {
+        const length = val.length;
+        let debug = '[';
+        if (length > 0) {
+            debug += debugString(val[0]);
+        }
+        for(let i = 1; i < length; i++) {
+            debug += ', ' + debugString(val[i]);
+        }
+        debug += ']';
+        return debug;
+    }
+    // Test for built-in
+    const builtInMatches = /\[object ([^\]]+)\]/.exec(toString.call(val));
+    let className;
+    if (builtInMatches && builtInMatches.length > 1) {
+        className = builtInMatches[1];
+    } else {
+        // Failed to match the standard '[object ClassName]'
+        return toString.call(val);
+    }
+    if (className == 'Object') {
+        // we're a user defined class or Object
+        // JSON.stringify avoids problems with cycles, and is generally much
+        // easier than looping through ownProperties of `val`.
+        try {
+            return 'Object(' + JSON.stringify(val) + ')';
+        } catch (_) {
+            return 'Object';
+        }
+    }
+    // errors
+    if (val instanceof Error) {
+        return `${val.name}: ${val.message}\n${val.stack}`;
+    }
+    // TODO we could test for more things here, like `Set`s and `Map`s.
+    return className;
 }
 
 function dropObject(idx) {
@@ -860,6 +1349,13 @@ let heap_next = heap.length;
 
 function isLikeNone(x) {
     return x === undefined || x === null;
+}
+
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArrayJsValueToWasm0(array, malloc) {

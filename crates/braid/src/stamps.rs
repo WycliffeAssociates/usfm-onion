@@ -78,4 +78,40 @@ mod tests {
     fn engine_stamp_is_stable_within_one_build() {
         assert_eq!(LintEngineStamp::current(), LintEngineStamp::current());
     }
+
+    /// The stamp is derived from the crate version, so a release invalidates every
+    /// cache built under a different one — by design, not by accident. Pinned here
+    /// so that consequence is a stated property rather than a surprise at upgrade
+    /// time: whoever bumps the version is told, by this test's name, that warm
+    /// caches from the previous release will be refused and recomputed.
+    #[test]
+    fn a_version_bump_invalidates_every_cache_built_under_the_old_one() {
+        let current = LintEngineStamp::current();
+        let previous = {
+            let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+            hasher.update(b"usfm_onion@0.0.9:rules1");
+            LintEngineStamp(hasher.digest())
+        };
+        assert_ne!(
+            current, previous,
+            "the stamp must move with the crate version"
+        );
+        // And it is the *version* doing it, not the rules number, which did not change.
+        assert_eq!(
+            current.0,
+            {
+                let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+                hasher.update(
+                    format!(
+                        "usfm_onion@{}:rules{}",
+                        usfm_onion::lint::CRATE_VERSION,
+                        usfm_onion::lint::RULES_VERSION
+                    )
+                    .as_bytes(),
+                );
+                hasher.digest()
+            },
+            "the stamp is exactly the crate version and the rules version"
+        );
+    }
 }
