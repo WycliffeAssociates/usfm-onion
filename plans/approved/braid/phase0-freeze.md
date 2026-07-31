@@ -1897,3 +1897,83 @@ changes all 92 corpus fix payloads (the 0D §9 census would be re-run) and the
 `missing-whitespace-before-marker` fix would need an "insert *before* the target"
 op, which the frozen op set does not have (`InsertAfter` on the *previous* token
 expresses it, at the cost of addressing a token the finding does not anchor).
+
+---
+
+## O. Adjudication — 2026-07-31 (proxy-ruled, owner veto window open): the §8.2/§8.3
+lint-cache stamps
+
+Resolves the gap C2/C3 both recorded (`LintConfigFingerprint`/`LintEngineStamp` had
+no definition, so `PrimeRejectReason`'s five cache-acceptance variants and
+`CorpusRestoreInput`/`BookRestoreInput`'s stamp fields stayed unbuilt). Proxy-ruled
+for the Phase D packet under the owner's standing delegation; recorded here, as
+elsewhere, with an open veto window rather than waiting on synchronous sign-off.
+
+- **O.1 — `config_fingerprint: u64`.** xxh3-64 over a canonical serialization of
+  the effective lint configuration (`usfm_onion::lint::LintOptions`: the enabled
+  rule set and every per-rule setting). "Canonical" means *a* fixed encoding, not a
+  portable one — nothing ever decodes a fingerprint back into a value, so derived
+  `Debug` output is the canonical form (field order is struct-declaration order,
+  stable within one build), not serde JSON. No new dependency, no cross-version
+  stability claim. Exact match required to reuse a cached lint contribution.
+- **O.2 — `engine_stamp: u64`.** xxh3-64 over `"{crate}@{version}:rules{RULES_VERSION}"`.
+  `crate`/`version` are `usfm_onion`'s own name and `CARGO_PKG_VERSION` — read via a
+  new core constant (`usfm_onion::lint::CRATE_VERSION`), because `env!("CARGO_PKG_VERSION")`
+  written in braid's own source would name braid's version, not core's.
+  `RULES_VERSION` is a new core constant (`usfm_onion::lint::RULES_VERSION: u16 = 1`)
+  naming the rule engine's own semantic version, independent of
+  `usfm_onion_wire::schema::FINDING_SECTION_RULES_VERSION` (the wire *format*'s
+  version — a different concern). The two numbers are equal today by convention,
+  not by dependency: braid must not depend on wire (§8.1's sibling-crate rule), so
+  each side owns and gates its own copy, the same duplication judgment call already
+  made for `canonical_order` (§J.8). Deliberately coarse: any release of the crate
+  that ships the rule engine, or any bump to its own rules version, invalidates
+  every cache built under a different one.
+- **O.3 — compared, never trusted.** Both stamps gate a cached lint contribution as
+  a single batch (`LintPrimeInput`/`CorpusRestoreInput` carry one
+  `config_fingerprint`/`engine_stamp` pair for every book in the call): a mismatch
+  rejects every book's cached contribution in that call with the matching typed
+  `PrimeRejectReason`, never a partial adoption. Per-book validation (source hash,
+  then whether every cached finding's fix still resolves against that book's own
+  token stream) runs only after the batch-level stamps agree.
+- **O.4 — residency and lint-priming are independent facts.** A cached-lint
+  rejection (`SourceHashMismatch`, `ConfigFingerprintMismatch`, `EngineStampMismatch`,
+  `InvalidPatch`) never revokes a book's residency — the book still seeds with no
+  lex/parse, just dirty, falling back to an ordinary `lint()` later.
+  `SourceTokenMismatch` remains the one reason that *is* a residency refusal (the
+  supplied tokens do not spell the supplied bytes at all, so there is nothing safe
+  to install). `BookNotResident` is `prime_lint_cache`'s own reason, unreachable from
+  `restore_corpus`.
+- **O.5 — `InvalidPatch`'s producer.** A cached `LintResult`'s findings' fixes are
+  re-flattened against the *current* resident token stream by a stricter twin of
+  the existing `resolve_fixes` (`BookState::try_resolve_cached_fixes`) that refuses
+  the whole contribution (`None`) if even one fix fails to resolve to a real
+  position and a non-empty patch, rather than silently dropping the ones that
+  don't (`resolve_fixes`'s own behavior for a book's *own* freshly computed
+  result, which cannot have this problem by construction). A cached patch table is
+  not carried as its own serialized shape (no `TokenPatch`/`Vec<PatchRow>` field on
+  `BookLintPrime`): re-flattening from the cached `LintResult` is not core rule
+  work (it is the same cheap position lookup `resolve_fixes` already does), so
+  nothing about the "clean lint performs no rule work" gate is spent re-deriving
+  it, and it avoids a second serialized patch-table shape whose bijectivity would
+  need its own gate.
+- **O.6 — no `Deserialize` on `BookLintPrime`/`LintPrimeInput`.** `LintResult`
+  embeds `LintIssue::template: &'static str`, which has no honest `Deserialize` (no
+  way to manufacture a `'static` reference from arbitrary bytes without a lookup
+  back through `LintCode::template`) — core has never derived one for exactly this
+  reason. The intended producer of a `BookLintPrime` is always the composing
+  adapter decoding wire bytes natively in the same process as the `Braid` it
+  seeds, never a value crossing a real serde boundary, so this costs nothing
+  today. Revisit with a manual `Deserialize` impl (reconstructing `template` from
+  `code`) if a caller ever needs one.
+
+**Byte placement:** none of the above needed a container byte slot this round —
+the stamps are corpus-side validation inputs (application-supplied, computed
+in-process by the composing adapter and compared by braid), not fields serialized
+into the packed container itself. Container-level stamp placement (Phase D step 1,
+composing braid snapshots with wire encoding) is not built in this round; see the
+2026-07-31 ledger entry.
+
+**Owner veto window:** open. Proxy-ruled per the standing delegation for stamp
+definitions explicitly named in the Phase D packet; flag here if any of O.1–O.6
+should be revisited before Phase D's remaining steps build on them.

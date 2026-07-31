@@ -3165,3 +3165,109 @@ committed, per the standing ruling.
 - Phase C entire: C1 (core pull-forwards), C2/F1 (residency floor + format seams), C3/C4
   (resident lint, snapshots, patches, wire fields 5/6, finding-and-patch gate, restore seed).
   Next: Phase D (packed publication) — stamps adjudication rides the packet.
+
+## 2026-07-31 — Phase D opened: stamps adjudicated and the warm lint cache unblocked (step 3 of 4)
+
+Owner routed Phase D (packed braid publication) here. Delivered this round: the
+§8.2/§8.3 stamp definitions (freeze §O, proxy-ruled, veto window open) and step 3
+of the packet's four — the warm lint cache unblock C2/C3 both deferred pending
+those stamps. Steps 1, 2, and 4 (container composition, publication reuse,
+publish→decode→compare corpus gate) are **not** done this round — see the
+explicit scope note below.
+
+**Stamps (freeze §O).** `LintConfigFingerprint`/`LintEngineStamp` land as new
+braid types (`crates/braid/src/stamps.rs`), each a `u64` newtype computed rather
+than caller-supplied. `LintConfigFingerprint::of(&LintOptions)` hashes derived
+`Debug` output (a fixed encoding braid controls, not serde JSON — no new
+dependency, no portability claim needed since nothing decodes a fingerprint back
+into a value). `LintEngineStamp::current()` hashes
+`"usfm_onion@{CRATE_VERSION}:rules{RULES_VERSION}"`; both consts are new core
+exports (`usfm_onion::lint::CRATE_VERSION`, `usfm_onion::lint::RULES_VERSION: u16
+= 1`) rather than reusing wire's `FINDING_SECTION_RULES_VERSION`, because braid
+must not depend on wire — the same duplicated-constant judgment call as
+`canonical_order` (§J.8).
+
+**Warm lint cache unblock.** `PrimeRejectReason` gains its five previously-frozen
+variants (`BookNotResident`, `SourceHashMismatch`, `ConfigFingerprintMismatch`,
+`EngineStampMismatch`, `InvalidPatch`), all with real producers now.
+`BookRestoreInput` regains `lint: Option<BookLintPrime>`; `CorpusRestoreInput`
+gains `config_fingerprint`/`engine_stamp`. `Braid::prime_lint_cache(LintPrimeInput)
+-> PrimeReport` is new, priming an already-resident corpus by `BookId` (the
+producer `BookNotResident` needs, since `restore_corpus`'s cached-lint entries
+always arrive alongside the very book they prime and can never miss). Clarified
+and re-documented `RestoreReport`'s own contract while wiring this in: residency
+and lint-priming are independent facts. `SourceTokenMismatch` is the one reason
+that refuses a book's residency outright; every other reason gates only its
+*cached lint contribution* — the book still seeds (tokens installed, no
+lex/parse) and is simply dirty, exactly as if `lint` had been absent. A book can
+therefore now appear in both `seeded` and `rejected`, which it could not before
+this round (deviation from the epic's literal wording, recorded here rather than
+guessed at silently — see freeze §O.4).
+
+`BookLintPrime` does not carry a serialized patch table (no `TokenPatch`/
+`Vec<PatchRow>` field): re-flattening a cached `LintResult`'s fixes against the
+current resident token stream is not core rule work (the same cheap position
+lookup `resolve_fixes` already does for a fresh result), so nothing about the
+"clean lint performs no rule work" gate is spent re-deriving it. `InvalidPatch`'s
+producer is `BookState::try_resolve_cached_fixes`, a stricter twin of
+`resolve_fixes` that refuses the whole contribution if even one fix fails to
+resolve, rather than silently dropping it (foreign data does not get the same
+trust as a book's own just-computed result). `BookLintPrime`/`LintPrimeInput`
+derive `Serialize` only, not `Deserialize`: `LintResult` embeds
+`LintIssue::template: &'static str`, which has no honest `Deserialize`, and the
+intended producer is always the composing adapter constructing the value
+natively in-process, never a real serde boundary (freeze §O.6).
+
+New public API: `braid::LintConfigFingerprint`, `braid::LintEngineStamp` (+
+`stamps.rs`); `braid::BookLintPrime`, `braid::LintPrimeInput`, `braid::PrimeReport`;
+`Braid::prime_lint_cache`; `PrimeRejectReason`'s five new variants;
+`CorpusRestoreInput::new`'s signature gains the two stamp parameters;
+`BookRestoreInput.lint`. Core gains `usfm_onion::lint::CRATE_VERSION`,
+`usfm_onion::lint::RULES_VERSION`.
+
+Tests: `crates/braid/tests/lint_prime.rs` (new) — valid contribution adopted
+without leaving the book dirty; source-hash mismatch seeds the book but rejects
+only its cache; config-fingerprint and engine-stamp mismatches reject atomically;
+a restamped-hostile case (hash and both stamps agree, but a fix's
+`target_token_id` names a token the book does not hold) is refused as
+`InvalidPatch`; `prime_lint_cache` accepts a valid contribution on an
+already-resident book and rejects a book that is not resident. `resident_lint.rs`'s
+four existing restore-corpus tests updated for the new `CorpusRestoreInput`
+shape (a `matching_stamps()` helper, unrelated to lint-cache priming, keeps them
+exercising plain token/source seeding as before).
+
+**Gates:** `cargo test --workspace` 282 (core) + 59 (braid: 8 lib + 27 lifecycle +
+7 lint_prime + 7 patches + 10 resident_lint) + 180 (wire) + 27 (wasm), 0 failed;
+`cargo test --test lint_oracle -- --ignored` byte-identical; `cargo test --release
+-p braid -- --ignored` 3 (corpus-scale, all 66 en_ulb books); `cargo test --release
+-p usfm_onion_wire -- --ignored` 4 + 2, zero golden diffs; `npm run test:packed`
+and `test:packed:web` both green at 410 cases / 5,717,153 tokens (15 good / 16
+malformed goldens) — identical to the count already ledgered at Phase C's close
+(the `zero-row-patch-record` vector from the C3/C4 round), confirming this
+round introduced no packed-surface drift of its own; `cargo fmt --check` clean;
+`pkg-bundler`/`pkg-web` restored via `git checkout --`, never committed.
+
+**Scope note — steps 1, 2, 4 not done this round.** Composing braid's semantic
+snapshot with wire's byte encoding into a complete packed container (step 1),
+per-book publication reuse of already-encoded sections (step 2), and the
+corpus-scale publish→decode→compare gate against all 66 en_ulb books (step 4)
+are a substantially larger unit of work than the stamp definitions and the
+lint-cache unblock: wire's encode side (`token_codec`, `token_section`,
+`container`) is currently entirely private (`#[allow(dead_code)] mod ...`) with
+no public composition entrypoint at all — building one, plus a reuse-cache
+design that cannot risk adopting an unverified section, plus a release-mode
+66-book gate, deserved a dedicated pass rather than a rushed addition on top of
+the stamp work. Not a STOP (no freeze contradiction, no impossible stamp slot,
+no partial-adoption forced) — a scope decision, recorded rather than silently
+claimed done. Next: steps 1/2/4, building wire's public compose entrypoint (the
+"composing adapter" is `usfm_onion_wasm`'s Rust internals per epic decision 8 —
+"wasm is their composition root" — not the public `wasm_bindgen` surface, which
+stays Phase F's).
+
+**Deviations:** `RestoreReport`'s seeded/rejected overlap (§O.4, above) — not
+explicitly spelled out by the epic's `restore_corpus` prose, and recorded rather
+than assumed silently. Stamp definitions and byte-placement judgment calls are
+proxy-ruled per the packet's own instruction, recorded as freeze §O with an open
+owner veto window.
+
+**Stops:** none.
