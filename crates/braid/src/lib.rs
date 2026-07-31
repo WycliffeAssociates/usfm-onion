@@ -216,9 +216,14 @@ impl Braid {
     /// from its tokens — tokens that spell something else would take unrelated
     /// parts of the file with them.
     ///
-    /// Corpus-level validation is the same as any other seed: duplicate declared
-    /// books or source keys refuse the entire call with resident state untouched.
-    /// Per-book refusals are data, and the caller re-ingests just those books.
+    /// Corpus-level validation runs on the manifest as supplied, before anything
+    /// else looks at a record: duplicate declared books or source keys refuse the
+    /// entire call with resident state untouched. It has to be first, because a
+    /// duplicate is a caller mistake about the *manifest* — checking it after
+    /// per-record processing would only see the records that survived, so a
+    /// manifest naming one book twice could seed one copy and report the other as
+    /// a content rejection instead of refusing outright. Per-book refusals are
+    /// data, and the caller re-ingests just those books.
     ///
     /// Seeded books are dirty: this restores the parse, not the findings. Braid
     /// never decodes wire bytes — the composing adapter does that and hands the
@@ -227,6 +232,8 @@ impl Braid {
         &mut self,
         seed: CorpusRestoreInput,
     ) -> Result<RestoreReport, IngestError> {
+        validate_unique_keys(seed.books.iter().map(|book| (book.book, &book.source_key)))?;
+
         let mut candidates = Vec::with_capacity(seed.books.len());
         let mut rejected = Vec::new();
         for book in seed.books {
@@ -246,7 +253,6 @@ impl Braid {
                 });
             }
         }
-        validate_unique(&candidates)?;
 
         let seeded = candidates.iter().map(|book| book.book).collect();
         self.books = candidates;
@@ -804,24 +810,42 @@ impl Braid {
 /// resident scope and wire identity, the source key binds it to where it came
 /// from.
 fn validate_unique(candidates: &[BookState]) -> Result<(), IngestError> {
-    for (index, candidate) in candidates.iter().enumerate() {
-        let duplicates: Vec<SourceKey> = candidates
+    validate_unique_keys(
+        candidates
             .iter()
-            .filter(|other| other.book == candidate.book)
-            .map(|other| other.source_key.clone())
+            .map(|candidate| (candidate.book, &candidate.source_key)),
+    )
+}
+
+/// The same rule over any manifest of `(declared book, source key)` pairs,
+/// whatever it is a manifest *of*.
+///
+/// Split out because a seed has to be checked before its records are turned into
+/// anything: a manifest with two records for one book is one caller mistake with
+/// one answer — refuse the call — and a check that runs after per-record
+/// processing can only see the records that survived it.
+fn validate_unique_keys<'a>(
+    manifest: impl Iterator<Item = (BookId, &'a SourceKey)> + Clone,
+) -> Result<(), IngestError> {
+    for (index, (book, source_key)) in manifest.clone().enumerate() {
+        let duplicates: Vec<SourceKey> = manifest
+            .clone()
+            .filter(|(other, _)| *other == book)
+            .map(|(_, key)| key.clone())
             .collect();
         if duplicates.len() > 1 {
             return Err(IngestError::DuplicateBook {
-                book: candidate.book,
+                book,
                 sources: duplicates,
             });
         }
-        if candidates[..index]
-            .iter()
-            .any(|other| other.source_key == candidate.source_key)
+        if manifest
+            .clone()
+            .take(index)
+            .any(|(_, other)| other == source_key)
         {
             return Err(IngestError::DuplicateSourceKey {
-                source: candidate.source_key.clone(),
+                source: source_key.clone(),
             });
         }
     }

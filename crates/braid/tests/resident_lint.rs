@@ -10,7 +10,7 @@
 
 use braid::{
     BookInput, BookTokensInput, Braid, BraidConfig, ChapterInput, ChapterLabel, ChapterTarget,
-    CorpusInput, LineEnding, SourceKey,
+    CorpusInput, IngestError, LineEnding, SourceKey,
 };
 use usfm_onion::lint::{LintCode, LintIssue, LintOptions, LintScope, lint_tokens};
 use usfm_onion::parse::parse;
@@ -395,4 +395,77 @@ fn a_seed_whose_tokens_disagree_with_its_bytes_is_refused() {
         1,
         "a refused book is not resident at all"
     );
+}
+
+/// A manifest naming one book twice is one caller mistake about the manifest, and
+/// the answer is to refuse the whole call — even when one of the two records
+/// would have been rejected for its own reasons. The reviewer's repro: a valid
+/// GEN record and a mismatched GEN record must not seed one and report the other.
+#[test]
+fn a_duplicate_book_in_the_seed_manifest_refuses_the_whole_call() {
+    let mut resident = braid();
+    resident
+        .replace_corpus(CorpusInput::new(vec![usfm("EXO", EXO_SOURCE)]))
+        .expect("a book to be left untouched");
+    let identity = resident.expected_snapshot_id();
+    let books = resident.books();
+
+    let seed = braid::CorpusRestoreInput::new(vec![
+        braid::BookRestoreInput {
+            source_key: key("GEN.usfm"),
+            book: id("GEN"),
+            source: GEN_SOURCE.to_string(),
+            tokens: owned(GEN_SOURCE),
+            line_ending: LineEnding::Lf,
+        },
+        braid::BookRestoreInput {
+            source_key: key("copy/GEN.usfm"),
+            book: id("GEN"),
+            // Would be a content rejection on its own — which must not be how a
+            // duplicate declaration gets reported.
+            source: GEN_SOURCE.to_string(),
+            tokens: owned(EXO_SOURCE),
+            line_ending: LineEnding::Lf,
+        },
+    ]);
+    assert_eq!(
+        resident.restore_corpus(seed),
+        Err(IngestError::DuplicateBook {
+            book: id("GEN"),
+            sources: vec![key("GEN.usfm"), key("copy/GEN.usfm")],
+        })
+    );
+    assert_eq!(resident.expected_snapshot_id(), identity);
+    assert_eq!(resident.books(), books);
+}
+
+/// Same rule for the other key, and again with one of the two records carrying a
+/// content mismatch: the source key is what binds a book to where it came from,
+/// so two records claiming one binding is equally unanswerable.
+#[test]
+fn a_duplicate_source_key_in_the_seed_manifest_refuses_the_whole_call() {
+    let mut resident = braid();
+    let seed = braid::CorpusRestoreInput::new(vec![
+        braid::BookRestoreInput {
+            source_key: key("shared.usfm"),
+            book: id("GEN"),
+            source: GEN_SOURCE.to_string(),
+            tokens: owned(GEN_SOURCE),
+            line_ending: LineEnding::Lf,
+        },
+        braid::BookRestoreInput {
+            source_key: key("shared.usfm"),
+            book: id("EXO"),
+            source: EXO_SOURCE.to_string(),
+            tokens: owned(GEN_SOURCE),
+            line_ending: LineEnding::Lf,
+        },
+    ]);
+    assert_eq!(
+        resident.restore_corpus(seed),
+        Err(IngestError::DuplicateSourceKey {
+            source: key("shared.usfm"),
+        })
+    );
+    assert!(resident.books().is_empty());
 }
