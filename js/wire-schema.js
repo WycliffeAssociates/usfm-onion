@@ -241,6 +241,7 @@ export const FINDING_FIELD = deepFreeze([
   { id: 6, name: "patchTable", elementWidth: null, required: false },
   { id: 7, name: "stringDictionary", elementWidth: null, required: false },
   { id: 8, name: "messagePayloadTable", elementWidth: null, required: false },
+  { id: 9, name: "lintStamps", elementWidth: 16, required: false },
 ]);
 
 export const LINT_CODES = deepFreeze([

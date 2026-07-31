@@ -11,6 +11,7 @@
 mod catalog;
 #[allow(dead_code)]
 mod container;
+pub mod corpus_codec;
 pub mod dto;
 pub mod error;
 pub mod finding_codec;

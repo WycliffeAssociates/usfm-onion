@@ -556,6 +556,20 @@ pub mod token_field {
     pub const POSITIONAL_ID_EXCLUSIVE: [u16; 2] = [TOKEN_ID_INDEX, TOKEN_ID_DICTIONARY];
 }
 
+/// The pair of stamps that gate reusing a published book's findings as a warm
+/// lint cache.
+///
+/// Wire stores them verbatim and compares nothing: what a fingerprint *means* is
+/// the corpus side's business (braid computes and compares them), and what this
+/// crate owns is that the bytes a publisher wrote are the bytes a reader gets
+/// back. Two `u64`s rather than one so a mismatch can name which of the two
+/// moved — the frozen rejection reasons distinguish them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LintStamps {
+    pub config_fingerprint: u64,
+    pub engine_stamp: u64,
+}
+
 /// Flat patch-edit op discriminants, frozen by the Phase 0 freeze (§5.2) in the
 /// plan's own declaration order. Stable identifiers only: they say nothing about
 /// the order rows are applied in.
@@ -637,6 +651,14 @@ pub mod finding_field {
     pub const STRING_DICTIONARY: u16 = 7;
     /// Message payload rows followed by their key/value pairs.
     pub const MESSAGE_PAYLOAD_TABLE: u16 = 8;
+    /// One 16-byte record: `{config_fingerprint:u64, engine_stamp:u64}` — the
+    /// pair that licenses reusing this section's findings as a warm lint cache.
+    ///
+    /// Optional, and its absence is meaningful: a section without it carries
+    /// findings that may be read but never adopted as a cache, because nothing
+    /// says what configuration or rule engine produced them. Present iff the
+    /// publisher supplied the pair.
+    pub const LINT_STAMPS: u16 = 9;
 
     /// Field requirements and any fixed uniform width, in stable id order.
     pub const TABLE: &[FieldSpec] = &[
@@ -683,6 +705,11 @@ pub mod finding_field {
         FieldSpec {
             id: MESSAGE_PAYLOAD_TABLE,
             element_width: None,
+            required: false,
+        },
+        FieldSpec {
+            id: LINT_STAMPS,
+            element_width: Some(16),
             required: false,
         },
     ];

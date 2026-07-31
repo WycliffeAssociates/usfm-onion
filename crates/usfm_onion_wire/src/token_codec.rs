@@ -398,16 +398,26 @@ pub(crate) fn encode_owned_token_section(
 ) -> Result<(String, TokenSectionBuffers), EncodeError> {
     let (source, spans) = tokens_to_usfm_reconstruct_spanned(tokens);
     let borrowed = owned_to_borrowed(book, tokens, &spans, &source)?;
-    // Opaque ids are carried; positional ones are omitted and re-synthesized. The
-    // test is what the flag actually claims — that every id is the positional form
-    // this stream's own `assign_ids` pass produced — rather than a caller promise.
-    let positional = tokens.iter().zip(&borrowed).all(|(owned, token)| {
-        owned.id().as_str() == format!("{}-{}", token.id.book_code, token.id.index)
-    });
-    let stable_ids: Option<Vec<&str>> =
-        (!positional).then(|| tokens.iter().map(|token| token.id().as_str()).collect());
+    let stable_ids = owned_stable_ids(tokens, &borrowed);
     let buffers = encode_token_section_with_ids(book, &source, &borrowed, stable_ids.as_deref())?;
     Ok((source, buffers))
+}
+
+/// The opaque ids an owned stream needs carried, or `None` when every one of them
+/// is the positional form a decoder re-synthesizes for free.
+///
+/// The test is what the `positional_ids` flag actually claims — that every id is
+/// the `{book}-{index}` label this stream's own `assign_ids` pass would produce —
+/// rather than a caller promise. Shared with the corpus composer, whose finding
+/// sections must address tokens by these same ids.
+pub(crate) fn owned_stable_ids<'a>(
+    tokens: &'a [OwnedToken],
+    borrowed: &[Token<'_>],
+) -> Option<Vec<&'a str>> {
+    let positional = tokens.iter().zip(borrowed).all(|(owned, token)| {
+        owned.id().as_str() == format!("{}-{}", token.id.book_code, token.id.index)
+    });
+    (!positional).then(|| tokens.iter().map(|token| token.id().as_str()).collect())
 }
 
 /// Rebuilds borrowed tokens over the serialized source, so the owned path feeds

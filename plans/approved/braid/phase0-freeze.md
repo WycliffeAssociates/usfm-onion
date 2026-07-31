@@ -1977,3 +1977,79 @@ composing braid snapshots with wire encoding) is not built in this round; see th
 **Owner veto window:** open. Proxy-ruled per the standing delegation for stamp
 definitions explicitly named in the Phase D packet; flag here if any of O.1–O.6
 should be revisited before Phase D's remaining steps build on them.
+
+---
+
+## P. Amendment — 2026-07-31 (Phase D step 1): the public composition surface and
+lint-stamp byte placement
+
+§O left container-level stamp placement to this step, and §7's `encode_corpus`
+signature predates both the patch table and the stamps. Both are settled here.
+
+### P.1 Finding-section field 9 — `lint_stamps` (new bytes)
+
+One optional 16-byte record per finding section:
+`{config_fingerprint:u64, engine_stamp:u64}`, `element_width = 16`, `count = 1`.
+
+**Why the bytes exist at all.** §O.3 has braid compare a cached contribution's
+stamps against the current ones, which is only a real check if the *cached* pair
+survives the artifact. A cold open reads packed bytes written by a previous
+process: if the adapter recomputed the stamps in-process it would be comparing
+today's values with themselves, and every stale cache in the world would pass.
+The pair therefore has to be data in the container.
+
+**Why the finding section, not the container header.** The 48-byte header has 8
+reserved bytes — room for one `u64`, not two — and folding the pair into a single
+hash would destroy exactly the distinction the frozen rejection reasons make
+(`ConfigFingerprintMismatch` vs `EngineStampMismatch`). Widening the header to 64
+bytes would re-bless every golden vector and every checked-in JS layout constant
+for a fact that is only meaningful *when there are findings at all*. A finding
+section is precisely the thing being licensed, it already carries its own
+`catalog_stamp` and `rules_version` as section-scoped stamps, and the field
+directory exists for additive optional columns. Cost accepted: 16 bytes per
+book with findings (66 books ≈ 1 KB).
+
+**Absence is meaningful, not a default.** A finding section without field 9
+carries findings that may be *read* but never *adopted* as a warm cache: nothing
+in the bytes says what produced them. `encode_corpus` refuses stamps for a
+publication with no findings (a licence covering nothing), and `verify_corpus`
+refuses a publication where only some finding sections are stamped, or where two
+of them disagree — one publication is one cache decision, and adopting the
+stamped half is the partial adoption §O.3 forbids.
+
+**Blast radius, reported not silent:** the pre-existing goldens' bytes are
+unchanged, because `encode_book` (the single-book entry point they are generated
+through) supplies no stamps and therefore emits no field 9. What did change:
+`js/wire-schema.js`'s generated `FINDING_FIELD` table gained the row (9 → 10
+entries) and `scripts/test-wire-schema-import.mjs`'s pinned count with it.
+
+### P.2 `encode_corpus`, amended from §7
+
+| §7 as frozen | as built | why |
+| --- | --- | --- |
+| `encode_corpus(snapshot_id: u64, sections: &[CorpusSectionInput])` | `encode_corpus(snapshot_id: u64, lint_stamps: Option<LintStamps>, sections: &[CorpusSection])` | the stamps are corpus-level (one pair per publication, §O.3's batch contract) rather than per book, so they belong beside the snapshot id rather than repeated in every section input |
+| `CorpusSectionInput` is the only section shape | `CorpusSection::{Fresh(CorpusSectionInput), Cached(CachedBookSections)}` | publication reuse (epic step 2): a book may arrive as semantics to encode *or* as the bytes a previous publication already produced |
+| `EncodedCorpus { bytes, sources }` | `+ books: Vec<PublishedBook>` | the per-book sidecar the reuse path consumes. No IO and no embedded source: it is the encoded sections plus the `(book, source_hash)` pair that decides whether they may be reused |
+| — | `verify_corpus(packed, sources) -> VerifiedCorpus` | §7 specified no corpus-level *read*. `verify_book` deliberately refuses a multi-book container, so a publication had no way to be read back at the grain it was written; the corpus verifier runs the identical per-book checks and additionally requires exactly one source per book, in either direction |
+| — | `VerifiedBook.lint_stamps` | field 9's value, surfaced where the findings it licenses are |
+
+`CorpusSectionTokens::{Parsed, Owned}` land exactly as frozen. Everything below
+this module stays private: there is deliberately no public way to build a section,
+a column, or a container by hand, so no caller can write bytes that skipped a
+check.
+
+### P.3 Reuse is a splice, and never a trust
+
+A finished section is position-independent — every directory offset is relative to
+the section's own start and its checksum covers only its own bytes — so reusing one
+is a byte splice into a new TOC, not a re-encode. That is what makes "recompute one
+book, reuse sixty-five" cheap.
+
+What keeps it safe: bytes offered back are read by the same reader a decoder uses
+(`inspect_section`: magic, version, discriminants, reserved bytes, its own
+integrity checksum, and its whole field directory), and then the facts the caller
+*claims* about them — book, source hash, kind — are checked against what the
+header says. A caller's claim is what makes the check non-circular; a mismatch or
+an unreadable section is `LayoutRefusal::CachedSectionMismatch` /
+`CachedSectionUnreadable`, refusing the whole publication rather than emitting a
+container with one unverified book in it.

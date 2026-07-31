@@ -40,7 +40,9 @@ use crate::finding_section::{
     FindingColumns, FindingDecodeInputs, FindingRowInput, FindingSectionBuffers, FixInput, FixRef,
     MarkerRef, PatchRowInput, TemplateInput,
 };
-use crate::schema::{LintCodeTag, PatchOpTag, SectionKind, TokenKindTag, param_contract};
+use crate::schema::{
+    LintCodeTag, LintStamps, PatchOpTag, SectionKind, TokenKindTag, param_contract,
+};
 use crate::token_codec::{
     DecodedTokens, anchor_fidelity, decode_token_section, encode_token_section,
 };
@@ -100,7 +102,8 @@ pub fn decode_book<'a>(bytes: &'a [u8], source: &'a str) -> Result<Vec<LintIssue
         .ok_or(DecodeError::InvalidToc)??;
 
     let decoded_tokens = decode_token_section(&token_section, source)?;
-    decode_finding_section(&finding_section, book, source, &decoded_tokens)
+    let (issues, _) = decode_finding_section(&finding_section, book, source, &decoded_tokens)?;
+    Ok(issues)
 }
 
 /// Trust-checks one finding section against the live source and registry, then
@@ -114,7 +117,7 @@ pub(crate) fn decode_finding_section<'a>(
     book: BookId,
     source: &'a str,
     decoded_tokens: &DecodedTokens<'a>,
-) -> Result<Vec<LintIssue>, DecodeError> {
+) -> Result<(Vec<LintIssue>, Option<LintStamps>), DecodeError> {
     let token_ids = resolve_token_ids(decoded_tokens);
     let inputs = FindingDecodeInputs {
         token_count: u32::try_from(decoded_tokens.tokens.len())
@@ -134,7 +137,8 @@ pub(crate) fn decode_finding_section<'a>(
     if columns.catalog_stamp != crate::catalog::catalog_stamp() {
         return Err(DecodeError::CatalogMismatch);
     }
-    decode_findings(book, source, &decoded_tokens.tokens, &token_ids, &columns)
+    let issues = decode_findings(book, source, &decoded_tokens.tokens, &token_ids, &columns)?;
+    Ok((issues, columns.lint_stamps))
 }
 
 /// The token id every row would report through [`usfm_onion::lint::LintableToken::id`]:
@@ -212,6 +216,21 @@ pub(crate) fn encode_findings(
     tokens: &[Token<'_>],
     issues: &[LintIssue],
 ) -> Result<FindingSectionBuffers, EncodeError> {
+    encode_findings_with(book, source, tokens, None, issues, None)
+}
+
+/// [`encode_findings`], with the two things a corpus publication adds: the
+/// opaque stable ids an owned token stream carries (its findings address tokens
+/// by *those* ids, not by the positional labels the borrowed rebuild wears), and
+/// the stamps that license adopting these findings as a warm cache.
+pub(crate) fn encode_findings_with(
+    book: BookId,
+    source: &str,
+    tokens: &[Token<'_>],
+    stable_ids: Option<&[&str]>,
+    issues: &[LintIssue],
+    lint_stamps: Option<LintStamps>,
+) -> Result<FindingSectionBuffers, EncodeError> {
     use usfm_onion::lint::LintableToken;
 
     // A finding's `token_id`/`related_token_id` are opaque strings (positional
@@ -219,12 +238,22 @@ pub(crate) fn encode_findings(
     // reverse lookup built from each token's own `id()`. Built before sorting
     // because canonical order is itself keyed on these row positions.
     let mut ids: Vec<String> = Vec::with_capacity(tokens.len());
-    for token in tokens {
-        ids.push(
-            token
-                .id()
-                .ok_or(EncodeError::UnboundSpan { book, token_idx: 0 })?,
-        );
+    match stable_ids {
+        Some(stable_ids) => {
+            if stable_ids.len() != tokens.len() {
+                return Err(EncodeError::UnboundSpan { book, token_idx: 0 });
+            }
+            ids.extend(stable_ids.iter().map(|id| (*id).to_string()));
+        }
+        None => {
+            for token in tokens {
+                ids.push(
+                    token
+                        .id()
+                        .ok_or(EncodeError::UnboundSpan { book, token_idx: 0 })?,
+                );
+            }
+        }
     }
     let mut resolver: BTreeMap<&str, u32> = BTreeMap::new();
     for (row, id) in ids.iter().enumerate() {
@@ -249,6 +278,7 @@ pub(crate) fn encode_findings(
         source.len() as u64,
         crate::catalog::catalog_stamp(),
         &rows,
+        lint_stamps,
     )
 }
 

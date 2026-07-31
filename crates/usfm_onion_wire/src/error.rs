@@ -147,6 +147,14 @@ pub enum LayoutRefusal {
     FieldExtentMismatch { field_id: u16 },
     /// A field the schema marks required for this section kind is absent.
     MissingRequiredField { field_id: u16 },
+    /// Bytes offered back for reuse are not a readable section: truncated, not a
+    /// section at all, or their integrity checksum does not hold. Reuse never
+    /// means trust, so this is a refusal of the whole publication rather than a
+    /// silent re-encode.
+    CachedSectionUnreadable,
+    /// Bytes offered back for reuse are a readable section describing a different
+    /// book, source, or kind than the caller claims they are.
+    CachedSectionMismatch,
     /// A section claiming positional token ids also carries the explicit id
     /// column or its dictionary, which that flag asserts are omitted.
     PositionalIdConflict { field_id: u16 },
@@ -228,6 +236,12 @@ impl std::fmt::Display for LayoutRefusal {
             }
             Self::TooManyFields => f.write_str("more fields than the directory count can name"),
             Self::TooManySections => f.write_str("more sections than the container count can name"),
+            Self::CachedSectionUnreadable => {
+                f.write_str("a section offered for reuse is not a readable section")
+            }
+            Self::CachedSectionMismatch => {
+                f.write_str("a section offered for reuse describes different content than claimed")
+            }
         }
     }
 }

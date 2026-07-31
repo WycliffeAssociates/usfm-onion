@@ -12,7 +12,7 @@ use usfm_onion::token::BookId;
 use crate::container::{ElementWidth, FieldPayload, Section, SectionPayload, SectionVariant};
 use crate::error::{DecodeError, EncodeError};
 use crate::schema::{
-    FINDING_SECTION_RULES_VERSION, LintCodeTag, PatchOpTag, SectionKind, TokenKindTag,
+    FINDING_SECTION_RULES_VERSION, LintCodeTag, LintStamps, PatchOpTag, SectionKind, TokenKindTag,
     finding_field, finding_flag, param_contract,
 };
 use crate::token_payload::{StringDictionary, StringDictionaryBuilder};
@@ -23,6 +23,7 @@ const OVERFLOW_LEN: usize = 8;
 const MARKER_REF_LEN: usize = 8;
 const PAYLOAD_ROW_LEN: usize = 8;
 const PAYLOAD_PAIR_LEN: usize = 8;
+const LINT_STAMPS_LEN: usize = 16;
 const PATCH_RECORD_LEN: usize = 24;
 const PATCH_ROW_LEN: usize = 20;
 const TOKEN_NONE: u32 = u32::MAX;
@@ -100,6 +101,9 @@ pub(crate) struct FindingColumns<'wire> {
     pub source_hash: u64,
     pub catalog_stamp: u64,
     pub rules_version: u16,
+    /// The stamps that license adopting these findings as a warm lint cache.
+    /// `None` means the publisher supplied none, so nothing may be adopted.
+    pub lint_stamps: Option<LintStamps>,
 }
 
 impl<'wire> FindingColumns<'wire> {
@@ -310,12 +314,26 @@ impl<'wire> FindingColumns<'wire> {
         {
             return Err(DecodeError::InvalidSection);
         }
+        let lint_stamps = match section.field(finding_field::LINT_STAMPS) {
+            None => None,
+            Some(field) => {
+                if field.count != 1 || field.bytes.len() != LINT_STAMPS_LEN {
+                    return Err(DecodeError::InvalidSection);
+                }
+                Some(LintStamps {
+                    config_fingerprint: u64_at(field.bytes, 0)?,
+                    engine_stamp: u64_at(field.bytes, 8)?,
+                })
+            }
+        };
+
         Ok(Self {
             rows,
             source_len: section.header.source_len,
             source_hash: section.header.source_hash,
             catalog_stamp: section.header.catalog_stamp,
             rules_version: section.header.rules_version,
+            lint_stamps,
         })
     }
 
@@ -389,6 +407,7 @@ pub(crate) struct FindingSectionBuffers {
     string_count: u32,
     payload_table: Option<Vec<u8>>,
     payload_count: u32,
+    lint_stamps: Option<[u8; LINT_STAMPS_LEN]>,
     record_count: u32,
 }
 
@@ -399,6 +418,7 @@ impl FindingSectionBuffers {
         source_len: u64,
         catalog_stamp: u64,
         rows: &[FindingRowInput],
+        lint_stamps: Option<LintStamps>,
     ) -> Result<Self, EncodeError> {
         let record_count =
             u32::try_from(rows.len()).map_err(|_| EncodeError::UnrepresentablePayload {
@@ -607,11 +627,18 @@ impl FindingSectionBuffers {
             patch_records.extend_from_slice(&patch_rows);
             patch_records
         });
+        let lint_stamps = lint_stamps.map(|stamps| {
+            let mut bytes = [0u8; LINT_STAMPS_LEN];
+            bytes[..8].copy_from_slice(&stamps.config_fingerprint.to_le_bytes());
+            bytes[8..].copy_from_slice(&stamps.engine_stamp.to_le_bytes());
+            bytes
+        });
         Ok(Self {
             book,
             source_hash,
             source_len,
             catalog_stamp,
+            lint_stamps,
             common,
             related: has_related.then_some(related),
             overflow: has_overflow.then_some(overflow),
@@ -696,6 +723,14 @@ impl FindingSectionBuffers {
                 id: finding_field::MESSAGE_PAYLOAD_TABLE,
                 width: ElementWidth::Variable,
                 count: self.payload_count,
+                bytes,
+            });
+        }
+        if let Some(bytes) = &self.lint_stamps {
+            fields.push(FieldPayload {
+                id: finding_field::LINT_STAMPS,
+                width: ElementWidth::Sixteen,
+                count: 1,
                 bytes,
             });
         }
@@ -805,6 +840,15 @@ fn u32_at(bytes: &[u8], offset: usize) -> Result<u32, DecodeError> {
         .try_into()
         .map_err(|_| DecodeError::Truncated)?;
     Ok(u32::from_le_bytes(raw))
+}
+
+fn u64_at(bytes: &[u8], offset: usize) -> Result<u64, DecodeError> {
+    let raw: [u8; 8] = bytes
+        .get(offset..offset.checked_add(8).ok_or(DecodeError::OffsetOverflow)?)
+        .ok_or(DecodeError::Truncated)?
+        .try_into()
+        .map_err(|_| DecodeError::Truncated)?;
+    Ok(u64::from_le_bytes(raw))
 }
 
 fn decode_marker_ref(bytes: &[u8], source_len: u64) -> Result<MarkerRef, DecodeError> {
@@ -1234,7 +1278,7 @@ mod tests {
         }
     }
     fn section(rows: &[FindingRowInput]) -> FindingSectionBuffers {
-        FindingSectionBuffers::new(book(), 7, 99, 11, rows).unwrap()
+        FindingSectionBuffers::new(book(), 7, 99, 11, rows, None).unwrap()
     }
     fn encoded(rows: &[FindingRowInput]) -> Vec<u8> {
         // Pair with a minimal token section: the container's TOC policy requires it.
@@ -1557,7 +1601,7 @@ mod tests {
             row.code = code;
             row.params = Some(BTreeMap::new());
             assert!(matches!(
-                FindingSectionBuffers::new(book(), 7, 99, 11, &[row]),
+                FindingSectionBuffers::new(book(), 7, 99, 11, &[row], None),
                 Err(EncodeError::UnrepresentablePayload { .. })
             ));
             assert!(checked_params(code, Some(Vec::new())).is_err());
@@ -1604,10 +1648,10 @@ mod tests {
     fn builder_refuses_unrepresentable_marker_and_anchor_shapes() {
         let mut row = input();
         row.marker = MarkerRef::SourceSpan { offset: 99, len: 1 };
-        assert!(FindingSectionBuffers::new(book(), 1, 99, 1, &[row]).is_err());
+        assert!(FindingSectionBuffers::new(book(), 1, 99, 1, &[row], None).is_err());
         let mut bad_anchor = input();
         bad_anchor.chapter = None;
-        assert!(FindingSectionBuffers::new(book(), 1, 99, 1, &[bad_anchor]).is_err());
+        assert!(FindingSectionBuffers::new(book(), 1, 99, 1, &[bad_anchor], None).is_err());
     }
 
     #[test]

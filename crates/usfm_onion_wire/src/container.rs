@@ -439,11 +439,54 @@ fn read_section<'a>(
     Ok(Section { header, fields })
 }
 
+/// Validates standalone section bytes — structure, discriminants, reserved
+/// bytes, its own integrity checksum, and its whole field directory — and returns
+/// what the bytes say they are.
+///
+/// This is what makes reusing a previously encoded section safe: a caller offering
+/// bytes back gets them read by the same reader a decoder would use, and the
+/// facts it *claims* about them are then checked against the header this returns.
+/// A section validated here is one a reader will accept in the container it is
+/// spliced into, because a section's bytes mean the same thing wherever they sit
+/// on the 16-byte grid.
+pub(crate) fn inspect_section(bytes: &[u8]) -> Result<SectionHeader, DecodeError> {
+    let (header, directory_count) = read_section_header_inner(bytes, None)?;
+    let section_bytes = bytes
+        .get(..usize::try_from(header.section_len).map_err(|_| DecodeError::OffsetOverflow)?)
+        .ok_or(DecodeError::Truncated)?;
+    if section_bytes.len() != bytes.len() {
+        // Trailing bytes are not a harmless tail: the checksum covers exactly the
+        // section, so extra bytes mean this slice is not one section.
+        return Err(DecodeError::InvalidSection);
+    }
+    validate_checksum(
+        section_bytes,
+        SECTION_CHECKSUM_OFFSET,
+        header.checksum,
+        false,
+    )?;
+    read_directory(section_bytes, &header, directory_count)?;
+    Ok(header)
+}
+
 /// Returns the validated header plus the raw directory entry count, which is a
 /// layout detail the public header deliberately does not carry.
 fn read_section_header(
     section_bytes: &[u8],
     entry: &TocEntry,
+) -> Result<(SectionHeader, u16), DecodeError> {
+    read_section_header_inner(section_bytes, Some(entry))
+}
+
+/// The header reader, with the TOC cross-check optional.
+///
+/// `entry` is `None` for standalone bytes ([`inspect_section`]), which have no TOC
+/// to agree with; every other check is identical, and in the same order, so a
+/// section validated without a TOC is held to the same standard as one inside a
+/// container.
+fn read_section_header_inner(
+    section_bytes: &[u8],
+    entry: Option<&TocEntry>,
 ) -> Result<(SectionHeader, u16), DecodeError> {
     let mut cursor = Cursor::new(
         section_bytes
@@ -480,10 +523,11 @@ fn read_section_header(
     // The TOC entry and the section header restate kind, book, source hash, and
     // length. They must agree: a decoder trusting one and indexing with the
     // other would hand back a different book's bytes than the caller asked for.
-    if kind != entry.kind
-        || book != entry.book
-        || source_hash != entry.source_hash
-        || section_len != entry.byte_len
+    if let Some(entry) = entry
+        && (kind != entry.kind
+            || book != entry.book
+            || source_hash != entry.source_hash
+            || section_len != entry.byte_len)
     {
         return Err(DecodeError::InvalidSection);
     }
@@ -697,6 +741,45 @@ pub struct SectionPayload<'a> {
     pub fields: Vec<FieldPayload<'a>>,
 }
 
+/// One section of a container: semantics to encode now, or bytes a previous
+/// publication already encoded.
+///
+/// A finished section is position-independent — every directory offset is
+/// relative to the section's own start and its checksum covers only its own bytes
+/// — which is what makes reuse a splice rather than a re-encode. The header here
+/// is one a reader already validated ([`inspect_section`]); this writer trusts no
+/// caller-supplied description of opaque bytes.
+pub(crate) enum ContainerSection<'a> {
+    Fresh(&'a SectionPayload<'a>),
+    Encoded {
+        header: SectionHeader,
+        bytes: &'a [u8],
+    },
+}
+
+impl ContainerSection<'_> {
+    fn kind(&self) -> SectionKind {
+        match self {
+            Self::Fresh(payload) => payload.variant.kind(),
+            Self::Encoded { header, .. } => header.kind,
+        }
+    }
+
+    fn book(&self) -> BookId {
+        match self {
+            Self::Fresh(payload) => payload.book,
+            Self::Encoded { header, .. } => header.book,
+        }
+    }
+
+    fn source_hash(&self) -> u64 {
+        match self {
+            Self::Fresh(payload) => payload.source_hash,
+            Self::Encoded { header, .. } => header.source_hash,
+        }
+    }
+}
+
 /// Writes a canonical container: token sections in caller (corpus) order, then
 /// the corresponding finding sections in caller order, each 16-byte aligned,
 /// non-overlapping, and integrity-checksummed.
@@ -704,12 +787,22 @@ pub fn write_container(
     snapshot_id: u64,
     sections: &[SectionPayload<'_>],
 ) -> Result<Vec<u8>, EncodeError> {
+    let sections: Vec<ContainerSection<'_>> =
+        sections.iter().map(ContainerSection::Fresh).collect();
+    write_container_sections(snapshot_id, &sections)
+}
+
+/// [`write_container`], accepting already-encoded sections alongside fresh ones.
+pub(crate) fn write_container_sections(
+    snapshot_id: u64,
+    sections: &[ContainerSection<'_>],
+) -> Result<Vec<u8>, EncodeError> {
     let ordered = canonical_order(sections)?;
     let section_count =
         u32::try_from(ordered.len()).map_err(|_| EncodeError::InvalidSectionLayout {
             book: ordered
                 .last()
-                .map_or(BookId::UNKNOWN, |section| section.book),
+                .map_or(BookId::UNKNOWN, |section| section.book()),
             reason: LayoutRefusal::TooManySections,
         })?;
 
@@ -724,18 +817,21 @@ pub fn write_container(
     let mut body = Writer::default();
     for section in &ordered {
         let offset = (sections_base + body.len()) as u64;
-        let bytes = write_section(section)?;
-        let byte_len = bytes.len() as u64;
-        body.bytes(&bytes);
+        let encoded = match section {
+            ContainerSection::Fresh(payload) => std::borrow::Cow::Owned(write_section(payload)?),
+            ContainerSection::Encoded { bytes, .. } => std::borrow::Cow::Borrowed(*bytes),
+        };
+        let byte_len = encoded.len() as u64;
+        body.bytes(&encoded);
         body.pad_to_from(sections_base, SECTION_ALIGN as usize);
 
-        toc.u8(section.variant.kind().as_u8());
-        toc.bytes(section.book.as_str().as_bytes());
+        toc.u8(section.kind().as_u8());
+        toc.bytes(section.book().as_str().as_bytes());
         toc.u16(SECTION_VERSION);
         toc.u16(0);
         toc.u64(offset);
         toc.u64(byte_len);
-        toc.u64(section.source_hash);
+        toc.u64(section.source_hash());
     }
 
     let mut header = [0u8; CONTAINER_HEADER_LEN];
@@ -774,11 +870,11 @@ pub fn write_container(
 /// The order comes from the input sequence alone, so it reproduces without
 /// depending on comparison stability or key collisions.
 fn canonical_order<'p, 'a>(
-    sections: &'p [SectionPayload<'a>],
-) -> Result<Vec<&'p SectionPayload<'a>>, EncodeError> {
+    sections: &'p [ContainerSection<'a>],
+) -> Result<Vec<&'p ContainerSection<'a>>, EncodeError> {
     let mut keys: Vec<(SectionKind, BookId)> = sections
         .iter()
-        .map(|section| (section.variant.kind(), section.book))
+        .map(|section| (section.kind(), section.book()))
         .collect();
     keys.sort_unstable();
     if let Some(pair) = keys.windows(2).find(|pair| pair[0] == pair[1]) {
@@ -790,27 +886,24 @@ fn canonical_order<'p, 'a>(
 
     let mut token_keys: Vec<(BookId, u64)> = sections
         .iter()
-        .filter(|section| section.variant.kind() == SectionKind::Token)
-        .map(|section| (section.book, section.source_hash))
+        .filter(|section| section.kind() == SectionKind::Token)
+        .map(|section| (section.book(), section.source_hash()))
         .collect();
     token_keys.sort_unstable();
 
     let mut ordered = Vec::with_capacity(sections.len());
     for kind in [SectionKind::Token, SectionKind::Finding] {
-        for section in sections
-            .iter()
-            .filter(|section| section.variant.kind() == kind)
-        {
+        for section in sections.iter().filter(|section| section.kind() == kind) {
             // A finding section pairs to its token section by book *and* source
             // hash; a differing hash means the pair a reader looks for does not
             // exist.
             if kind == SectionKind::Finding
                 && token_keys
-                    .binary_search(&(section.book, section.source_hash))
+                    .binary_search(&(section.book(), section.source_hash()))
                     .is_err()
             {
                 return Err(EncodeError::InvalidSectionLayout {
-                    book: section.book,
+                    book: section.book(),
                     reason: LayoutRefusal::OrphanFindingSection,
                 });
             }

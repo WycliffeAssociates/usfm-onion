@@ -93,7 +93,7 @@ const TOKEN_KIND_WIRE: [&str; 9] = [
 const NUMBER_RANGE_KIND_WIRE: [&str; 4] = ["single", "range", "sequence", "sequenceWithRange"];
 
 /// Display names for `finding_field::TABLE`, in the same dense id order.
-const FINDING_FIELD_NAMES: [&str; 9] = [
+const FINDING_FIELD_NAMES: [&str; 10] = [
     "commonRow",
     "relatedTokenIdx",
     "overflowSpan",
@@ -103,6 +103,7 @@ const FINDING_FIELD_NAMES: [&str; 9] = [
     "patchTable",
     "stringDictionary",
     "messagePayloadTable",
+    "lintStamps",
 ];
 
 /// Renders `(wire-schema.js, wire-schema.d.ts)` from the compiled schema

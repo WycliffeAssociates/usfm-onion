@@ -19,7 +19,7 @@
 
 use usfm_onion::lint::LintIssue;
 use usfm_onion::marker_defs::structural_marker_info;
-use usfm_onion::token::marker_metadata;
+use usfm_onion::token::{BookId, marker_metadata};
 
 use crate::container::{Section, read_container};
 use crate::dto::{PackedBookReceipt, PackedMarkerDescriptor};
@@ -39,6 +39,10 @@ use crate::token_payload::{MarkerDescriptors, StringDictionary};
 pub struct VerifiedBook {
     pub receipt: PackedBookReceipt,
     pub findings: Vec<LintIssue>,
+    /// The stamps the publisher recorded for these findings, when it recorded
+    /// any. `None` means they may be read but never adopted as a warm lint
+    /// cache: nothing in the bytes says what produced them.
+    pub lint_stamps: Option<crate::schema::LintStamps>,
 }
 
 /// Verifies one packed container against the exact source it was bound to.
@@ -78,15 +82,35 @@ pub fn verify_book(packed: &[u8], source: &str) -> Result<VerifiedBook, DecodeEr
     // anything below reads a span or a marker ordinal.
     let decoded_tokens = decode_token_section(&token_section, source)?;
 
-    let findings = match finding_index {
+    let (findings, lint_stamps) = match finding_index {
         Some(index) => {
             let finding_section = container.section(index).ok_or(DecodeError::InvalidToc)??;
             decode_finding_section(&finding_section, book, source, &decoded_tokens)?
         }
-        None => Vec::new(),
+        None => (Vec::new(), None),
     };
 
-    let descriptors = resolve_descriptors(&token_section)?;
+    verified_book(
+        &token_section,
+        book,
+        container.header().snapshot_id,
+        findings,
+        lint_stamps,
+    )
+}
+
+/// Builds one book's receipt from its already-validated token section.
+///
+/// Shared with the corpus verifier so a per-book receipt means exactly the same
+/// thing however many books were in the container it came out of.
+pub(crate) fn verified_book(
+    token_section: &Section<'_>,
+    book: BookId,
+    snapshot_id: u64,
+    findings: Vec<LintIssue>,
+    lint_stamps: Option<crate::schema::LintStamps>,
+) -> Result<VerifiedBook, DecodeError> {
+    let descriptors = resolve_descriptors(token_section)?;
     let header = &token_section.header;
     let receipt = PackedBookReceipt {
         book: book.as_str().to_string(),
@@ -98,10 +122,14 @@ pub fn verify_book(packed: &[u8], source: &str) -> Result<VerifiedBook, DecodeEr
         positional_ids: token_section.positional_ids(),
         source_hash: format!("{:016x}", header.source_hash),
         catalog_stamp: format!("{:016x}", header.catalog_stamp),
-        snapshot_id: format!("{:016x}", container.header().snapshot_id),
+        snapshot_id: format!("{:016x}", snapshot_id),
         descriptors,
     };
-    Ok(VerifiedBook { receipt, findings })
+    Ok(VerifiedBook {
+        receipt,
+        findings,
+        lint_stamps,
+    })
 }
 
 /// One materialized token section: the boundary DTOs, plus the opaque stable ids
