@@ -3828,3 +3828,23 @@ Gates: `cargo test --workspace` green (braid 88 across 8 test binaries);
 `cargo test --release -p braid -p usfm_onion_wire -p usfm_onion_wasm --
 --ignored` green; `cargo fmt --all -- --check` clean. No wasm-facing code
 changed, so the packed npm gates were not re-run this round.
+
+## 2026-07-31 — Phase E re-review P2 closeout: test names now match what they prove
+
+Re-review verdict: P1 fix clean (sid fallback held under adversarial nested-marker
+attack, baseline carry-forward and duplicate-label handling sound); one P2
+test-only gap before Phase E formally closes. `crates/braid/tests/baseline.rs`
+had two tests whose names promised more than their bodies proved: split
+`duplicate_chapter_labels_make_the_scope_ambiguous_on_either_side` into
+`duplicate_current_chapter_labels_make_is_dirty_ambiguous` (as it already was)
+plus new `duplicate_baseline_chapter_labels_make_the_scope_ambiguous_too`
+(unique current label, duplicate baseline label — both `is_dirty` and
+`diff_baseline` typed-ambiguous); renamed
+`a_content_mutation_carries_the_baseline_forward_unchanged` to
+`a_changed_update_book_carries_the_baseline_forward_unchanged` (what it
+actually exercises) and added `update_chapter_carries_the_baseline_forward_unchanged`
+(the `rebuilt()` seam) and `a_byte_identical_resubmission_carries_the_baseline_forward_via_inherit_cache`
+(the `inherit_cache()` seam, asserting the `Unchanged`/no-op effect). No
+production changes. `crates/braid/tests/baseline.rs`: 16 → 19 tests. Gates:
+`cargo test --workspace` green (braid 89 across 8 binaries); `cargo fmt --all
+-- --check` clean.

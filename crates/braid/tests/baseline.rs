@@ -7,8 +7,9 @@
 //! routes (kept verbatim versus re-emitted from tokens).
 
 use braid::{
-    BaselineError, BookInput, BookTokensInput, Braid, BraidConfig, ChapterLabel, ChapterTarget,
-    CorpusInput, CorpusScope, LineEnding, ScopeError, ScopedOutput, SetBaselineError, SourceKey,
+    BaselineError, BookInput, BookTokensInput, Braid, BraidConfig, ChapterInput, ChapterLabel,
+    ChapterTarget, CorpusInput, CorpusScope, LineEnding, ScopeError, ScopedOutput,
+    SetBaselineError, SourceKey,
 };
 use usfm_onion::diff::diff_skeleton;
 use usfm_onion::lint::{LintOptions, LintScope};
@@ -214,7 +215,7 @@ fn a_baseline_run_missing_for_that_label_is_dirty() {
 }
 
 #[test]
-fn duplicate_chapter_labels_make_the_scope_ambiguous_on_either_side() {
+fn duplicate_current_chapter_labels_make_is_dirty_ambiguous() {
     let dup = "\\id GEN\n\\c 1\n\\p\n\\v 1 a\n\\c 1\n\\p\n\\v 1 b\n";
     let mut resident = braid();
     resident
@@ -227,6 +228,37 @@ fn duplicate_chapter_labels_make_the_scope_ambiguous_on_either_side() {
     assert!(matches!(
         resident.is_dirty(CorpusScope::Chapter(chapter_1)),
         Err(ScopeError::AmbiguousChapter { .. })
+    ));
+}
+
+#[test]
+fn duplicate_baseline_chapter_labels_make_the_scope_ambiguous_too() {
+    // The other side of the same rule: current content has one unambiguous
+    // chapter 1 (so the current-side lookup alone would succeed), but the
+    // declared baseline has two runs labeled "1" — both `is_dirty` and
+    // `diff_baseline` must report the typed ambiguity rather than picking
+    // one baseline run arbitrarily or treating the mismatch as "no baseline".
+    let dup = "\\id GEN\n\\c 1\n\\p\n\\v 1 a\n\\c 1\n\\p\n\\v 1 b\n";
+    let unique = "\\id GEN\n\\c 1\n\\p\n\\v 1 a\n";
+    let mut resident = braid();
+    resident
+        .replace_corpus(CorpusInput::new(vec![Lane::Parsed.book("GEN", dup)]))
+        .unwrap();
+    resident
+        .set_baseline(Lane::Parsed.book("GEN", dup))
+        .unwrap();
+    resident
+        .update_book(Lane::Parsed.book("GEN", unique))
+        .unwrap();
+
+    let chapter_1 = ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into()));
+    assert!(matches!(
+        resident.is_dirty(CorpusScope::Chapter(chapter_1.clone())),
+        Err(ScopeError::AmbiguousChapter { .. })
+    ));
+    assert!(matches!(
+        resident.diff_baseline(CorpusScope::Chapter(chapter_1)),
+        Err(BaselineError::Scope(ScopeError::AmbiguousChapter { .. }))
     ));
 }
 
@@ -273,10 +305,12 @@ fn clearing_a_baseline_makes_the_book_dirty_again() {
 }
 
 #[test]
-fn a_content_mutation_carries_the_baseline_forward_unchanged() {
-    // Editing current content is not how a baseline changes — a chapter edit,
-    // a whole-book replace, and a no-op resubmission must all leave a
-    // previously declared baseline exactly as it was.
+fn a_changed_update_book_carries_the_baseline_forward_unchanged() {
+    // Editing current content is not how a baseline changes. This pins the
+    // `update_book` "content differs, book already resident" seam
+    // specifically: the candidate `BookState::build` produces defaults to no
+    // baseline, so this is the branch that has to explicitly carry the
+    // predecessor's forward rather than losing it to that default.
     for lane in LANES {
         let mut resident = seeded(lane);
         resident.set_baseline(lane.book("GEN", GEN_SOURCE)).unwrap();
@@ -293,6 +327,69 @@ fn a_content_mutation_carries_the_baseline_forward_unchanged() {
         assert!(
             !resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap(),
             "{lane:?}"
+        );
+    }
+}
+
+#[test]
+fn update_chapter_carries_the_baseline_forward_unchanged() {
+    // The `rebuilt()` seam: `update_chapter` splices a new run and rebuilds
+    // the whole book from it, which must carry the resident predecessor's
+    // own baseline forward exactly as `rebuilt` promises — a different code
+    // path than `update_book`'s own "content differs" branch above.
+    for lane in LANES {
+        let mut resident = seeded(lane);
+        resident.set_baseline(lane.book("GEN", GEN_SOURCE)).unwrap();
+
+        resident
+            .update_chapter(
+                ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into())),
+                ChapterInput::Tokens(owned("\\c 1\n\\p\n\\v 1 In the beginning God.\n")),
+            )
+            .unwrap();
+        assert!(
+            resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap(),
+            "{lane:?}"
+        );
+
+        // Revert the same chapter back to exactly the baseline's own
+        // content: clean again, proving the baseline survived the rebuilt()
+        // mutation rather than being reset or dropped by it.
+        resident
+            .update_chapter(
+                ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into())),
+                ChapterInput::Tokens(owned("\\c 1\n\\p\n\\v 1 In the beginning.\n")),
+            )
+            .unwrap();
+        assert!(
+            !resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap(),
+            "{lane:?}"
+        );
+    }
+}
+
+#[test]
+fn a_byte_identical_resubmission_carries_the_baseline_forward_via_inherit_cache() {
+    // The `inherit_cache()` seam: resubmitting exactly the same content is a
+    // no-op for hydration (`content_eq` holds), which is also where an
+    // untouched baseline must survive rather than being reset to whatever a
+    // freshly built candidate defaults to (`None`).
+    for lane in LANES {
+        let mut resident = seeded(lane);
+        resident.set_baseline(lane.book("GEN", GEN_SOURCE)).unwrap();
+        assert!(
+            !resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap(),
+            "{lane:?}"
+        );
+
+        let effect = resident.update_book(lane.book("GEN", GEN_SOURCE)).unwrap();
+        assert!(
+            effect.is_noop(),
+            "{lane:?}: byte-identical resubmission takes the inherit_cache no-op path"
+        );
+        assert!(
+            !resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap(),
+            "{lane:?}: baseline still matches after the no-op"
         );
     }
 }
