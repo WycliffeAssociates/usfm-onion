@@ -3872,3 +3872,25 @@ UnresolvableSid refusal of format-inserted tokens.
 
 Remaining: Phase F only (public wasm Braid, restoreCorpus composition, reconcile helper, editor
 parity transcripts, pkg + canonical-docs regeneration).
+
+## 2026-07-31 — Phase F step 1a: the wasm crate split by responsibility
+
+Groundwork for the resident surface: `crates/usfm_onion_wasm/src/lib.rs` was a single 2,359-line file
+holding the boundary value types, their conversions, every stateless export, and the tests. It is now
+four modules — `dto` (the boundary shapes plus the conversions in both directions), `stateless` (the
+one-shot exports over caller-owned input), `publication` (the Phase D composing adapter), and
+`resident` (empty until the next step, where the `Braid` class lands) — with the root holding only the
+crate-wide pieces: the hand-written TypeScript section, the wire DTO re-exports, and `pub use`s that
+keep every public item reachable at the crate root whichever module now declares it.
+
+Deliberately a pure move. The only substantive edits are visibility widenings forced by the new module
+boundary (conversion helpers and a few boundary-struct fields become `pub(crate)`; none becomes `pub`,
+so the Rust API surface is unchanged) and the import pruning that follows from splitting one `use` block
+four ways.
+
+**The proof that nothing moved:** the generated `pkg-bundler/usfm_onion_web.d.ts` is byte-identical
+before and after — which is the only statement that matters for a crate whose product is its generated
+declarations — and the crate's 33 lib tests are the same 33.
+
+Gates: `cargo test --workspace` green, `cargo fmt --all -- --check` clean, zero compiler warnings, a
+dev bundler build diffed against the committed declarations.
