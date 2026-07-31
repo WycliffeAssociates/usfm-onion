@@ -941,10 +941,14 @@ impl Braid {
         scope: CorpusScope,
     ) -> Result<ScopedOutput<Vec<OwnedToken>>, ScopeError>;
 
+    // Amended 2026-07-31 (Phase C close, reviewer-approved): preview is a pure
+    // working projection — it never mints and returns the id-optional working
+    // type. Existing tokens keep their ids; synthesized tokens carry `id: None`
+    // until apply's admission mints them.
     pub fn preview_patch(
         &self,
-        handle: PatchHandle,
-    ) -> Result<ScopedOutput<Vec<OwnedToken>>, PatchError>;
+        id: PatchId,
+    ) -> Result<Vec<FormatToken>, PatchError>;
 
     pub fn to_usfm(&self, scope: CorpusScope) -> Result<ScopedOutput<String>, ScopeError>;
 
@@ -2105,8 +2109,11 @@ host, whose current loader avoids copying book bytes into JS (Gate 0F P3b).
   succeeds for an untouched CRLF book;
 - chapter-scope dirty: same-label baseline run comparison; missing baseline run is dirty;
   duplicate labels return the typed ambiguity error;
-- `to_tokens`/`preview_patch`: preview equals post-apply tokens on the same snapshot; neither
-  mutates; stale handles reject.
+- `to_tokens`/`preview_patch`: preview equals apply's semantic token content *before admission*
+  on the same snapshot — existing tokens retain their ids, synthesized tokens are unminted in
+  preview (`id: None`) and minted only by apply's admission, so "equals" excludes newly minted
+  ids by definition; preview neither mutates nor mints; stale handles reject. (Amended
+  2026-07-31, Phase C close.)
 
 ### 11.6 Oracles and consumer transcripts
 

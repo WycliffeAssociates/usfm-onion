@@ -3152,3 +3152,16 @@ wire 183, wasm 27. Lint oracle `--ignored` byte-identical. Release ignored: brai
 `zero-row-patch-record` vector), good goldens unchanged at 15, no existing golden's bytes changed.
 Golden generators re-run. `pkg-bundler`/`pkg-web` are owner-modified and were left that way — never
 committed, per the standing ruling.
+
+## 2026-07-31 — PHASE C CLOSED (reviewer verdict: code dispatchable; doc amendment applied)
+
+- C3/C4 fix-round re-review: all three P1s confirmed fixed, both adjudications approved
+  (preview as pure `&self -> Vec<FormatToken>` projection; structural empty-fix omission over an
+  impossible LintError). The one P2 (normative preview signature) is applied: freeze C4 ledger
+  row re-amended, epic §8.2 signature and Phase C gate wording corrected — preview-equals-apply
+  is semantic content before admission.
+- Pre-existing catalog.rs formatting drift (outside any packet) cleared in a style commit so
+  `cargo fmt --all --check` is green again.
+- Phase C entire: C1 (core pull-forwards), C2/F1 (residency floor + format seams), C3/C4
+  (resident lint, snapshots, patches, wire fields 5/6, finding-and-patch gate, restore seed).
+  Next: Phase D (packed publication) — stamps adjudication rides the packet.
