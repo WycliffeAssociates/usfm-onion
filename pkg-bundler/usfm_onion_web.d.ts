@@ -250,7 +250,7 @@ export interface SourceOutput<T> {
 /**
  * One book\'s worth of resident input.
  */
-export type BookInput = { kind: "usfm"; source_key: string; book: string; source: string } | { kind: "tokens"; source_key: string; book: string; tokens: Token[]; line_ending: LineEnding };
+export type BookInput = { kind: "usfm"; sourceKey: string; book: string; source: string } | { kind: "tokens"; sourceKey: string; book: string; tokens: Token[]; lineEnding: LineEnding };
 
 /**
  * One chapter run\'s address.

@@ -4457,3 +4457,75 @@ three places tokens may enter, the three identity stamps and what each is for, e
 patches as snapshot-bound token operations, and publication/warm-open. The WASM section now states
 the stateless-versus-resident split and the tagged-result convention, including why declarations
 name per-verb aliases (wasm-bindgen erases a generic's parameters in a method signature).
+
+## 2026-07-31 — Final pre-review packet, item 1: native-vs-wasm parity transcript gate
+
+Owner's core F-wasm goal: prove the native `braid::Braid` and the wasm `Braid`
+class behave identically over the same lifecycle.
+
+**Mechanics.** `crates/usfm_onion_wasm/src/parity.rs` (new, `#[cfg(test)]`
+module declared in `lib.rs`) is a generator, not an assertion: it drives
+*native* `braid::Braid` through a scripted lifecycle (`replace_corpus` →
+`books`/`chapter_labels` → `update_chapter` → `lint` → `patches` →
+`preview_patch` → `apply_patch` → pull the changed scopes via `to_tokens` →
+`set_baseline` → `is_dirty` → `update_book` → `is_dirty` again → `diff_baseline`
+→ `prepare_format_patch`/`apply_format_patch` → `vref_index` → `to_usfm` →
+`remove_book` → `clear`, plus the typed error cases: unknown book, an
+already-stale patch id, a duplicate declared book, an ambiguous chapter,
+`set_baseline` on a non-resident book, and a duplicate token id), both ingest
+lanes (`usfm`/`tokens`). After every step it converts the native outcome
+through the *exact same* `pub(crate)` conversions the real wasm bindings call
+(`resident::MutationEffect::from`, `dto::map_lint_issue`,
+`dto::map_native_skeleton`, etc.) and records `{step, lane, args, output}` —
+args and output both already in the wasm-facing JSON shape — into
+`crates/usfm_onion_wasm/tests/fixtures/parity-transcript.json` (committed).
+Deliberately lives inside the crate rather than `tests/` (which only sees
+`pub` items) specifically so it can reach those `pub(crate)` conversions
+instead of hand-mirroring them a second time — the actual bug class this
+whole epic exists to prevent. `#[ignore]`d (`npm run
+generate:parity-transcript`; regenerate only when the scripted lifecycle
+itself changes, the same convention every other golden-fixture generator in
+this workspace follows.
+
+`scripts/test-parity.mjs` (new, pattern matched to
+`scripts/test-packed-equivalence.mjs`) drives the *real* wasm `Braid` class
+(bundler and web builds) through the identical scripted sequence read back
+out of the transcript and deep-compares its actual output. The only mapping
+layer is unwrapping the `ApiResult {status, value|error}` envelope fallible
+verbs return — everything else (hex snapshot/hash ids, tagged
+`ScopedOutput`/`ChapterLabel`/error unions, `VrefIndex`'s `[sid,
+projection][]` tuple-array shape) comes from the same `Serialize` impl on
+both sides, so there is nothing else to translate; a real divergence would
+show up as a plain structural diff. Wired as `npm run test:parity` /
+`test:parity:web`, both green (54 steps × 2 targets, 0 divergences),
+added to the standing gate battery below.
+
+**Divergence found and fixed (the gate's first real catch).** `BookInput`'s
+`#[serde(tag = "kind", rename_all = "camelCase")]` looked identical to every
+sibling tagged enum in `resident.rs`, but `rename_all` on an enum renames
+*variant tags only* — it does not cascade into a struct variant's own field
+names (this crate's `dto::TokenFix` already had to learn this lesson via the
+separate `rename_all_fields` attribute; `BookInput` never got it). The
+generated `.d.ts` shipped `{ kind: "usfm"; source_key: string; ...;
+line_ending: LineEnding }` while every other multi-word-field DTO in the
+same file was correctly camelCase — a real cross-boundary bug any JS caller
+following the (correct, universal-elsewhere) camelCase convention would hit.
+Found by the parity generator itself: its own transcript JSON (produced by
+calling this exact `Serialize` impl) showed `source_key` where every other
+step's JSON showed camelCase. Fixed by adding `rename_all_fields =
+"camelCase"` to `BookInput`'s container attribute, matching `TokenFix`'s
+existing convention. Verified via the `.d.ts` diff before/after regen: one
+clean hunk, `source_key`/`line_ending` → `sourceKey`/`lineEnding`, nothing
+else — pkg-bundler and pkg-web both regenerated and committed.
+
+Gates (full battery, this round): `cargo test --workspace --all-features`
+green — core 290, wire 196+2, wasm 35 (includes the new parity generator,
+run only under `--ignored`), braid 99 across 8 binaries (lib 11, baseline
+19, format_patch 12, lifecycle 28, lint_prime 7, patches 7, resident_lint
+10, vref 5); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `cargo test --release -p braid -p usfm_onion_wire -p
+usfm_onion_wasm -- --ignored` green; `npm run test:packed` /
+`test:packed:web` green (410 cases / 5,717,153 tokens, unchanged); `npm run
+test:wasm` (bundler+web) green; `npm run golden:wasm` / `golden:wasm:web`
+green (7 fixtures); `npm run test:parity` / `test:parity:web` green (new,
+54 steps × 2 targets, 0 divergences); `cargo fmt --all -- --check` clean.

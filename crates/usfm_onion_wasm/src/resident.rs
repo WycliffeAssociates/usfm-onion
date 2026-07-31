@@ -924,7 +924,18 @@ impl From<braid::LineEnding> for LineEnding {
 /// One book's worth of resident input.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+// `rename_all` on an enum renames variant tags only, never a struct variant's
+// own field names (a genuine cross-boundary bug this crate's `TokenFix` DTO
+// already had to learn: found here by the RFC parity generator, which uses
+// this same `Serialize` impl to build its argument fixtures — the generated
+// `.d.ts` had `source_key`/`line_ending` while every sibling multi-word field
+// elsewhere in this file was already camelCase). `rename_all_fields` is the
+// separate attribute that actually covers per-variant field names.
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum BookInput {
     /// Cold load: exact USFM bytes, kept verbatim.
     Usfm {

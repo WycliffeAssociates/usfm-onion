@@ -44,6 +44,12 @@ pub mod publication;
 pub mod resident;
 pub mod stateless;
 
+/// The native-vs-wasm parity transcript generator. Test-only: it needs the
+/// same `pub(crate)` DTO conversions `resident`'s wasm bindings call, so it
+/// lives inside the crate rather than as an external integration test.
+#[cfg(test)]
+mod parity;
+
 pub use crate::dto::*;
 pub use crate::stateless::*;
 
