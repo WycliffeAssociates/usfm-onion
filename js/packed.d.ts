@@ -164,3 +164,14 @@ export declare function materialize(
 
 /** Tokens-only entry for one book, by the path the caller supplied. */
 export declare function decodeTokens(verified: VerifiedPacked, path: string): MaterializedBook;
+
+/**
+ * Reuses `previous`'s finding objects wherever a finding is unchanged, so a consumer
+ * keeps whatever it attached to them. Identity is the rule code plus the anchored
+ * token ids — the only address stable across a recompute. Returns `previous` itself
+ * when nothing moved.
+ */
+export declare function reconcileFindings<T>(
+  previous: readonly T[] | undefined,
+  next: readonly T[],
+): readonly T[];

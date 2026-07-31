@@ -147,6 +147,12 @@ outcome!(
     ScopeError
 );
 outcome!(
+    /// A warm restore's report, or the reason the bytes were refused.
+    RestoreOutcome,
+    RestoreReport,
+    RestoreError
+);
+outcome!(
     /// A scope's verse index, or the reason the scope does not resolve.
     VrefIndexOutcome,
     ScopedOutput<crate::VrefIndex>,
@@ -224,6 +230,117 @@ impl Braid {
                 .replace_corpus(native)
                 .map(MutationEffect::from)
                 .map_err(IngestError::from),
+        )
+    }
+
+    /// Seeds the whole corpus from packed bytes plus the sources they were bound to
+    /// — the warm cold-open.
+    ///
+    /// Composed here because this is the only layer allowed to know both halves: the
+    /// bytes are verified and decoded by the wire codec, and the results are handed
+    /// to the resident corpus, which never sees a packed byte itself. Verification is
+    /// the full trust boundary — structure, both checksums, exact source length and
+    /// content hash, the catalog stamp, every discriminant and index — so a container
+    /// that does not check out is refused before anything is installed.
+    ///
+    /// A book whose cached findings cannot be adopted still seeds: residency and
+    /// lint-priming are independent facts, so that book arrives with no lex or parse
+    /// and is simply awaiting recompute.
+    #[wasm_bindgen(js_name = restoreCorpus)]
+    pub fn restore_corpus(&mut self, records: Vec<RestoreRecord>) -> RestoreOutcome {
+        let mut books = Vec::with_capacity(records.len());
+        for record in &records {
+            let source = match std::str::from_utf8(&record.source) {
+                Ok(source) => source,
+                Err(_) => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidUtf8,
+                    });
+                }
+            };
+            let verified = match usfm_onion_wire::verify::verify_book(&record.packed, source) {
+                Ok(verified) => verified,
+                Err(error) => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: error.into(),
+                    });
+                }
+            };
+            let tokens =
+                match usfm_onion_wire::verify::materialize_owned_tokens(&record.packed, source) {
+                    Ok(tokens) => tokens,
+                    Err(error) => {
+                        return RestoreOutcome::refused(RestoreError::Decode {
+                            error: error.into(),
+                        });
+                    }
+                };
+            let book = match usfm_onion::token::BookId::from_str(&verified.receipt.book) {
+                Some(book) => book,
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidSection,
+                    });
+                }
+            };
+            let source_key = match braid::SourceKey::new(record.path.clone()) {
+                Some(key) => key,
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Ingest {
+                        error: IngestError::DuplicateSourceKey {
+                            source: record.path.clone(),
+                        },
+                    });
+                }
+            };
+            books.push(braid::BookRestoreInput {
+                source_key,
+                book,
+                source: source.to_string(),
+                tokens,
+                line_ending: usfm_onion::token::LineEnding::detect(source),
+                // The findings the container carried are adoptable only if its own
+                // stamps say what produced them; braid re-checks them against the
+                // resident configuration before it trusts any of it.
+                lint: verified.lint_stamps.map(|_| braid::BookLintPrime {
+                    book,
+                    source_hash: braid::SourceHash(
+                        u64::from_str_radix(&verified.receipt.source_hash, 16).unwrap_or_default(),
+                    ),
+                    result: usfm_onion::lint::LintResult {
+                        issues: verified.findings.clone(),
+                        summary: Default::default(),
+                    },
+                }),
+            });
+        }
+
+        let stamps = records
+            .first()
+            .and_then(|record| {
+                usfm_onion_wire::verify::verify_book(
+                    &record.packed,
+                    std::str::from_utf8(&record.source).unwrap_or_default(),
+                )
+                .ok()
+                .and_then(|verified| verified.lint_stamps)
+            })
+            .unwrap_or(usfm_onion_wire::corpus_codec::LintStamps {
+                config_fingerprint: 0,
+                engine_stamp: 0,
+            });
+
+        RestoreOutcome::from(
+            self.inner
+                .restore_corpus(braid::CorpusRestoreInput::new(
+                    braid::LintConfigFingerprint(stamps.config_fingerprint),
+                    braid::LintEngineStamp(stamps.engine_stamp),
+                    books,
+                ))
+                .map(RestoreReport::from)
+                .map_err(|error| RestoreError::Ingest {
+                    error: error.into(),
+                }),
         )
     }
 
@@ -1247,6 +1364,102 @@ impl From<braid::FormatError> for FormatError {
             braid::FormatError::Scope(error) => Self::Scope {
                 error: error.into(),
             },
+        }
+    }
+}
+
+/// One book's packed bytes and the source they were bound to.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreRecord {
+    /// The caller's own binding for where the book came from — normally a path.
+    pub path: String,
+    pub packed: Vec<u8>,
+    /// The exact bytes the container was bound to. Bytes rather than a string so a
+    /// host can hand over what it read from disk without a UTF-16 round trip.
+    pub source: Vec<u8>,
+}
+
+/// Why a warm restore was refused outright.
+///
+/// A refusal here is about the *call*: bytes that do not verify, or a corpus that
+/// cannot be installed. A single book whose cached findings are not adoptable is not
+/// a refusal — it seeds anyway and appears in the report's rejections.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RestoreError {
+    Decode { error: crate::PackedDecodeError },
+    Ingest { error: IngestError },
+}
+
+/// Why one book's cached lint contribution was not adopted.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum PrimeRejectReason {
+    BookNotResident,
+    SourceHashMismatch,
+    ConfigFingerprintMismatch,
+    EngineStampMismatch,
+    InvalidPatch,
+    /// The one reason that refuses residency too: the supplied tokens do not spell
+    /// the supplied bytes, so there is nothing safe to install.
+    SourceTokenMismatch,
+}
+
+impl From<braid::PrimeRejectReason> for PrimeRejectReason {
+    fn from(reason: braid::PrimeRejectReason) -> Self {
+        match reason {
+            braid::PrimeRejectReason::BookNotResident => Self::BookNotResident,
+            braid::PrimeRejectReason::SourceHashMismatch => Self::SourceHashMismatch,
+            braid::PrimeRejectReason::ConfigFingerprintMismatch => Self::ConfigFingerprintMismatch,
+            braid::PrimeRejectReason::EngineStampMismatch => Self::EngineStampMismatch,
+            braid::PrimeRejectReason::InvalidPatch => Self::InvalidPatch,
+            braid::PrimeRejectReason::SourceTokenMismatch => Self::SourceTokenMismatch,
+        }
+    }
+}
+
+/// One book a warm seed would not fully accept.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimeRejection {
+    pub book: String,
+    pub reason: PrimeRejectReason,
+}
+
+/// What one warm restore installed, and what it would not take.
+///
+/// A book can appear in both lists: residency and lint-priming are independent, so a
+/// book whose cached findings were refused still seeds — with no lex or parse — and
+/// is simply awaiting recompute.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreReport {
+    pub seeded: Vec<String>,
+    pub rejected: Vec<PrimeRejection>,
+}
+
+impl From<braid::RestoreReport> for RestoreReport {
+    fn from(report: braid::RestoreReport) -> Self {
+        Self {
+            seeded: report
+                .seeded
+                .iter()
+                .map(|book| book.as_str().to_string())
+                .collect(),
+            rejected: report
+                .rejected
+                .into_iter()
+                .map(|rejection| PrimeRejection {
+                    book: rejection.book.as_str().to_string(),
+                    reason: rejection.reason.into(),
+                })
+                .collect(),
         }
     }
 }

@@ -146,6 +146,37 @@ pub struct MaterializedTokens {
     pub stable_ids: Option<Vec<String>>,
 }
 
+/// Materializes one book's tokens as *resident* tokens.
+///
+/// The seeding counterpart of [`materialize_tokens`]: a composing adapter that is
+/// about to hand a book to a resident corpus needs owned tokens, and going through
+/// the boundary DTO to get them would convert twice and lose the opaque stable ids
+/// on the way (a DTO token carries its id as a string, which is exactly what
+/// `OwnedToken` wants — but only the section knows whether the ids were explicit or
+/// positional). Repeats the same verification, because a caller holding only bytes is
+/// never asked to have verified them first.
+pub fn materialize_owned_tokens(
+    packed: &[u8],
+    source: &str,
+) -> Result<Vec<usfm_onion::token::OwnedToken>, DecodeError> {
+    let materialized = materialize_tokens(packed, source)?;
+    materialized
+        .tokens
+        .iter()
+        .enumerate()
+        .map(|(index, token)| {
+            let mut token = token.clone();
+            // The section's own opaque ids win when it carried them; otherwise the
+            // positional label the decoder already stamped is the id.
+            if let Some(ids) = materialized.stable_ids.as_ref() {
+                token.id = ids.get(index).cloned().ok_or(DecodeError::InvalidSection)?;
+            }
+            crate::dto::owned_token_from_dto(&token, index as u32)
+                .map_err(|_| DecodeError::InvalidSection)
+        })
+        .collect()
+}
+
 /// Materializes one book's tokens as boundary DTOs.
 ///
 /// This is the Rust half of the cross-language equivalence gate, and the token

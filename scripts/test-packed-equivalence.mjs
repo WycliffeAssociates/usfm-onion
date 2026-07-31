@@ -27,7 +27,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { PackedError, decodeTokens, materialize, receiptFor, verifyPackedCorpus } from "../js/packed.js";
+import {
+  PackedError,
+  decodeTokens,
+  materialize,
+  receiptFor,
+  reconcileFindings,
+  verifyPackedCorpus,
+} from "../js/packed.js";
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const target = process.argv.includes("web") ? "web" : "bundler";
@@ -144,7 +151,12 @@ const stats = {
   corpus: 0,
   chapters: 0,
   duplicateBook: 0,
+  reconciled: 0,
 };
+
+/// The first case that produced more than one finding, kept for the reconciliation
+/// checks so they run over shapes the boundary actually emits.
+let reconciliationSample;
 const workRoot = await mkdtemp(path.join(os.tmpdir(), "usfm-onion-equivalence-"));
 
 /** First discovered corpus book with no `\c` at all, `{caseName, verified}` — or `undefined`. */
@@ -203,6 +215,10 @@ async function runGoodCase(caseName, emitArgs, options = {}) {
   const expectedStableIds = JSON.parse(await readFile(path.join(outDir, "stable-ids.json"), "utf8"));
 
   const { verified, findings } = verifyOne(caseName, packed, source);
+  const caseFindings = findings.get(caseName) ?? [];
+  if (reconciliationSample === undefined && caseFindings.length > 1) {
+    reconciliationSample = caseFindings;
+  }
   const receipt = receiptFor(verified, caseName).receipt;
   const book = decodeTokens(verified, caseName);
   assert.equal(
@@ -510,6 +526,41 @@ for (const file of corpusPaths) {
   );
 }
 
+// Finding reconciliation, over findings that came out of the trust boundary rather
+// than hand-built ones: the identity rule has to hold for the real shapes, including
+// findings that carry a fix and findings anchored to the same token by two rules.
+{
+  const findings = reconciliationSample;
+  assert.ok(findings.length > 1, "the corpus must supply findings to reconcile");
+  const untouched = reconcileFindings(findings, findings.map((finding) => ({ ...finding })));
+  assert.equal(
+    untouched,
+    findings,
+    "an unchanged pass returns the previous array itself, so a consumer can skip a re-render",
+  );
+
+  const edited = findings.map((finding, index) =>
+    index === 0 ? { ...finding, message: `${finding.message} (edited)` } : { ...finding },
+  );
+  const reconciled = reconcileFindings(findings, edited);
+  assert.notEqual(reconciled[0], findings[0], "a changed finding is a fresh object");
+  for (let index = 1; index < findings.length; index += 1) {
+    assert.equal(
+      reconciled[index],
+      findings[index],
+      "every unchanged finding keeps its identity across a recompute",
+    );
+  }
+
+  const reAnchored = reconcileFindings(findings, [{ ...findings[0], tokenId: "no-such-token" }]);
+  assert.notEqual(
+    reAnchored[0],
+    findings[0],
+    "a finding anchored to a different token is a different finding",
+  );
+  stats.reconciled = findings.length;
+}
+
 await rm(workRoot, { recursive: true, force: true });
 
 console.log(
@@ -517,5 +568,6 @@ console.log(
     `(${stats.goldensGood} good goldens, ${stats.goldensMalformed} malformed goldens refused, ` +
     `${stats.corpus} corpus books, ` +
     `${stats.chapters} chapter-selective slices, ` +
-    `${stats.duplicateBook} duplicate-book ambiguity check)`,
+    `${stats.duplicateBook} duplicate-book ambiguity check, ` +
+    `${stats.reconciled} findings reconciled)`,
 );

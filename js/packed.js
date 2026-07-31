@@ -731,3 +731,70 @@ export function decodeTokens(verified, path) {
   if (!book) fail("unknownBook", path);
   return materializeBook(book, undefined);
 }
+
+/**
+ * Reuses the previous findings array's objects wherever a finding is unchanged.
+ *
+ * The finding counterpart of token reconciliation, and it exists for the same
+ * reason: a consumer that re-renders on every lint pass wants to know which
+ * findings are *the same finding*, so it can keep whatever it attached to them —
+ * a DOM node, a dismissal, a scroll position — instead of rebuilding all of it
+ * because one verse changed.
+ *
+ * Identity is the rule code plus the tokens the finding is anchored to, which is
+ * the only address stable across a recompute: a byte span moves when anything
+ * earlier in the book is edited, a token id does not. Message text and fix payload
+ * are deliberately not identity — a rule whose wording changed is the same finding
+ * — but a change in either still yields a fresh object, because what a consumer
+ * reads did change.
+ *
+ * Never validates and never decodes: these findings already came out of the trust
+ * boundary.
+ */
+export function reconcileFindings(previous, next) {
+  const byIdentity = new Map();
+  for (const finding of previous ?? []) {
+    const key = findingIdentity(finding);
+    // Same-identity duplicates are possible in principle; first wins, and the rest
+    // fall through to fresh objects rather than being silently merged.
+    if (!byIdentity.has(key)) byIdentity.set(key, finding);
+  }
+
+  let reused = 0;
+  const out = (next ?? []).map((finding) => {
+    const candidate = byIdentity.get(findingIdentity(finding));
+    if (candidate !== undefined && sameFindingValue(candidate, finding)) {
+      reused += 1;
+      return candidate;
+    }
+    return finding;
+  });
+  // Returning the previous array itself when nothing moved lets a caller skip a
+  // re-render on identity alone.
+  if (reused === out.length && out.length === (previous?.length ?? 0)) return previous;
+  return out;
+}
+
+function findingIdentity(finding) {
+  return finding.code + " " + (finding.tokenId ?? "") + " " + (finding.relatedTokenId ?? "");
+}
+
+/** Whether two same-identity findings also read identically. */
+function sameFindingValue(a, b) {
+  return (
+    a.severity === b.severity &&
+    a.message === b.message &&
+    a.sid === b.sid &&
+    a.marker === b.marker &&
+    spanEq(a.span, b.span) &&
+    spanEq(a.relatedSpan, b.relatedSpan) &&
+    JSON.stringify(a.messageParams ?? null) === JSON.stringify(b.messageParams ?? null) &&
+    JSON.stringify(a.fix ?? null) === JSON.stringify(b.fix ?? null)
+  );
+}
+
+function spanEq(a, b) {
+  if (a === undefined || a === null) return b === undefined || b === null;
+  if (b === undefined || b === null) return false;
+  return a.start === b.start && a.end === b.end;
+}

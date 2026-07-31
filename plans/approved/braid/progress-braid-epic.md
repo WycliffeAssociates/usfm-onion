@@ -4387,3 +4387,37 @@ name-derived marker fields recomputed exactly as decoding does.
 
 Gates: `cargo test --workspace --all-features` 627 passed / 0 failed; zero warnings; fmt
 clean; generated declarations inspected for every verb.
+
+## 2026-07-31 — Phase F step 3: the warm cold-open and finding reconciliation ship
+
+`Braid.restoreCorpus(records)` is the composed verb, and this layer is the only one
+allowed to compose it: the bytes are verified and decoded by the wire codec, the results
+are handed to the resident corpus, and braid never sees a packed byte. Verification is the
+full trust boundary — structure, both checksums, exact source length and content hash, the
+catalog stamp, every discriminant and index — so a container that does not check out is
+refused before anything installs. Records carry `source` as bytes rather than a string so a
+host can hand over what it read from disk without a UTF-16 round trip; non-UTF-8 is a typed
+refusal, not a panic.
+
+A book whose cached findings cannot be adopted **still seeds**: residency and lint-priming
+are independent, so it arrives with no lex or parse and is simply awaiting recompute. The
+report says so, and a book can appear in both `seeded` and `rejected`.
+
+New wire export `materialize_owned_tokens` supports it. Going through the boundary DTO would
+convert twice and, worse, lose the opaque stable ids: only the section knows whether its ids
+were explicit or positional, so the resident tokens are built from the decoded section
+rather than re-derived from DTOs a caller could have edited.
+
+`reconcileFindings(previous, next)` is pure JS, validating and decoding nothing — it operates
+on findings that already came out of the trust boundary. Identity is the rule code plus the
+anchored token ids, which is the only address stable across a recompute: a byte span moves
+when anything earlier in the book is edited, a token id does not. Message text and fix payload
+are deliberately *not* identity (a rule whose wording changed is the same finding) but a change
+in either still yields a fresh object, because what a consumer reads did change. An unchanged
+pass returns the `previous` array itself, so a caller can skip a re-render on reference
+equality alone.
+
+Gated inside the packed equivalence run over findings the boundary actually emitted rather
+than hand-built ones (410 cases, now `+ 3 findings reconciled`): unchanged pass returns the
+same array, one edited finding is fresh while every sibling keeps its identity, and a
+re-anchored finding is a different finding.
