@@ -42,6 +42,123 @@ impl<T, E> ApiResult<T, E> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Named outcomes.
+//
+// `wasm_bindgen` erases a generic's parameters in a method signature, so a verb
+// returning `ApiResult<MutationEffect, IngestError>` would be declared as a bare
+// `ApiResult` — no value at all to a TypeScript consumer. A transparent newtype per
+// shape costs nothing at runtime and restores the full type: each one renders as
+// `export type XOutcome = ApiResult<T, E>`.
+// ---------------------------------------------------------------------------
+
+macro_rules! outcome {
+    ($(#[$meta:meta])* $name:ident, $value:ty, $error:ty) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+        #[tsify(into_wasm_abi, from_wasm_abi)]
+        #[serde(transparent)]
+        pub struct $name(pub ApiResult<$value, $error>);
+
+        impl From<Result<$value, $error>> for $name {
+            fn from(result: Result<$value, $error>) -> Self {
+                Self(ApiResult::of(result))
+            }
+        }
+
+        impl $name {
+            fn refused(error: $error) -> Self {
+                Self(ApiResult::Error { error })
+            }
+        }
+    };
+}
+
+outcome!(
+    /// A mutation, or the reason the input was refused.
+    MutationOutcome,
+    MutationEffect,
+    IngestError
+);
+outcome!(
+    /// A mutation addressed by scope, or the reason the scope does not resolve.
+    ScopedMutationOutcome,
+    MutationEffect,
+    ScopeError
+);
+outcome!(
+    /// A recorded baseline, or the reason it could not be.
+    BaselineMutationOutcome,
+    MutationEffect,
+    SetBaselineError
+);
+outcome!(
+    /// One patch, or the reason it is not addressable.
+    PatchOutcome,
+    Patch,
+    PatchError
+);
+outcome!(
+    /// A patch's projected tokens, or the reason it is not addressable.
+    PatchPreviewOutcome,
+    Vec<crate::Token>,
+    PatchError
+);
+outcome!(
+    /// An applied patch, or the reason it was refused.
+    PatchMutationOutcome,
+    MutationEffect,
+    PatchError
+);
+outcome!(
+    /// A prepared format patch, or the reason the scope does not resolve.
+    FormatPreparationOutcome,
+    PatchPreparation,
+    FormatError
+);
+outcome!(
+    /// An applied format patch, or the reason it was refused.
+    FormatMutationOutcome,
+    MutationEffect,
+    FormatPatchError
+);
+outcome!(
+    /// One book's chapter labels, or the reason the book does not resolve.
+    ChapterLabelsOutcome,
+    Vec<ChapterLabel>,
+    ScopeError
+);
+outcome!(
+    /// Hydrated tokens, or the reason a scope does not resolve.
+    ScopeTokensOutcome,
+    Vec<ScopeTokens>,
+    ScopeError
+);
+outcome!(
+    /// A scope's exact bytes, or the reason it does not resolve.
+    UsfmOutcome,
+    ScopedOutput<String>,
+    ScopeError
+);
+outcome!(
+    /// Whether a scope differs from its baseline, or the reason it does not resolve.
+    DirtyOutcome,
+    bool,
+    ScopeError
+);
+outcome!(
+    /// A scope's verse index, or the reason the scope does not resolve.
+    VrefIndexOutcome,
+    ScopedOutput<crate::VrefIndex>,
+    ScopeError
+);
+outcome!(
+    /// A baseline diff, or the reason it cannot be answered.
+    DiffBaselineOutcome,
+    ScopedOutput<crate::DiffSkeleton>,
+    BaselineError
+);
+
 /// The resident configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -89,6 +206,465 @@ impl Braid {
         }
     }
 
+    // ---- mutation ------------------------------------------------------
+
+    /// Replaces the whole corpus with a validated candidate.
+    ///
+    /// Every book is built, validated, and hashed before resident state is touched,
+    /// so a rejection leaves the corpus, its stamps, and its identity exactly as
+    /// they were.
+    #[wasm_bindgen(js_name = replaceCorpus)]
+    pub fn replace_corpus(&mut self, corpus: CorpusInput) -> MutationOutcome {
+        let native = match corpus_into_native(corpus) {
+            Ok(native) => native,
+            Err(error) => return MutationOutcome::refused(error),
+        };
+        MutationOutcome::from(
+            self.inner
+                .replace_corpus(native)
+                .map(MutationEffect::from)
+                .map_err(IngestError::from),
+        )
+    }
+
+    /// Replaces one book, or appends it when it is not resident yet.
+    ///
+    /// Whole-book replacement is the structural escape hatch: chapter insertion,
+    /// deletion, reordering, and duplicate resolution all go through here.
+    #[wasm_bindgen(js_name = updateBook)]
+    pub fn update_book(&mut self, book: BookInput) -> MutationOutcome {
+        let native = match book_into_native(book) {
+            Ok(native) => native,
+            Err(error) => return MutationOutcome::refused(error),
+        };
+        MutationOutcome::from(
+            self.inner
+                .update_book(native)
+                .map(MutationEffect::from)
+                .map_err(IngestError::from),
+        )
+    }
+
+    /// Replaces exactly one existing chapter run with the caller's content.
+    ///
+    /// The replacement must be that same one run: no matching run is not found,
+    /// several is ambiguous, and content that is a different or additional chapter
+    /// is a label mismatch. The book's stored line ending is inherited.
+    #[wasm_bindgen(js_name = updateChapter)]
+    pub fn update_chapter(
+        &mut self,
+        target: ChapterTarget,
+        replacement: ChapterInput,
+    ) -> MutationOutcome {
+        let target = match target_into_native(target) {
+            Ok(target) => target,
+            Err(error) => return MutationOutcome::refused(error),
+        };
+        let ChapterInput::Tokens { tokens } = replacement;
+        let tokens = match tokens_into_native(tokens) {
+            Ok(tokens) => tokens,
+            Err(error) => return MutationOutcome::refused(error),
+        };
+        MutationOutcome::from(
+            self.inner
+                .update_chapter(target, braid::ChapterInput::Tokens(tokens))
+                .map(MutationEffect::from)
+                .map_err(IngestError::from),
+        )
+    }
+
+    /// Removes a book. Removing an absent book is a no-op, not an error: the
+    /// requested end state already holds.
+    #[wasm_bindgen(js_name = removeBook)]
+    pub fn remove_book(&mut self, book: String) -> MutationOutcome {
+        let book = match book_id(&book) {
+            Ok(book) => book,
+            Err(error) => return MutationOutcome::refused(error),
+        };
+        MutationOutcome::from(Ok(self.inner.remove_book(book).into()))
+    }
+
+    /// Removes one chapter run's tokens from its book. The effect is whole-book:
+    /// the address the caller used no longer exists.
+    #[wasm_bindgen(js_name = removeChapter)]
+    pub fn remove_chapter(&mut self, target: ChapterTarget) -> ScopedMutationOutcome {
+        // A book code this library cannot even read names no resident book, so the
+        // caller gets the same refusal an absent book gives — carrying the code it
+        // actually sent, which is the only part it can act on.
+        let unreadable = target.book.clone();
+        let target = match target_into_native(target) {
+            Ok(target) => target,
+            Err(_) => {
+                return ScopedMutationOutcome::refused(ScopeError::BookNotFound {
+                    book: unreadable,
+                });
+            }
+        };
+        ScopedMutationOutcome::from(
+            self.inner
+                .remove_chapter(target)
+                .map(MutationEffect::from)
+                .map_err(ScopeError::from),
+        )
+    }
+
+    /// Drops every resident book. Clearing an empty corpus is a no-op.
+    pub fn clear(&mut self) -> MutationEffect {
+        self.inner.clear().into()
+    }
+
+    /// Replaces the resident configuration.
+    ///
+    /// No tokens are rewritten, so nothing needs re-pulling and the identity — which
+    /// covers source bytes only — is unchanged. What changes is staleness: every
+    /// book is marked for recompute, because the configuration its cached findings
+    /// were produced under no longer applies.
+    #[wasm_bindgen(js_name = updateConfig)]
+    pub fn update_config(&mut self, config: BraidConfig) -> MutationEffect {
+        self.inner.update_config(config.into_native()).into()
+    }
+
+    /// Records one book's baseline — the state later comparisons are against.
+    ///
+    /// Only for a book that is already resident: a baseline is what the *current*
+    /// state is compared against, so installing one for a book with no current
+    /// state would invent the comparison rather than record it.
+    #[wasm_bindgen(js_name = setBaseline)]
+    pub fn set_baseline(&mut self, book: BookInput) -> BaselineMutationOutcome {
+        let native = match book_into_native(book) {
+            Ok(native) => native,
+            Err(error) => {
+                return BaselineMutationOutcome::refused(SetBaselineError::Invalid { error });
+            }
+        };
+        BaselineMutationOutcome::from(
+            self.inner
+                .set_baseline(native)
+                .map(MutationEffect::from)
+                .map_err(SetBaselineError::from),
+        )
+    }
+
+    /// Forgets one book's baseline. Clearing an absent one is a no-op.
+    #[wasm_bindgen(js_name = clearBaseline)]
+    pub fn clear_baseline(&mut self, book: String) -> MutationOutcome {
+        let book = match book_id(&book) {
+            Ok(book) => book,
+            Err(error) => return MutationOutcome::refused(error),
+        };
+        MutationOutcome::from(Ok(self.inner.clear_baseline(book).into()))
+    }
+
+    // ---- lint and patches ----------------------------------------------
+
+    /// Recomputes every book awaiting it and returns the complete snapshot.
+    ///
+    /// The only recompute verb, and always explicit: no mutation lints implicitly
+    /// and no effect carries findings. Exactly the stale books run rules — a clean
+    /// corpus runs none.
+    pub fn lint(&mut self) -> LintSnapshot {
+        let snapshot = self.inner.lint();
+        LintSnapshot {
+            snapshot_id: format!("{:016x}", snapshot.id.0),
+            summary: crate::dto::map_lint_summary(snapshot.summary.clone()),
+            books: snapshot
+                .books
+                .iter()
+                .map(|book| BookLintSnapshot {
+                    source_key: book.source_key.as_str().to_string(),
+                    book: book.book.as_str().to_string(),
+                    source_hash: format!("{:016x}", book.source_hash.0),
+                    token_identity: format!("{:016x}", book.token_identity.0),
+                    findings: book
+                        .result
+                        .issues
+                        .iter()
+                        .cloned()
+                        .map(crate::dto::map_lint_issue)
+                        .collect(),
+                    summary: crate::dto::map_lint_summary(book.result.summary.clone()),
+                })
+                .collect(),
+        }
+    }
+
+    /// Every patch of the current snapshot, in corpus order and then each book's own
+    /// canonical finding order — which is what assigns each one its ordinal.
+    ///
+    /// A book awaiting recompute contributes none: its stored positions address the
+    /// token stream it held when its findings were computed.
+    pub fn patches(&self) -> Vec<Patch> {
+        self.inner.patches().into_iter().map(Patch::from).collect()
+    }
+
+    /// One patch by id, refusing a stale or unknown one.
+    pub fn patch(&self, id: PatchId) -> PatchOutcome {
+        let native = match id.clone().into_native() {
+            Ok(native) => native,
+            Err(()) => return PatchOutcome::refused(unknown_patch(id)),
+        };
+        PatchOutcome::from(
+            self.inner
+                .patch(native)
+                .map(Patch::from)
+                .map_err(PatchError::from),
+        )
+    }
+
+    /// The token stream the patch would produce, without applying it.
+    ///
+    /// A preview is a projection and is never admitted to residency, so it mints
+    /// nothing: a surviving token carries the id it already had, and a token the fix
+    /// would synthesize carries none until an apply grants it one.
+    #[wasm_bindgen(js_name = previewPatch)]
+    pub fn preview_patch(&self, id: PatchId) -> PatchPreviewOutcome {
+        let native = match id.clone().into_native() {
+            Ok(native) => native,
+            Err(()) => return PatchPreviewOutcome::refused(unknown_patch(id)),
+        };
+        PatchPreviewOutcome::from(
+            self.inner
+                .preview_patch(native)
+                .map(|tokens| tokens.iter().map(crate::dto::map_format_token).collect())
+                .map_err(PatchError::from),
+        )
+    }
+
+    /// Applies a patch as an ordinary mutation, atomically.
+    #[wasm_bindgen(js_name = applyPatch)]
+    pub fn apply_patch(&mut self, id: PatchId) -> PatchMutationOutcome {
+        let native = match id.clone().into_native() {
+            Ok(native) => native,
+            Err(()) => return PatchMutationOutcome::refused(unknown_patch(id)),
+        };
+        PatchMutationOutcome::from(
+            self.inner
+                .apply_patch(native)
+                .map(MutationEffect::from)
+                .map_err(PatchError::from),
+        )
+    }
+
+    /// Prepares a formatting pass over a scope without applying it.
+    #[wasm_bindgen(js_name = prepareFormatPatch)]
+    pub fn prepare_format_patch(
+        &mut self,
+        scope: CorpusScope,
+        options: Option<crate::FormatOptions>,
+    ) -> FormatPreparationOutcome {
+        let scope = match scope_into_native(scope) {
+            Ok(scope) => scope,
+            Err(book) => {
+                return FormatPreparationOutcome::refused(FormatError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        FormatPreparationOutcome::from(
+            self.inner
+                .prepare_format_patch(scope, crate::dto::format_options_into_native(options))
+                .map(PatchPreparation::from)
+                .map_err(FormatError::from),
+        )
+    }
+
+    /// Applies a prepared format patch. All-or-nothing across every book it covers.
+    #[wasm_bindgen(js_name = applyFormatPatch)]
+    pub fn apply_format_patch(&mut self, id: FormatPatchId) -> FormatMutationOutcome {
+        let native = match id.clone().into_native() {
+            Ok(native) => native,
+            Err(()) => {
+                return FormatMutationOutcome::refused(FormatPatchError::UnknownPatch { id });
+            }
+        };
+        FormatMutationOutcome::from(
+            self.inner
+                .apply_format_patch(native)
+                .map(MutationEffect::from)
+                .map_err(FormatPatchError::from),
+        )
+    }
+
+    // ---- reads ---------------------------------------------------------
+
+    /// Resident books with their derived stamps, in corpus order.
+    pub fn books(&self) -> Vec<BookEntry> {
+        self.inner
+            .books()
+            .into_iter()
+            .map(|entry| BookEntry {
+                source_key: entry.source_key.as_str().to_string(),
+                book: entry.book.as_str().to_string(),
+                source_hash: format!("{:016x}", entry.source_hash.0),
+                token_identity: format!("{:016x}", entry.token_identity.0),
+                line_ending: entry.line_ending.into(),
+            })
+            .collect()
+    }
+
+    /// One book's chapter-run labels in source order, duplicates included.
+    #[wasm_bindgen(js_name = chapterLabels)]
+    pub fn chapter_labels(&self, book: String) -> ChapterLabelsOutcome {
+        let book = match usfm_onion::token::BookId::from_str(&book) {
+            Some(book) => book,
+            None => {
+                return ChapterLabelsOutcome::refused(ScopeError::BookNotFound { book });
+            }
+        };
+        ChapterLabelsOutcome::from(
+            self.inner
+                .chapter_labels(book)
+                .map(|labels| labels.iter().map(ChapterLabel::from).collect())
+                .map_err(ScopeError::from),
+        )
+    }
+
+    /// Current tokens for the requested scopes — the single hydration verb.
+    ///
+    /// Returns current truth, not state as of any earlier effect. The input is
+    /// normalized first (duplicates collapse, a whole-book scope absorbs that
+    /// book's chapter scopes), so concatenating several effects' `changed` lists is
+    /// always correct.
+    #[wasm_bindgen(js_name = toTokens)]
+    pub fn to_tokens(&self, scopes: Vec<Scope>) -> ScopeTokensOutcome {
+        let mut native = Vec::with_capacity(scopes.len());
+        for scope in scopes {
+            let book = match usfm_onion::token::BookId::from_str(&scope.book) {
+                Some(book) => book,
+                None => {
+                    return ScopeTokensOutcome::refused(ScopeError::BookNotFound {
+                        book: scope.book,
+                    });
+                }
+            };
+            native.push(match scope.chapter {
+                None => braid::Scope::book(book),
+                Some(label) => braid::Scope::chapter(book, label.into()),
+            });
+        }
+        ScopeTokensOutcome::from(
+            self.inner
+                .to_tokens(native)
+                .map(|scopes| {
+                    scopes
+                        .into_iter()
+                        .map(|scope| ScopeTokens {
+                            book: scope.book.as_str().to_string(),
+                            chapter: scope.chapter.as_ref().map(ChapterLabel::from),
+                            tokens: scope
+                                .tokens
+                                .iter()
+                                .map(crate::dto::map_owned_token)
+                                .collect(),
+                        })
+                        .collect()
+                })
+                .map_err(ScopeError::from),
+        )
+    }
+
+    /// The exact bytes a scope would be saved as.
+    #[wasm_bindgen(js_name = toUsfm)]
+    pub fn to_usfm(&self, scope: CorpusScope) -> UsfmOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => return UsfmOutcome::refused(ScopeError::BookNotFound { book }),
+        };
+        UsfmOutcome::from(
+            self.inner
+                .to_usfm(native)
+                .map(|output| scoped_out(output, |value| value))
+                .map_err(ScopeError::from),
+        )
+    }
+
+    /// Whether a scope differs from its baseline, by exact serialized equality.
+    #[wasm_bindgen(js_name = isDirty)]
+    pub fn is_dirty(&self, scope: CorpusScope) -> DirtyOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => return DirtyOutcome::refused(ScopeError::BookNotFound { book }),
+        };
+        DirtyOutcome::from(self.inner.is_dirty(native).map_err(ScopeError::from))
+    }
+
+    /// The resident diff against the baseline.
+    #[wasm_bindgen(js_name = diffBaseline)]
+    pub fn diff_baseline(&self, scope: CorpusScope) -> DiffBaselineOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return DiffBaselineOutcome::refused(BaselineError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        DiffBaselineOutcome::from(
+            self.inner
+                .diff_baseline(native)
+                .map(|output| {
+                    scoped_out(output, |skeleton| {
+                        crate::dto::map_native_skeleton(
+                            &skeleton,
+                            crate::dto::map_owned_token,
+                            usfm_onion::diff::TextDiffMode::None,
+                        )
+                    })
+                })
+                .map_err(BaselineError::from),
+        )
+    }
+
+    /// Every verse's lossless text projection for a scope, in document order.
+    ///
+    /// The resident answer to what the stateless projection computes from scratch:
+    /// identical entries, but a read after a one-chapter edit recomputes only that
+    /// chapter and takes the rest from cache — which is what makes this callable on
+    /// a keystroke instead of once a document.
+    ///
+    /// Entries are `[sid, projection]` pairs in first-seen token order, the same
+    /// shape the stateless `vrefIndexUsfm`/`vrefIndexTokens` exports return: one
+    /// authoritative sequence, since an object keyed by sid enumerates its keys
+    /// sorted and would silently reorder a document that is deliberately not.
+    #[wasm_bindgen(js_name = vrefIndex)]
+    pub fn vref_index(&mut self, scope: CorpusScope) -> VrefIndexOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => return VrefIndexOutcome::refused(ScopeError::BookNotFound { book }),
+        };
+        VrefIndexOutcome::from(
+            self.inner
+                .vref_index(native)
+                .map(|output| {
+                    scoped_out(output, |entries| {
+                        crate::VrefIndex(
+                            entries
+                                .into_iter()
+                                .map(|entry| {
+                                    (
+                                        entry.sid,
+                                        crate::dto::map_verse_projection(entry.projection),
+                                    )
+                                })
+                                .collect(),
+                        )
+                    })
+                })
+                .map_err(ScopeError::from),
+        )
+    }
+
+    /// Books whose findings are stale, in corpus order. Derived from authoritative
+    /// stamps rather than drained from a queue, so reading it twice is safe.
+    #[wasm_bindgen(js_name = booksAwaitingLint)]
+    pub fn books_awaiting_lint(&self) -> Vec<String> {
+        self.inner
+            .books_awaiting_lint()
+            .into_iter()
+            .map(|book| book.as_str().to_string())
+            .collect()
+    }
+
     /// The corpus's content-derived identity, as a 16-digit hex string.
     ///
     /// Hex rather than a number because the value is 64 bits: a JS `number` cannot
@@ -100,11 +676,99 @@ impl Braid {
     }
 }
 
-/// Proves the generic result type projects through tsify and wasm-bindgen before
-/// the verbs depend on it. Removed once a real verb returns one.
-#[allow(dead_code)]
-fn _projects(result: Result<String, String>) -> ApiResult<String, String> {
-    ApiResult::of(result)
+fn unknown_patch(id: PatchId) -> PatchError {
+    PatchError::UnknownPatch { id }
+}
+
+fn book_id(code: &str) -> Result<usfm_onion::token::BookId, IngestError> {
+    usfm_onion::token::BookId::from_str(code).ok_or_else(|| IngestError::DuplicateBook {
+        book: code.to_string(),
+        sources: Vec::new(),
+    })
+}
+
+/// A scope's book code, or the code that could not be read — which is not a
+/// resident book by definition, so the caller gets the same refusal it would get
+/// for a book that is simply absent.
+fn scope_into_native(scope: CorpusScope) -> Result<braid::CorpusScope, String> {
+    match scope {
+        CorpusScope::All => Ok(braid::CorpusScope::All),
+        CorpusScope::Book { book } => usfm_onion::token::BookId::from_str(&book)
+            .map(braid::CorpusScope::Book)
+            .ok_or(book),
+        CorpusScope::Chapter { target } => {
+            let book = target.book.clone();
+            usfm_onion::token::BookId::from_str(&target.book)
+                .map(|id| {
+                    braid::CorpusScope::Chapter(braid::ChapterTarget::new(id, target.label.into()))
+                })
+                .ok_or(book)
+        }
+    }
+}
+
+fn target_into_native(target: ChapterTarget) -> Result<braid::ChapterTarget, IngestError> {
+    Ok(braid::ChapterTarget::new(
+        book_id(&target.book)?,
+        target.label.into(),
+    ))
+}
+
+/// The caller's tokens as resident ones, refusing the whole array if any single
+/// token cannot be one — a half-converted book is not a book.
+fn tokens_into_native(
+    tokens: Vec<crate::Token>,
+) -> Result<Vec<usfm_onion::token::OwnedToken>, IngestError> {
+    tokens
+        .iter()
+        .enumerate()
+        .map(|(index, token)| {
+            usfm_onion_wire::dto::owned_token_from_dto(token, index as u32).map_err(|error| {
+                IngestError::InvalidToken {
+                    message: error.to_string(),
+                }
+            })
+        })
+        .collect()
+}
+
+fn source_key(value: String) -> Result<braid::SourceKey, IngestError> {
+    braid::SourceKey::new(value.clone()).ok_or(IngestError::DuplicateSourceKey { source: value })
+}
+
+fn book_into_native(book: BookInput) -> Result<braid::BookInput, IngestError> {
+    match book {
+        BookInput::Usfm {
+            source_key: key,
+            book,
+            source,
+        } => Ok(braid::BookInput::Usfm {
+            source_key: source_key(key)?,
+            book: book_id(&book)?,
+            source,
+        }),
+        BookInput::Tokens {
+            source_key: key,
+            book,
+            tokens,
+            line_ending,
+        } => Ok(braid::BookInput::Tokens(braid::BookTokensInput {
+            source_key: source_key(key)?,
+            book: book_id(&book)?,
+            tokens: tokens_into_native(tokens)?,
+            line_ending: line_ending.into(),
+        })),
+    }
+}
+
+fn corpus_into_native(corpus: CorpusInput) -> Result<braid::CorpusInput, IngestError> {
+    Ok(braid::CorpusInput::new(
+        corpus
+            .books
+            .into_iter()
+            .map(book_into_native)
+            .collect::<Result<Vec<_>, _>>()?,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -489,6 +1153,298 @@ impl From<braid::ScopeError> for ScopeError {
                 target: target_out(&target),
                 matches,
             },
+        }
+    }
+}
+
+/// A patch that could not be looked up or applied.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PatchError {
+    /// The patch was resolved against a different corpus than the resident one —
+    /// either the identity moved, or the target book was rewritten since.
+    StaleSnapshot {
+        expected: String,
+        found: String,
+    },
+    UnknownPatch {
+        id: PatchId,
+    },
+    /// Applying it produced a token stream that cannot become resident.
+    InvalidResult {
+        error: IngestError,
+    },
+}
+
+impl From<braid::PatchError> for PatchError {
+    fn from(error: braid::PatchError) -> Self {
+        match error {
+            braid::PatchError::StaleSnapshot { expected, found } => Self::StaleSnapshot {
+                expected: format!("{:016x}", expected.0),
+                found: format!("{:016x}", found.0),
+            },
+            braid::PatchError::UnknownPatch(id) => Self::UnknownPatch { id: id.into() },
+            braid::PatchError::InvalidResult(error) => Self::InvalidResult {
+                error: error.into(),
+            },
+        }
+    }
+}
+
+/// A prepared format patch that could not be looked up or applied.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum FormatPatchError {
+    StaleSnapshot {
+        expected: String,
+        found: String,
+    },
+    UnknownPatch {
+        id: FormatPatchId,
+    },
+    /// A book the preparation targeted is no longer resident. Applying is
+    /// all-or-nothing across the books it covered, so one missing book refuses the
+    /// whole application rather than formatting the rest.
+    BookNotResident {
+        book: String,
+    },
+    InvalidResult {
+        error: IngestError,
+    },
+}
+
+impl From<braid::FormatPatchError> for FormatPatchError {
+    fn from(error: braid::FormatPatchError) -> Self {
+        match error {
+            braid::FormatPatchError::StaleSnapshot { expected, found } => Self::StaleSnapshot {
+                expected: format!("{:016x}", expected.0),
+                found: format!("{:016x}", found.0),
+            },
+            braid::FormatPatchError::UnknownPatch(id) => Self::UnknownPatch { id: id.into() },
+            braid::FormatPatchError::BookNotResident(book) => Self::BookNotResident {
+                book: book.as_str().to_string(),
+            },
+            braid::FormatPatchError::InvalidResult(error) => Self::InvalidResult {
+                error: error.into(),
+            },
+        }
+    }
+}
+
+/// A scope that does not resolve, on the way to preparing a format patch.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum FormatError {
+    Scope { error: ScopeError },
+}
+
+impl From<braid::FormatError> for FormatError {
+    fn from(error: braid::FormatError) -> Self {
+        match error {
+            braid::FormatError::Scope(error) => Self::Scope {
+                error: error.into(),
+            },
+        }
+    }
+}
+
+/// A baseline that could not be recorded.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SetBaselineError {
+    /// The book is not resident, so there is no current state for a baseline to be
+    /// the counterpart of.
+    BookNotResident { book: String },
+    /// The supplied book is not valid input in the first place.
+    Invalid { error: IngestError },
+}
+
+impl From<braid::SetBaselineError> for SetBaselineError {
+    fn from(error: braid::SetBaselineError) -> Self {
+        match error {
+            braid::SetBaselineError::BookNotResident(book) => Self::BookNotResident {
+                book: book.as_str().to_string(),
+            },
+            braid::SetBaselineError::Invalid(error) => Self::Invalid {
+                error: error.into(),
+            },
+        }
+    }
+}
+
+/// A baseline comparison that cannot be answered.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum BaselineError {
+    Scope {
+        error: ScopeError,
+    },
+    /// These books have no baseline, so there is nothing to compare against.
+    MissingBaseline {
+        books: Vec<String>,
+    },
+}
+
+impl From<braid::BaselineError> for BaselineError {
+    fn from(error: braid::BaselineError) -> Self {
+        match error {
+            braid::BaselineError::Scope(error) => Self::Scope {
+                error: error.into(),
+            },
+            braid::BaselineError::MissingBaseline { books } => Self::MissingBaseline {
+                books: books.iter().map(|book| book.as_str().to_string()).collect(),
+            },
+        }
+    }
+}
+
+/// A patch's snapshot-bound identity.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchId {
+    /// The corpus identity the patch was resolved against, as 16 hex digits.
+    pub snapshot: String,
+    pub ordinal: u32,
+}
+
+impl From<braid::PatchId> for PatchId {
+    fn from(id: braid::PatchId) -> Self {
+        Self {
+            snapshot: format!("{:016x}", id.snapshot.0),
+            ordinal: id.ordinal,
+        }
+    }
+}
+
+impl PatchId {
+    fn into_native(self) -> Result<braid::PatchId, ()> {
+        Ok(braid::PatchId {
+            snapshot: braid::SnapshotId(u64::from_str_radix(&self.snapshot, 16).map_err(|_| ())?),
+            ordinal: self.ordinal,
+        })
+    }
+}
+
+/// A prepared format patch's snapshot-bound identity.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct FormatPatchId {
+    pub snapshot: String,
+    pub ordinal: u32,
+}
+
+impl From<braid::FormatPatchId> for FormatPatchId {
+    fn from(id: braid::FormatPatchId) -> Self {
+        Self {
+            snapshot: format!("{:016x}", id.snapshot.0),
+            ordinal: id.ordinal,
+        }
+    }
+}
+
+impl FormatPatchId {
+    fn into_native(self) -> Result<braid::FormatPatchId, ()> {
+        Ok(braid::FormatPatchId {
+            snapshot: braid::SnapshotId(u64::from_str_radix(&self.snapshot, 16).map_err(|_| ())?),
+            ordinal: self.ordinal,
+        })
+    }
+}
+
+/// What one patch row does at its own position.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum PatchOp {
+    /// Place the template immediately after the row's position; several inserts at
+    /// one position place in row order.
+    Insert,
+    Replace,
+    Delete,
+}
+
+/// One token operation. `position` addresses the token stream of the snapshot the
+/// owning patch is bound to, never the post-patch stream.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchRow {
+    pub op: PatchOp,
+    pub position: u32,
+    /// Absent exactly for a delete, which places nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<crate::TokenTemplate>,
+}
+
+/// One resolved fix, addressable and inspectable without applying it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct Patch {
+    pub id: PatchId,
+    pub book: String,
+    /// The target book's hash at resolution time — the second half of the
+    /// staleness check, since a book can be rewritten and restored inside a corpus
+    /// that hashes the same overall.
+    pub source_hash: String,
+    /// The fix's own remedy code, which is not the finding's lint code.
+    pub code: String,
+    pub label: String,
+    pub label_params: std::collections::BTreeMap<String, String>,
+    pub rows: Vec<PatchRow>,
+}
+
+impl From<braid::Patch> for Patch {
+    fn from(patch: braid::Patch) -> Self {
+        Self {
+            id: patch.id.into(),
+            book: patch.book.as_str().to_string(),
+            source_hash: format!("{:016x}", patch.source_hash.0),
+            code: patch.code,
+            label: patch.label,
+            label_params: patch.label_params,
+            rows: patch
+                .rows
+                .into_iter()
+                .map(|row| PatchRow {
+                    op: match row.op {
+                        braid::PatchOp::Insert => PatchOp::Insert,
+                        braid::PatchOp::Replace => PatchOp::Replace,
+                        braid::PatchOp::Delete => PatchOp::Delete,
+                    },
+                    position: row.position,
+                    template: row.template.map(crate::dto::map_token_template),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Whether preparing a format patch found anything to change.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PatchPreparation {
+    /// The scope is already formatted; nothing was stored and there is nothing to
+    /// apply.
+    Unchanged,
+    Ready {
+        id: FormatPatchId,
+    },
+}
+
+impl From<braid::PatchPreparation> for PatchPreparation {
+    fn from(preparation: braid::PatchPreparation) -> Self {
+        match preparation {
+            braid::PatchPreparation::Unchanged => Self::Unchanged,
+            braid::PatchPreparation::Ready(id) => Self::Ready { id: id.into() },
         }
     }
 }

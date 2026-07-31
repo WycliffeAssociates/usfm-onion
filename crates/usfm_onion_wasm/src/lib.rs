@@ -696,6 +696,63 @@ mod tests {
         }
     }
 
+    /// The resident handle projects the same verse index the stateless export does,
+    /// including after an edit — the property that lets a consumer swap one for the
+    /// other on a keystroke path without changing what it reads.
+    #[test]
+    fn the_resident_vref_index_matches_the_stateless_projection() {
+        use crate::resident::*;
+
+        let source = "\\id PSA\n\\c 51\n\\q1\n\\v 8 Make me hear joy and gladness\n\\q2 so that the bones may rejoice.\n\\c 52\n\\p\n\\v 1 Why do you boast?\n";
+        // Driven through braid's surface plus this crate's own conversions: a
+        // `js_sys::Function` cannot be constructed on a non-wasm target, so the
+        // handle's JS-facing constructor is exercised by the JS-side gates instead.
+        let mut resident = braid::Braid::new(
+            braid::BraidConfig::new(usfm_onion::lint::LintOptions::scoped(
+                usfm_onion::lint::LintScope::Book,
+            )),
+            || "minted".to_string(),
+        );
+        resident
+            .replace_corpus(braid::CorpusInput::new(vec![braid::BookInput::Usfm {
+                source_key: braid::SourceKey::new("PSA.usfm").unwrap(),
+                book: usfm_onion::token::BookId::from_str("PSA").unwrap(),
+                source: source.to_string(),
+            }]))
+            .expect("one book");
+
+        let resident_entries = match resident
+            .vref_index(braid::CorpusScope::Book(
+                usfm_onion::token::BookId::from_str("PSA").unwrap(),
+            ))
+            .expect("resident index")
+        {
+            braid::ScopedOutput::Single(entries) => entries,
+            other => panic!("a book scope returns one value, got {other:?}"),
+        };
+        let stateless = crate::stateless::wasm_vref_index_usfm(source);
+        let projected: Vec<(String, String)> = resident_entries
+            .iter()
+            .map(|entry| (entry.sid.clone(), entry.projection.text.clone()))
+            .collect();
+        let expected: Vec<(String, String)> = serde_json::to_value(&stateless)
+            .expect("serializes")
+            .as_array()
+            .expect("ordered pairs")
+            .iter()
+            .map(|pair| {
+                (
+                    pair[0].as_str().expect("sid").to_string(),
+                    pair[1]["text"].as_str().expect("text").to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(projected, expected, "resident must equal stateless");
+        // And the seam byte the projection preserves is actually in there, so this
+        // is comparing real content and not two empty lists.
+        assert!(projected[0].1.contains("gladness\nso that"));
+    }
+
     // --- native <-> wasm parity fixture (Gate 5) ---
     //
     // The Gate 4 tests above prove the DTO path *populates* text_diff and pin

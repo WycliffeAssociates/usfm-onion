@@ -949,6 +949,12 @@ pub(crate) fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssue {
     }
 }
 
+/// One resident token as the boundary shape, via the wire DTO's own conversion so
+/// there is one definition of what a token looks like out here.
+pub(crate) fn map_owned_token(token: &usfm_onion::token::OwnedToken) -> Token {
+    Token::from(token)
+}
+
 pub(crate) fn map_native_skeleton<T: DiffableToken>(
     skeleton: &NativeDiffSkeleton<T>,
     map_token: impl Fn(&T) -> Token,

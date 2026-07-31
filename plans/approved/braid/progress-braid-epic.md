@@ -4343,3 +4343,47 @@ the feature, so the entire `#[cfg(feature = "serde")]` surface — derives and t
 never compiled in any run I made. `cargo test --workspace --all-features` is now part of the
 standing battery (626 passed / 0 failed), which covers braid's `serde` and wire's `wasm`
 features together; a feature that is never enabled is a gate that does not exist.
+
+## 2026-07-31 — Phase F step 1c: the resident `Braid` class
+
+The wasm handle now projects **18 verbs** over `crates/braid`: the lifecycle
+(`replaceCorpus`, `updateBook`, `updateChapter`, `removeBook`, `removeChapter`, `clear`,
+`updateConfig`), baselines (`setBaseline`, `clearBaseline`, `isDirty`, `diffBaseline`), lint
+and patches (`lint`, `patches`, `patch`, `previewPatch`, `applyPatch`, `prepareFormatPatch`,
+`applyFormatPatch`), reads (`books`, `chapterLabels`, `toTokens`, `toUsfm`,
+`booksAwaitingLint`, `expectedSnapshotId`), and `vrefIndex`.
+
+**Outcomes are typed, and getting there took a fix worth recording.** `wasm_bindgen` erases a
+generic's parameters in a method signature, so a verb returning `ApiResult<MutationEffect,
+IngestError>` was declared as a bare `ApiResult` — no information at all to a consumer. A
+transparent newtype per shape costs nothing at runtime and restores the whole type: 14
+`XOutcome` aliases, each rendering as `export type XOutcome = ApiResult<T, E>`, so
+`applyPatch(id: PatchId): PatchMutationOutcome` resolves to
+`ApiResult<MutationEffect, PatchError>` in an editor.
+
+Deviations, both recorded earlier and reaffirmed here: `ApiResult` is tagged on a string
+(`{status:"ok"|"error"}`) because a boolean tag cannot narrow a union in TypeScript, matching
+the crate's existing `PackedBookOutcome`; and `ScopedOutput` projects `all` as ordered pairs
+rather than an object keyed by source key, because corpus order is a contract and an object's
+key enumeration is not.
+
+**Inputs are discriminated unions** (`BookInput`, `ChapterInput`, `ChapterLabel`,
+`CorpusScope`), never optional bags — a book arriving as bytes and a book arriving as tokens
+carry different obligations, and a shape that could be neither is one a caller builds by
+accident. Every refusal is a typed union a consumer switches on, carrying the same information
+the Rust error does; a book code this library cannot even read reports the code the caller
+sent rather than an empty string, since that is the only part they can act on.
+
+`vrefIndex(scope)` projects the other builder's resident verb with RFC 1's tuple-entries
+shape — `[sid, projection]` pairs in first-seen order, identical to what the stateless
+`vrefIndexUsfm`/`vrefIndexTokens` return, so a consumer can move a keystroke path from one to
+the other without changing what it reads. Pinned by a test asserting the resident entries
+equal the stateless projection's, including the preserved seam byte so it cannot pass on two
+empty lists.
+
+New wire export: `impl From<&OwnedToken> for Token`, the outbound counterpart of
+`owned_token_from_dto` — resident tokens leaving the boundary. Spanless, with the two
+name-derived marker fields recomputed exactly as decoding does.
+
+Gates: `cargo test --workspace --all-features` 627 passed / 0 failed; zero warnings; fmt
+clean; generated declarations inspected for every verb.

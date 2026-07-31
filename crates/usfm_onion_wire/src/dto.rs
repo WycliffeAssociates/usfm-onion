@@ -1024,6 +1024,57 @@ fn verbatim_value(attribute: &AttributeItem) -> Option<&str> {
     )
 }
 
+/// One resident token as the boundary shape — the outbound counterpart of
+/// [`owned_token_from_dto`], and the pair that makes a round trip meaningful.
+///
+/// `span` is absent because an owned token has none: spanlessness is what lets it
+/// outlive the source it came from. The two name-derived fields are recomputed from
+/// the marker rather than carried, exactly as decoding does, so a consumer sees the
+/// same resolved metadata whichever path produced its token.
+impl From<&OwnedToken> for Token {
+    fn from(token: &OwnedToken) -> Self {
+        let marker = token.marker_name();
+        let marker_like = marker.is_some();
+        Token {
+            id: token.id().as_str().to_string(),
+            kind: token.kind().into(),
+            source: token.source().to_string(),
+            span: None,
+            sid: token.sid().map(ToOwned::to_owned),
+            marker: marker.map(ToOwned::to_owned),
+            nested: marker_like.then(|| token.nested()),
+            marker_metadata: marker.map(|name| usfm_onion::token::marker_metadata(name).into()),
+            structural: marker.map(|name| {
+                usfm_onion::marker_defs::structural_marker_info(
+                    name,
+                    usfm_onion::token::marker_metadata(name).kind,
+                )
+                .into()
+            }),
+            number_info: token.number_info().map(|number| NumberInfo {
+                start: number.start,
+                end: number.end,
+                kind: number.kind.into(),
+            }),
+            book_code: token.book_code().map(|code| code.code.as_ref().to_string()),
+            book_code_valid: token.book_code().map(|code| code.is_valid),
+            attributes: token
+                .attributes()
+                .iter()
+                .map(|attribute| AttributeItem {
+                    span: attribute.span.map(Into::into),
+                    text: attribute.source.as_ref().to_string(),
+                    key: attribute.key.as_ref().to_string(),
+                    value: decode_attr_value(attribute.value.as_ref()),
+                    is_default: attribute.is_default,
+                })
+                .collect(),
+            attribute_source: token.attribute_list().map(ToOwned::to_owned),
+            attribute_offset: token.attribute_offset(),
+        }
+    }
+}
+
 impl<'a> From<&NativeToken<'a>> for Token {
     fn from(token: &NativeToken<'a>) -> Self {
         let mut value = Token {
