@@ -804,6 +804,7 @@ dependencies = [
 name = "usfm_onion_wasm"
 version = "0.0.9"
 dependencies = [
+ "braid",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
