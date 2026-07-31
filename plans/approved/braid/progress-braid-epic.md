@@ -3097,3 +3097,14 @@ restored after the dev builds.
 
 Clean-room review of this batch (Will runs it). Then Phase D — which the full finding-and-patch gate
 above now unblocks — with the ordinal-bridging task from §N.2 as its first patch-related item.
+
+## 2026-07-31 — Owner rulings on the C3/C4 surfaced items
+
+- Whitespace-remedy shape: **A — deferred.** The remedy should have inserted a newline token;
+  reshape charter recorded at plans/candidates/fix-whitespace-remedy-token-shape.md; braid ships
+  with editor-parity behavior meanwhile (pinned by test).
+- Warm-lint-cache stamps: **A** — coordinator drafts the config-fingerprint and engine-stamp
+  definitions with the Phase D packet for owner adjudication there.
+- Pre-existing USJ/USX ignored-test failures: owner-dispositioned as expected — USJ/USX are not
+  intended to be lossless given the nature of their keys; the two `#[ignore]`d "lossless" tests
+  overclaim. No chase; noted here so the red `--ignored` core gate has a recorded explanation.
