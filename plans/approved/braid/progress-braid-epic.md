@@ -3473,3 +3473,26 @@ tokens, 15 good + 17 malformed goldens — unchanged from the previous round, no
 ### New public core API
 
 `usfm_onion::token::OwnedToken::hash_wire_identity` (generic over `std::hash::Hasher`).
+
+## 2026-07-31 — Phase D CLOSED (clean-room verdict) + comment typo fix
+
+Clean-room re-review verdict on `0ac5079`: "Phase D closes. No correctness or spec findings
+remain: the projection is exhaustive, drift-proof, collision-framed, and aligned with the owned
+encoder." Reviewer independently verified the full workspace suite, lint oracle (byte-identical),
+release wasm Phase D corpus gate, braid corpus gates 3/3, both new focused regressions, fmt, and
+the commit diff. Reviewer skipped the packed npm gates locally (working-tree `pkg-*` state);
+director had run both green on the same commit.
+
+One non-blocking finding, fixed in this commit: the fixture comment at the adapter's
+attribute-spelling regression said the spelling was "widened" and the bytes changed, while the
+fixture actually narrows each attribute's recorded spelling by its leading character and
+deliberately keeps every emitted byte identical. Comment corrected to describe the real mutation;
+no code changed. Touched test re-run green; `cargo fmt --all -- --check` clean.
+
+Phase D deliverables, final: `usfm_onion_wire::corpus_codec` (encode_corpus/verify_corpus,
+Fresh/Cached sections, splice refusals), wasm composing adapter + PublicationCache keyed on
+(book, source_hash, token_identity, stamps), clean-corpus negative cache, §O stamps, field-9
+lint_stamps, and the core-owned `OwnedToken::hash_wire_identity` projection.
+
+Remaining: Phase E (baseline mutation, missing-baseline policy, exact is_dirty, scoped to_usfm),
+Phase F (public wasm Braid, restoreCorpus composition, reconcile helper, editor parity, pkg regen).

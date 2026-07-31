@@ -485,9 +485,10 @@ mod tests {
         let first = cache.publish(&mut resident).expect("first publication");
         assert_eq!(first.encoded.len(), 2);
 
-        // Re-push GEN with one attribute's verbatim spelling widened by a space,
-        // which the emitter puts back into the list text: same key and value, same
-        // structural attributes, different bytes.
+        // Re-push GEN with each attribute's recorded spelling narrowed by its
+        // leading character while the verbatim list text is kept, so every
+        // emitted byte stays identical: same key and value, same source bytes,
+        // different per-attribute spellings.
         let respelled: Vec<OwnedToken> = parse(ALIGNED)
             .tokens
             .iter()
