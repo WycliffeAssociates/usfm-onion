@@ -3945,3 +3945,14 @@ existing test asserted BTreeMap iteration order as such; three used map-only met
 The generated TypeScript for `VrefIndex` changes shape with this commit; the
 regenerated `pkg-bundler`/`pkg-web` trees carrying it land with this packet's package
 commit.
+
+## 2026-07-31 — owner ratifies the from_parts proxy ruling (Phase F checkpoint)
+
+The Phase F checkpoint's proxy ruling is owner-confirmed: wire Token DTO -> OwnedToken assembly
+lands as core `OwnedToken::from_parts` (exhaustively destructured parts struct, typed
+refuse-never-guess errors — core owns semantic legality because it owns the private payload
+enum) plus wire `TryFrom<&Token>` mapping shape-level problems to the frozen `TokenInputError`
+(§5.1). Rejected alternatives, for the record: fabricating anchors for `from_format_token`, or
+relaxing the C4-hardened no-anchor refusals. Same session, owner also redirected the RFC 1
+boundary projection from `{order, bySid}` to a single ordered `[sid, projection][]` entries
+list — one authority, consumers build their own lookup.
