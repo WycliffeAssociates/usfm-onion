@@ -37,6 +37,7 @@ mod lint;
 mod patch;
 mod stamps;
 mod state;
+mod vref;
 
 use usfm_onion::diff::{DiffSkeleton, diff_skeleton};
 use usfm_onion::format::{FormatOptions, FormatToken, format};
@@ -65,6 +66,10 @@ pub use crate::state::{
     PrimeReport, RestoreReport, Scope, ScopeSet, ScopeTokens, SnapshotId, SourceHash,
     TokenIdentity,
 };
+/// Re-exported so a caller can name a `vref_index` result's own types
+/// without a direct `usfm_onion` dependency — the same courtesy every other
+/// resident projection here extends over its own core return type.
+pub use usfm_onion::vref::{Segment, Utf16Span, VerseProjection, VrefEntry};
 
 /// Resident configuration. Lint options live here so every recompute uses one
 /// declared configuration rather than a per-call argument.
@@ -203,8 +208,11 @@ impl Braid {
                 Some(resident) => {
                     // A content change is not how a baseline changes: carry
                     // the predecessor's forward rather than letting the fresh
-                    // candidate's default `None` erase it.
+                    // candidate's default `None` erase it. The vref cache
+                    // carries forward too — see `crate::vref` for why that
+                    // is always safe.
                     candidate.baseline = resident.baseline.clone();
+                    candidate.vref_cache = resident.vref_cache.clone();
                     changed.push(Scope::book(candidate.book));
                 }
                 None => changed.push(Scope::book(candidate.book)),
@@ -403,8 +411,13 @@ impl Braid {
                 } else {
                     // A content change is not how a baseline changes: carry
                     // the predecessor's forward rather than letting the fresh
-                    // candidate's default `None` erase it.
+                    // candidate's default `None` erase it. The vref cache
+                    // carries forward too — safe regardless of how much of
+                    // the book actually changed, since every entry is
+                    // re-verified against its own run's current tokens on
+                    // read (see `crate::vref`).
                     candidate.baseline = self.books[index].baseline.clone();
+                    candidate.vref_cache = self.books[index].vref_cache.clone();
                     let book = candidate.book;
                     self.books[index] = candidate;
                     Ok(self.effect(vec![Scope::book(book)], Vec::new()))
@@ -919,6 +932,99 @@ impl Braid {
                 )))
             }
         }
+    }
+
+    /// The scope's vref index — every in-scope verse's lossless projection,
+    /// in stream order — content-identical to
+    /// `usfm_onion::vref::tokens_to_vref_index` over the same tokens, the
+    /// only difference being that a resident read may serve some or all of
+    /// a book's chapter runs from cache instead of walking their tokens
+    /// again. `&mut self`, the same explicit-recompute shape as `lint()`:
+    /// this is where the cache is read, verified, and (for whatever it
+    /// misses) updated — nothing here is computed as a side effect of a
+    /// mutation.
+    ///
+    /// `CorpusScope::Chapter` reads and updates only the one run's own cache
+    /// entry; a whole-book read (`Book`/`All`) additionally prunes every
+    /// entry that does not belong to one of the book's current runs, so the
+    /// cache never grows past the book's own run count on that path. See
+    /// `crate::vref` for why a run's own `TokenIdentity` is a sound cache key
+    /// for this specific projection.
+    pub fn vref_index(
+        &mut self,
+        scope: CorpusScope,
+    ) -> Result<ScopedOutput<Vec<VrefEntry>>, ScopeError> {
+        match scope {
+            CorpusScope::All => {
+                let mut out = Vec::with_capacity(self.books.len());
+                for index in 0..self.books.len() {
+                    let entries = self.book_vref_entries(index);
+                    let book = &self.books[index];
+                    out.push(SourceOutput {
+                        source_key: book.source_key.clone(),
+                        book: book.book,
+                        value: entries,
+                    });
+                }
+                Ok(ScopedOutput::All(out))
+            }
+            CorpusScope::Book(book) => {
+                let index = self.index_of(book).ok_or(ScopeError::BookNotFound(book))?;
+                Ok(ScopedOutput::Single(self.book_vref_entries(index)))
+            }
+            CorpusScope::Chapter(target) => {
+                let (book_index, run_index) = self.resolve_chapter(&target)?;
+                Ok(ScopedOutput::Single(
+                    self.run_vref_entries(book_index, run_index),
+                ))
+            }
+        }
+    }
+
+    /// Every run's vref entries, concatenated in run order — the same order
+    /// the token stream itself puts them in, since runs partition it without
+    /// gaps or overlaps. Rebuilds the book's whole cache in the same pass:
+    /// every run this visits either reuses a matching old entry (moved, not
+    /// recomputed) or computes fresh, and nothing left over from a run that
+    /// no longer exists in this shape survives past this call.
+    fn book_vref_entries(&mut self, book_index: usize) -> Vec<VrefEntry> {
+        let run_count = self.books[book_index].runs.len();
+        let mut old_cache = std::mem::take(&mut self.books[book_index].vref_cache);
+        let mut fresh_cache = Vec::with_capacity(run_count);
+        let mut entries = Vec::new();
+        for run_index in 0..run_count {
+            let range = self.books[book_index].runs[run_index].range.clone();
+            let cached =
+                vref::take_or_compute(&mut old_cache, &self.books[book_index].tokens[range]);
+            entries.extend(cached.entries.iter().cloned());
+            fresh_cache.push(cached);
+        }
+        self.books[book_index].vref_cache = fresh_cache;
+        // A duplicate/reopened `\c` run can share a sid with an earlier run;
+        // the whole-stream projection this must stay equivalent to folds
+        // that through one shared index (first-seen position, last write
+        // wins), so the per-run concatenation redoes exactly that fold once
+        // here — see `vref::merge_by_sid`.
+        vref::merge_by_sid(entries)
+    }
+
+    /// One run's own vref entries, without touching any other run's cache
+    /// entry — see `vref::run_entries`.
+    fn run_vref_entries(&mut self, book_index: usize, run_index: usize) -> Vec<VrefEntry> {
+        let range = self.books[book_index].runs[run_index].range.clone();
+        let cached = vref::run_entries(
+            &self.books[book_index].vref_cache,
+            &self.books[book_index].tokens[range],
+        );
+        let entries = cached.entries.clone();
+        if !self.books[book_index]
+            .vref_cache
+            .iter()
+            .any(|run| run.identity == cached.identity)
+        {
+            self.books[book_index].vref_cache.push(cached);
+        }
+        entries
     }
 
     /// Whether a scope's exact serialized bytes differ from its baseline.

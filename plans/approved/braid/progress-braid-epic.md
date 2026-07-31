@@ -4176,3 +4176,147 @@ So the two vref surfaces were the only content-flattening sites, and both are no
   `partitioned_matches_serial_over_{test_data,example_corpora}` (both re-run green here).
   Pre-existing, and unrelated to the separator: it tracks the block-supports-verse flag,
   which still persists across chapters.
+
+## 2026-07-31 — RFC 3: resident, per-chapter-incremental vref index
+
+Owner-directed, editor-critical: the editor calls stateless whole-book
+`vrefIndexTokens` on every keystroke at ~520-630ms/edit; this is the resident
+fix.
+
+**Verb.** `Braid::vref_index(&mut self, scope: CorpusScope) ->
+Result<ScopedOutput<Vec<VrefEntry>>, ScopeError>`, following `lint()`'s
+explicit-recompute shape (`&mut self`, nothing computed as a mutation side
+effect) and the existing `to_usfm`/`to_usx`/`to_usj` `ScopedOutput`
+convention rather than a new envelope. Supports `All | Book | Chapter` for
+consistency with every other resident projection, though the editor's own
+hot path is `Book`/`All`. Content is byte-for-byte identical to
+`usfm_onion::vref::tokens_to_vref_index` over the same current tokens (see
+gate below) — braid adds caching, not a second projection. `VrefEntry`,
+`VerseProjection`, `Segment`, `Utf16Span` re-exported from `usfm_onion::vref`
+for callers, the same courtesy every other resident projection extends.
+
+**Cache key and invalidation predicate.** Per chapter run, keyed on that
+run's own `TokenIdentity` (`crates/braid/src/vref.rs`, new module) — the same
+drift-proof `hash_wire_identity`-backed projection this crate's baseline/
+patch machinery already uses. Justified against "what does the projection
+actually read": per-token id (segment anchors), kind, source text (verse
+content and a verse-number token's own lexeme — this is how a bridge like
+`"1,3"` survives into the sid), sid (the entry key), and marker name
+(paragraph-support gating) — every one of those is already covered by
+`hash_wire_identity`'s exhaustive, no-`..` destructuring. Deliberately not
+"invalidate the cache when mutation X happens" — this epic has twice found
+that kind of predicate incomplete for something a projection actually reads
+(the format-patch snapshot-only bug, twice). Instead every read re-derives
+each visited run's *current* identity and only ever reuses an entry whose
+stored identity matches that fresh one; a stale entry left over from a run
+that no longer exists in this shape is simply never matched again. This
+makes the specific sharp edges named in the RFC fall out for free rather
+than needing separate cases: an `\id`/book-code change reaching every sid in
+the book is just one more way a run's own tokens' hash can move (a
+front-matter edit only ever invalidates the front-matter run's own — usually
+empty — cache entry; every *other* run's tokens, and thus their embedded
+sid strings, are untouched, so there is no cross-run cascade to invalidate
+in braid's token-resident model in the first place); a `\v`-lexeme change is
+covered because `source` is hashed; duplicate/reopened `\c` boundary shifts
+are covered because chapter runs are always recomputed fresh from the
+current stream and a run's hash is taken over whatever slice its *current*
+range names, never a remembered offset. The cache lives on `BookState`
+(`vref_cache: Vec<CachedRun>`) and is carried forward — unconditionally,
+including through `update_book`'s/`replace_corpus`'s whole-book-replace
+branches, not just `update_chapter`'s splice path — because carrying it
+forward is always safe (every entry is re-verified before use) and only
+ever helps; there is no separate "clear on mutation X" bookkeeping to keep
+in sync with every mutation path, unlike the format-patch table's fix.
+
+One correctness subtlety found and fixed during testing: a book with
+duplicate/reopened `\c` runs sharing a chapter number can have the *same*
+sid appear in two different runs. The single whole-stream stateless
+projection folds that through one shared `VrefIndex` (first-seen position,
+last-write-wins content — `VrefIndex::insert`'s own documented rule); this
+crate's per-run projection walks each run through its own separate index (so
+a cache hit for one run can never see another's entries), so the same fold
+has to be redone once over the concatenated result — `vref::merge_by_sid`,
+added after `mutation_battery_stays_equivalent_to_the_stateless_projection`
+caught the drift (two entries under one sid instead of the correctly-merged
+one).
+
+**Reuse proof.** `crates/braid/src/vref.rs`'s own `#[cfg(test)]` module adds
+a thread-local recompute counter (`recompute_count`, incremented only inside
+`CachedRun::fresh`, i.e., only on a genuine non-cache-hit projection run) —
+a cache-generation observable, never a timing assertion, per the standing
+rule. `a_whole_book_read_recomputes_only_the_dirty_chapter` proves: first
+read has nothing to reuse (every run computes); an unchanged re-read is
+entirely cache hits (recompute count 0); after editing exactly one chapter,
+a whole-book read recomputes exactly 1 run, and the untouched chapters'
+entries are unchanged content, not merely unasserted.
+
+**Equivalence gate.** `crates/braid/tests/vref.rs`:
+- Fast (non-`#[ignore]`) tests, both lanes: a scope-exercising fixture (note
+  stripping, chapter crossing, verse bridge) equals the stateless
+  projection; `All` groups by book in corpus order; `Chapter` equals the
+  corresponding slice of a whole-book read; typed `ScopeError`s
+  (book/chapter not found); a mutation battery (`update_chapter`,
+  `update_book`, an `\id`-adjacent whole-book replace, a duplicate-`\c`
+  fixture, `remove_chapter` + `replace_corpus`) staying equivalent to a
+  fresh stateless projection after every step, both lanes.
+- `#[ignore = "corpus-scale"]`:
+  `resident_vref_index_equals_stateless_over_the_whole_corpus_through_a_mutation_battery`
+  — all 66 `en_ulb` books, both lanes, plus the same mutation battery at
+  corpus scale against GEN/PSA/REV/EXO.
+- `#[ignore = "corpus-scale"]` `psalms_informal_timing` — release-build wall
+  clock, not a pass/fail gate (informal numbers only, per the standing
+  counters-not-timing rule for *correctness* proofs; this one is explicitly
+  informal by design).
+
+**Psalms numbers** (release build, warm cache, one `update_chapter` edit
+then a whole-book resident read, vs. a from-scratch stateless
+`tokens_to_vref_index` over Psalms' original 66-book-corpus source in the
+same process): resident **3.38ms** (2455 entries) vs. in-process stateless
+recompute **13.30ms** (2461 entries; the count differs because the
+stateless comparison intentionally reads the *original* unedited source,
+not the post-edit tokens — a like-for-like correctness comparison is what
+the equivalence gate above proves, not this timing one). Both numbers are
+dwarfed by the editor's quoted ~520-630ms/edit baseline, which additionally
+pays wasm marshalling/boundary costs this in-process measurement does not;
+the in-process 3.4ms-vs-13.3ms delta is itself already a ~4x win before any
+boundary-cost difference is counted.
+
+**Deviations / notes for the owner:**
+- `#[cfg(test)] mod tests` inside `crates/braid/src/vref.rs` is new for this
+  packet's proof specifically (existing crate convention already does this
+  for internal-seam tests elsewhere in `lib.rs`); it is compiled only for
+  the crate's own unit-test target and adds no production surface.
+- Found (not introduced by this packet, not fixed — outside this lane):
+  `cargo build -p braid --features serde` currently fails
+  (`error: lifetime may not live long enough` deriving `Deserialize` for
+  `IngestError::InvalidToken(TokenBuildError)`), because `TokenBuildError`
+  gained an `UnexpectedPayload { fact: &'static str, .. }` variant upstream
+  (`src/token.rs`, outside this lane) whose `&'static str` field cannot
+  honestly derive `Deserialize` for an arbitrary input lifetime. Does not
+  affect any gate run for this packet: `usfm_onion_wasm` depends on `braid`
+  with no features, so `serde` is never enabled by `cargo test --workspace`,
+  and every gate above is green. Flagging for whoever owns braid's `serde`
+  feature next, since it is currently non-compiling.
+
+**Signature for the wasm projection:**
+```rust
+pub fn vref_index(&mut self, scope: CorpusScope)
+    -> Result<ScopedOutput<Vec<VrefEntry>>, ScopeError>;
+```
+`ScopedOutput<T> = Single(T) | All(Vec<SourceOutput<T>>)` (existing type);
+`VrefEntry { sid: String, projection: VerseProjection }`; `VerseProjection {
+text: String, segments: Vec<Segment> }`; `Segment { token_id: String,
+source_span: Span, text_span: Utf16Span }` — all re-exported from
+`usfm_onion::vref` unchanged, so the wasm layer's existing stateless
+`vrefIndexTokens` DTO shape for these types should already have a mapping
+to reuse verbatim.
+
+Gates: `cargo test --workspace` green (braid 95: lib 9, baseline 19,
+format_patch 12, lifecycle 28, lint_prime 7, patches 7, resident_lint 10,
+vref 5; core 290, wire 196+2, wasm 34 — core/wire counts reflect the other
+builder's concurrent RFC 2 landing, unaffected by this packet); `cargo test
+--release --test lint_oracle -- --ignored` byte-identical; `cargo test
+--release -p braid -p usfm_onion_wire -p usfm_onion_wasm -- --ignored`
+green including the two new corpus-scale vref gates; `cargo fmt --all --
+--check` clean. npm/packed gates intentionally not run (outside this
+lane/packet; no wasm-facing code changed here).

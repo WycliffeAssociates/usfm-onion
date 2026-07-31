@@ -15,6 +15,7 @@ use crate::error::IngestError;
 use crate::input::{BookInput, ChapterLabel, SourceKey};
 use crate::patch::ResolvedFix;
 use crate::state::{SourceHash, TokenIdentity};
+use crate::vref::CachedRun;
 
 /// One contiguous chapter run: its label and its token range in the book.
 ///
@@ -60,6 +61,13 @@ pub(crate) struct BookState {
     /// ordinary content mutation: a candidate replacing this book (edited,
     /// formatted, patched) always carries this field forward unchanged.
     pub(crate) baseline: Option<BaselineState>,
+    /// Per-chapter-run vref-index cache. Content-addressed by each run's own
+    /// `TokenIdentity` and re-verified against it on every read, so carrying
+    /// this forward across a mutation is always safe: an entry that no
+    /// longer matches any current run is simply never matched again, never
+    /// applied. See `crate::vref` for why a run's own token identity is a
+    /// sound key for this projection specifically.
+    pub(crate) vref_cache: Vec<CachedRun>,
 }
 
 impl BookState {
@@ -109,6 +117,9 @@ impl BookState {
             lint: None,
             patches: Vec::new(),
             baseline: None,
+            // Nothing to carry forward — this is either a brand new book or
+            // a whole-book reseed with no predecessor in scope here.
+            vref_cache: Vec::new(),
         })
     }
 
@@ -116,9 +127,12 @@ impl BookState {
     /// the chapter-splice path, where the tokens are the mutation and
     /// everything else is derived from them.
     ///
-    /// The predecessor's baseline carries forward untouched: a content
-    /// mutation is not how a baseline changes, so this book's "what was last
-    /// saved" reference stays exactly what it was before this edit.
+    /// The predecessor's baseline and vref cache both carry forward as they
+    /// were: a content mutation is not how a baseline changes, and every
+    /// vref cache entry is re-verified against its own run's current tokens
+    /// on read (see `crate::vref`), so carrying a now-partly-stale cache
+    /// forward is always safe — a run whose content changed simply stops
+    /// matching its old entry and gets recomputed there, not here.
     pub(crate) fn rebuilt(&self, tokens: Vec<OwnedToken>) -> Result<Self, IngestError> {
         validate_token_ids(self.book, &tokens)?;
         let source = tokens_to_usfm_reconstruct_with_eol(&tokens, self.line_ending);
@@ -135,6 +149,7 @@ impl BookState {
             lint: None,
             patches: Vec::new(),
             baseline: self.baseline.clone(),
+            vref_cache: self.vref_cache.clone(),
         })
     }
 
@@ -149,6 +164,7 @@ impl BookState {
         self.lint = resident.lint.clone();
         self.patches = resident.patches.clone();
         self.baseline = resident.baseline.clone();
+        self.vref_cache = resident.vref_cache.clone();
     }
 
     /// Recomputes this book's whole-book lint contribution and the patch table
