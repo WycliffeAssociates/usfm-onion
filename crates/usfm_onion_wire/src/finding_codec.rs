@@ -333,7 +333,13 @@ fn issue_to_row(
         return Err(err());
     }
 
-    if issue.token_id.is_some() != issue.span.is_some() {
+    // A span with no anchor names bytes nothing in this section points at, so it
+    // stays refused. The reverse — an anchor with no span — is what a *resident*
+    // finding looks like: owned tokens are deliberately spanless (that is what
+    // lets them outlive their source), so a finding over them carries only its
+    // anchor. The row stores the same "whole token" pair every parsed finding
+    // already stores, and decode resolves it back to the anchor's own span.
+    if issue.span.is_some() && issue.token_id.is_none() {
         return Err(err());
     }
     let token_row = match &issue.token_id {
@@ -341,9 +347,9 @@ fn issue_to_row(
         None => None,
     };
     let (offset, len) = match (issue.span, token_row) {
-        (None, None) => (0u32, 0u32),
+        (None, _) => (0u32, 0u32),
         (Some(span), Some(row)) => span_within_token(book, code, tokens[row as usize].span, span)?,
-        _ => return Err(err()),
+        (Some(_), None) => return Err(err()),
     };
 
     // Whether a finding has an SID is independent of whether it is
@@ -395,16 +401,18 @@ fn issue_to_row(
         Some(id) => Some(*resolver.get(id.as_str()).ok_or_else(err)?),
         None => None,
     };
-    if issue.related_token_id.is_some() != issue.related_span.is_some() {
+    if issue.related_span.is_some() && issue.related_token_id.is_none() {
         return Err(err());
     }
     let related = match (issue.related_span, related_token_row) {
         (None, None) => None,
+        // Same rule for the related anchor: spanless means whole token.
+        (None, Some(row)) => Some((row, 0, 0)),
         (Some(span), Some(row)) => {
             let (offset, len) = span_within_token(book, code, tokens[row as usize].span, span)?;
             Some((row, offset, len))
         }
-        _ => return Err(err()),
+        (Some(_), None) => return Err(err()),
     };
 
     let natural_marker = token_row.and_then(|row| tokens[row as usize].marker_name());
@@ -1204,6 +1212,72 @@ mod tests {
                 source,
                 &parsed.tokens,
                 std::slice::from_ref(&issue)
+            ),
+            Err(EncodeError::UnrepresentablePayload { .. })
+        ));
+    }
+
+    /// A resident finding carries an anchor but no span — owned tokens are
+    /// spanless by design, which is what lets them outlive their source. The row
+    /// stores the same "whole token" pair every parsed finding already stores, so
+    /// decode resolves the span back from the anchor's own columns: the
+    /// publication gains a span the resident value did not have, and it is the
+    /// right one. A span with no anchor stays refused, because nothing in the
+    /// section points at the bytes it names.
+    #[test]
+    fn a_spanless_anchored_finding_resolves_to_its_anchors_own_span() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 body\n";
+        let parsed = parse(source);
+        let anchor = parsed
+            .tokens
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .expect("the paragraph marker");
+        let params = MessageParams::from([("marker".to_string(), "p".to_string())]);
+        let spanless = LintIssue {
+            code: LintCode::EmptyParagraph,
+            category: LintCode::EmptyParagraph.category(),
+            severity: LintCode::EmptyParagraph.severity(),
+            issue_type: LintCode::EmptyParagraph.issue_type(),
+            template: LintCode::EmptyParagraph.template(),
+            message: LintCode::EmptyParagraph.render_message(&params),
+            message_params: params.clone(),
+            span: None,
+            related_span: None,
+            token_id: {
+                use usfm_onion::LintableToken;
+                anchor.id()
+            },
+            related_token_id: None,
+            sid: anchor.sid.map(|sid| sid.to_string()),
+            marker: Some("p".to_string()),
+            fix: None,
+            position: NO_TOKEN_POSITION,
+            related_position: NO_TOKEN_POSITION,
+        };
+        let bytes = encode_book(
+            book("GEN"),
+            source,
+            &parsed.tokens,
+            std::slice::from_ref(&spanless),
+        )
+        .expect("a spanless anchored finding encodes");
+        let decoded = decode_book(&bytes, source).expect("decodes");
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].span, Some(anchor.span));
+        assert_eq!(decoded[0].token_id, spanless.token_id);
+        assert_eq!(decoded[0].message_params, params);
+
+        // The reverse is still a refusal.
+        let mut orphan_span = spanless.clone();
+        orphan_span.span = Some(anchor.span);
+        orphan_span.token_id = None;
+        assert!(matches!(
+            encode_book(
+                book("GEN"),
+                source,
+                &parsed.tokens,
+                std::slice::from_ref(&orphan_span)
             ),
             Err(EncodeError::UnrepresentablePayload { .. })
         ));

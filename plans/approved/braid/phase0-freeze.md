@@ -2053,3 +2053,25 @@ header says. A caller's claim is what makes the check non-circular; a mismatch o
 an unreadable section is `LayoutRefusal::CachedSectionMismatch` /
 `CachedSectionUnreadable`, refusing the whole publication rather than emitting a
 container with one unverified book in it.
+
+### P.4 The finding encoder accepts a spanless anchored finding
+
+Found by building the publication path: `issue_to_row` required `token_id` and
+`span` to be present or absent *together*, which no resident finding satisfies.
+Owned tokens are spanless by design (§2.2#15 / Gate 0D D1 — that is what lets them
+outlive their source), so a finding over them carries an anchor and no span, and
+every book of a resident corpus was refused at encode.
+
+Amended: a span with **no anchor** stays refused (nothing in the section points at
+the bytes it names), while an **anchor with no span** is accepted and stores the
+`(offset 0, len 0)` "whole token" pair — the same pair all 61,166 corpus findings
+already store, since a finding's span is always exactly its anchor token's own span
+(Gate 0E/0D §3.4). Decode resolves it back from the anchor's span columns, so a
+published resident finding *gains* the span it structurally could not carry, and it
+is the right one.
+
+No byte changed and no golden moved: this is the encoder's acceptance contract, not
+the layout. The one visible consequence is that a resident finding does not
+round-trip *identically* — it comes back with a span — which is the documented
+spanless-token consequence the braid corpus gate already asserts in the other
+direction (`span.is_none()` resident, `span.is_some()` parsed).

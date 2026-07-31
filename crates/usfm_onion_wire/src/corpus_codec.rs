@@ -35,7 +35,12 @@ use crate::container::{
 };
 use crate::error::{EncodeError, LayoutRefusal};
 use crate::finding_codec::{decode_finding_section, encode_findings_with};
-use crate::schema::{LintStamps, SectionKind};
+use crate::schema::SectionKind;
+
+// Re-exported so the composition surface is one import: the stamps are part of
+// what a publisher supplies, and a caller should not have to reach into the
+// schema module to name them.
+pub use crate::schema::LintStamps;
 use crate::token_codec::{
     decode_token_section, encode_token_section_with_ids, owned_stable_ids, owned_to_borrowed,
 };

@@ -3271,3 +3271,98 @@ proxy-ruled per the packet's own instruction, recorded as freeze §O with an ope
 owner veto window.
 
 **Stops:** none.
+
+## 2026-07-31 — Phase D steps 1, 2, 4: packed publication composition landed
+
+Completes the phase Sonnet's step-3 round opened. Three commits:
+
+1. `f15f6ce` feat(wire): public corpus composition surface + lint-stamp bytes (step 1)
+2. `0361f19` test(wire): prove publication reuse rather than infer it (step 2)
+3. *(this round's third commit)* feat(wasm): the composing adapter + the corpus publish→decode→compare
+   gate (steps 3 groundwork + 4)
+
+### The public wire surface (for the Phase 0 ledger)
+
+`usfm_onion_wire::corpus_codec` is the whole publication boundary; everything below it stays private,
+so there is no lower-level way to assemble a container by hand:
+
+| item | shape |
+| --- | --- |
+| `encode_corpus(snapshot_id: u64, lint_stamps: Option<LintStamps>, sections: &[CorpusSection]) -> Result<EncodedCorpus, EncodeError>` | amends §7's two-parameter signature; stamps are corpus-level per §O.3 |
+| `CorpusSection::{Fresh(CorpusSectionInput), Cached(CachedBookSections)}` | semantics to encode, or bytes to splice |
+| `CorpusSectionInput { book, tokens, findings }`, `CorpusSectionTokens::{Parsed, Owned}` | as frozen in §7 |
+| `EncodedCorpus { bytes, sources, books }` | `books` is the new per-book reuse sidecar |
+| `PublishedBook { book, source_hash, bytes, sections }` + `as_cached()`, `PublishedSection { kind, offset, len }` | the sidecar and its extents |
+| `LintStamps { config_fingerprint, engine_stamp }` (re-exported from `schema`) | §O's pair as wire data |
+| `verify_corpus(packed, sources) -> Result<VerifiedCorpus, DecodeError>` | the corpus-level read §7 never specified |
+| `VerifiedCorpus { snapshot_id, lint_stamps, books }`, `VerifiedBook.lint_stamps` (new field) | — |
+| `EncodeError::EmptyFix` (C4) and `LayoutRefusal::{CachedSectionUnreadable, CachedSectionMismatch}` | typed reuse refusals |
+
+Container-internal additions: `ContainerSection`, `write_container_sections`, `inspect_section`
+(private); `verified_book`, `encode_findings_with`, `owned_stable_ids` (crate-internal extractions,
+not second copies).
+
+### Stamp placement decision (freeze §P.1)
+
+Finding-section **field 9**, one optional 16-byte record `{config_fingerprint:u64, engine_stamp:u64}`.
+The pair has to be *data in the artifact* or §O.3's comparison is vacuous — an adapter recomputing it
+in-process on a cold open compares today's values with themselves and passes every stale cache. The
+finding section rather than the container header because the header has 8 reserved bytes (room for one
+`u64`) and folding the pair into one hash would destroy the distinction
+`ConfigFingerprintMismatch`/`EngineStampMismatch` make; widening the header would re-bless every
+golden and every JS layout constant for a fact that only matters when findings exist. Absence is
+meaningful: unstamped findings may be read, never adopted. **Blast radius, reported:** no existing
+golden's bytes changed (`encode_book` supplies no stamps, so it emits no field 9); the generated
+`js/wire-schema.js` `FINDING_FIELD` table gained a row (9 → 10) and `test-wire-schema-import.mjs`'s
+pinned count with it.
+
+### §P.4 — the one freeze amendment the work forced
+
+`issue_to_row` required `token_id` and `span` to co-occur, so **every** resident finding was refused
+at encode: owned tokens are spanless by design (§2.2#15 / D1). Amended so an anchor with no span
+stores the `(0,0)` "whole token" pair — what all 61,166 corpus findings already store — while a span
+with no anchor stays refused. No byte moved; a published resident finding gains the correct span on
+decode.
+
+### The composing adapter (steps 3/4)
+
+`crates/usfm_onion_wasm/src/publication.rs` — private, no `wasm_bindgen`, `dead_code`-allowed until
+Phase F wires the public class. `usfm_onion_wasm` gains a `braid` dependency, which is the epic's own
+§4.1 composition-root arrangement (the one crate allowed to depend on both). `PublicationCache::publish`
+recomputes exactly the dirty books' lint, re-encodes exactly the books whose bytes *or stamps* moved,
+splices the rest, and reports `encoded`/`reused` as data rather than leaving reuse to be inferred.
+
+The cache key is `(book, source_hash, stamps)`, not the hash alone: a configuration change rewrites
+what a book's findings are while leaving its bytes untouched, and the published section carries those
+findings — pinned by its own test.
+
+### Gates
+
+- `cargo test --workspace`: **570 passed, 0 failed** (core 282, braid 59, wire 196, wasm 30 + the
+  small binaries).
+- `cargo test --test lint_oracle -- --ignored`: byte-identical, no rebless.
+- Release ignored: braid corpus 3, wire lib 4 + corpus 2, **wasm 1 — the Phase D corpus gate**: all 66
+  `en_ulb` books published as one container, decoded through `verify_corpus`, and compared against the
+  native snapshot (per-book token counts, source hashes, stamps, and every finding field including
+  `fix`); the census's one `en_ulb` fix survives publication. Then one chapter edited: **1 book
+  re-encoded, 65 spliced**, each spliced book's sections asserted byte-identical to the first
+  publication's, and the republication verified against the new truth.
+- Reuse proof at unit scale hands back *only bytes* for the untouched book — nothing to re-encode
+  from — so a complete verifying container proves reuse rather than inferring it.
+- `npm run test:packed` / `test:packed:web`: 410 cases / 5,717,153 tokens, 15 good + 16 malformed
+  goldens — unchanged counts. `pkg-bundler`/`pkg-web` restored, never committed.
+
+### Deviations
+
+- `encode_corpus`'s signature gained the stamps parameter and the `CorpusSection` wrapper (§P.2 table).
+- `verify_corpus`/`VerifiedCorpus` are new surface §7 never specified: `verify_book` deliberately
+  refuses a multi-book container, so a publication had no way to be read back at the grain it was
+  written.
+- The reuse cache lives in the adapter, not in braid. The packet's wording ("braid-side publication
+  caches per-book encoded sections") would require braid to hold wire bytes and call wire to make
+  them, which the dependency rule forbids; braid supplies the facts the cache keys on
+  (`books()`, `dirty_books()`, `lint()`, `expected_snapshot_id()`) and the adapter owns the bytes.
+
+### Stops
+
+None.

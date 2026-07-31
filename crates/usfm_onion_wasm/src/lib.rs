@@ -57,6 +57,13 @@ pub use usfm_onion_wire::dto::{
 };
 use usfm_onion_wire::verify::verify_book as verify_packed_book;
 
+// The composing adapter (braid semantics + wire bytes). Not a wasm export:
+// the public `Braid` class and `restoreCorpus` are Phase F, and this is the
+// Rust composition both they and a native host call. `dead_code`-allowed
+// until that surface lands, the same way wire keeps its own internals.
+#[allow(dead_code)]
+mod publication;
+
 // TODO: eventually move off of this ideally
 #[wasm_bindgen(typescript_custom_section)]
 const TS_TYPES: &str = r#"
