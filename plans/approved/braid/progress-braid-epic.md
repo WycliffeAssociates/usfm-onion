@@ -4320,3 +4320,26 @@ builder's concurrent RFC 2 landing, unaffected by this packet); `cargo test
 green including the two new corpus-scale vref gates; `cargo fmt --all --
 --check` clean. npm/packed gates intentionally not run (outside this
 lane/packet; no wasm-facing code changed here).
+
+## 2026-07-31 — Fix: `TokenBuildError` could not cross a serde boundary
+
+Found by the other builder: `cargo build -p braid --features serde` did not compile. The
+`from_parts` work gave `TokenBuildError::UnexpectedPayload` a `fact: &'static str`, and a
+borrowed `'static` label cannot be deserialized — the deserializer's own lifetime would have
+to outlive `'static` — so braid's feature-gated derives over the lifecycle types (a frozen
+contract, since a native resident host serializes these straight to its IPC channel) failed
+at the `IngestError::InvalidToken(TokenBuildError)` arm.
+
+Fixed as `Cow<'static, str>`, chosen over the alternatives because it is the only one that
+costs nothing and loses nothing: construction still borrows the static label (no allocation
+on an error path), `Deserialize` yields an owned label, and the fact — which is the whole
+informative part of the variant, naming *which* payload was illegal — survives. `String`
+would allocate on every refusal; `serde(skip)` plus reconstruction would drop the one field a
+caller acts on.
+
+**Gate gap, recorded in one sentence as asked:** `lifecycle_errors_round_trip_through_serde`
+already existed and would have caught this immediately, but no gate in my list ever enabled
+the feature, so the entire `#[cfg(feature = "serde")]` surface — derives and test alike — was
+never compiled in any run I made. `cargo test --workspace --all-features` is now part of the
+standing battery (626 passed / 0 failed), which covers braid's `serde` and wire's `wasm`
+features together; a feature that is never enabled is a gate that does not exist.

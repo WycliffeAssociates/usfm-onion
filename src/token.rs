@@ -570,10 +570,17 @@ pub enum TokenBuildError {
     /// text token, an attribute list on an end marker, nesting on a milestone.
     /// Refused rather than dropped: a caller that sent it believes it means
     /// something.
+    ///
+    /// `fact` is a `Cow` rather than a `&'static str` so this error can cross a
+    /// serde boundary: a borrowed `'static` label cannot be deserialized (the
+    /// deserializer's lifetime would have to outlive `'static`), and a resident host
+    /// serializes these errors straight to its IPC channel. Construction still
+    /// borrows, so naming the fact costs no allocation; only a value read back from
+    /// bytes owns its label.
     UnexpectedPayload {
         id: Box<str>,
         kind: TokenKind,
-        fact: &'static str,
+        fact: std::borrow::Cow<'static, str>,
     },
 }
 
@@ -885,7 +892,7 @@ impl OwnedToken {
         let unexpected = |fact: &'static str| TokenBuildError::UnexpectedPayload {
             id: Box::from(id.as_str()),
             kind,
-            fact,
+            fact: std::borrow::Cow::Borrowed(fact),
         };
 
         // The formatted anchor has to become the structured one the packed form is
