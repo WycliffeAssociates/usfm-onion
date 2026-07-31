@@ -25,12 +25,13 @@ use usfm_onion_wire::error::EncodeError;
 /// pins only one of them:
 ///
 /// - the **source hash**, the bytes the section's spans are bound to;
-/// - the **token identity**, everything the token stream carries that its bytes do
-///   not — the stable ids above all. An editor re-pushing byte-identical content
-///   under fresh ids changes every id in the section and every finding anchor and
-///   fix target that names one, while the bytes stay identical; serving the old
-///   sections there would hand back a publication addressing tokens that no longer
-///   exist;
+/// - the **token identity**, which covers whatever the token stream carries that
+///   its bytes do not — the exact set is `OwnedToken::hash_wire_identity`'s, not a
+///   list restated here. The case it exists for: an editor re-pushing
+///   byte-identical content under fresh ids changes every id in the section, and
+///   every finding anchor and fix target that names one, while the bytes stay
+///   identical; serving the old sections would hand back a publication addressing
+///   tokens that no longer exist;
 /// - the **stamps**, because a configuration change rewrites what a book's
 ///   findings *are* while leaving both of the above alone.
 #[derive(Debug, Clone)]
@@ -463,6 +464,132 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The subtler half of the identity rule: an attribute's own *spelling* is
+    /// what the owned encoder searches for when it places attribute spans, so two
+    /// streams that agree on every key, value, and default but spell an attribute
+    /// differently encode to different bytes. A cache that could not see that
+    /// would serve spans naming the wrong text.
+    #[test]
+    fn an_attribute_spelling_change_re_encodes_rather_than_serving_stale_bytes() {
+        const ALIGNED: &str = "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\w gracious|lemma=\"grace\"\\w* b\n";
+        let mut resident = resident();
+        resident
+            .replace_corpus(CorpusInput::new(vec![
+                usfm("GEN", ALIGNED),
+                usfm("EXO", EXO),
+            ]))
+            .expect("two books");
+        let mut cache = PublicationCache::default();
+        let first = cache.publish(&mut resident).expect("first publication");
+        assert_eq!(first.encoded.len(), 2);
+
+        // Re-push GEN with one attribute's verbatim spelling widened by a space,
+        // which the emitter puts back into the list text: same key and value, same
+        // structural attributes, different bytes.
+        let respelled: Vec<OwnedToken> = parse(ALIGNED)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .map(|token| {
+                if token.attribute_list().is_none() {
+                    return token;
+                }
+                // The verbatim list is kept, so not one emitted byte moves; only
+                // each attribute's own recorded spelling narrows, which is what
+                // the encoder searches for when it places the attribute's span.
+                let working = usfm_onion::format::FormatToken {
+                    attributes: token
+                        .attributes()
+                        .iter()
+                        .map(|attribute| usfm_onion::token::OwnedAttribute {
+                            source: Box::from(&attribute.source[1..]),
+                            key: attribute.key.clone(),
+                            value: attribute.value.clone(),
+                            is_default: attribute.is_default,
+                            span: None,
+                        })
+                        .collect(),
+                    ..usfm_onion::format::FormatToken::from(&token)
+                };
+                OwnedToken::from_format_token(&working, Some(&token)).expect("respelled")
+            })
+            .collect();
+        let identity_before = resident
+            .books()
+            .into_iter()
+            .find(|entry| entry.book == book("GEN"))
+            .unwrap()
+            .token_identity;
+        resident
+            .update_book(BookInput::Tokens(braid::BookTokensInput {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: book("GEN"),
+                tokens: respelled,
+                line_ending: braid::LineEnding::Lf,
+            }))
+            .expect("a spelling-only push");
+        let entry = resident
+            .books()
+            .into_iter()
+            .find(|entry| entry.book == book("GEN"))
+            .unwrap();
+        assert_ne!(
+            entry.token_identity, identity_before,
+            "the attribute spelling moved, so the token identity must"
+        );
+
+        // Not one byte moved, which is exactly why the source hash could not have
+        // caught this.
+        let hash_after = resident
+            .books()
+            .into_iter()
+            .find(|entry| entry.book == book("GEN"))
+            .unwrap()
+            .source_hash;
+        assert_eq!(
+            hash_after.0,
+            u64::from_str_radix(
+                &verify(&first, &[(book("GEN"), ALIGNED), (book("EXO"), EXO)]).books[0]
+                    .receipt
+                    .source_hash,
+                16
+            )
+            .expect("hex hash"),
+        );
+
+        let second = cache.publish(&mut resident).expect("republication");
+        assert_eq!(
+            second.encoded,
+            vec![book("GEN")],
+            "a spelling-only change must re-encode"
+        );
+        assert_eq!(second.reused, vec![book("EXO")]);
+
+        // The freshly encoded sections are not the stale ones, and the publication
+        // still verifies against the (unchanged) bytes.
+        let before = section_bytes(&first.bytes);
+        let after = section_bytes(&second.bytes);
+        let sections_of = |sections: &[(BookId, Vec<Vec<u8>>)], book: BookId| {
+            sections
+                .iter()
+                .find(|(candidate, _)| *candidate == book)
+                .map(|(_, sections)| sections.clone())
+                .expect("published")
+        };
+        assert_ne!(
+            sections_of(&after, book("GEN")),
+            sections_of(&before, book("GEN")),
+            "the served section must be the new one"
+        );
+        assert_eq!(
+            sections_of(&after, book("EXO")),
+            sections_of(&before, book("EXO")),
+            "and the untouched book is still spliced"
+        );
+        let verified = verify(&second, &[(book("GEN"), ALIGNED), (book("EXO"), EXO)]);
+        assert_eq!(verified.books.len(), 2);
     }
 
     /// A clean project must be able to restore its *negative* lint result: "lint

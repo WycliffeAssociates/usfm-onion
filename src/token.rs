@@ -680,6 +680,116 @@ impl OwnedToken {
         })
     }
 
+    /// Feeds everything the packed wire encoding derives from this token into
+    /// `state`, exhaustively.
+    ///
+    /// This exists so a consumer can key a cache on "the same token stream" rather
+    /// than on the book's bytes, which pin far less than they look like they do: a
+    /// book's source is its tokens' text concatenated, so two streams can
+    /// serialize identically while differing in every fact a serializer never
+    /// writes — stable ids above all, and the canonical anchors, nesting,
+    /// book-code validity, parsed numbers, and attribute spellings with them.
+    ///
+    /// # Why it lives here, and why it cannot silently rot
+    ///
+    /// The payload is private to this module, so an outside crate can only reach it
+    /// through accessors — and an accessor-based projection is exactly the thing
+    /// that goes quietly stale, because adding a field to a private struct compiles
+    /// fine everywhere that never learned to ask for it. Every value below is
+    /// reached by **destructuring with no `..` anywhere**: this token, every payload
+    /// variant, the marker-attribute record, each attribute, and each name-derived
+    /// struct. Adding a field to any of them is therefore a compile error at this
+    /// site, which is the whole guarantee — a caller does not have to trust that
+    /// this list is complete, because it cannot compile while being incomplete.
+    ///
+    /// Fields that are *deliberately* excluded are destructured and ignored by
+    /// name, with the reason, rather than skipped: an exclusion is a decision, and
+    /// a new field must force that decision to be made again.
+    ///
+    /// Every `Option` gets a presence byte and every variable-length value is
+    /// length-framed, so `None` cannot hash like `Some("")` and `("ab", "c")`
+    /// cannot hash like `("a", "bc")`. The hasher, and therefore the algorithm and
+    /// the digest's meaning, belong to the caller.
+    pub fn hash_wire_identity<H: std::hash::Hasher>(&self, state: &mut H) {
+        // No `..`: a new field here is a compile error, by design.
+        let Self {
+            id,
+            kind,
+            source,
+            sid,
+            parsed_sid,
+            payload,
+        } = self;
+        framed(state, id.as_str().as_bytes());
+        state.write_u8(*kind as u8);
+        framed(state, source.as_bytes());
+        optional(state, sid.as_deref(), |state, sid| {
+            framed(state, sid.as_bytes())
+        });
+        optional(state, parsed_sid.as_ref(), |state, sid| {
+            let Sid {
+                book,
+                chapter,
+                verse,
+                verse_end_delta,
+            } = sid;
+            framed(state, book.as_str().as_bytes());
+            state.write_u16(*chapter);
+            state.write_u16(*verse);
+            state.write_u8(*verse_end_delta);
+        });
+
+        match payload {
+            OwnedTokenPayload::Plain => state.write_u8(0),
+            OwnedTokenPayload::Marker {
+                marker,
+                metadata,
+                structural,
+                nested,
+                attrs,
+            } => {
+                state.write_u8(1);
+                framed(state, marker.as_bytes());
+                ignore_name_derived(metadata, structural);
+                state.write_u8(u8::from(*nested));
+                hash_marker_attrs(state, attrs.as_ref());
+            }
+            OwnedTokenPayload::EndMarker {
+                marker,
+                metadata,
+                structural,
+                nested,
+            } => {
+                state.write_u8(2);
+                framed(state, marker.as_bytes());
+                ignore_name_derived(metadata, structural);
+                state.write_u8(u8::from(*nested));
+            }
+            OwnedTokenPayload::Milestone {
+                marker,
+                metadata,
+                structural,
+                attrs,
+            } => {
+                state.write_u8(3);
+                framed(state, marker.as_bytes());
+                ignore_name_derived(metadata, structural);
+                hash_marker_attrs(state, attrs.as_ref());
+            }
+            OwnedTokenPayload::BookCode(OwnedBookCode { code, is_valid }) => {
+                state.write_u8(4);
+                framed(state, code.as_bytes());
+                state.write_u8(u8::from(*is_valid));
+            }
+            OwnedTokenPayload::Number(OwnedNumberInfo { start, end, kind }) => {
+                state.write_u8(5);
+                state.write_u32(*start);
+                optional(state, end.as_ref(), |state, end| state.write_u32(*end));
+                state.write_u8(*kind as u8);
+            }
+        }
+    }
+
     /// Copies one parsed token into the owned semantic representation.
     pub fn from_parsed(value: &Token<'_>) -> Self {
         let kind = value.kind();
@@ -862,6 +972,93 @@ impl OwnedToken {
             _ => MarkerIndex::UNKNOWN,
         }
     }
+}
+
+/// Writes a length-framed byte string, so concatenations cannot collide.
+fn framed<H: std::hash::Hasher>(state: &mut H, bytes: &[u8]) {
+    state.write_u64(bytes.len() as u64);
+    state.write(bytes);
+}
+
+/// Writes a presence byte, then the value when there is one: `None` and an empty
+/// `Some` are different facts and must hash differently.
+fn optional<H: std::hash::Hasher, T>(
+    state: &mut H,
+    value: Option<T>,
+    write: impl FnOnce(&mut H, T),
+) {
+    match value {
+        None => state.write_u8(0),
+        Some(value) => {
+            state.write_u8(1);
+            write(state, value);
+        }
+    }
+}
+
+/// The two marker facts the wire encoder deliberately re-derives from the marker
+/// name rather than reading off the token (`marker_metadata` /
+/// `structural_marker_info`, exactly as decoding does), so they cannot make one
+/// name's encoding differ and must not make its identity differ either.
+///
+/// Destructured with no `..` and ignored by name: adding a field to either struct
+/// breaks this line, which forces the "does the encoder read this?" question to be
+/// answered again instead of inheriting a stale answer.
+fn ignore_name_derived(metadata: &MarkerMetadata, structural: &StructuralMarkerInfo) {
+    let MarkerMetadata {
+        canonical: _,
+        kind: _,
+        family: _,
+        index: _,
+    } = metadata;
+    let StructuralMarkerInfo {
+        scope_kind: _,
+        inline_context: _,
+        note_context: _,
+    } = structural;
+}
+
+/// One marker/milestone's attribute record, exhaustively.
+fn hash_marker_attrs<H: std::hash::Hasher>(state: &mut H, attrs: Option<&OwnedMarkerAttrs>) {
+    optional(state, attrs, |state, attrs| {
+        let OwnedMarkerAttrs {
+            attributes,
+            attribute_source,
+            attribute_offset,
+        } = attrs;
+        state.write_u64(attributes.len() as u64);
+        for attribute in attributes.iter() {
+            let OwnedAttribute {
+                source,
+                key,
+                value,
+                is_default,
+                // The parse-time span of an attribute inside its original
+                // document. The owned encoder never reads it: it locates each
+                // attribute by finding `source` in the text it just emitted, so a
+                // remembered span cannot change the bytes and must not change the
+                // identity either.
+                span: _,
+            } = attribute;
+            // `source` is load-bearing for exactly that reason — it is the
+            // spelling the encoder searches for — so two attributes that agree on
+            // key, value, and default while spelling themselves differently are
+            // not the same token.
+            framed(state, source.as_bytes());
+            framed(state, key.as_bytes());
+            framed(state, value.as_bytes());
+            state.write_u8(u8::from(*is_default));
+        }
+        // Presence is the distinction the wire draws too: no verbatim list at all
+        // is a token with no attribute row, while an empty one is a row with an
+        // empty span.
+        optional(state, attribute_source.as_deref(), |state, source| {
+            framed(state, source.as_bytes())
+        });
+        optional(state, attribute_offset.as_ref(), |state, offset| {
+            state.write_u32(*offset)
+        });
+    });
 }
 
 /// The attribute record a rebuilt token keeps.

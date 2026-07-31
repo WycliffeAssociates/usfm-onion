@@ -3423,3 +3423,53 @@ one chapter edited → 1 re-encoded, 65 spliced byte-identically). `npm run test
 
 `braid::TokenIdentity` (+ `BookEntry.token_identity`, `BookLintSnapshot.token_identity`);
 `usfm_onion_wire::LayoutRefusal::CachedSectionStampMismatch`.
+
+## 2026-07-31 — Phase D re-review: the last P1 (drift-proof token identity) closed
+
+One P1 remained: `TokenIdentity` was accessor-based, so it was neither drift-proof (a field added to
+`OwnedToken`, its private payload, or `OwnedAttribute` would compile silently without joining the
+stamp) nor complete — `attribute_list` `None` and `Some("")` hashed identically though the wire
+distinguishes them (absent = no attribute row; present-empty = a row with an empty span), and
+`OwnedAttribute.source` was not hashed at all even though the owned encoder *searches for that exact
+spelling* to place each attribute's span.
+
+Fixed where the reviewer put it: the projection moved **into core**, beside the private types that
+caused the accessor fallback in the first place. `OwnedToken::hash_wire_identity<H: Hasher>`
+destructures the token, all six payload variants, the marker-attribute record, and each
+`OwnedAttribute` **with no `..` anywhere**, so a new field on any of them is a compile error at that
+site — the drift-proof claim is now a property of the code rather than an assertion in a comment.
+Every `Option` carries a presence byte and every variable-length value is length-framed, so `None`
+cannot hash like `Some("")` and `("ab","c")` cannot hash like `("a","bc")`. Two fields are excluded
+*by name with the reason* rather than skipped — `MarkerMetadata`/`StructuralMarkerInfo` (the encoder
+re-derives both from the marker name, so they cannot change the bytes) and `OwnedAttribute.span` (the
+owned encoder recomputes it by locating `source` in the text it just emitted) — and those exclusions
+are themselves destructured, so a new field forces the question to be answered again instead of
+inheriting a stale answer.
+
+Braid keeps the algorithm: `TokenIdentity::of` feeds the projection into its own `Xxh3`. Core owns
+completeness, braid owns the digest.
+
+Regressions: `format::tests::wire_identity_separates_attribute_presence_and_spelling` (absent vs empty
+list; two attributes differing only in their own spelling; and a framing collision, `id`+`source`
+split two ways) and
+`publication::tests::an_attribute_spelling_change_re_encodes_rather_than_serving_stale_bytes` — a
+push that changes only each attribute's recorded spelling, leaving **every emitted byte identical**
+(asserted against the first publication's own source hash), which is exactly why the source hash could
+not catch it: the adapter re-encodes GEN, still splices EXO, and the new sections are not the stale
+ones. Both identity-only repros from the previous round stay green.
+
+Documentation: the six-category enumeration is gone from the doc comments on both sides — braid's
+`TokenIdentity` and the adapter's `CachedBook` now defer to the projection instead of restating what it
+covers, since a restated list is the thing that goes stale.
+
+### Gates
+
+`cargo test --workspace` **576 passed, 0 failed** (core 283, braid 60, wire 201, wasm 33). Lint oracle
+`--ignored` byte-identical. Release ignored: braid corpus 3, wire lib 4 + corpus 2, wasm 1 — the Phase D
+corpus gate still passes. `npm run test:packed` / `test:packed:web` green at 410 cases / 5,717,153
+tokens, 15 good + 17 malformed goldens — unchanged from the previous round, no golden's bytes moved.
+`pkg-bundler`/`pkg-web` restored, never committed.
+
+### New public core API
+
+`usfm_onion::token::OwnedToken::hash_wire_identity` (generic over `std::hash::Hasher`).

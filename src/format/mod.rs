@@ -2877,6 +2877,98 @@ mod tests {
         assert_eq!(survivors, owned.iter().collect::<Vec<_>>());
     }
 
+    /// The two distinctions the wire encoding draws that a naive projection
+    /// misses, pinned where the projection lives.
+    ///
+    /// An absent attribute list is a token with no attribute row at all; an empty
+    /// one is a row with an empty span. And the encoder locates each attribute by
+    /// searching for its own `source` spelling in the text it just emitted, so two
+    /// attributes agreeing on key, value, and default while spelling themselves
+    /// differently produce different bytes.
+    #[test]
+    fn wire_identity_separates_attribute_presence_and_spelling() {
+        use std::hash::Hasher;
+
+        fn identity(token: &OwnedToken) -> u64 {
+            // Any `Hasher` will do — the projection owns completeness, the caller
+            // owns the algorithm. `DefaultHasher` keeps this test dependency-free.
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            token.hash_wire_identity(&mut hasher);
+            hasher.finish()
+        }
+
+        // A marker carrying a verbatim attribute list, and the same token with the
+        // list structurally edited away to empty.
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\w gracious|lemma=\"grace\"\\w* b\n";
+        let owned: Vec<OwnedToken> = crate::parse::parse(source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect();
+        let with_list = owned
+            .iter()
+            .find(|token| token.attribute_list().is_some())
+            .expect("the fixture carries a verbatim list");
+
+        let mut working = FormatToken::from(with_list);
+        working.attribute_source = None;
+        let absent = OwnedToken::from_format_token(&working, Some(with_list)).expect("rebuilt");
+        working.attribute_source = Some(String::new());
+        let empty = OwnedToken::from_format_token(&working, Some(with_list)).expect("rebuilt");
+        assert_eq!(absent.attribute_list(), None);
+        assert_eq!(empty.attribute_list(), Some(""));
+        assert_ne!(
+            identity(&absent),
+            identity(&empty),
+            "no list and an empty list are different facts on the wire"
+        );
+
+        // Two attributes that differ only in their own spelling: same key, same
+        // value, same default, different verbatim text.
+        let mut respelled = working.clone();
+        respelled.attribute_source = with_list.attribute_list().map(ToOwned::to_owned);
+        respelled.attributes = with_list
+            .attributes()
+            .iter()
+            .map(|attribute| OwnedAttribute {
+                source: Box::from(format!(" {}", attribute.source).as_str()),
+                key: attribute.key.clone(),
+                value: attribute.value.clone(),
+                is_default: attribute.is_default,
+                span: attribute.span,
+            })
+            .collect();
+        let respelled =
+            OwnedToken::from_format_token(&respelled, Some(with_list)).expect("rebuilt");
+        assert_eq!(
+            respelled.attributes().len(),
+            with_list.attributes().len(),
+            "same attributes, one spelling apart"
+        );
+        assert_eq!(respelled.attributes()[0].key, with_list.attributes()[0].key);
+        assert_ne!(
+            identity(&respelled),
+            identity(with_list),
+            "the encoder searches for the source spelling, so it is identity"
+        );
+
+        // And the framing itself: a token whose id and source are the same bytes
+        // split differently must not collide.
+        let mut a = FormatToken::from(&owned[0]);
+        a.id = Some("ab".to_string());
+        a.text = "c".to_string();
+        let mut b = a.clone();
+        b.id = Some("a".to_string());
+        b.text = "bc".to_string();
+        let a = OwnedToken::from_format_token(&a, Some(&owned[0])).expect("rebuilt");
+        let b = OwnedToken::from_format_token(&b, Some(&owned[0])).expect("rebuilt");
+        assert_ne!(
+            identity(&a),
+            identity(&b),
+            "variable fields are length-framed"
+        );
+    }
+
     /// Builds a `TokenFix::InsertAfter` for the test above without depending
     /// on `lint_impl`'s private constructors.
     struct TokenFixForTest;
