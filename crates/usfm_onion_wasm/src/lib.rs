@@ -656,6 +656,48 @@ mod tests {
         );
     }
 
+    /// The boundary's own statement of order, checked after serialization —
+    /// which is the only place a sorted container's betrayal is visible. The
+    /// fixture is out of order in both dimensions a sort would "fix": verse 19
+    /// before verse 2, and chapter 10 before chapter 2.
+    #[test]
+    fn vref_index_states_the_documents_own_verse_order_across_the_boundary() {
+        let source = "\\id GEN\n\\c 29\n\\p\n\\v 19 nineteen\n\\v 2 two\n\\c 10\n\\p\n\\v 1 ten one\n\\c 2\n\\p\n\\v 1 two one\n";
+        let expected = ["GEN 29:19", "GEN 29:2", "GEN 10:1", "GEN 2:1"];
+
+        for index in [
+            crate::stateless::wasm_vref_index_usfm(source),
+            // The token lane is the editor's: same projection, no reparse, and it
+            // must state the same order.
+            crate::stateless::wasm_vref_index_tokens(crate::dto::map_tokens(
+                &native_parse(source).tokens,
+            )),
+        ] {
+            let json = serde_json::to_value(&index).expect("serializes");
+            let order: Vec<&str> = json["order"]
+                .as_array()
+                .expect("an authoritative order array")
+                .iter()
+                .map(|sid| sid.as_str().expect("sid"))
+                .collect();
+            assert_eq!(order, expected, "the boundary must report document order");
+
+            // The lookup reaches every verse, and its own key enumeration is the
+            // sorted one that `order` exists to correct — asserted so the reason
+            // for carrying both is visible rather than assumed.
+            let by_sid = json["bySid"].as_object().expect("a lookup map");
+            assert_eq!(by_sid.len(), expected.len());
+            for sid in expected {
+                assert!(by_sid.contains_key(sid), "{sid} must be reachable");
+            }
+            let enumerated: Vec<&str> = by_sid.keys().map(String::as_str).collect();
+            assert_ne!(
+                enumerated, order,
+                "if these ever matched, this fixture stopped proving anything"
+            );
+        }
+    }
+
     // --- native <-> wasm parity fixture (Gate 5) ---
     //
     // The Gate 4 tests above prove the DTO path *populates* text_diff and pin

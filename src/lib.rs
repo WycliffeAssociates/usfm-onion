@@ -56,7 +56,7 @@ pub use token::{
 pub use usj::{UsjDocument, UsjElement, UsjError, UsjNode};
 pub use usx::UsxError;
 pub use vref::{
-    Segment, Utf16Span, VerseProjection, VrefIndex, VrefMap, tokens_to_vref_index,
+    Segment, Utf16Span, VerseProjection, VrefEntry, VrefIndex, VrefMap, tokens_to_vref_index,
     usfm_to_vref_index,
 };
 pub use whitespace::{

@@ -3894,3 +3894,54 @@ declarations — and the crate's 33 lib tests are the same 33.
 
 Gates: `cargo test --workspace` green, `cargo fmt --all -- --check` clean, zero compiler warnings, a
 dev bundler build diffed against the committed declarations.
+
+## 2026-07-31 — RFC 1: token-derived VREF indexes preserve the document's own verse order
+
+A correctness bug, fixed in core and stated at the boundary. `VrefIndex` was
+`BTreeMap<String, VerseProjection>`, so every consumer — `vrefIndexUsfm`,
+`vrefIndexTokens`, and any native caller — received verses in **lexicographic SID
+order**: `GEN 10:1` before `GEN 2:1`, `GEN 29:19` before `GEN 29:2`. A projection is
+read against a document, and a document's verses are in whatever order it puts
+them, including deliberately out-of-order editor content; the sorted keys made that
+order unrecoverable. Segment data was always correct (it is reached by SID).
+
+**Shape chosen.** Core's `VrefIndex` is now an order-preserving container: a
+`Vec<VrefEntry { sid, projection }>` in first-seen token order, plus a private
+`sid → position` index for lookup. Accessors are `entries()`, `sids()`, `iter()`,
+`get()`, `contains_key()`, `len()`, `is_empty()`; it serializes **as its entries, in
+order** (a JSON array), because an ordered container that serialized to an object
+would re-introduce the sort at the first `serde_json` call. At the wasm boundary the
+same fact is projected as `{ order: string[], bySid: Record<string, VerseProjection> }`
+— the ordered key sequence is authoritative and the map stays for O(1) lookup,
+which costs no duplicated projection data and keeps existing JS lookups working. The
+DTO's doc says outright that `bySid`'s key enumeration is not meaningful.
+
+**Duplicate-SID semantics are unchanged and now pinned.** One entry per SID with the
+last projection written — what the map did — and the position that entry now also
+has to answer for is its *first-seen* one. Both halves are asserted, plus continued
+key-set parity with `to_vref`.
+
+**Regressions.** A fixture out of order in both dimensions a sort would "fix"
+(`\v 19` before `\v 2`; chapter 10 before chapter 2, then chapter 2 last) asserts
+emitted order equals stream order at the Rust surface *and* through the wasm
+boundary **after serialization**, which is the only place a sorted container betrays
+itself. The boundary test additionally asserts that `bySid`'s enumeration differs
+from `order`, so the reason for carrying both stays visible instead of assumed. No
+existing test asserted BTreeMap iteration order as such; three used map-only methods
+(`keys`, `remove`, `&index` iteration) and now use the ordered accessors.
+
+### Census — other consumer-visible surfaces whose container sorts (owner rules; not changed here)
+
+| surface | container | is stream order recoverable? |
+| --- | --- | --- |
+| `usfm_onion::vref::VrefMap` (`to_vref`, `usfm_to_vref_map`, `tokens_to_vref_map`, `vref_map_to_json_string`) and the wasm `VrefMap` DTO / `vref_to_object` | `BTreeMap<String, String>` keyed by SID | **No.** Same violation class as the one fixed here, one surface up: lossy text instead of lossless projections. Nothing carries the order. |
+| `usfm_onion::api` diff-by-chapter (`src/api.rs:390` over `Token`, `:412` over `FormatToken`) and the wasm `DiffsByChapterMap` | `BTreeMap<String, BTreeMap<u32, DiffSkeleton>>` | **No**, and worse than order: the outer map sorts books lexicographically, and the inner `u32` chapter key both sorts numerically *and collapses duplicate chapter numbers* — which braid elsewhere deliberately retains as distinct runs. Order and multiplicity are both lost. |
+| `LintSummary.by_category` / `by_severity` / `by_issue_type` | `BTreeMap<enum, usize>` | **Not a violation.** Keys are library enums, ordered by their own declaration order; there is no user-supplied order to lose. |
+| `LintIssue.message_params` (`MessageParams`) | `BTreeMap<String, String>` | **Not a violation.** Keys are a fixed per-code contract, and the wire encoder depends on that key order for canonical bytes. |
+
+`braid`'s public surface has no sorted-container boundary: its ordered facts
+(`books()`, `chapter_labels()`, `entries`, snapshots) are all `Vec` in caller order.
+
+The generated TypeScript for `VrefIndex` changes shape with this commit; the
+regenerated `pkg-bundler`/`pkg-web` trees carrying it land with this packet's package
+commit.
