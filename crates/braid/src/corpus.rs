@@ -153,7 +153,9 @@ impl BookState {
     /// Position resolution is by token id, the only address a `TokenFix`
     /// carries. A fix naming a token this book does not hold cannot happen from
     /// its own lint pass — core only attaches a fix to a token it just read, and
-    /// resident ids are unique — and is skipped rather than guessed at.
+    /// resident ids are unique — and is skipped rather than guessed at. A fix that
+    /// edits nothing is skipped for the same reason it is unrepresentable as a
+    /// patch: there is nothing to address.
     fn resolve_fixes(&self, result: &LintResult) -> Vec<ResolvedFix> {
         let mut positions: FxHashMap<&str, u32> =
             FxHashMap::with_capacity_and_hasher(self.tokens.len(), rustc_hash::FxBuildHasher);
@@ -170,7 +172,12 @@ impl BookState {
                     position.is_some(),
                     "a fix from this book's own lint names one of its tokens"
                 );
-                Some(ResolvedFix::new(fix, position?, self.hash))
+                let resolved = ResolvedFix::new(fix, position?, self.hash);
+                debug_assert!(
+                    resolved.is_some(),
+                    "no rule produces a fix that edits nothing"
+                );
+                resolved
             })
             .collect()
     }

@@ -399,7 +399,7 @@ fn issue_to_row(
 
     let patch = match &issue.fix {
         None => None,
-        Some(fix) => Some(fix_input(fix, resolver).ok_or_else(err)?),
+        Some(fix) => Some(fix_input(book, code, fix, resolver)?),
     };
 
     let params = if param_contract(LintCodeTag::from(code)).is_some() {
@@ -434,9 +434,22 @@ fn issue_to_row(
 /// something else. A multi-template replacement becomes one `Replace` followed by
 /// `Insert`s at the same position, which is how the whole fix stays one
 /// contiguous row run.
-fn fix_input(fix: &TokenFix, resolver: &BTreeMap<&str, u32>) -> Option<FixInput> {
-    let position = *resolver.get(fix.target_token_id())?;
-    let (code, label, label_params, rows) = match fix {
+///
+/// A fix that edits nothing is refused too, and for a sharper reason: the table
+/// addresses a fix by a run of rows, so a zero-row run is indistinguishable from
+/// the next fix's run. Writing one would produce bytes this codec's own decoder
+/// cannot read back as the fix that went in, which is the one thing an encoder
+/// must never do.
+fn fix_input(
+    book: BookId,
+    code: LintCode,
+    fix: &TokenFix,
+    resolver: &BTreeMap<&str, u32>,
+) -> Result<FixInput, EncodeError> {
+    let position = *resolver
+        .get(fix.target_token_id())
+        .ok_or_else(|| unrepresentable(book, code))?;
+    let (fix_code, label, label_params, rows) = match fix {
         TokenFix::ReplaceToken {
             code,
             label,
@@ -496,8 +509,14 @@ fn fix_input(fix: &TokenFix, resolver: &BTreeMap<&str, u32>) -> Option<FixInput>
                 .collect(),
         ),
     };
-    Some(FixInput {
-        code: code.clone(),
+    if rows.is_empty() {
+        return Err(EncodeError::EmptyFix {
+            book,
+            code: LintCodeTag::from(code) as u8,
+        });
+    }
+    Ok(FixInput {
+        code: fix_code.clone(),
         label: label.clone(),
         label_params: label_params.clone(),
         rows,
@@ -1160,6 +1179,57 @@ mod tests {
         ));
     }
 
+    /// A fix that edits nothing has no representation: the table addresses a fix
+    /// by a run of rows, and a zero-row run is indistinguishable from the next
+    /// fix's run. The encoder refuses rather than writing bytes its own decoder
+    /// cannot read back as the fix that went in.
+    #[test]
+    fn a_fix_that_edits_nothing_refuses_to_encode() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 body\n";
+        let parsed = parse(source);
+        let anchor = parsed
+            .tokens
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .unwrap();
+        let target = {
+            use usfm_onion::LintableToken;
+            anchor.id().unwrap()
+        };
+
+        for fix in [
+            TokenFix::ReplaceToken {
+                code: "empty-replace".to_string(),
+                label: "EmptyReplace".to_string(),
+                label_params: MessageParams::default(),
+                target_token_id: target.clone(),
+                replacements: Vec::new(),
+            },
+            TokenFix::InsertAfter {
+                code: "empty-insert".to_string(),
+                label: "EmptyInsert".to_string(),
+                label_params: MessageParams::default(),
+                target_token_id: target.clone(),
+                insert: Vec::new(),
+            },
+        ] {
+            let issue = issue_with_fix(source, anchor, fix.clone());
+            assert_eq!(
+                encode_book(
+                    book("GEN"),
+                    source,
+                    &parsed.tokens,
+                    std::slice::from_ref(&issue)
+                ),
+                Err(EncodeError::EmptyFix {
+                    book: book("GEN"),
+                    code: LintCodeTag::MissingWhitespaceBeforeMarker as u8,
+                }),
+                "{fix:?} must be refused"
+            );
+        }
+    }
+
     /// Semantic mutations of the patch table itself, each restamped so the
     /// checksum cannot be what catches them. Every one must be a typed error
     /// rather than a fix that quietly means something else.
@@ -1296,7 +1366,21 @@ mod tests {
             );
         }
 
-        // (h) the fix flag cleared while the column still names a record: the
+        // (h) a record whose row run is empty. The partition still adds up (the
+        // next record absorbs the rows), so this isolates the zero-row rule
+        // itself rather than the contiguity check.
+        {
+            let mut bytes = base.clone();
+            let at = table_offset(&bytes);
+            bytes[at + 4..at + 8].copy_from_slice(&0u32.to_le_bytes());
+            restamp(&mut bytes);
+            assert_eq!(
+                decode_book(&bytes, source),
+                Err(DecodeError::InvalidSection)
+            );
+        }
+
+        // (i) the fix flag cleared while the column still names a record: the
         // flag and the column are both authoritative, and disagreement is a
         // section this decoder will not guess about.
         {

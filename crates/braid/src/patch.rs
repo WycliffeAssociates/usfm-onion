@@ -95,7 +95,15 @@ impl ResolvedFix {
     /// flattens to exactly one row; the multi-template forms are expressed as a
     /// replace (or nothing) followed by inserts at the same position, which is
     /// how a run of rows stays addressable by one first/count pair.
-    pub(crate) fn new(fix: &TokenFix, position: u32, source_hash: SourceHash) -> Self {
+    ///
+    /// Returns `None` for a fix that edits nothing — an empty replacement or
+    /// insertion list. Such a fix is a no-op (core's own applier returns the
+    /// tokens unchanged), no rule produces one, and a patch with no rows has
+    /// nothing to preview, apply, or publish. Making it unrepresentable here is
+    /// what keeps "a `Patch` has at least one row" a property of the type instead
+    /// of a rule every reader has to remember; it is also the shape the wire
+    /// refuses to encode, so the two boundaries agree.
+    pub(crate) fn new(fix: &TokenFix, position: u32, source_hash: SourceHash) -> Option<Self> {
         let mut rows = Vec::new();
         match fix {
             TokenFix::ReplaceToken { replacements, .. } => {
@@ -126,11 +134,14 @@ impl ResolvedFix {
                 }
             }
         }
-        Self {
+        if rows.is_empty() {
+            return None;
+        }
+        Some(Self {
             source_hash,
             rows,
             fix: fix.clone(),
-        }
+        })
     }
 
     /// The public patch view, once the corpus assigns this fix its ordinal.

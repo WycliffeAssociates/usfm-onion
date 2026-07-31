@@ -506,6 +506,15 @@ impl FindingSectionBuffers {
                     .copy_from_slice(&payload_index.to_le_bytes());
             }
             if let Some(patch) = &row.patch {
+                // A fix is addressed by a *run* of rows, so a zero-row run is
+                // indistinguishable from the next fix's run: the writer refuses
+                // to lay out what this crate's own decoder refuses to read.
+                if patch.rows.is_empty() {
+                    return Err(EncodeError::EmptyFix {
+                        book,
+                        code: row.code as u8,
+                    });
+                }
                 let index = u32::try_from(patch_records.len() / PATCH_RECORD_LEN)
                     .map_err(|_| unrepresentable(book, row.code))?;
                 patch_indices[row_index * 4..row_index * 4 + 4]
@@ -1065,6 +1074,13 @@ impl<'wire> PatchTable<'wire> {
             // The same partition rule the payload table uses: contiguous,
             // ascending, together covering exactly the row array.
             if first != expected_first {
+                return Err(DecodeError::InvalidSection);
+            }
+            // A fix that edits nothing is not a fix, and a zero-row run cannot be
+            // told apart from the next record's run. No encoder in this crate can
+            // produce one; a producer that did would be describing something this
+            // decoder would have to invent.
+            if count == 0 {
                 return Err(DecodeError::InvalidSection);
             }
             expected_first = expected_first

@@ -932,6 +932,50 @@ mod tests {
             0,
             SourceHash(0),
         )
+        .expect("a one-template insertion edits something")
+    }
+
+    /// A fix that edits nothing is not representable as a patch: there is no run
+    /// of rows to address, nothing to preview or apply, and the wire refuses to
+    /// encode the same shape. No rule produces one; this pins the boundary rather
+    /// than the producer.
+    #[test]
+    fn a_fix_that_edits_nothing_resolves_to_no_patch() {
+        for fix in [
+            TokenFix::ReplaceToken {
+                code: "empty-replace".to_string(),
+                label: "EmptyReplace".to_string(),
+                label_params: Default::default(),
+                target_token_id: "GEN-0".to_string(),
+                replacements: Vec::new(),
+            },
+            TokenFix::InsertAfter {
+                code: "empty-insert".to_string(),
+                label: "EmptyInsert".to_string(),
+                label_params: Default::default(),
+                target_token_id: "GEN-0".to_string(),
+                insert: Vec::new(),
+            },
+        ] {
+            assert!(
+                ResolvedFix::new(&fix, 0, SourceHash(0)).is_none(),
+                "{fix:?} edits nothing"
+            );
+        }
+        // A delete always edits something: the token it names.
+        assert!(
+            ResolvedFix::new(
+                &TokenFix::DeleteToken {
+                    code: "drop".to_string(),
+                    label: "Drop".to_string(),
+                    label_params: Default::default(),
+                    target_token_id: "GEN-0".to_string(),
+                },
+                0,
+                SourceHash(0),
+            )
+            .is_some()
+        );
     }
 
     /// A minter that records how many ids it granted, so a test can assert on

@@ -117,6 +117,15 @@ pub enum EncodeError {
     /// Appended after the two payload refusals; no existing variant is
     /// renumbered.
     InvalidSectionLayout { book: BookId, reason: LayoutRefusal },
+    /// A `TokenFix` that edits nothing — no replacement, no insertion, no
+    /// deletion.
+    ///
+    /// Semantically a no-op fix, and no rule produces one. It is refused rather
+    /// than stored because the patch table addresses a fix by a *run* of rows: a
+    /// zero-row run is indistinguishable from the next fix's run, so writing one
+    /// would produce a table this format's own decoder cannot read back as the
+    /// fix that went in.
+    EmptyFix { book: BookId, code: u8 },
 }
 
 /// Why a section set cannot be laid out canonically. Each variant mirrors a
@@ -180,6 +189,12 @@ impl std::fmt::Display for EncodeError {
             }
             Self::InvalidSectionLayout { book, reason } => {
                 write!(f, "book {book} section layout refused: {reason}")
+            }
+            Self::EmptyFix { book, code } => {
+                write!(
+                    f,
+                    "book {book} carries a fix for rule code {code} that edits nothing"
+                )
             }
         }
     }

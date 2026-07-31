@@ -265,6 +265,22 @@ fn patch_row_position_out_of_range(bytes: &mut Vec<u8>) {
     });
 }
 
+/// Empties the first patch record's row run and hands its row to the second, so
+/// the record/row partition still adds up and the only rule broken is "a fix
+/// edits something". The writer cannot produce this shape at all, which is why
+/// the vector has to be built by corrupting one that it can.
+#[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
+fn zero_row_patch_record(bytes: &mut Vec<u8>) {
+    let (offset, _) = section_bounds(bytes)[1];
+    let table = field_offset(bytes, crate::schema::finding_field::PATCH_TABLE);
+    // Record 0: keep first_row, zero the count. Record 1: absorb both rows.
+    bytes[table + 4..table + 8].copy_from_slice(&0u32.to_le_bytes());
+    bytes[table + 24..table + 28].copy_from_slice(&0u32.to_le_bytes());
+    bytes[table + 28..table + 32].copy_from_slice(&2u32.to_le_bytes());
+    restamp_section(bytes, offset);
+    restamp_container(bytes);
+}
+
 #[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
 fn patch_index_column_not_dense(bytes: &mut Vec<u8>) {
     let (offset, _) = section_bounds(bytes)[1];
@@ -340,6 +356,13 @@ fn malformed_vectors() -> Vec<MalformedVector> {
             corrupt: patch_row_position_out_of_range,
             expected: DecodeError::InvalidSection,
             proves: "a patch row naming a token position the paired token section does not have rejects rather than resolving a target id out of bounds",
+        },
+        MalformedVector {
+            name: "zero-row-patch-record",
+            base: "whitespace-fix-patch",
+            corrupt: zero_row_patch_record,
+            expected: DecodeError::InvalidSection,
+            proves: "a patch record with an empty row run rejects: a fix that edits nothing is not a fix, and a zero-row run cannot be told apart from the next record's run — the writer refuses to produce this shape, so the decoder must refuse to read it",
         },
         MalformedVector {
             name: "patch-index-column-not-dense",

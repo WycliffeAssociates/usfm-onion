@@ -1,0 +1,7 @@
+{
+  "name": "zero-row-patch-record",
+  "kind": "malformed",
+  "base": "whitespace-fix-patch",
+  "expectedError": "InvalidSection",
+  "proves": "a patch record with an empty row run rejects: a fix that edits nothing is not a fix, and a zero-row run cannot be told apart from the next record's run — the writer refuses to produce this shape, so the decoder must refuse to read it"
+}
