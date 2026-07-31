@@ -4529,3 +4529,55 @@ usfm_onion_wasm -- --ignored` green; `npm run test:packed` /
 test:wasm` (bundler+web) green; `npm run golden:wasm` / `golden:wasm:web`
 green (7 fixtures); `npm run test:parity` / `test:parity:web` green (new,
 54 steps × 2 targets, 0 divergences); `cargo fmt --all -- --check` clean.
+## 2026-07-31 — Final pre-review packet, item 2: DTO dedup audit
+
+Epic item 2: wasm-local DTO shapes that duplicate what
+`usfm_onion_wire`/(the since-absorbed) `usfm_onion_dto` already define move
+to the single source.
+
+**Audit.** Diffed every `pub struct`/`pub enum` name in
+`usfm_onion_wire::dto` against every `pub struct`/`pub enum` name in
+`usfm_onion_wasm::dto` and `usfm_onion_wasm::resident`: zero name
+collisions. Cross-checked the reason: `usfm_onion_wasm::lib.rs` already
+re-exports the *entire* set of wire-owned shared vocabulary at the crate
+root (`AttributeItem, BlockBehavior, ..., Span, Token, TokenKind, ...,
+format_sid, map_marker_info` — 30 names) rather than redefining any of them,
+and every wasm-local type that remains (`LintIssue`, `LintResult`,
+`LintSummary`, `DecisionUnit`, `DiffSkeleton`, `Slot`, `Anchor`, `CstNode`,
+`FormatOptions`, `FormatFix`, ...) has **no wire counterpart to be a
+duplicate of** — `usfm_onion_wire::dto` only owns the packed/wire-layout
+primitives (checked directly: it has no `LintIssue`, `LintResult`,
+`DecisionUnit`, `DiffSkeleton`, or `Slot` at all). These friendly,
+full-fidelity JSON aggregates are wasm's own job as the composition root;
+wire has nothing resembling them to consolidate onto. Conclusion: **no
+actionable duplication found against `usfm_onion_wire`/`usfm_onion_dto`
+this round** — the one real hand-mirroring bug the parity work turned up
+(`BookInput`'s field casing) was a correctness bug in a wasm-local type with
+no wire or braid counterpart, not a case of two sources defining the same
+shape; it is recorded under item 1, not here.
+
+**Noted, not fixed — a larger, separate concern.** `resident.rs` hand-mirrors
+several of *braid's own* lifecycle types for Tsify/wasm-bindgen ABI
+purposes (`BookInput`, `CorpusInput`, `ChapterTarget`, `ChapterLabel`,
+`ChapterInput`, `CorpusScope`, `Scope`, `MutationEffect`, `IngestError`,
+`ScopeError`, `PatchError`, ..., and `LineEnding`). The original frozen
+design (§2.2#13) anticipated braid growing its own `wasm` feature
+(`serde` + tsify/wasm-bindgen glue) so these could derive directly on
+braid's own types instead of a second wasm-side mirror; braid's Cargo.toml
+still only has the plain `serde` feature, with a comment recording the
+`wasm` feature as deferred, not built. This is real, but it is a
+`usfm_onion_wire`/`usfm_onion_dto` question's cousin, not its instance — the
+packet scoped item 2 to wire/dto duplication specifically, adding a `wasm`
+feature to braid and re-deriving a dozen call sites against it is a
+materially larger change than a final pre-review packet, and it was never
+in this round's stated scope. Recorded here so it is not silently
+rediscovered as if new.
+
+**Hard gate.** `.d.ts` diff before vs. after this item: **empty** — no code
+changed for this item, which is the honest outcome of an audit that found
+nothing left to move, not a skipped step. (Item 1's `BookInput` fix already
+regenerated and committed the one hunk that needed to change, ledgered
+separately above.)
+
+Gates: none re-run beyond item 1's battery above, since no code changed for
+this item.
