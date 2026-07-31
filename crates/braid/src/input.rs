@@ -9,6 +9,9 @@ use usfm_onion::token::{BookId, OwnedToken};
 
 pub use usfm_onion::token::LineEnding;
 
+use crate::stamps::{LintConfigFingerprint, LintEngineStamp};
+use crate::state::BookLintPrime;
+
 /// The caller's opaque binding for where a resident book came from — normally
 /// a path.
 ///
@@ -166,21 +169,30 @@ impl CorpusInput {
 /// bytes and the semantic tokens, so braid only has to check that they agree and
 /// install them.
 ///
-/// The per-book cached *lint* contribution §5.5 of the plan describes is
-/// deliberately absent: accepting a cached result requires the lint-config
-/// fingerprint and rule-engine stamp, whose input sets are still undecided, and a
-/// stamp that does not actually cover what changed would accept stale findings —
-/// the one failure mode a warm cache must not have. Seeded books are therefore
-/// dirty, and the next `lint()` computes their findings. What restore already
-/// saves is the parse, which is the expensive half.
+/// `config_fingerprint`/`engine_stamp` gate every book's *optional* cached
+/// `lint` contribution as one batch: a mismatch here means nothing in this
+/// seed's `lint` fields can be trusted, so every book that carries one is
+/// rejected (its cached contribution only — the book itself still seeds; see
+/// [`crate::RestoreReport`]) rather than checked one at a time against a value
+/// already known to be wrong.
 #[derive(Debug, Clone, Default)]
 pub struct CorpusRestoreInput {
+    pub config_fingerprint: LintConfigFingerprint,
+    pub engine_stamp: LintEngineStamp,
     pub books: Vec<BookRestoreInput>,
 }
 
 impl CorpusRestoreInput {
-    pub fn new(books: Vec<BookRestoreInput>) -> Self {
-        Self { books }
+    pub fn new(
+        config_fingerprint: LintConfigFingerprint,
+        engine_stamp: LintEngineStamp,
+        books: Vec<BookRestoreInput>,
+    ) -> Self {
+        Self {
+            config_fingerprint,
+            engine_stamp,
+            books,
+        }
     }
 }
 
@@ -190,6 +202,11 @@ impl CorpusRestoreInput {
 /// one thing a warm restore must never install: after a restore the first edit
 /// re-emits the whole book from its tokens, so tokens that do not spell these
 /// bytes would silently rewrite parts of the file nobody touched.
+///
+/// `lint` is this book's optional cached contribution, validated against this
+/// same book's post-seed hash and the batch's two stamps before it is
+/// adopted; a rejection leaves the book seeded (tokens installed, no lex or
+/// parse) but dirty, exactly as if `lint` had been absent.
 #[derive(Debug, Clone)]
 pub struct BookRestoreInput {
     pub source_key: SourceKey,
@@ -197,6 +214,7 @@ pub struct BookRestoreInput {
     pub source: String,
     pub tokens: Vec<OwnedToken>,
     pub line_ending: LineEnding,
+    pub lint: Option<BookLintPrime>,
 }
 
 /// A read/projection selector over resident data.

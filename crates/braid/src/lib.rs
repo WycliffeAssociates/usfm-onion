@@ -33,6 +33,7 @@ mod error;
 mod input;
 mod lint;
 mod patch;
+mod stamps;
 mod state;
 
 use usfm_onion::format::FormatToken;
@@ -51,9 +52,10 @@ pub use crate::input::{
 };
 pub use crate::lint::{BookLintSnapshot, LintSnapshot};
 pub use crate::patch::{Patch, PatchId, PatchOp, PatchRow};
+pub use crate::stamps::{LintConfigFingerprint, LintEngineStamp};
 pub use crate::state::{
-    BookEntry, MutationEffect, PrimeRejectReason, PrimeRejection, RestoreReport, Scope, ScopeSet,
-    ScopeTokens, SnapshotId, SourceHash,
+    BookEntry, BookLintPrime, LintPrimeInput, MutationEffect, PrimeRejectReason, PrimeRejection,
+    PrimeReport, RestoreReport, Scope, ScopeSet, ScopeTokens, SnapshotId, SourceHash,
 };
 
 /// Resident configuration. Lint options live here so every recompute uses one
@@ -225,39 +227,124 @@ impl Braid {
     /// a content rejection instead of refusing outright. Per-book refusals are
     /// data, and the caller re-ingests just those books.
     ///
-    /// Seeded books are dirty: this restores the parse, not the findings. Braid
-    /// never decodes wire bytes — the composing adapter does that and hands the
-    /// results here.
+    /// A book's optional `lint` field is validated against this corpus's own
+    /// two stamps and this book's own post-seed hash before it is adopted — see
+    /// [`RestoreReport`] for exactly what a rejection there does and does not
+    /// invalidate. A book still seeds even when its cached lint is refused;
+    /// only `SourceTokenMismatch` refuses the book itself.
     pub fn restore_corpus(
         &mut self,
         seed: CorpusRestoreInput,
     ) -> Result<RestoreReport, IngestError> {
         validate_unique_keys(seed.books.iter().map(|book| (book.book, &book.source_key)))?;
 
+        let stamps_ok = seed.config_fingerprint == LintConfigFingerprint::of(&self.config.lint)
+            && seed.engine_stamp == LintEngineStamp::current();
+        let stamp_reason =
+            if seed.config_fingerprint != LintConfigFingerprint::of(&self.config.lint) {
+                PrimeRejectReason::ConfigFingerprintMismatch
+            } else {
+                PrimeRejectReason::EngineStampMismatch
+            };
+
         let mut candidates = Vec::with_capacity(seed.books.len());
         let mut rejected = Vec::new();
         for book in seed.books {
-            let expected = book.source;
-            let candidate = BookState::build(BookInput::Tokens(BookTokensInput {
+            let expected_source = book.source;
+            let lint = book.lint;
+            let mut candidate = BookState::build(BookInput::Tokens(BookTokensInput {
                 source_key: book.source_key,
                 book: book.book,
                 tokens: book.tokens,
                 line_ending: book.line_ending,
             }))?;
-            if candidate.source == expected {
-                candidates.push(candidate);
-            } else {
+            if candidate.source != expected_source {
                 rejected.push(PrimeRejection {
                     book: book.book,
                     reason: PrimeRejectReason::SourceTokenMismatch,
                 });
+                continue;
             }
+            if let Some(prime) = lint {
+                match self.validate_prime(&candidate, &prime, stamps_ok, stamp_reason) {
+                    Ok((result, patches)) => candidate.install_lint(result, patches),
+                    Err(reason) => rejected.push(PrimeRejection {
+                        book: book.book,
+                        reason,
+                    }),
+                }
+            }
+            candidates.push(candidate);
         }
 
         let seeded = candidates.iter().map(|book| book.book).collect();
         self.books = candidates;
         self.snapshot_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
         Ok(RestoreReport { seeded, rejected })
+    }
+
+    /// Applies cached lint contributions to an already-resident corpus — the
+    /// same validation `restore_corpus` runs per book, addressed by
+    /// [`BookId`]/[`SourceHash`] instead of arriving alongside a fresh seed.
+    /// Every accepted book's contribution replaces its current one atomically;
+    /// a rejected book is left exactly as it was (dirty if it already was).
+    pub fn prime_lint_cache(&mut self, input: LintPrimeInput) -> PrimeReport {
+        let stamps_ok = input.config_fingerprint == LintConfigFingerprint::of(&self.config.lint)
+            && input.engine_stamp == LintEngineStamp::current();
+        let stamp_reason =
+            if input.config_fingerprint != LintConfigFingerprint::of(&self.config.lint) {
+                PrimeRejectReason::ConfigFingerprintMismatch
+            } else {
+                PrimeRejectReason::EngineStampMismatch
+            };
+
+        let mut accepted = Vec::new();
+        let mut rejected = Vec::new();
+        for prime in input.books {
+            let book = prime.book;
+            let Some(index) = self.index_of(book) else {
+                rejected.push(PrimeRejection {
+                    book,
+                    reason: PrimeRejectReason::BookNotResident,
+                });
+                continue;
+            };
+            match self.validate_prime(&self.books[index], &prime, stamps_ok, stamp_reason) {
+                Ok((result, patches)) => {
+                    self.books[index].install_lint(result, patches);
+                    accepted.push(book);
+                }
+                Err(reason) => rejected.push(PrimeRejection { book, reason }),
+            }
+        }
+        PrimeReport { accepted, rejected }
+    }
+
+    /// The validation both `restore_corpus` and `prime_lint_cache` run for one
+    /// book's cached contribution: the batch's stamps (already compared once
+    /// per call, not per book — a mismatch there is the same fact for every
+    /// book in the batch), this book's own source hash, and finally that every
+    /// fix in the result actually resolves against this book's own tokens.
+    /// Ok returns the pieces the caller installs; it never installs them
+    /// itself, so a corpus-level rejection this checks for cannot leave one
+    /// book adopted and its sibling refused out of the same bad batch.
+    fn validate_prime(
+        &self,
+        book: &BookState,
+        prime: &BookLintPrime,
+        stamps_ok: bool,
+        stamp_reason: PrimeRejectReason,
+    ) -> Result<(usfm_onion::lint::LintResult, Vec<ResolvedFix>), PrimeRejectReason> {
+        if !stamps_ok {
+            return Err(stamp_reason);
+        }
+        if prime.source_hash != book.hash {
+            return Err(PrimeRejectReason::SourceHashMismatch);
+        }
+        let patches = book
+            .try_resolve_cached_fixes(&prime.result)
+            .ok_or(PrimeRejectReason::InvalidPatch)?;
+        Ok((prime.result.clone(), patches))
     }
 
     /// Replaces one book, or appends it when it is not resident yet.

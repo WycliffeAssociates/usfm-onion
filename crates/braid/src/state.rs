@@ -177,8 +177,16 @@ pub struct BookEntry {
 
 /// What one [`crate::Braid::restore_corpus`] call installed, and what it refused.
 ///
-/// A refusal is data, not an error: the caller falls back to ordinary ingest for
-/// that one book (re-reading and parsing it) while every other book stays warm.
+/// Residency and lint-priming are two independent facts, and a book can carry
+/// both: `SourceTokenMismatch` refuses the book's residency entirely (its
+/// tokens do not spell its own bytes, so there is nothing safe to seed — the
+/// caller re-ingests it from scratch). Every other reason instead gates the
+/// book's *cached lint contribution* only — the book still seeds (`seeded`
+/// includes it) with no lex/parse, just without a warm lint result, and stays
+/// dirty until the next ordinary `lint()`. A book therefore appears in
+/// `rejected` alone (residency refused) or in both `seeded` and `rejected`
+/// (residency accepted, cached lint refused), never in `rejected` for a
+/// residency reason while also appearing in `seeded`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RestoreReport {
@@ -194,18 +202,81 @@ pub struct PrimeRejection {
     pub reason: PrimeRejectReason,
 }
 
-/// Why a book was refused.
+/// Why a book — or its cached lint contribution — was refused.
 ///
-/// One variant, because one thing can be checked today. The frozen
-/// cache-acceptance reasons (`BookNotResident`, `SourceHashMismatch`,
-/// `ConfigFingerprintMismatch`, `EngineStampMismatch`, `InvalidPatch`) all gate a
-/// cached *lint* contribution, which no input can carry yet — the stamps that
-/// would license one are undecided — so they have no producer and are not built.
+/// `SourceTokenMismatch` is a residency refusal (see [`RestoreReport`]); every
+/// other variant gates a cached lint contribution only and leaves the book's
+/// residency untouched, whether it arrived through `restore_corpus` or
+/// `prime_lint_cache`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PrimeRejectReason {
     /// The supplied tokens do not spell the supplied bytes.
     SourceTokenMismatch,
+    /// [`crate::Braid::prime_lint_cache`] named a book that is not currently
+    /// resident. (Unreachable from `restore_corpus`, whose cached-lint entries
+    /// are always embedded alongside the very book they prime.)
+    BookNotResident,
+    /// The cached contribution's own recorded source hash does not match this
+    /// book's actual hash — it was computed against different bytes.
+    SourceHashMismatch,
+    /// The batch's `config_fingerprint` does not match the lint configuration
+    /// this corpus actually runs with.
+    ConfigFingerprintMismatch,
+    /// The batch's `engine_stamp` does not match the rule engine this build
+    /// actually runs.
+    EngineStampMismatch,
+    /// The source hash and both stamps agreed, but at least one finding's fix
+    /// could not be resolved against this book's own token stream — a
+    /// structural inconsistency a matching hash does not rule out, so the
+    /// whole cached contribution is refused rather than adopting the findings
+    /// with an incomplete patch table.
+    InvalidPatch,
+}
+
+/// One book's cached lint contribution, presented for validation.
+///
+/// `book`/`source_hash` are carried on this type rather than inferred from
+/// where it is embedded, because [`crate::Braid::prime_lint_cache`] addresses
+/// resident books by this pair directly (its `books` are a flat list, not
+/// nested inside a per-book restore record).
+///
+/// `Serialize` only, deliberately: `usfm_onion::lint::LintResult` embeds
+/// `LintIssue::template: &'static str`, which has no honest `Deserialize` —
+/// there is no way to manufacture a `'static` reference from arbitrary input
+/// bytes without a lookup back through `LintCode::template`, and core itself
+/// has never derived one for exactly this reason (`LintResult`/`LintIssue`
+/// are `Serialize`-only today). The intended producer of a `BookLintPrime` is
+/// always the composing adapter decoding wire bytes natively in the same Rust
+/// process as the `Braid` it seeds — never a value crossing a real serde
+/// boundary — so this asymmetry costs nothing today; it would need a manual
+/// `Deserialize` impl (reconstructing `template` from `code`) the day
+/// something other than that in-process caller needs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct BookLintPrime {
+    pub book: BookId,
+    pub source_hash: SourceHash,
+    pub result: usfm_onion::lint::LintResult,
+}
+
+/// [`crate::Braid::prime_lint_cache`]'s input: one batch of cached
+/// contributions, all produced under the same lint configuration and rule
+/// engine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct LintPrimeInput {
+    pub config_fingerprint: crate::stamps::LintConfigFingerprint,
+    pub engine_stamp: crate::stamps::LintEngineStamp,
+    pub books: Vec<BookLintPrime>,
+}
+
+/// What one [`crate::Braid::prime_lint_cache`] call accepted and refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PrimeReport {
+    pub accepted: Vec<BookId>,
+    pub rejected: Vec<PrimeRejection>,
 }
 
 /// A chapter scope that could not be resolved, kept alongside the address the

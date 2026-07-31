@@ -143,9 +143,8 @@ impl BookState {
         let mut options = base.clone();
         options.declared_book = Some(self.book);
         let result = lint_tokens(&self.tokens, options);
-        self.patches = self.resolve_fixes(&result);
-        self.lint = Some(result);
-        self.lint_dirty = false;
+        let patches = self.resolve_fixes(&result);
+        self.install_lint(result, patches);
     }
 
     /// Flattens every finding's fix against this book's token stream.
@@ -157,11 +156,7 @@ impl BookState {
     /// edits nothing is skipped for the same reason it is unrepresentable as a
     /// patch: there is nothing to address.
     fn resolve_fixes(&self, result: &LintResult) -> Vec<ResolvedFix> {
-        let mut positions: FxHashMap<&str, u32> =
-            FxHashMap::with_capacity_and_hasher(self.tokens.len(), rustc_hash::FxBuildHasher);
-        for (position, token) in self.tokens.iter().enumerate() {
-            positions.insert(token.id().as_str(), position as u32);
-        }
+        let positions = self.positions_by_id();
         result
             .issues
             .iter()
@@ -180,6 +175,45 @@ impl BookState {
                 resolved
             })
             .collect()
+    }
+
+    /// Same flattening as [`Self::resolve_fixes`], for a lint result this book
+    /// did not just compute — a restored or primed cache. Foreign data does not
+    /// get the same trust: a matching source hash and matching stamps rule out
+    /// most drift, but not all of it, so every fix must resolve to a real
+    /// position and a non-empty patch or the whole contribution is refused
+    /// (`None`) rather than silently adopting the findings with a partial or
+    /// dropped patch table.
+    pub(crate) fn try_resolve_cached_fixes(&self, result: &LintResult) -> Option<Vec<ResolvedFix>> {
+        let positions = self.positions_by_id();
+        result
+            .issues
+            .iter()
+            .filter_map(|issue| issue.fix.as_ref())
+            .map(|fix| {
+                let position = *positions.get(fix.target_token_id())?;
+                ResolvedFix::new(fix, position, self.hash)
+            })
+            .collect()
+    }
+
+    /// Installs a lint contribution — freshly computed or a validated cached
+    /// one — as this book's current one. The shared tail of ordinary recompute
+    /// and cache priming, so both paths leave the same three fields in the
+    /// same consistent state.
+    pub(crate) fn install_lint(&mut self, result: LintResult, patches: Vec<ResolvedFix>) {
+        self.patches = patches;
+        self.lint = Some(result);
+        self.lint_dirty = false;
+    }
+
+    fn positions_by_id(&self) -> FxHashMap<&str, u32> {
+        let mut positions =
+            FxHashMap::with_capacity_and_hasher(self.tokens.len(), rustc_hash::FxBuildHasher);
+        for (position, token) in self.tokens.iter().enumerate() {
+            positions.insert(token.id().as_str(), position as u32);
+        }
+        positions
     }
 
     /// Exact content equality — the check that decides a no-op. Hash equality

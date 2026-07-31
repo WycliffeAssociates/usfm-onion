@@ -10,7 +10,7 @@
 
 use braid::{
     BookInput, BookTokensInput, Braid, BraidConfig, ChapterInput, ChapterLabel, ChapterTarget,
-    CorpusInput, IngestError, LineEnding, SourceKey,
+    CorpusInput, IngestError, LineEnding, LintConfigFingerprint, LintEngineStamp, SourceKey,
 };
 use usfm_onion::lint::{LintCode, LintIssue, LintOptions, LintScope, lint_tokens};
 use usfm_onion::parse::parse;
@@ -53,6 +53,18 @@ fn usfm(code: &str, source: &str) -> BookInput {
         book: id(code),
         source: source.to_string(),
     }
+}
+
+/// The two stamps `braid()`'s own config actually matches — the restore
+/// tests below aren't exercising lint-cache priming (that's Phase D's own
+/// suite), just plain token/source seeding, so any restore seed needs a
+/// pair that passes rather than a placeholder that would reject every book's
+/// (here always-absent) `lint` field for the wrong reason.
+fn matching_stamps() -> (LintConfigFingerprint, LintEngineStamp) {
+    (
+        LintConfigFingerprint::of(&LintOptions::scoped(LintScope::Book)),
+        LintEngineStamp::current(),
+    )
 }
 
 fn tokens_input(code: &str, source: &str) -> BookInput {
@@ -326,6 +338,8 @@ fn restore_seeds_a_corpus_that_matches_the_parsed_one() {
     let mut restored = braid();
     let report = restored
         .restore_corpus(braid::CorpusRestoreInput::new(
+            matching_stamps().0,
+            matching_stamps().1,
             [("GEN", GEN_SOURCE), ("EXO", EXO_SOURCE)]
                 .into_iter()
                 .map(|(code, source)| braid::BookRestoreInput {
@@ -334,6 +348,7 @@ fn restore_seeds_a_corpus_that_matches_the_parsed_one() {
                     source: source.to_string(),
                     tokens: owned(source),
                     line_ending: LineEnding::Lf,
+                    lint: None,
                 })
                 .collect(),
         ))
@@ -363,23 +378,29 @@ fn restore_seeds_a_corpus_that_matches_the_parsed_one() {
 fn a_seed_whose_tokens_disagree_with_its_bytes_is_refused() {
     let mut restored = braid();
     let report = restored
-        .restore_corpus(braid::CorpusRestoreInput::new(vec![
-            braid::BookRestoreInput {
-                source_key: key("GEN.usfm"),
-                book: id("GEN"),
-                source: GEN_SOURCE.to_string(),
-                tokens: owned(GEN_SOURCE),
-                line_ending: LineEnding::Lf,
-            },
-            braid::BookRestoreInput {
-                source_key: key("EXO.usfm"),
-                book: id("EXO"),
-                // The bytes claim one thing, the tokens spell another.
-                source: EXO_SOURCE.to_string(),
-                tokens: owned("\\id EXO\n\\c 1\n\\p\n\\v 1 Something else entirely.\n"),
-                line_ending: LineEnding::Lf,
-            },
-        ]))
+        .restore_corpus(braid::CorpusRestoreInput::new(
+            matching_stamps().0,
+            matching_stamps().1,
+            vec![
+                braid::BookRestoreInput {
+                    source_key: key("GEN.usfm"),
+                    book: id("GEN"),
+                    source: GEN_SOURCE.to_string(),
+                    tokens: owned(GEN_SOURCE),
+                    line_ending: LineEnding::Lf,
+                    lint: None,
+                },
+                braid::BookRestoreInput {
+                    source_key: key("EXO.usfm"),
+                    book: id("EXO"),
+                    // The bytes claim one thing, the tokens spell another.
+                    source: EXO_SOURCE.to_string(),
+                    tokens: owned("\\id EXO\n\\c 1\n\\p\n\\v 1 Something else entirely.\n"),
+                    line_ending: LineEnding::Lf,
+                    lint: None,
+                },
+            ],
+        ))
         .expect("the corpus itself is well-formed");
 
     assert_eq!(report.seeded, vec![id("GEN")]);
@@ -410,24 +431,30 @@ fn a_duplicate_book_in_the_seed_manifest_refuses_the_whole_call() {
     let identity = resident.expected_snapshot_id();
     let books = resident.books();
 
-    let seed = braid::CorpusRestoreInput::new(vec![
-        braid::BookRestoreInput {
-            source_key: key("GEN.usfm"),
-            book: id("GEN"),
-            source: GEN_SOURCE.to_string(),
-            tokens: owned(GEN_SOURCE),
-            line_ending: LineEnding::Lf,
-        },
-        braid::BookRestoreInput {
-            source_key: key("copy/GEN.usfm"),
-            book: id("GEN"),
-            // Would be a content rejection on its own — which must not be how a
-            // duplicate declaration gets reported.
-            source: GEN_SOURCE.to_string(),
-            tokens: owned(EXO_SOURCE),
-            line_ending: LineEnding::Lf,
-        },
-    ]);
+    let seed = braid::CorpusRestoreInput::new(
+        matching_stamps().0,
+        matching_stamps().1,
+        vec![
+            braid::BookRestoreInput {
+                source_key: key("GEN.usfm"),
+                book: id("GEN"),
+                source: GEN_SOURCE.to_string(),
+                tokens: owned(GEN_SOURCE),
+                line_ending: LineEnding::Lf,
+                lint: None,
+            },
+            braid::BookRestoreInput {
+                source_key: key("copy/GEN.usfm"),
+                book: id("GEN"),
+                // Would be a content rejection on its own — which must not be how a
+                // duplicate declaration gets reported.
+                source: GEN_SOURCE.to_string(),
+                tokens: owned(EXO_SOURCE),
+                line_ending: LineEnding::Lf,
+                lint: None,
+            },
+        ],
+    );
     assert_eq!(
         resident.restore_corpus(seed),
         Err(IngestError::DuplicateBook {
@@ -445,22 +472,28 @@ fn a_duplicate_book_in_the_seed_manifest_refuses_the_whole_call() {
 #[test]
 fn a_duplicate_source_key_in_the_seed_manifest_refuses_the_whole_call() {
     let mut resident = braid();
-    let seed = braid::CorpusRestoreInput::new(vec![
-        braid::BookRestoreInput {
-            source_key: key("shared.usfm"),
-            book: id("GEN"),
-            source: GEN_SOURCE.to_string(),
-            tokens: owned(GEN_SOURCE),
-            line_ending: LineEnding::Lf,
-        },
-        braid::BookRestoreInput {
-            source_key: key("shared.usfm"),
-            book: id("EXO"),
-            source: EXO_SOURCE.to_string(),
-            tokens: owned(GEN_SOURCE),
-            line_ending: LineEnding::Lf,
-        },
-    ]);
+    let seed = braid::CorpusRestoreInput::new(
+        matching_stamps().0,
+        matching_stamps().1,
+        vec![
+            braid::BookRestoreInput {
+                source_key: key("shared.usfm"),
+                book: id("GEN"),
+                source: GEN_SOURCE.to_string(),
+                tokens: owned(GEN_SOURCE),
+                line_ending: LineEnding::Lf,
+                lint: None,
+            },
+            braid::BookRestoreInput {
+                source_key: key("shared.usfm"),
+                book: id("EXO"),
+                source: EXO_SOURCE.to_string(),
+                tokens: owned(GEN_SOURCE),
+                line_ending: LineEnding::Lf,
+                lint: None,
+            },
+        ],
+    );
     assert_eq!(
         resident.restore_corpus(seed),
         Err(IngestError::DuplicateSourceKey {
