@@ -3,7 +3,7 @@ tokens	147	b245e1fbd8d4ee0d
 cst	147	990ec557099cb1b8
 usj	3414	3015bf6660f29ab9
 usx	2638	0f304262b967bd23
-vref	686	23adabdacfd0aaf6
+vref	709	92ab460b66fbc720
 html	5600	5f2bef719922e45c
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":297,"end":302},"related_span":null,"token_id":"MAT-39","related_token_id":null,"sid":"MAT 0:0","marker":"ior","fix":null}
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":336,"end":341},"related_span":null,"token_id":"MAT-45","related_token_id":null,"sid":"MAT 0:0","marker":"ior","fix":null}
@@ -16,7 +16,7 @@ tokens	35	9c4458d5da1fee6e
 cst	35	cbe9a778797139dd
 usj	863	89f0b2397006bebc
 usx	722	668183e042289066
-vref	221	725913de8c7e7464
+vref	227	3e3a7daa4cc34874
 html	1342	4033d6408a2e857e
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\jmp* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"jmp"},"span":{"start":268,"end":273},"related_span":null,"token_id":"GEN-30","related_token_id":null,"sid":"GEN 1:2","marker":"jmp","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"warning":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -25,7 +25,7 @@ tokens	18	82a85ee7210d10e6
 cst	18	f9dd08966bee81b1
 usj	409	9bcc854213b220c8
 usx	387	210a2e7c1c8c313a
-vref	76	de264d0325dac7b9
+vref	78	aed1331706c8f303
 html	666	6b3767819f627a8b
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/advanced/figureInNote/origin.usfm
@@ -44,7 +44,7 @@ tokens	47	38fe4eed9306480a
 cst	47	1d43c2629b7cd009
 usj	1079	9c2bd19e42c7d224
 usx	796	8b6d5c0998e374de
-vref	67	3de5beef2ae3c440
+vref	71	31638699c1bfccd0
 html	2050	8ed62ce992617669
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/advanced/header/origin.usfm
@@ -52,7 +52,7 @@ tokens	67	29a18c2270bc0f43
 cst	67	e2861497e1bedfb5
 usj	1530	42f38b3d5036b13e
 usx	1170	e67bac8e2b36ef0e
-vref	67	0f37c49d00c159a0
+vref	69	c00d7dd83f7af77e
 html	2292	216976aa09492d42
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":353,"end":358},"related_span":null,"token_id":"MRK-33","related_token_id":null,"sid":"MRK 0:0","marker":"ior","fix":null}
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":411,"end":416},"related_span":null,"token_id":"MRK-39","related_token_id":null,"sid":"MRK 0:0","marker":"ior","fix":null}
@@ -63,7 +63,7 @@ tokens	20	fb40a71bedb9dac3
 cst	20	de7a62417862e018
 usj	433	592f881c531206d4
 usx	366	1273a433e1d13c65
-vref	35	73a2faa0f7ce7317
+vref	37	e6358b342e13aad1
 html	1018	f78b95498ddffbf6
 {"code":"misnested-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{has_expected, select, true {Expected \\{expected}* here, but found \\{marker}*.} other {\\{marker}* does not match the marker that is currently open.}}","message":"Expected \\ft* here, but found \\fr*.","message_params":{"expected":"ft","has_expected":"true","marker":"fr"},"span":{"start":42,"end":46},"related_span":null,"token_id":"GEN-13","related_token_id":null,"sid":"GEN 1:1","marker":"fr","fix":null}
 {"code":"implicitly-closed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} was never closed; \\{closer}* closed it indirectly. Add an explicit \\{marker}* before \\{closer}*.","message":"\\ft was never closed; \\fr* closed it indirectly. Add an explicit \\ft* before \\fr*.","message_params":{"closer":"fr","marker":"ft"},"span":{"start":50,"end":54},"related_span":null,"token_id":"GEN-15","related_token_id":null,"sid":"GEN 1:1","marker":"ft","fix":null}
@@ -73,7 +73,7 @@ tokens	49	6a66f985adb390e5
 cst	49	b52293663b26d8a6
 usj	1193	fd99a509e7a7afe8
 usx	1072	055e763395ef47fe
-vref	377	22e60d4e5e142ea0
+vref	391	f023b39570367c3a
 html	1894	8b6b2a0c69af1516
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/advanced/milestones/origin.usfm
@@ -81,7 +81,7 @@ tokens	25	af747432219689a8
 cst	25	03e61d7131b4ce89
 usj	542	b2015e1718d703d9
 usx	516	797e1b8461ef2f0b
-vref	119	03af14a9a348e156
+vref	127	817be4fac19749fe
 html	946	1b9dd71bdf369536
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":62,"end":63},"related_span":null,"token_id":"GEN-17","related_token_id":null,"sid":"GEN 1:3","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -90,7 +90,7 @@ tokens	28	ebaed7aba5bf75d6
 cst	28	e3b28e4b3c504f6b
 usj	597	7e3a87421ee70c5e
 usx	559	78b9c553300870a8
-vref	182	d9f21c12cde0534f
+vref	188	6ce7c2b0a8b83dfd
 html	946	10605d561402abf5
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\bk* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"bk"},"span":{"start":121,"end":125},"related_span":null,"token_id":"GEN-25","related_token_id":null,"sid":"GEN 1:14","marker":"bk","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"warning":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -99,7 +99,7 @@ tokens	28	c2415a5c9019c649
 cst	28	e3b28e4b3c504f6b
 usj	597	7e3a87421ee70c5e
 usx	559	78b9c553300870a8
-vref	182	d9f21c12cde0534f
+vref	188	6ce7c2b0a8b83dfd
 html	945	85b05d1dc10d4ade
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\bk* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"bk"},"span":{"start":119,"end":123},"related_span":null,"token_id":"GEN-25","related_token_id":null,"sid":"GEN 1:14","marker":"bk","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"warning":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -116,7 +116,7 @@ tokens	18	397b9fad7dceff50
 cst	18	f9dd08966bee81b1
 usj	409	9bcc854213b220c8
 usx	387	210a2e7c1c8c313a
-vref	76	de264d0325dac7b9
+vref	78	aed1331706c8f303
 html	671	54e50c8f7a9045ef
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/character/origin.usfm
@@ -124,7 +124,7 @@ tokens	23	43e087069e06760b
 cst	23	700790bfa0717eeb
 usj	555	acd09e706979a9d7
 usx	536	f1de95fcbdae5dd3
-vref	188	c3812fffd7b19c57
+vref	192	132bd91a1b0dc3d3
 html	868	8a78bbcfb7d7e321
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/cross-refs/origin.usfm
@@ -132,7 +132,7 @@ tokens	26	255dbf74ab64ea69
 cst	26	9121817316fa5485
 usj	628	b9fd0edd96d9fc77
 usx	567	b62e052a786b9d49
-vref	127	2f0c44cc748c0e8d
+vref	131	6f406e718a7abb59
 html	1337	75732afc35da2e17
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\x* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"x"},"span":{"start":112,"end":115},"related_span":null,"token_id":"MAT-24","related_token_id":null,"sid":"MAT 1:3","marker":"x","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"warning":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -141,7 +141,7 @@ tokens	32	e500af6b7df8a2b4
 cst	32	85074e1166cda5dd
 usj	782	ed2aa0087a42783e
 usx	703	6683e4db6b12ecc9
-vref	177	0aceac810909f00c
+vref	183	22108ba7110e8c86
 html	1587	f9060c8c64ad88f5
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/header/origin.usfm
@@ -149,7 +149,7 @@ tokens	38	8f47ab6a9f58a024
 cst	38	47f382bf143d1baf
 usj	795	4352d79201723676
 usx	640	2c833ea577a11115
-vref	67	0f37c49d00c159a0
+vref	71	92e3a0951e4d3d30
 html	1227	5717995dc6bbef74
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/minimal/origin.usfm
@@ -157,7 +157,7 @@ tokens	15	0ec6af3b3ec6b3f2
 cst	15	bcbefb191d4677f9
 usj	327	f17cc74c015bb74f
 usx	328	52521c17982c537a
-vref	54	97b9fce6eeddb59c
+vref	56	f6b6c1eea234084e
 html	547	4151db0db06392c6
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/multiple-chapters/origin.usfm
@@ -165,7 +165,7 @@ tokens	28	7d0f21bf4082163e
 cst	28	54ebc6ae11f96a80
 usj	595	a9661f7e3658ade2
 usx	590	ed56df77a72ce6f4
-vref	132	9b2e5cd2e67234f2
+vref	138	632b606e3f6c6e8c
 html	1039	a75724820461e6f6
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/multiple-paragraphs/origin.usfm
@@ -173,7 +173,7 @@ tokens	45	be626217413b9cf9
 cst	45	2e91fd987f98a1bd
 usj	1317	e09e4af79a709d52
 usx	1162	aedb46e966c90e2a
-vref	530	95ac80cde5259ef6
+vref	544	4a6e8ebdea2839d8
 html	1923	4d170b42fd32fc25
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/basic/section/origin.usfm
@@ -181,7 +181,7 @@ tokens	28	059ed1fd0c2c30e9
 cst	28	09426159918ad671
 usj	593	316d94d3807ea35d
 usx	561	3d3271270a29190f
-vref	132	ff6f8baf4655e3d2
+vref	140	450d86609aa47792
 html	1004	342411e60fe04ec9
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/biblica/BlankLinesWithFigures/origin.usfm
@@ -199,7 +199,7 @@ tokens	76	457a1deec8976115
 cst	76	7ad2ee8845bd3f67
 usj	1785	d56f476d99a7b6bc
 usx	1369	a824d9b7ff97307f
-vref	231	7e11f41c94c5a94d
+vref	239	698df0c4cbdd96ed
 html	3555	16ab62bf37a47a4f
 {"code":"unclosed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}","message":"Note \\f was opened but never closed before a new block began.","message_params":{"kind":"note","location":"at-boundary","marker":"f"},"span":{"start":71,"end":74},"related_span":{"start":390,"end":391},"token_id":"MRK-15","related_token_id":"MRK-75","sid":"MRK 1:1","marker":"f","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\cat* has no matching opening \\cat.","message_params":{"form":"named","marker":"cat"},"span":{"start":89,"end":94},"related_span":null,"token_id":"MRK-19","related_token_id":null,"sid":"MRK 1:1","marker":"cat","fix":null}
@@ -251,7 +251,7 @@ tokens	23	8eb23ef692ed16f6
 cst	23	a7e00b0b05cfee41
 usj	498	f6a1078ff5da8674
 usx	424	e016d9544b6a363e
-vref	43	a12714b302203c27
+vref	47	1de01256779c2b1f
 html	738	b5badb44abd65c54
 {"code":"content-before-first-chapter","category":"document","severity":"error","issue_type":"usfm","template":"{kind, select, paragraph {Paragraph marker \\{marker}} verse {Verse marker \\v} other {\\{marker}}} appears before the first \\c.","message":"Paragraph marker \\p appears before the first \\c.","message_params":{"kind":"paragraph","marker":"p"},"span":{"start":50,"end":53},"related_span":null,"token_id":"GAL-10","related_token_id":null,"sid":"GAL 0:0","marker":"p","fix":null}
 summary	{"by_category":{"document":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -291,7 +291,7 @@ tokens	22	d56bbb8a7ce51146
 cst	22	f5e49633421204f3
 usj	633	15f8828572b4612c
 usx	610	f291d4653519851d
-vref	245	5d34af3897f2a307
+vref	251	686dab93b6859d71
 html	936	d2a13eb3aca15bd8
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/mandatory/v/origin.usfm
@@ -307,7 +307,7 @@ tokens	34	d55e8cd5376ce476
 cst	34	905f138948a49cac
 usj	689	93b4ff30bd2c4cb4
 usx	570	c9602b715b4941e3
-vref	106	6092282c1a5409e4
+vref	108	be1636fdaf936d92
 html	1177	10628312460233df
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"GEN-8","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":74,"end":76},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:2","marker":"v","fix":null}
@@ -319,7 +319,7 @@ tokens	22	e700b9152740078a
 cst	22	e66c4249deb496b0
 usj	469	231acc65d572fb82
 usx	378	33464105af0a1e21
-vref	35	73bea6ac57e24041
+vref	37	04229304f91d91df
 html	1084	a28114221aa9607e
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"GEN-8","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\em* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"em"},"span":{"start":66,"end":70},"related_span":null,"token_id":"GEN-19","related_token_id":null,"sid":"GEN 1:1","marker":"em","fix":null}
@@ -329,7 +329,7 @@ tokens	23	c87a57bd5c4a4d53
 cst	23	0b747ea004b9a335
 usj	481	beb23ca1ef63e1cc
 usx	430	4aba249ec58ca896
-vref	48	bb204cbd2780fda1
+vref	52	99185f98414a28f5
 html	781	69717a88b490925a
 {"code":"unclosed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}","message":"Character marker \\nd was opened but never closed before a new block began.","message_params":{"kind":"character","location":"at-boundary","marker":"nd"},"span":{"start":40,"end":44},"related_span":{"start":63,"end":64},"token_id":"GEN-15","related_token_id":"GEN-22","sid":"GEN 1:1","marker":"nd","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\nd* has no matching opening \\nd.","message_params":{"form":"named","marker":"nd"},"span":{"start":59,"end":63},"related_span":null,"token_id":"GEN-21","related_token_id":null,"sid":"GEN 1:2","marker":"nd","fix":null}
@@ -339,7 +339,7 @@ tokens	30	8448201ffeb28a3c
 cst	30	d1e214e820a449d4
 usj	614	8e8adf65af55be5f
 usx	460	ba8a1e5c562e2cd4
-vref	30	d9bcfda72a146ca6
+vref	35	9016a401e05b7690
 html	1391	c36d6f9ca91f56b0
 {"code":"unclosed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}","message":"Character marker \\nd was opened but never closed before a new block began.","message_params":{"kind":"character","location":"at-boundary","marker":"nd"},"span":{"start":40,"end":44},"related_span":{"start":83,"end":84},"token_id":"GEN-15","related_token_id":"GEN-29","sid":"GEN 1:1","marker":"nd","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -348,7 +348,7 @@ tokens	22	5e62607d74f805ea
 cst	22	d10310a2a3e8783c
 usj	467	85d96dade3be90cd
 usx	379	34c9435e99977d26
-vref	37	3b3844ff333fe373
+vref	39	f6a7b1d4732586ad
 html	1086	ad310cd9759eb625
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/CrossReferencesQuoteOutsideNote/origin.usfm
@@ -366,7 +366,7 @@ tokens	19	8a9e171c8ece031b
 cst	19	0e3cec9967f9a737
 usj	383	f1c879fb45ab5c48
 usx	338	c2f4939fbc6ce9ab
-vref	36	2db33f1496411444
+vref	38	d929ccabaec68732
 html	616	5589c0a4125dceb2
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/EmptyFigure/origin.usfm
@@ -374,7 +374,7 @@ tokens	31	329c8a35fec33e28
 cst	31	78d49f49252044dc
 usj	689	4ada92f00052cd12
 usx	567	74d293b7f13597e4
-vref	36	1d3b09f5cbfdf85c
+vref	38	79bf62412243664a
 html	1053	7ae959edb8d0abd6
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\fig* has no matching opening \\fig.","message_params":{"form":"named","marker":"fig"},"span":{"start":77,"end":82},"related_span":null,"token_id":"GEN-19","related_token_id":null,"sid":"GEN 1:1","marker":"fig","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\fig* has no matching opening \\fig.","message_params":{"form":"named","marker":"fig"},"span":{"start":120,"end":125},"related_span":null,"token_id":"GEN-26","related_token_id":null,"sid":"GEN 1:1","marker":"fig","fix":null}
@@ -384,7 +384,7 @@ tokens	23	c1a71176dd7151ff
 cst	23	3e150567e5d95152
 usj	449	7170d1db35d31726
 usx	396	cf13579a1cd20b24
-vref	30	29e1543f2e630da3
+vref	33	f54217f93ff52625
 html	845	7db45814a054badd
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":33,"end":35},"related_span":{"start":36,"end":39},"token_id":"GEN-15","related_token_id":"GEN-17","sid":"GEN 1:1","marker":"p","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":49,"end":50},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:2","marker":"v","fix":null}
@@ -403,7 +403,7 @@ tokens	22	c96ac74a65ca6f13
 cst	22	b2741c42ab95c53a
 usj	461	3cf8fa27135ef076
 usx	384	255fd1305e6e2aab
-vref	32	0de79f894b188c03
+vref	33	80cc9ec19ac3b3b3
 html	782	c9cafeb143e41d8b
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/FootnoteConsistencyCheck/origin.usfm
@@ -411,7 +411,7 @@ tokens	30	9d325507a1a6342c
 cst	30	608e68ff884179e2
 usj	707	cb4ce0b5ebe3908a
 usx	531	0367574a208e97a9
-vref	29	cd83513525c2cd50
+vref	31	3b72bfb10e378f3e
 html	1976	fdd2bc1cf073280a
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/FootnoteNotClosed/origin.usfm
@@ -419,7 +419,7 @@ tokens	31	65e74ad3c18b3742
 cst	31	01d67f3c5e3865ef
 usj	617	ce53e36eaf64b933
 usx	460	0648f2774f2e6b1e
-vref	30	d9bcfda72a146ca6
+vref	33	da7bd6df31fae19e
 html	1391	130f5c2c9c6e2a8e
 {"code":"unclosed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}","message":"Note \\f was opened but never closed before a new block began.","message_params":{"kind":"note","location":"at-boundary","marker":"f"},"span":{"start":59,"end":62},"related_span":{"start":84,"end":85},"token_id":"GEN-22","related_token_id":"GEN-30","sid":"GEN 1:1","marker":"f","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -428,7 +428,7 @@ tokens	32	ac0c1c244fe99acc
 cst	32	ffce7ab48a0557a3
 usj	613	931fcc45938628df
 usx	459	766d2a32d34c1be6
-vref	30	d9bcfda72a146ca6
+vref	35	9016a401e05b7690
 html	1391	d0999186592917a0
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/GlossaryCitationFormContainingWordMedialPunctuation_Pass/origin.usfm
@@ -436,7 +436,7 @@ tokens	29	1be80bc6bcfc32be
 cst	29	a1cab222c428859c
 usj	650	eafa42c52f5bd69c
 usx	560	732a834a1a4367ae
-vref	52	d19ead8ea35b9632
+vref	54	12a35e1112ea1364
 html	1106	3c8610f6fe8b7a39
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":67,"end":68},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":75,"end":77},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -454,7 +454,7 @@ tokens	29	d211785b556b35e8
 cst	29	a1cab222c428859c
 usj	653	4cfee881ae5d25ef
 usx	558	1984547e7e21e6d8
-vref	53	ad7727831b2461e9
+vref	55	c9f1d74c6249bb87
 html	1105	b5de99ad56d1bbdb
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":69,"end":70},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":77,"end":79},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -464,7 +464,7 @@ tokens	55	6df1975203fa9bbe
 cst	55	227759093e068152
 usj	1201	109bb4ba8f243ca2
 usx	1004	0145d7f4c93217f5
-vref	48	9e12f55bca016f89
+vref	50	22b48b69d6790ae7
 html	2109	6f687bb919d52383
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":64,"end":65},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":72,"end":74},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -520,7 +520,7 @@ tokens	25	480e29780d0122d6
 cst	25	f25f4aec43296a3e
 usj	527	a9fe521f178829b7
 usx	442	ef5d7dc0138ca121
-vref	26	e222167d322a5e61
+vref	28	a4809d37721405bf
 html	937	2264c5829d25a82d
 {"code":"duplicate-id-marker","category":"document","severity":"error","issue_type":"usfm","template":"This file has more than one \\id; only one is allowed.","message":"This file has more than one \\id; only one is allowed.","message_params":{},"span":{"start":53,"end":57},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:1","marker":"id","fix":null}
 {"code":"id-marker-not-at-file-start","category":"document","severity":"error","issue_type":"usfm","template":"\\id must come before any other content.","message":"\\id must come before any other content.","message_params":{},"span":{"start":53,"end":57},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:1","marker":"id","fix":null}
@@ -542,7 +542,7 @@ tokens	25	973def7339c8163b
 cst	25	c9064999aeeb777c
 usj	488	f7b1e0bece35e5f6
 usx	426	264352afda9cdb5d
-vref	72	da3e49c0544c3a1c
+vref	76	656a2524a69a06d8
 html	866	eb523fe0d14f4067
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/InvalidAttributes/origin.usfm
@@ -550,7 +550,7 @@ tokens	19	868636e2b87e660b
 cst	19	0e3cec9967f9a737
 usj	382	a78c3c7e00f2950c
 usx	337	45a2ad10d478f877
-vref	36	2db33f1496411444
+vref	38	d929ccabaec68732
 html	615	836bd8fd58e3ea46
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/InvalidFigureAttributesReported/origin.usfm
@@ -567,7 +567,7 @@ tokens	23	fa11be43c7f98b76
 cst	23	9706d27b1b492b15
 usj	425	05429d94d022082c
 usx	365	fab2f666b0ff8499
-vref	31	5cbf3d39f3e8aa78
+vref	35	fbc6bc4184d54b8c
 html	657	428331477ae9e6a0
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\ix is not a known USFM marker.","message_params":{"marker":"ix"},"span":{"start":53,"end":56},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:1","marker":"ix","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -576,7 +576,7 @@ tokens	21	cfacc1035c2f5b82
 cst	21	426899525b2685fa
 usj	425	041bf17408fbfeca
 usx	391	16c834682f6330ab
-vref	57	9c47cb8a4bae9bb4
+vref	61	1af4d5005fa5bc10
 html	734	dcac1e442550be9f
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/InvalidMilestone_IdsDontMatch/origin.usfm
@@ -584,7 +584,7 @@ tokens	23	207e03b59e3f417c
 cst	23	62d49ac89a3d68c1
 usj	483	7bc3168c2c27a3e2
 usx	433	bd573bbf9720c608
-vref	57	9c47cb8a4bae9bb4
+vref	61	1af4d5005fa5bc10
 html	857	2f335436b40688c5
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":32,"end":34},"related_span":null,"token_id":"GEN-12","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -593,7 +593,7 @@ tokens	36	7ecef7ce9c8125c8
 cst	36	119993bde6b0d458
 usj	696	ce9071f02350a34c
 usx	625	4fbe2816e45bbe55
-vref	57	9c47cb8a4bae9bb4
+vref	61	1af4d5005fa5bc10
 html	1280	5d1552b23f80e409
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":32,"end":34},"related_span":null,"token_id":"GEN-12","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":77,"end":79},"related_span":null,"token_id":"GEN-22","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
@@ -605,7 +605,7 @@ tokens	51	aac9dfbd8c95f009
 cst	51	a15e43a70dc58219
 usj	901	fa46dd8a0e23c73b
 usx	777	4558513c8376e7bf
-vref	32	8f5ff4c7c79c25d7
+vref	35	385d8f624512ce97
 html	1521	783eca5253d0f477
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":65,"end":67},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":99,"end":101},"related_span":null,"token_id":"GEN-28","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
@@ -617,7 +617,7 @@ tokens	19	13227c8fe86f01ce
 cst	19	0e3cec9967f9a737
 usj	442	652a4e0c83bf03bd
 usx	393	816c436f5bbf0580
-vref	36	2db33f1496411444
+vref	38	d929ccabaec68732
 html	691	71f7a0ea00507301
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/MajorTitleRequired/origin.usfm
@@ -625,7 +625,7 @@ tokens	15	a9efbafcaeed321b
 cst	15	3e9fb463be1ec38a
 usj	308	b19b5a70285d763a
 usx	285	43b69f30b42304b0
-vref	29	e8c84fae7500efab
+vref	31	4bc3235a76c3ce45
 html	498	3266e53dbcfdbbe3
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/MarkersMissingSpace/origin.usfm
@@ -633,7 +633,7 @@ tokens	30	4776ea3f611b8c2e
 cst	30	5a8f060d62ca690b
 usj	643	d109ed4611a5b95f
 usx	554	2b826c791681f6fb
-vref	98	295679f5b8b46d36
+vref	101	7c087fa97688b934
 html	1103	a1aa8af4caaea1d1
 {"code":"missing-tag-end-delimiter-after-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space before the text that follows.","message":"\\p needs a space before the text that follows.","message_params":{"marker":"p"},"span":{"start":38,"end":40},"related_span":null,"token_id":"GEN-11","related_token_id":null,"sid":"GEN 1:1","marker":"p","fix":{"ReplaceToken":{"code":"insert-tag-end-delimiter-after-marker","label":"InsertTagEndDelimiterAfterMarker","label_params":{},"target_token_id":"GEN-11","replacements":[{"kind":"Marker","text":"\\p ","marker":"p","sid":"GEN 1:1"}]}}}
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\p needs a space or newline before it.","message_params":{"marker":"p"},"span":{"start":38,"end":40},"related_span":null,"token_id":"GEN-11","related_token_id":null,"sid":"GEN 1:1","marker":"p","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"GEN-11","replacements":[{"kind":"Marker","text":"\n\\p","marker":"p","sid":"GEN 1:1"}]}}}
@@ -644,7 +644,7 @@ tokens	27	8937ef2fd74f2a95
 cst	27	cf87aa8d922d6ab1
 usj	729	789ac500be9c94dc
 usx	526	4695be9b41084e2a
-vref	57	dc5bb009d2806f28
+vref	61	2eb9c018b3e213d6
 html	1146	9c61c7d929956a96
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/MissingIdAndChapterMarkers/origin.usfm
@@ -672,7 +672,7 @@ tokens	18	0cac7ff62b76d3d1
 cst	18	42db627e46a1f94c
 usj	360	8d99102433f9c361
 usx	316	67ed1a09fc6c5719
-vref	34	c79aa39efe903c36
+vref	36	d8f105644d28d488
 html	584	9769538c58852b03
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/NbMarkerInCorrectPlace/origin.usfm
@@ -680,7 +680,7 @@ tokens	23	388893a95e0511a6
 cst	23	f0e433d2a940b641
 usj	512	6d77f842ad30af68
 usx	468	f1d8e00455c29e18
-vref	56	d38f38a2ed48589f
+vref	58	bc9b9f6caae17445
 html	911	ae294930c385c0f4
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/NbMarkerInWrongPlace/origin.usfm
@@ -688,7 +688,7 @@ tokens	31	5de38a4212fad0d0
 cst	31	92ece568a92fc9f4
 usj	680	cfe956eb347d0ac5
 usx	600	6c7bb2be7d46887b
-vref	88	6030e313747e1356
+vref	92	a4212cabf9e1b8b2
 html	1208	1f786f71ebfdfb13
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/NestingInCrossReferences/origin.usfm
@@ -696,7 +696,7 @@ tokens	23	4ee641f9805fe0f4
 cst	23	cd2b39a4833cd0a7
 usj	508	b044e86f9245b4c6
 usx	402	0ec6f0dfd5d534c7
-vref	30	566108b65a04f537
+vref	32	98643a6ced268931
 html	1166	ae3eec603e5f817e
 {"code":"missing-tag-end-delimiter-after-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space before the text that follows.","message":"\\p needs a space before the text that follows.","message_params":{"marker":"p"},"span":{"start":13,"end":15},"related_span":null,"token_id":"GEN-6","related_token_id":null,"sid":"GEN 1:0","marker":"p","fix":{"ReplaceToken":{"code":"insert-tag-end-delimiter-after-marker","label":"InsertTagEndDelimiterAfterMarker","label_params":{},"target_token_id":"GEN-6","replacements":[{"kind":"Marker","text":"\\p ","marker":"p","sid":"GEN 1:0"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -713,7 +713,7 @@ tokens	23	29e65ff416b4751d
 cst	23	cd2b39a4833cd0a7
 usj	507	bb9aca315c47eeee
 usx	401	959ca54b7d960c23
-vref	29	27cd2117692cea3f
+vref	31	a2fbcbbfd2636f99
 html	1165	42f7ccd6522d2f36
 {"code":"missing-tag-end-delimiter-after-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space before the text that follows.","message":"\\p needs a space before the text that follows.","message_params":{"marker":"p"},"span":{"start":13,"end":15},"related_span":null,"token_id":"GEN-6","related_token_id":null,"sid":"GEN 1:0","marker":"p","fix":{"ReplaceToken":{"code":"insert-tag-end-delimiter-after-marker","label":"InsertTagEndDelimiterAfterMarker","label_params":{},"target_token_id":"GEN-6","replacements":[{"kind":"Marker","text":"\\p ","marker":"p","sid":"GEN 1:0"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -722,7 +722,7 @@ tokens	34	39e4af1239e0785f
 cst	34	5facaa5dc0a9f79d
 usj	666	239e0d60fffcd929
 usx	488	9e413bae34afe042
-vref	34	e5ead86a5c116e31
+vref	39	a618cb74ea947779
 html	1475	1e21c2686502e8d9
 {"code":"misnested-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{has_expected, select, true {Expected \\{expected}* here, but found \\{marker}*.} other {\\{marker}* does not match the marker that is currently open.}}","message":"Expected \\+nd* here, but found \\em*.","message_params":{"expected":"+nd","has_expected":"true","marker":"em"},"span":{"start":40,"end":44},"related_span":null,"token_id":"GEN-15","related_token_id":null,"sid":"GEN 1:1","marker":"em","fix":null}
 {"code":"implicitly-closed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} was never closed; \\{closer}* closed it indirectly. Add an explicit \\{marker}* before \\{closer}*.","message":"\\+nd was never closed; \\em* closed it indirectly. Add an explicit \\+nd* before \\em*.","message_params":{"closer":"em","marker":"+nd"},"span":{"start":48,"end":53},"related_span":null,"token_id":"GEN-17","related_token_id":null,"sid":"GEN 1:1","marker":"+nd","fix":null}
@@ -805,7 +805,7 @@ tokens	35	229650284273ce32
 cst	35	0c7bcb5702515f0c
 usj	666	239e0d60fffcd929
 usx	488	9e413bae34afe042
-vref	34	e5ead86a5c116e31
+vref	39	a618cb74ea947779
 html	1475	e5493fdbc8fbd0df
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/NoErrorsPartiallyEmptyBook/origin.usfm
@@ -813,7 +813,7 @@ tokens	165	413683520e25c78c
 cst	165	60857ae9d7d5b558
 usj	4262	9145306b9c1bd302
 usx	4078	40f2e89ddc4523bd
-vref	220	e61cc88a7a239656
+vref	229	2b7e738626d20446
 html	8550	5d227850078dc095
 {"code":"missing-horizontal-whitespace-after-marker-name","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space after the marker name.","message":"\\ide needs a space after the marker name.","message_params":{"marker":"ide"},"span":{"start":8,"end":12},"related_span":null,"token_id":"GEN-3","related_token_id":null,"sid":"GEN 0:0","marker":"ide","fix":{"ReplaceToken":{"code":"insert-whitespace-after-marker-name","label":"InsertWhitespaceAfterMarkerName","label_params":{},"target_token_id":"GEN-3","replacements":[{"kind":"Marker","text":"\\ide ","marker":"ide","sid":"GEN 0:0"}]}}}
 {"code":"missing-horizontal-whitespace-after-marker-name","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space after the marker name.","message":"\\rem needs a space after the marker name.","message_params":{"marker":"rem"},"span":{"start":13,"end":17},"related_span":null,"token_id":"GEN-5","related_token_id":null,"sid":"GEN 0:0","marker":"rem","fix":{"ReplaceToken":{"code":"insert-whitespace-after-marker-name","label":"InsertWhitespaceAfterMarkerName","label_params":{},"target_token_id":"GEN-5","replacements":[{"kind":"Marker","text":"\\rem ","marker":"rem","sid":"GEN 0:0"}]}}}
@@ -884,7 +884,7 @@ tokens	32	a697a1ca2a8cc65d
 cst	32	ffce7ab48a0557a3
 usj	617	ce53e36eaf64b933
 usx	460	0648f2774f2e6b1e
-vref	30	d9bcfda72a146ca6
+vref	35	9016a401e05b7690
 html	1391	d0999186592917a0
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/OnlyChapterAndVerseMarkers/origin.usfm
@@ -892,7 +892,7 @@ tokens	27	73d48d5b8f1003f8
 cst	27	84dda52870648fa5
 usj	569	435c9bf23c2d3dbb
 usx	564	a733d855ed6f68e5
-vref	106	2c2e91cef6e3e583
+vref	114	cff15fc4b7782b9f
 html	1013	aba0e0ce918e9b15
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/ParaOutOfOrder/origin.usfm
@@ -900,7 +900,7 @@ tokens	30	2a9645289c3c4e72
 cst	30	3f5514f6c55739df
 usj	587	a8ea71f949d39cb8
 usx	442	e1d888de8a97bc2c
-vref	30	d9bcfda72a146ca6
+vref	35	9016a401e05b7690
 html	1314	8353dbbc68756f46
 {"code":"content-before-first-chapter","category":"document","severity":"error","issue_type":"usfm","template":"{kind, select, paragraph {Paragraph marker \\{marker}} verse {Verse marker \\v} other {\\{marker}}} appears before the first \\c.","message":"Paragraph marker \\p appears before the first \\c.","message_params":{"kind":"paragraph","marker":"p"},"span":{"start":8,"end":11},"related_span":null,"token_id":"GEN-3","related_token_id":null,"sid":"GEN 0:0","marker":"p","fix":null}
 summary	{"by_category":{"document":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -909,7 +909,7 @@ tokens	12	75b2ce71852c2073
 cst	12	59ffabb4772601c2
 usj	299	98316301c3c9bb6c
 usx	285	d48e3ef6dfe92c41
-vref	36	b485da7f4e26bc0a
+vref	38	21c561647cec421c
 html	422	e76bfb55df949452
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\esbe needs a space or newline before it.","message_params":{"marker":"esbe"},"span":{"start":38,"end":43},"related_span":null,"token_id":"GEN-10","related_token_id":null,"sid":"GEN 1:1","marker":"esbe","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"GEN-10","replacements":[{"kind":"Marker","text":"\n\\esbe","marker":"esbe","sid":"GEN 1:1"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -918,7 +918,7 @@ tokens	12	8b9d16a2ee3b9935
 cst	12	59ffabb4772601c2
 usj	298	ac27bc4e214cbf7b
 usx	284	667fe87ab7bf304c
-vref	36	b485da7f4e26bc0a
+vref	38	21c561647cec421c
 html	503	3d1b4dcacda0f3f6
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\esb needs a space or newline before it.","message_params":{"marker":"esb"},"span":{"start":38,"end":42},"related_span":null,"token_id":"GEN-10","related_token_id":null,"sid":"GEN 1:1","marker":"esb","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"GEN-10","replacements":[{"kind":"Marker","text":"\n\\esb","marker":"esb","sid":"GEN 1:1"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -941,7 +941,7 @@ tokens	23	2c90d95857c15318
 cst	23	62d49ac89a3d68c1
 usj	459	80e46c7de58c01a1
 usx	413	51613261aa79dc3b
-vref	57	9c47cb8a4bae9bb4
+vref	61	1af4d5005fa5bc10
 html	814	0ec872165a182938
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":32,"end":34},"related_span":null,"token_id":"GEN-12","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -950,7 +950,7 @@ tokens	59	979df4477af433c8
 cst	59	7a454a2364603dc8
 usj	1050	38736e5a82f835ac
 usx	904	b3985c979cc1ee88
-vref	32	8f5ff4c7c79c25d7
+vref	36	6973b6337daa6317
 html	1777	cf3d4c4e6f91a836
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":62,"end":64},"related_span":null,"token_id":"GEN-20","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":99,"end":101},"related_span":null,"token_id":"GEN-28","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
@@ -973,7 +973,7 @@ tokens	24	f963f5f270818f45
 cst	24	4999c282c9763257
 usj	562	2a363e180995a10f
 usx	477	6442790a8ebf5841
-vref	92	c633b72c39e454d4
+vref	94	e8324a711ed2ddc6
 html	917	47505b808e082c8e
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerKeywordContainsNonWordformingPunctuation/origin.usfm
@@ -981,7 +981,7 @@ tokens	33	726ad059a1a25360
 cst	33	63d1a191e0a4cc32
 usj	754	c39c16002447da24
 usx	628	d9b18e518ce2538c
-vref	86	5c30f9654ffa4759
+vref	88	31bb50b20eac4473
 html	1240	341a067dd3fccaef
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":114,"end":116},"related_span":null,"token_id":"GLO-26","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
 summary	{"by_category":{"numbering":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -990,7 +990,7 @@ tokens	51	760b67b9ced19802
 cst	51	72f5c2992f0652b3
 usj	1136	bb9a910f456fb40e
 usx	928	ea6daa1875a78aea
-vref	86	5c30f9654ffa4759
+vref	88	31bb50b20eac4473
 html	1884	1ec530d5be382837
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":111,"end":113},"related_span":null,"token_id":"GLO-26","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":161,"end":163},"related_span":null,"token_id":"GLO-35","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
@@ -1001,7 +1001,7 @@ tokens	24	c08d23cc73e8055d
 cst	24	4999c282c9763257
 usj	553	a62c1aa426797e05
 usx	468	57829725545bac37
-vref	86	5c30f9654ffa4759
+vref	88	31bb50b20eac4473
 html	908	c895de7d1b028d9e
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerKeywordEndsInSpaceGlossaryEntryPresent_Pass/origin.usfm
@@ -1009,7 +1009,7 @@ tokens	29	8249e76186d52ebc
 cst	29	a1cab222c428859c
 usj	646	0d9e9d82c04bd0ab
 usx	551	cf065aa9be937944
-vref	48	a2bb7e2dac4f781b
+vref	50	4e492f019a4667d5
 html	1098	cd2aebad2cd45cad
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":67,"end":68},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":75,"end":77},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -1019,7 +1019,7 @@ tokens	24	e915a954d15f8b11
 cst	24	4999c282c9763257
 usj	570	7bec2654962ff047
 usx	485	0a11ef6fb1052c99
-vref	96	18da980d1b32a840
+vref	98	4d9d27a60f7798f2
 html	925	b6b49b7252394dee
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerMissingFromGlossaryCitationForms/origin.usfm
@@ -1027,7 +1027,7 @@ tokens	40	61fae99923ad5feb
 cst	40	03283443f6efcfe7
 usj	923	c686c292bc15b8d3
 usx	758	4d7390ca16507db6
-vref	90	51cb50e8ae116178
+vref	92	ca76421f9ba1080a
 html	1537	1b27f62926b5c397
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":101,"end":103},"related_span":null,"token_id":"GLO-25","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":149,"end":151},"related_span":null,"token_id":"GLO-33","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
@@ -1037,7 +1037,7 @@ tokens	27	94b939f20403df66
 cst	27	2f22d450020e7a61
 usj	591	12d0f11cc2263475
 usx	490	1a66609e3103b2a0
-vref	100	22bac7e4ff05947d
+vref	104	8fd569e8a7b4aae1
 html	1002	c8ddfa34e575ce87
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerNestedProperNoun_Pass/origin.usfm
@@ -1045,7 +1045,7 @@ tokens	31	5e70bb7a4fa98e73
 cst	31	359b1f2901b68765
 usj	690	cb3be6998a60920b
 usx	577	4b9cefad0130fec2
-vref	50	cd91749930a02530
+vref	52	c5a482cb159ee7de
 html	1180	bb0b5ed44b384473
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":67,"end":68},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":75,"end":77},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -1055,7 +1055,7 @@ tokens	26	5fef8dd6b8fe6862
 cst	26	40dcde88cd04b48d
 usj	583	79a83bdda2fbc37f
 usx	482	ce227fd22642b31a
-vref	92	1b47cd6eae00a7c3
+vref	94	01fe393bf7ae82a1
 html	994	6e6789ae03cc07a3
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerNestedTwoProperNouns_Pass/origin.usfm
@@ -1063,7 +1063,7 @@ tokens	31	2330a34975ab4718
 cst	31	359b1f2901b68765
 usj	691	a6cb82be838efb07
 usx	578	f7eabc994389fe30
-vref	51	c332d3a6ae8e9d08
+vref	53	b0aa423db9fcdb16
 html	1181	fdefe1735421d937
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":67,"end":68},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":75,"end":77},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -1073,7 +1073,7 @@ tokens	51	8954a1930f8e95f1
 cst	51	72f5c2992f0652b3
 usj	1100	6b10732579732dfb
 usx	900	25de1dec489e6ba1
-vref	96	82801b815d7fe744
+vref	98	aa85364390411bee
 html	1836	af21d094fb45e2d2
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":111,"end":113},"related_span":null,"token_id":"GLO-26","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":161,"end":163},"related_span":null,"token_id":"GLO-35","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
@@ -1084,7 +1084,7 @@ tokens	51	efbae160f7c6fd4b
 cst	51	72f5c2992f0652b3
 usj	1139	398f9e15535d9992
 usx	931	30d02048dba5a3a0
-vref	90	752ac96445dd017d
+vref	92	72d8f41c8a832c5f
 html	1887	af4667cc3a55f23d
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":114,"end":116},"related_span":null,"token_id":"GLO-26","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2"},"span":{"start":165,"end":167},"related_span":null,"token_id":"GLO-35","related_token_id":null,"sid":"GLO 1:2","marker":"v","fix":null}
@@ -1095,7 +1095,7 @@ tokens	24	11475f1efac401b4
 cst	24	4999c282c9763257
 usj	536	fad71442b86717f6
 usx	453	890fd615c2e20249
-vref	87	266e92fa9520f903
+vref	89	9e59dbe7e0238871
 html	888	d229351b4c73ce4d
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerTextEndsInSpaceGlossaryEntryPresent_Pass/origin.usfm
@@ -1111,7 +1111,7 @@ tokens	29	f95623a59964998f
 cst	29	a1cab222c428859c
 usj	661	67f428de3487741f
 usx	564	ffafc85fe53283dd
-vref	45	0db4dedab33a339a
+vref	47	f49abefde843f18c
 html	1116	fa3f2a6b5a317651
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":67,"end":68},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":75,"end":77},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -1121,7 +1121,7 @@ tokens	24	7403819b5c0a9ae4
 cst	24	4999c282c9763257
 usj	573	5ef37070f6c75919
 usx	486	3cd7f6682721295e
-vref	88	d284332497f80dae
+vref	90	dfbc1c9fab72e348
 html	936	9296546e848bbd14
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/paratextTests/WordlistMarkerWithKeyword_Pass/origin.usfm
@@ -1129,7 +1129,7 @@ tokens	38	aa3614ae5fa3ce7b
 cst	38	09e55fe672235177
 usj	853	a5d1ba87f07495bf
 usx	715	f83fb5fd6e202628
-vref	44	48e69646ccc91b36
+vref	46	116f4a9280018b88
 html	1444	4e076a208f5f5964
 {"code":"duplicate-chapter-number","category":"numbering","severity":"error","issue_type":"content","template":"Chapter {chapter, number} appears more than once.","message":"Chapter 1 appears more than once.","message_params":{"chapter":"1","marker":"c"},"span":{"start":67,"end":68},"related_span":null,"token_id":"GLO-17","related_token_id":null,"sid":"GLO 1:0","marker":"c","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 1 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"1"},"span":{"start":75,"end":77},"related_span":null,"token_id":"GLO-21","related_token_id":null,"sid":"GLO 1:1","marker":"v","fix":null}
@@ -1140,7 +1140,7 @@ tokens	6270	c38c417655cac8e7
 cst	6270	eb355457a6a39b1a
 usj	271576	0d76128d588860ad
 usx	266184	fde0d465079cf177
-vref	184278	559dd1cd83623f32
+vref	187416	111ad9fa023d171c
 html	386413	27121aaea0f075d3
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/samples-from-wild/WEB2/origin.usfm
@@ -1148,7 +1148,7 @@ tokens	8767	b738ad9fcca076c5
 cst	8767	b3a6dc3fc91ec951
 usj	225461	99941ce61d57bc37
 usx	190874	e012058f12304b5d
-vref	94175	cee312cf70c548c4
+vref	99844	6ac326ca5f8a7ec6
 html	361122	b4f3995ba890ca33
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\f* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"f"},"span":{"start":91571,"end":91574},"related_span":null,"token_id":"PRO-8570","related_token_id":null,"sid":"PRO 31:10","marker":"f","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"warning":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -1157,7 +1157,7 @@ tokens	2739	8c4344a3b3061874
 cst	2739	5f8946c5f22b9f57
 usj	100936	7cb72338e0bf70ff
 usx	94573	71d315dcdeed18c6
-vref	58450	3842b7969c3faf58
+vref	59593	e8d070660bf50736
 html	164375	8e7cb51107c93a69
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/samples-from-wild/brenton1/origin.usfm
@@ -1165,7 +1165,7 @@ tokens	544	48a6c3857ccf78f2
 cst	544	2f89975248cb77db
 usj	21270	2997be0a17656761
 usx	20458	faeb31d2ff7e702e
-vref	14603	dfec94a598718e36
+vref	14771	9732e6103f56e49a
 html	28542	b8e8a9c3f03986e0
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":4782,"end":4784},"related_span":null,"token_id":"RUT-201","related_token_id":null,"sid":"RUT 2:9","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -1174,7 +1174,7 @@ tokens	719	98a01ba153261087
 cst	719	8438dd1989f239bd
 usj	24621	1c80f521dc40c6e3
 usx	23698	889c05a87580be8b
-vref	15742	6d42418050626360
+vref	15974	6b7aafba7ab30968
 html	34553	d880b5dbd9952d7d
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":3409,"end":3412},"related_span":null,"token_id":"SNG-173","related_token_id":null,"sid":"SNG 2:14","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":4340,"end":4342},"related_span":null,"token_id":"SNG-217","related_token_id":null,"sid":"SNG 3:4","marker":"v","fix":null}
@@ -1184,7 +1184,7 @@ tokens	2296	9ee7c9e23d44cc61
 cst	2296	8f7761521a9e1c3f
 usj	52131	3b46641a1e8142c9
 usx	42730	b6909cb68a587c7d
-vref	22956	a5f54d130ed20d1a
+vref	23326	cddf1ad9f2647390
 html	78291	2c2ca3bb86c53d04
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":199,"end":201},"related_span":null,"token_id":"EST-25","related_token_id":null,"sid":"EST 1:1","marker":"v","fix":null}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\pn* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"pn"},"span":{"start":218,"end":222},"related_span":null,"token_id":"EST-28","related_token_id":null,"sid":"EST 1:1","marker":"pn","fix":null}
@@ -1550,7 +1550,7 @@ tokens	480	f1332fb0bc2d4262
 cst	480	986e6cc0f7ff697f
 usj	10064	44a707b4fcf677f3
 usx	7437	51f99f906f677a3f
-vref	2938	09c8bdd4d8a6e7f8
+vref	3140	7dc7ea3a97494566
 html	15753	543431798c606ef2
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":173,"end":175},"related_span":null,"token_id":"OBA-22","related_token_id":null,"sid":"OBA 1:1","marker":"v","fix":null}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\pn* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"pn"},"span":{"start":192,"end":196},"related_span":null,"token_id":"OBA-25","related_token_id":null,"sid":"OBA 1:1","marker":"pn","fix":null}
@@ -1592,7 +1592,7 @@ tokens	129	9094e4d7fe831773
 cst	129	abec4f91e98eaa5c
 usj	3657	cec11ed86ec3fedf
 usx	3263	28a1c7714ed508fb
-vref	1688	440dec9ad7ae5748
+vref	1722	01d464ceefe74d16
 html	5653	701d7c96e67699c5
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\add* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"add"},"span":{"start":275,"end":280},"related_span":null,"token_id":"3JN-37","related_token_id":null,"sid":"3JN 1:2","marker":"add","fix":null}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\add* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"add"},"span":{"start":591,"end":596},"related_span":null,"token_id":"3JN-58","related_token_id":null,"sid":"3JN 1:5","marker":"add","fix":null}
@@ -1606,7 +1606,7 @@ tokens	2868	0db228da211284ec
 cst	2868	79c897a59bdd1d9f
 usj	100045	a8fb3906c6c9ce71
 usx	97291	e86ff3ce37985dff
-vref	59478	5818e64b161e4b38
+vref	61233	9611895f2adf0b68
 html	135070	3d8d985cedd73b63
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":384,"end":387},"related_span":null,"token_id":"ROM-39","related_token_id":null,"sid":"ROM 1:3","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":740,"end":743},"related_span":null,"token_id":"ROM-55","related_token_id":null,"sid":"ROM 1:6","marker":"s5","fix":null}
@@ -1824,7 +1824,7 @@ tokens	6769	47631163d1e2c946
 cst	6769	2c67816ccadc920f
 usj	636843	420a4441f969b2c7
 usx	640202	ad2abcceb093417e
-vref	554673	324a2a0deeca17bf
+vref	558049	79920d1e932a0153
 html	745590	759c2fb1acf2e159
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/samples-from-wild/doo43-4/origin.usfm
@@ -1832,7 +1832,7 @@ tokens	268	fa2e44ff981ded10
 cst	268	86e3eea6229efb33
 usj	9602	51fd06afe0434d66
 usx	8052	e741209a212993e3
-vref	1212	71b01f34b7ef6890
+vref	1254	d4911b05b083e7be
 html	13332	e677e11ddce65cd7
 {"code":"note-submarker-outside-note","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is part of a footnote or cross-reference and must appear inside one.","message":"\\xt is part of a footnote or cross-reference and must appear inside one.","message_params":{"marker":"xt"},"span":{"start":1407,"end":1411},"related_span":null,"token_id":"PSA-27","related_token_id":null,"sid":"PSA 0:0","marker":"xt","fix":null}
 {"code":"note-submarker-outside-note","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is part of a footnote or cross-reference and must appear inside one.","message":"\\xt is part of a footnote or cross-reference and must appear inside one.","message_params":{"marker":"xt"},"span":{"start":1420,"end":1424},"related_span":null,"token_id":"PSA-31","related_token_id":null,"sid":"PSA 0:0","marker":"xt","fix":null}
@@ -1862,7 +1862,7 @@ tokens	5428	bc27f21d4157f7c6
 cst	5428	9c673f9d8ed55393
 usj	378816	3d41364850949848
 usx	375473	068356146cb6b450
-vref	298939	7f707aede6625b35
+vref	301537	5c1f39b4a553b697
 html	464361	458218c2f816ece4
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/samples-from-wild/hindi-IRV2/origin.usfm
@@ -1870,7 +1870,7 @@ tokens	2350	e2272cefff4fb39d
 cst	2350	45657df96e0fef41
 usj	186563	7329870d17cd18bf
 usx	183324	67915908f111fc2e
-vref	152010	6f5c97bbbce3fd49
+vref	153062	00cc432d6ae94b17
 html	222664	521e473d7b582397
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/samples-from-wild/rv2/origin.usfm
@@ -1878,7 +1878,7 @@ tokens	10071	6e50dca7dc922cf8
 cst	10071	30cb019a7805c12a
 usj	206137	c8b76b3dc3cda609
 usx	137479	7c4d2483ed5857e4
-vref	18867	5ec12652cf99f5cb
+vref	19173	63a528788cdda765
 html	342707	579af9034190f6c5
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":150,"end":152},"related_span":null,"token_id":"LAM-27","related_token_id":null,"sid":"LAM 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":1830,"end":1832},"related_span":null,"token_id":"LAM-235","related_token_id":null,"sid":"LAM 1:3","marker":"v","fix":null}
@@ -2004,7 +2004,7 @@ tokens	7276	b4132c4b39a381d2
 cst	7276	4e1833772c7eee77
 usj	149388	223974bad5165674
 usx	99517	f4f78e176887871d
-vref	13718	54d751949cf3cf9d
+vref	13926	183d9609046077a1
 html	248267	ebffbbca4ed71d67
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":152,"end":154},"related_span":null,"token_id":"1PE-27","related_token_id":null,"sid":"1PE 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":731,"end":733},"related_span":null,"token_id":"1PE-101","related_token_id":null,"sid":"1PE 1:2","marker":"v","fix":null}
@@ -2100,7 +2100,7 @@ tokens	7163	c0d49597280f33c3
 cst	7163	ee1b3653d059dddc
 usj	255095	aa39a79cea16f1e4
 usx	231130	7a631c4bfb48a066
-vref	159564	ba99422def6da51a
+vref	161810	1dc88985b1a8b614
 html	346834	561e79c82b6a86f2
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":1115,"end":1117},"related_span":null,"token_id":"2KI-87","related_token_id":null,"sid":"2KI 1:5","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":2610,"end":2613},"related_span":null,"token_id":"2KI-158","related_token_id":null,"sid":"2KI 1:11","marker":"v","fix":null}
@@ -2151,7 +2151,7 @@ tokens	20479	2f68a56a4246e271
 cst	20479	652d871166b0870e
 usj	513546	d6dc017a43b0298c
 usx	416656	739d0c750a018a89
-vref	236389	6c2498c971d71f5b
+vref	238928	b5b7f81fe1511f5d
 html	730008	4b4ae542c5ea3dbc
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":284,"end":286},"related_span":null,"token_id":"ACT-37","related_token_id":null,"sid":"ACT 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":1171,"end":1173},"related_span":null,"token_id":"ACT-115","related_token_id":null,"sid":"ACT 1:4","marker":"v","fix":null}
@@ -2314,7 +2314,7 @@ tokens	2003	9c1f648fd9fba730
 cst	2003	abfa7d160af5c9ea
 usj	204971	a6cc0936b9ce76d6
 usx	205164	d34127d79cc788ae
-vref	177442	59b85a0d3bfbf2e7
+vref	178346	df35f9c4305ad39f
 html	236451	200f8f604374cfeb
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/samples-from-wild/tamil-IRV1/origin.usfm
@@ -2322,7 +2322,7 @@ tokens	230	88c3ec8420e57396
 cst	230	5be0b359dfc434da
 usj	23621	fb57c39db8554cad
 usx	23545	22b527f2e419ddad
-vref	20328	be965e2d9be37631
+vref	20424	ecbcd8c1005678d9
 html	27129	4a2381fa0bc55f02
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/attributes/origin.usfm
@@ -2330,7 +2330,7 @@ tokens	48	de02542c9d049258
 cst	48	da84469b3c8eaaed
 usj	1496	f3954221cf1cee33
 usx	1271	a71430c676bf2fa8
-vref	476	b505bf1449228e47
+vref	490	b41b4cbcc3001937
 html	2043	e33907cffd776421
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":68,"end":70},"related_span":null,"token_id":"MAT-9","related_token_id":null,"sid":"MAT 1:1","marker":"v","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\cat* has no matching opening \\cat.","message_params":{"form":"named","marker":"cat"},"span":{"start":216,"end":221},"related_span":null,"token_id":"MAT-23","related_token_id":null,"sid":"MAT 1:1","marker":"cat","fix":null}
@@ -2341,7 +2341,7 @@ tokens	59	c4ffa0221e19decc
 cst	59	79c6c74256857eda
 usj	1477	0715ae02b00e00a7
 usx	1283	2fc269c6d270c48a
-vref	369	c66504a10a9c55eb
+vref	377	692c93dc09294257
 html	2281	882d0a4ced973082
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ca is not allowed inside a chapter.","message_params":{"context":"chapter-content","marker":"ca"},"span":{"start":62,"end":66},"related_span":null,"token_id":"MAT-7","related_token_id":null,"sid":"MAT 1:0","marker":"ca","fix":null}
 {"code":"metadata-outside-target","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} must follow a {target, select, chapter {\\c chapter marker} verse {\\v verse marker} other {target marker}}.","message":"\\cp must follow a \\c chapter marker.","message_params":{"marker":"cp","target":"chapter"},"span":{"start":72,"end":76},"related_span":null,"token_id":"MAT-11","related_token_id":null,"sid":"MAT 1:0","marker":"cp","fix":null}
@@ -2356,7 +2356,7 @@ tokens	168	6029dbd046162085
 cst	168	09702f6b299f0d85
 usj	4594	1853745ebcea1610
 usx	3878	76f00559791f0475
-vref	1377	ea66a4fa140964fb
+vref	1402	556c8a6be3a29b13
 html	7271	0d2951e08cb4d9e0
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 15 appears more than once in chapter 6.","message_params":{"chapter":"6","marker":"v","verse":"15"},"span":{"start":1392,"end":1395},"related_span":null,"token_id":"MAT-104","related_token_id":null,"sid":"MAT 6:15","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":1688,"end":1690},"related_span":null,"token_id":"MAT-134","related_token_id":null,"sid":"MAT 6:8","marker":"v","fix":null}
@@ -2367,7 +2367,7 @@ tokens	134	d8a999bec6b458b8
 cst	134	2b92343fe94d7160
 usj	3540	3ff5cc39e6a3e9ca
 usx	2776	f8e88d4887f66f69
-vref	549	1c3d3f40c716ad2a
+vref	566	67521319df615d08
 html	6699	f795e2d25113fd1d
 {"code":"missing-tag-end-delimiter-after-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space before the text that follows.","message":"\\p needs a space before the text that follows.","message_params":{"marker":"p"},"span":{"start":72,"end":74},"related_span":null,"token_id":"MAT-10","related_token_id":null,"sid":"MAT 6:0","marker":"p","fix":{"ReplaceToken":{"code":"insert-tag-end-delimiter-after-marker","label":"InsertTagEndDelimiterAfterMarker","label_params":{},"target_token_id":"MAT-10","replacements":[{"kind":"Marker","text":"\\p ","marker":"p","sid":"MAT 6:0"}]}}}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\x* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"x"},"span":{"start":1110,"end":1113},"related_span":null,"token_id":"MAT-107","related_token_id":null,"sid":"MAT 3:2","marker":"x","fix":null}
@@ -2402,7 +2402,7 @@ tokens	96	417e30c3506f65ab
 cst	96	0adc4d0bdb8caa57
 usj	2611	7e9bb606db89adce
 usx	2129	51f0dabf084b78a2
-vref	834	9f5412e0b2088c87
+vref	854	d9b39e9c6bdad653
 html	4527	dec1d5d001e0287c
 {"code":"unclosed-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{kind, select, note {Note} character {Character marker} other {Marker}} \\{marker} was opened but never closed{location, select, at-eof { before the file ended.} at-boundary { before a new block began.} other {.}}","message":"Note \\ef was opened but never closed before a new block began.","message_params":{"kind":"note","location":"at-boundary","marker":"ef"},"span":{"start":295,"end":299},"related_span":{"start":1127,"end":1128},"token_id":"GEN-22","related_token_id":"GEN-95","sid":"GEN 1:2-6","marker":"ef","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\cat* has no matching opening \\cat.","message_params":{"form":"named","marker":"cat"},"span":{"start":312,"end":317},"related_span":null,"token_id":"GEN-26","related_token_id":null,"sid":"GEN 1:2-6","marker":"cat","fix":null}
@@ -2420,7 +2420,7 @@ tokens	107	064bce38206f7340
 cst	107	ec00c4f87d43efbe
 usj	2540	18a246315bb1ddc7
 usx	2007	a6e062e78400505c
-vref	1008	87fbe7618e21d0e5
+vref	1029	fb9ce287b6467e33
 html	4261	182b0c94944f561f
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\ef* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"ef"},"span":{"start":95,"end":99},"related_span":null,"token_id":"GEN-23","related_token_id":null,"sid":"GEN 1:4","marker":"ef","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\cat* has no matching opening \\cat.","message_params":{"form":"named","marker":"cat"},"span":{"start":237,"end":242},"related_span":null,"token_id":"GEN-33","related_token_id":null,"sid":"GEN 1:4","marker":"cat","fix":null}
@@ -2431,7 +2431,7 @@ tokens	192	06a820db794c0843
 cst	192	ebd5393c1dd92202
 usj	4908	0d8c4fbd9893d0e1
 usx	3674	a8f13bb72ec2a588
-vref	712	d7d9e24d64e37dfc
+vref	728	8a315e957dcbaa80
 html	10622	cbe01e209229fd48
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\ef* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"ef"},"span":{"start":295,"end":299},"related_span":null,"token_id":"MRK-44","related_token_id":null,"sid":"MRK 1:2","marker":"ef","fix":null}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\ef* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"ef"},"span":{"start":1061,"end":1065},"related_span":null,"token_id":"MRK-116","related_token_id":null,"sid":"MRK 1:4","marker":"ef","fix":null}
@@ -2441,7 +2441,7 @@ tokens	73	fc79522ea6a653b7
 cst	73	51d4e6dc4eb1cea6
 usj	2154	179280e1d112d28d
 usx	1913	1f7c89a3aca21bb2
-vref	1206	4ef8cd054565c95e
+vref	1223	57556026d48f4d2e
 html	2717	15dbc8a0a4d42717
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/extended/sidebars/origin.usfm
@@ -2449,7 +2449,7 @@ tokens	64	d23a5c28ba32cf35
 cst	64	360710b0ecde5b8c
 usj	1808	37f8a0a39de278f5
 usx	1583	250b949e9987dc10
-vref	913	156296b69daf8bc7
+vref	927	9234e72829a03649
 html	2185	5f6c2777010230ac
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\cat* has no matching opening \\cat.","message_params":{"form":"named","marker":"cat"},"span":{"start":128,"end":133},"related_span":null,"token_id":"MRK-16","related_token_id":null,"sid":"MRK 1:18","marker":"cat","fix":null}
 {"code":"note-submarker-outside-note","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is part of a footnote or cross-reference and must appear inside one.","message":"\\xt is part of a footnote or cross-reference and must appear inside one.","message_params":{"marker":"xt"},"span":{"start":600,"end":604},"related_span":null,"token_id":"MRK-33","related_token_id":null,"sid":"MRK 1:18","marker":"xt","fix":null}
@@ -2461,7 +2461,7 @@ tokens	86	0569b722d63aa33b
 cst	86	0fda8a1529c4d43b
 usj	2630	a5141f99a4f57f9a
 usx	2101	f70ad1aa1f238f36
-vref	397	111a1aeb6924752e
+vref	405	05cbe7614692060e
 html	5166	1220d07a9e92c2f7
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/identification/origin.usfm
@@ -2469,7 +2469,7 @@ tokens	62	c1ffbe248ec3ce4a
 cst	62	b1409c2d3a171fc2
 usj	1529	c9ab8e72da26c721
 usx	1244	50f3f18a950f7be6
-vref	245	a493efb2211e0dec
+vref	253	f200589a12cadefc
 html	2258	4c2c74e85630d24e
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/introduction1/origin.usfm
@@ -2477,7 +2477,7 @@ tokens	63	d99b8d7cbab14825
 cst	63	53bd4224fa459a66
 usj	2041	7627af46dea1e551
 usx	1739	deff6e3229116c7c
-vref	245	a493efb2211e0dec
+vref	251	a8f6f555b6807caa
 html	2762	db0db79a3ff883e1
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/introduction2/origin.usfm
@@ -2485,7 +2485,7 @@ tokens	72	cb54da281ec35d7a
 cst	72	ee98e40394161237
 usj	2006	36793d960bb36f9a
 usx	1645	7a1eba9fcedb36c4
-vref	245	a493efb2211e0dec
+vref	251	a8f6f555b6807caa
 html	2881	a2f38679121d0abd
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":568,"end":573},"related_span":null,"token_id":"MAT-35","related_token_id":null,"sid":"MAT 0:0","marker":"ior","fix":null}
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":626,"end":631},"related_span":null,"token_id":"MAT-41","related_token_id":null,"sid":"MAT 0:0","marker":"ior","fix":null}
@@ -2496,7 +2496,7 @@ tokens	67	602cb2ddeb2cfca2
 cst	67	e6feeca9f42de2c6
 usj	1816	b120f4b0e4580b24
 usx	1532	b7fcd1666b07f40f
-vref	245	a493efb2211e0dec
+vref	253	f200589a12cadefc
 html	2564	d79ca342b9d106c8
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\iex is not allowed inside a chapter.","message_params":{"context":"chapter-content","marker":"iex"},"span":{"start":742,"end":747},"related_span":null,"token_id":"MAT-58","related_token_id":null,"sid":"MAT 1:2","marker":"iex","fix":null}
 summary	{"by_category":{"context":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -2505,7 +2505,7 @@ tokens	71	d9f7736eb55a3f8e
 cst	71	9d714fc57221a4c8
 usj	1776	d67eb1fb4500ce3c
 usx	1469	69528480fcb7d1c3
-vref	518	662f3f83ce005cbb
+vref	539	756309e9b8e87625
 html	2709	1839d8fd3e909b86
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/milestone/origin.usfm
@@ -2513,7 +2513,7 @@ tokens	94	1669568ac012e7ee
 cst	94	62327d1fcc3b2c52
 usj	2278	df1a7a0baa6040ef
 usx	2028	143d844892894185
-vref	884	aceed09100df01d8
+vref	917	c0ad476d6352a422
 html	3640	af1e85535636a596
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":69,"end":71},"related_span":null,"token_id":"MAT-10","related_token_id":null,"sid":"MAT 1:1","marker":"v","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\zms is not a known USFM marker.","message_params":{"marker":"zms"},"span":{"start":205,"end":209},"related_span":null,"token_id":"MAT-21","related_token_id":null,"sid":"MAT 1:1","marker":"zms","fix":null}
@@ -2525,7 +2525,7 @@ tokens	107	61dd01356272a1b3
 cst	107	9ee31a1624c30e2a
 usj	2564	f78f461314c378ef
 usx	2183	e04dd901fd46b89d
-vref	815	5987deb98fd305d6
+vref	855	f1dcb8828d8b0a14
 html	4042	f75fbce9249872e3
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/poetry/origin.usfm
@@ -2533,7 +2533,7 @@ tokens	80	03673441e4e1768a
 cst	80	5803485f21a7371e
 usj	1926	e1e2155d7ae92742
 usx	1525	fdd92f2f933e15e0
-vref	524	4203f75e607800e4
+vref	544	ccc4891a958dfc76
 html	2917	c50ca9d02176640c
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":212,"end":214},"related_span":null,"token_id":"MAT-28","related_token_id":null,"sid":"MAT 136:1","marker":"v","fix":null}
 {"code":"missing-content-space-after-close-marker","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker}* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message":"\\qac* is directly followed by text with no space. If this is an intentional contraction (e.g. \\nd Lord\\nd*'s) you can ignore this.","message_params":{"marker":"qac"},"span":{"start":220,"end":225},"related_span":null,"token_id":"MAT-31","related_token_id":null,"sid":"MAT 136:1","marker":"qac","fix":null}
@@ -2543,7 +2543,7 @@ tokens	73	d40047dfbafa4ada
 cst	73	30efc6eaf24a9e80
 usj	2350	8078c9d0e35c2ec4
 usx	1577	e545dd6b50517a28
-vref	269	1765e7104c9a0071
+vref	277	6108ad17d1aa9027
 html	3513	deadf597e1fd8acf
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/specExamples/titles/origin.usfm
@@ -2551,7 +2551,7 @@ tokens	134	9e5071b2d90b4e40
 cst	134	55c261278d51974a
 usj	3042	5bc9008ac809009d
 usx	2426	6949a6d2b001d4e1
-vref	781	cca20aec28d3a7c1
+vref	816	72bacc6b01985ed9
 html	4720	328293f413852785
 {"code":"missing-horizontal-whitespace-after-marker-name","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space after the marker name.","message":"\\sd2 needs a space after the marker name.","message_params":{"marker":"sd2"},"span":{"start":425,"end":429},"related_span":null,"token_id":"MAT-49","related_token_id":null,"sid":"MAT 1:2","marker":"sd2","fix":{"ReplaceToken":{"code":"insert-whitespace-after-marker-name","label":"InsertWhitespaceAfterMarkerName","label_params":{},"target_token_id":"MAT-49","replacements":[{"kind":"Marker","text":"\\sd2 ","marker":"sd2","sid":"MAT 1:2"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -2560,7 +2560,7 @@ tokens	9633	ecafbd7e06374d71
 cst	9633	e050cd642f7f21d8
 usj	692497	a890e6095571111f
 usx	672624	6428129eda1d6947
-vref	489098	c9ffdb6fcc29633c
+vref	492731	092c86d16a1474be
 html	876040	6d351ab9897425c1
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":6696,"end":6698},"related_span":null,"token_id":"GEN-152","related_token_id":null,"sid":"GEN 1:6","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":12533,"end":12536},"related_span":null,"token_id":"GEN-249","related_token_id":null,"sid":"GEN 1:22","marker":"v","fix":null}
@@ -2580,7 +2580,7 @@ tokens	6819	219c9d7c8d73e2ff
 cst	6819	ce7ede7fdce3142f
 usj	492172	ab6cec3408502165
 usx	473673	546431987b113ca6
-vref	351291	2dcdf416043849c7
+vref	353804	1052f0fb4510e6bb
 html	619179	6df151e254addf3b
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":46270,"end":46273},"related_span":null,"token_id":"DEU-676","related_token_id":null,"sid":"DEU 3:26","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":142622,"end":142625},"related_span":null,"token_id":"DEU-2118","related_token_id":null,"sid":"DEU 11:21","marker":"v","fix":null}
@@ -2593,7 +2593,7 @@ tokens	4373	96397f1295fdd5f6
 cst	4373	8ae176a21aa09ef6
 usj	373043	20b1a133abb40e9d
 usx	364654	f420e2deb11332f6
-vref	284311	f628b6e85321f3f1
+vref	286007	c33d176f620863d3
 html	456601	dd9bf939db4d30f4
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":125521,"end":125524},"related_span":null,"token_id":"2KI-1755","related_token_id":null,"sid":"2KI 10:30","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":142362,"end":142365},"related_span":null,"token_id":"2KI-1998","related_token_id":null,"sid":"2KI 12:16","marker":"v","fix":null}
@@ -2608,7 +2608,7 @@ tokens	8664	100cf295a15e6ebf
 cst	8664	b40f69528e9dfb1c
 usj	715676	1e287255d5354f6d
 usx	697187	ce1cdc039f63dfd6
-vref	537580	f43979814eb4d92b
+vref	540893	9f7f33f41607680d
 html	880427	0b082f3de2b18ab7
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":210762,"end":210765},"related_span":null,"token_id":"JER-3262","related_token_id":null,"sid":"JER 20:13","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":228299,"end":228302},"related_span":null,"token_id":"JER-3533","related_token_id":null,"sid":"JER 22:23","marker":"v","fix":null}
@@ -2619,7 +2619,7 @@ tokens	783	d156c7dd72a4f18d
 cst	783	3c15e76e2dec4724
 usj	62545	d08517b339dcc729
 usx	60172	e28519432e55fffe
-vref	41287	ced93efd0dbd0b0f
+vref	41542	b67de6c90be9e37f
 html	77941	d48e87d8b0c86a6a
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":14216,"end":14218},"related_span":null,"token_id":"MIC-239","related_token_id":null,"sid":"MIC 2:9","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":17041,"end":17043},"related_span":null,"token_id":"MIC-282","related_token_id":null,"sid":"MIC 3:2","marker":"v","fix":null}
@@ -2633,7 +2633,7 @@ tokens	7563	40f8708c1e6c04a7
 cst	7563	2d24f082a081f716
 usj	545841	40c00add86abcbd0
 usx	530285	15a75be22b41e1f2
-vref	392923	ce249a8da1294d66
+vref	395805	9cbc06d0f0ac2f84
 html	692520	dcf41387c1383fd8
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":153503,"end":153505},"related_span":null,"token_id":"EXO-2623","related_token_id":null,"sid":"EXO 15:2","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":280329,"end":280332},"related_span":null,"token_id":"EXO-5061","related_token_id":null,"sid":"EXO 27:21","marker":"v","fix":null}
@@ -2643,7 +2643,7 @@ tokens	3871	1bef6bda18fdd7af
 cst	3871	b72a87873db1110c
 usj	301916	31cc0c66d7b9fbd2
 usx	295262	de007a0c18c71e65
-vref	226405	331e9c13f2520b3f
+vref	227956	f4009155a6c1e73b
 html	375566	d877a693074e51a0
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":203166,"end":203169},"related_span":null,"token_id":"JOS-3354","related_token_id":null,"sid":"JOS 21:43","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":222408,"end":222410},"related_span":null,"token_id":"JOS-3604","related_token_id":null,"sid":"JOS 23:2","marker":"v","fix":null}
@@ -2653,7 +2653,7 @@ tokens	9357	a27df51fe32540dc
 cst	9357	743f2890112b068c
 usj	681027	abda48dc1684180c
 usx	654720	f135295e2aebacbb
-vref	480105	a4afbbab2f310cb0
+vref	483305	8b8c164e5822103a
 html	865080	bf06db698322581f
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":4795,"end":4797},"related_span":null,"token_id":"ISA-103","related_token_id":null,"sid":"ISA 1:3","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":18857,"end":18859},"related_span":null,"token_id":"ISA-356","related_token_id":null,"sid":"ISA 2:7","marker":"v","fix":null}
@@ -2692,7 +2692,7 @@ tokens	2475	1108c9224486c37e
 cst	2475	25e06aa0b2fd39df
 usj	205191	571a2b6a42f1d0c1
 usx	198514	da43aa7888015f69
-vref	149374	64e6adaa11ca6e84
+vref	150249	01d37c3a1b09b9da
 html	252599	95624d00c903a98a
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":21466,"end":21469},"related_span":null,"token_id":"DAN-371","related_token_id":null,"sid":"DAN 2:22","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":33102,"end":33105},"related_span":null,"token_id":"DAN-540","related_token_id":null,"sid":"DAN 2:48","marker":"v","fix":null}
@@ -2709,7 +2709,7 @@ tokens	42	07197af1754ca52d
 cst	42	55da5676d3fc07b3
 usj	1305	28a0d5e03dd6292c
 usx	1187	025493f17494379c
-vref	498	675da5cf5b937c93
+vref	504	6474fd0f5e74463d
 html	1867	b329b36ae6bafe9a
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/empty-attributes2/origin.usfm
@@ -2717,7 +2717,7 @@ tokens	19	38a6d22e05dc2b21
 cst	19	fa31d823bacf4e79
 usj	556	480312f882654256
 usx	503	80f7f0693aedcc41
-vref	127	8f9a887fcbce4f51
+vref	129	f077bbb2c87d338f
 html	801	4b44e10529541386
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/empty-attributes3/origin.usfm
@@ -2757,7 +2757,7 @@ tokens	18	8f28919a00cc097e
 cst	18	2a61b167d0864fca
 usj	405	ba4334f884232309
 usx	415	b15a5d9835c39c1c
-vref	59	687c5ae075ff8e8c
+vref	61	c94a0b0913b79b3a
 html	693	12847f855c1b4422
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/empty-li/origin.usfm
@@ -2765,7 +2765,7 @@ tokens	54	2f7d57e206fc7b3f
 cst	54	c10ab794e8b8d176
 usj	1160	9e3066eca7999321
 usx	1062	a2412005ae5fb93d
-vref	359	3e947cde53191d5a
+vref	382	891369588a7bcdb4
 html	1953	a0702686b4b1f4ba
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/empty-lines/origin.usfm
@@ -2773,7 +2773,7 @@ tokens	19	d52c479a7fa0b696
 cst	19	99c3ee1b71d94509
 usj	349	c2c5db374193aba4
 usx	350	1a472d67902ef49d
-vref	76	14fc2c40828c37e3
+vref	86	f2261a6cfbd84825
 html	570	9ef441dc136d874e
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/empty-para/origin.usfm
@@ -2791,7 +2791,7 @@ tokens	15	e9ccffc9706b4aa7
 cst	15	b8f4cc0308ec65a9
 usj	346	bb5f436dff43976f
 usx	311	3d87771797909226
-vref	46	02584a7d2776eefa
+vref	47	57e16e503c993a14
 html	583	f07107719f396fca
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":31,"end":33},"related_span":{"start":34,"end":37},"token_id":"GEN-11","related_token_id":"GEN-13","sid":"GEN 1:1","marker":"p","fix":null}
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\p needs a space or newline before it.","message_params":{"marker":"p"},"span":{"start":31,"end":33},"related_span":null,"token_id":"GEN-11","related_token_id":null,"sid":"GEN 1:1","marker":"p","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"GEN-11","replacements":[{"kind":"Marker","text":"\n\\p","marker":"p","sid":"GEN 1:1"}]}}}
@@ -2810,7 +2810,7 @@ tokens	15	6b5b96a75019fb48
 cst	15	bcbefb191d4677f9
 usj	353	753b2e8bca339aa6
 usx	354	d2ebf98a5feac87f
-vref	80	4e8057d5e396557d
+vref	82	1c7a74e671419dfb
 html	573	f3b7c45c766d7941
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/nbsp/origin.usfm
@@ -2834,7 +2834,7 @@ tokens	47	8114bfebd9a51be1
 cst	47	db1e6cb7bd1894b0
 usj	986	4c259ec55e75242f
 usx	753	50cecd62f6173f47
-vref	113	e264bd5d19ed71a8
+vref	115	67e898165be129fa
 html	1613	565254945b991554
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/newline-attributes/origin.usfm
@@ -2842,7 +2842,7 @@ tokens	20	d7b837524e9ec5eb
 cst	20	f1ac6f3b31646968
 usj	574	64c93143d2863d07
 usx	565	48a0908e4372a26a
-vref	240	11133aba3ef6a452
+vref	244	18de4980c2ead1ba
 html	853	cfec89c5d185dde4
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\qt1-s is a milestone and needs to end with \\*.","message_params":{"marker":"qt1-s"},"span":{"start":75,"end":82},"related_span":null,"token_id":"GEN-11","related_token_id":null,"sid":"GEN 1:22","marker":"qt1-s","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -2875,7 +2875,7 @@ tokens	18	539ab8264e4870cf
 cst	18	78cd3c943d84dbfd
 usj	415	2e426d0dc7b5e183
 usx	395	fe010cddb8bff2a4
-vref	99	8e3684616097514d
+vref	102	6b4cc4b11bd228af
 html	667	b3127ea1188c64ae
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\p needs a space or newline before it.","message_params":{"marker":"p"},"span":{"start":45,"end":47},"related_span":null,"token_id":"GEN-15","related_token_id":null,"sid":"GEN 1:2","marker":"p","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"GEN-15","replacements":[{"kind":"Marker","text":"\n\\p","marker":"p","sid":"GEN 1:2"}]}}}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -2884,7 +2884,7 @@ tokens	22	c597d64770794c3e
 cst	22	4a9f3f19e1a24a86
 usj	426	fa442dc386fe0484
 usx	385	52f76dd8a206f017
-vref	66	e20a884bd672ceba
+vref	72	c5bc09de5a75bc4e
 html	710	51e30b6418c71232
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/special-cases/sp/origin.usfm
@@ -2892,7 +2892,7 @@ tokens	19	f0a355379b9dba47
 cst	19	ba597e0f44b421ab
 usj	437	e04e691c3529efed
 usx	381	20a8152742f81da0
-vref	59	687c5ae075ff8e8c
+vref	61	c94a0b0913b79b3a
 html	706	595bd6fc34566232
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/synthetic/common-errors.usfm
@@ -2900,7 +2900,7 @@ tokens	81	ed7d47d25f9dd6dd
 cst	81	de5527b535a9d016
 usj	2074	ca431dc9e6ce9715
 usx	1913	3e91fd19a1c48cd8
-vref	401	e1dca1dc87331dbd
+vref	411	533021a959f5fcaf
 html	3402	7f0c8d74566fa96a
 {"code":"duplicate-id-marker","category":"document","severity":"error","issue_type":"usfm","template":"This file has more than one \\id; only one is allowed.","message":"This file has more than one \\id; only one is allowed.","message_params":{},"span":{"start":44,"end":48},"related_span":null,"token_id":"GEN-3","related_token_id":null,"sid":null,"marker":"id","fix":null}
 {"code":"id-marker-not-at-file-start","category":"document","severity":"error","issue_type":"usfm","template":"\\id must come before any other content.","message":"\\id must come before any other content.","message_params":{},"span":{"start":44,"end":48},"related_span":null,"token_id":"GEN-3","related_token_id":null,"sid":null,"marker":"id","fix":null}
@@ -2984,7 +2984,7 @@ tokens	57	2856766328319c4c
 cst	57	4fc05a78db9963ee
 usj	1372	864dd81282fcef6a
 usx	1234	22ed8b3e0bc2f07a
-vref	403	879ecfbb49cd9259
+vref	419	384f51ed6fe9578d
 html	1939	9e22da3c1567b3d7
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":140,"end":143},"related_span":null,"token_id":"ISA-25","related_token_id":null,"sid":"ISA 8:0","marker":"s5","fix":null}
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":144,"end":146},"related_span":{"start":147,"end":150},"token_id":"ISA-27","related_token_id":"ISA-29","sid":"ISA 8:0","marker":"p","fix":null}
@@ -2996,7 +2996,7 @@ tokens	3037	bbed4fd8b4a2296b
 cst	3037	fae0fd938d92915f
 usj	95331	c0aae2d711e42d18
 usx	76254	7d9a94801db111d0
-vref	9657	b9b8518c3e33938c
+vref	10470	87e79e75f53b6292
 html	140835	a8b348719116fcff
 {"code":"missing-horizontal-whitespace-after-marker-name","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space after the marker name.","message":"\\toc1 needs a space after the marker name.","message_params":{"marker":"toc1"},"span":{"start":34,"end":39},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 0:0","marker":"toc1","fix":{"ReplaceToken":{"code":"insert-whitespace-after-marker-name","label":"InsertWhitespaceAfterMarkerName","label_params":{},"target_token_id":"TIT-10","replacements":[{"kind":"Marker","text":"\\toc1 ","marker":"toc1","sid":"TIT 0:0"}]}}}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":85,"end":86},"related_span":null,"token_id":"TIT-29","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
@@ -3051,7 +3051,7 @@ tokens	3097	a7a28608b0ff8f7c
 cst	3097	c3b3612437839bee
 usj	94839	e2f8e3c132808684
 usx	75860	a4f67b03a5bf68ac
-vref	9668	cb1f8cf7d0a6ac5e
+vref	10604	8689125de01b8d60
 html	140839	5c2c42ee887d1de3
 {"code":"missing-horizontal-whitespace-after-marker-name","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space after the marker name.","message":"\\toc1 needs a space after the marker name.","message_params":{"marker":"toc1"},"span":{"start":34,"end":39},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 0:0","marker":"toc1","fix":{"ReplaceToken":{"code":"insert-whitespace-after-marker-name","label":"InsertWhitespaceAfterMarkerName","label_params":{},"target_token_id":"TIT-10","replacements":[{"kind":"Marker","text":"\\toc1 ","marker":"toc1","sid":"TIT 0:0"}]}}}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":85,"end":86},"related_span":null,"token_id":"TIT-29","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
@@ -3228,7 +3228,7 @@ tokens	259	0455a1e4307a32cc
 cst	259	cd77e95e4041cbec
 usj	8547	a7b9cacb88f8e851
 usx	6718	10d27f96978b5f41
-vref	195	4030052552cb7210
+vref	229	1c17ec294733d5d4
 html	14419	cbf19d19e8f02bb8
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\q needs a space or newline before it.","message_params":{"marker":"q"},"span":{"start":1191,"end":1194},"related_span":null,"token_id":"ACT-68","related_token_id":null,"sid":"ACT 1:20","marker":"q","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"ACT-68","replacements":[{"kind":"Marker","text":"\n\\q ","marker":"q","sid":"ACT 1:20"}]}}}
 {"code":"missing-tag-end-delimiter-after-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space before the text that follows.","message":"\\q needs a space before the text that follows.","message_params":{"marker":"q"},"span":{"start":2331,"end":2333},"related_span":null,"token_id":"ACT-118","related_token_id":null,"sid":"ACT 1:20","marker":"q","fix":{"ReplaceToken":{"code":"insert-tag-end-delimiter-after-marker","label":"InsertTagEndDelimiterAfterMarker","label_params":{},"target_token_id":"ACT-118","replacements":[{"kind":"Marker","text":"\\q ","marker":"q","sid":"ACT 1:20"}]}}}
@@ -3242,7 +3242,7 @@ tokens	292	7252cde5a48d6e3e
 cst	292	5d8dbf6e27cfcfd2
 usj	4911	90f894e4f225c651
 usx	3610	34bdf6cdc9e0c747
-vref	202	e850cca97fd21d50
+vref	339	d6c5969e976ae3ba
 html	14424	d3ddf63a68dfeea6
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":88,"end":95},"related_span":null,"token_id":"ACT-12","related_token_id":null,"sid":"ACT 1:20","marker":"zaln-s","fix":null}
 {"code":"missing-tag-end-delimiter-after-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space before the text that follows.","message":"\\q needs a space before the text that follows.","message_params":{"marker":"q"},"span":{"start":1199,"end":1201},"related_span":null,"token_id":"ACT-77","related_token_id":null,"sid":"ACT 1:20","marker":"q","fix":{"ReplaceToken":{"code":"insert-tag-end-delimiter-after-marker","label":"InsertTagEndDelimiterAfterMarker","label_params":{},"target_token_id":"ACT-77","replacements":[{"kind":"Marker","text":"\\q ","marker":"q","sid":"ACT 1:20"}]}}}
@@ -3279,7 +3279,7 @@ tokens	289	bcf2a71d9f54a319
 cst	289	41a14354016e3dac
 usj	4245	81b9c079b746812f
 usx	3040	c0ad1e16b47590b9
-vref	202	e850cca97fd21d50
+vref	341	8734a34a12398b5c
 html	14422	56fb57553a430d23
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":89,"end":96},"related_span":null,"token_id":"ACT-13","related_token_id":null,"sid":"ACT 1:20","marker":"zaln-s","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":266,"end":273},"related_span":null,"token_id":"ACT-22","related_token_id":null,"sid":"ACT 1:20","marker":"zaln-s","fix":null}
@@ -3318,7 +3318,7 @@ tokens	13	158c5a30c7f049e9
 cst	13	0aa77a9123c6b30c
 usj	476	3bc1f13271ff21ac
 usx	470	b923810515eb87b5
-vref	219	69652042b9450143
+vref	221	ba1a384c2f897a1d
 html	689	cfdeb52e8fca2534
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/acts_1_11.aligned/origin.usfm
@@ -3326,7 +3326,7 @@ tokens	296	d0b57319c338145a
 cst	296	e689a8d6febd178d
 usj	10032	b2ef033ba60be11c
 usx	7903	f4944b82e213cd15
-vref	219	f0a3c6e2499c2e01
+vref	257	974a8909f9ae8529
 html	16990	90dfbc3c92f191a6
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":84,"end":86},"related_span":null,"token_id":"ACT-10","related_token_id":null,"sid":"ACT 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -3335,7 +3335,7 @@ tokens	330	9ce8c6625f54f304
 cst	330	6801079da92e57ea
 usj	4712	fdaf6e3fbadc9ad7
 usx	3351	f9637095028657e4
-vref	225	5725a128937252d3
+vref	392	6bc30e5f7d089ea1
 html	16997	a7b5c4450d417365
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":84,"end":85},"related_span":null,"token_id":"ACT-10","related_token_id":null,"sid":"ACT 1:1","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":86,"end":93},"related_span":null,"token_id":"ACT-12","related_token_id":null,"sid":"ACT 1:1","marker":"zaln-s","fix":null}
@@ -3384,7 +3384,7 @@ tokens	214	7cfb5d82692ad433
 cst	214	669152bc8a0d3861
 usj	6701	32c98749a1f47de6
 usx	5242	fbdc1019701b587d
-vref	184	5810043e42098300
+vref	215	24d0d9cd795d600a
 html	11179	4ebf3cd43bd8e5b9
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":84,"end":86},"related_span":null,"token_id":"ACT-10","related_token_id":null,"sid":"ACT 1:4","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -3393,7 +3393,7 @@ tokens	234	5420a957b965a0a1
 cst	234	491f1a739c4e9289
 usj	3674	08f73eca8b9111ae
 usx	2647	a047671668e59115
-vref	190	6cd075e15ec08468
+vref	295	b267ae352c6e4db2
 html	11185	fc14613179b9f49d
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":84,"end":85},"related_span":null,"token_id":"ACT-10","related_token_id":null,"sid":"ACT 1:4","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":86,"end":93},"related_span":null,"token_id":"ACT-12","related_token_id":null,"sid":"ACT 1:4","marker":"zaln-s","fix":null}
@@ -3420,7 +3420,7 @@ tokens	1079	935c92b16048c44f
 cst	1079	e64561c94fa57605
 usj	36016	d95adbe1ee346368
 usx	28199	658cdb28861752d0
-vref	889	311c4a4a0d923b09
+vref	1030	bd4f84747691e6ed
 html	61035	b193b3c37fce28ad
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":158,"end":161},"related_span":null,"token_id":"ACT-25","related_token_id":null,"sid":"ACT 1:0","marker":"s5","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":168,"end":170},"related_span":null,"token_id":"ACT-30","related_token_id":null,"sid":"ACT 1:1","marker":"v","fix":null}
@@ -3437,7 +3437,7 @@ tokens	1209	34bd670642467da2
 cst	1209	f057b480760bcdb1
 usj	17282	6bc4fc3bc14647cb
 usx	12195	761a5cc4695b5f8e
-vref	926	927973da016a8345
+vref	1518	ec1fee8ad632e3f9
 html	60923	0643a763139b83b8
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":158,"end":160},"related_span":{"start":161,"end":164},"token_id":"ACT-25","related_token_id":"ACT-27","sid":"ACT 1:0","marker":"p","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":161,"end":164},"related_span":null,"token_id":"ACT-27","related_token_id":null,"sid":"ACT 1:0","marker":"s5","fix":null}
@@ -3575,7 +3575,7 @@ tokens	26	e364ba0063a75616
 cst	26	1b761cdffcd0a394
 usj	616	79a11824752ca722
 usx	614	9550180df451d076
-vref	288	3f8fb9a96d9f9cb3
+vref	298	d817bb3cf5b74829
 html	889	0f49827d1a02067a
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/chunk_footnote/origin.usfm
@@ -3591,7 +3591,7 @@ tokens	60	93fc4fd847bff7a2
 cst	60	8b53a8ea36014a8c
 usj	1683	6319ef09c13d0dae
 usx	1466	0bd8850f8a2e6dc4
-vref	891	6b4daacba0a45e84
+vref	908	5f92969629baee72
 html	2015	a7ba1db0cb28ba52
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"GEN-9","related_token_id":null,"sid":"GEN 1:16","marker":"v","fix":null}
 {"code":"stray-close-marker","category":"structure","severity":"error","issue_type":"usfm","template":"{form, select, milestone-end {Found \\* with no open milestone to close.} other {\\{marker}* has no matching opening \\{marker}.}}","message":"\\cat* has no matching opening \\cat.","message_params":{"form":"named","marker":"cat"},"span":{"start":39,"end":44},"related_span":null,"token_id":"GEN-14","related_token_id":null,"sid":"GEN 1:16","marker":"cat","fix":null}
@@ -3603,7 +3603,7 @@ tokens	86	a90106b9760de50c
 cst	86	4cf908ea12143482
 usj	1901	d91a02f6108faaaa
 usx	1424	aafb59a4762987bf
-vref	278	6cef85973ab1c737
+vref	280	6fbe49a89619fa65
 html	2933	377033708ef6891c
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/gn_headers/origin.usfm
@@ -3611,7 +3611,7 @@ tokens	292	3cffdb842677c541
 cst	292	5b9d5863168468af
 usj	7707	f790e1829ec57399
 usx	6164	7b74c31608f03dd5
-vref	209	355e05483c07c6dc
+vref	213	373d5efa980043c4
 html	10292	cc07a62da0979270
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":3877,"end":3882},"related_span":null,"token_id":"TIT-235","related_token_id":null,"sid":"TIT 0:0","marker":"ior","fix":null}
 {"code":"marker-not-valid-in-context","category":"context","severity":"error","issue_type":"usfm","template":"\\{marker} is not allowed inside a {context, select, footnote {footnote} cross-reference {cross-reference} table {table cell} chapter-content {chapter} para {paragraph} list {list} section {section heading} sidebar {sidebar} peripheral {peripheral section} peripheral-content {peripheral section} book-headers {book header} book-titles {book title} book-introduction {book introduction} book-introduction-end-titles {book introduction} scripture {scripture text} other {{context}}}.","message":"\\ior is not allowed inside a paragraph.","message_params":{"context":"para","marker":"ior"},"span":{"start":3935,"end":3940},"related_span":null,"token_id":"TIT-241","related_token_id":null,"sid":"TIT 0:0","marker":"ior","fix":null}
@@ -3626,7 +3626,7 @@ tokens	56	dd53c7cb22ff3381
 cst	56	8bc983f4d2b36bd4
 usj	1459	5d96bf750e0b8263
 usx	1187	36cee59f11155260
-vref	115	adc43668a2faf19f
+vref	125	e30419f23e374fa5
 html	2299	4c0a9a22de20cf8f
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":45,"end":47},"related_span":null,"token_id":"TIT-16","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":380,"end":382},"related_span":null,"token_id":"TIT-39","related_token_id":null,"sid":"TIT 2:1","marker":"v","fix":null}
@@ -3636,7 +3636,7 @@ tokens	58	5633ff517c98877b
 cst	58	915d72d5494db01d
 usj	1459	5d96bf750e0b8263
 usx	1187	36cee59f11155260
-vref	115	adc43668a2faf19f
+vref	129	493bb261ea038209
 html	2299	c903247f4603afcd
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":45,"end":46},"related_span":null,"token_id":"TIT-16","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":380,"end":381},"related_span":null,"token_id":"TIT-40","related_token_id":null,"sid":"TIT 2:1","marker":"v","fix":null}
@@ -3646,7 +3646,7 @@ tokens	25	e5d0c4ee81433499
 cst	25	4714cd186de8397a
 usj	570	7e69e3d0199f7fda
 usx	500	2302d9c7cfef49b2
-vref	49	276a1008785d1d16
+vref	57	9c5b6b922c113ec0
 html	1030	fb2fcd9f3758e61a
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":20},"related_span":null,"token_id":"GEN-9","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\k-s is a milestone and needs to end with \\*.","message_params":{"marker":"k-s"},"span":{"start":21,"end":26},"related_span":null,"token_id":"GEN-11","related_token_id":null,"sid":"GEN 1:1","marker":"k-s","fix":null}
@@ -3656,7 +3656,7 @@ tokens	77	4d249f59976deee5
 cst	77	4a17b0717ec5551f
 usj	2075	70ec5103a0d0e7e7
 usx	1652	ad0ef4c8a3fe4b3b
-vref	204	83f00d60ed17ff3a
+vref	222	87c8e96ff8cba4bc
 html	3096	300d0a8fc3d8b7b1
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"GEN-9","related_token_id":null,"sid":"GEN 1:27","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -3665,7 +3665,7 @@ tokens	131	537cdddf826699a0
 cst	131	712bd984a2f651d4
 usj	4260	0eaaea04bb02ad2c
 usx	3369	a28022efcdb60c85
-vref	107	e8be5420f4ae6a30
+vref	125	b3fe1904b7fc2212
 html	7105	4ad82b6d68e9798b
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":95,"end":97},"related_span":null,"token_id":"HEB-13","related_token_id":null,"sid":"HEB 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -3674,7 +3674,7 @@ tokens	144	0e2b74a439999333
 cst	144	8262b96062e3a813
 usj	2244	a4fa5e8caf594da8
 usx	1643	22efc8bb4850b444
-vref	108	f094cd27fdfc98ee
+vref	175	118fcdae60a2f7e4
 html	7108	e7bed4f61610a26a
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":95,"end":96},"related_span":null,"token_id":"HEB-13","related_token_id":null,"sid":"HEB 1:1","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":97,"end":104},"related_span":null,"token_id":"HEB-15","related_token_id":null,"sid":"HEB 1:1","marker":"zaln-s","fix":null}
@@ -3695,7 +3695,7 @@ tokens	90	ad89eaacad99b5de
 cst	90	81cc0213942d70fb
 usj	2524	1b864561ab946d58
 usx	2066	d0590da479f2fc65
-vref	374	761e3d9177e98491
+vref	396	6ba9ccecd5a0c491
 html	3848	6ad160927315a976
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":36,"end":38},"related_span":null,"token_id":"GEN-13","related_token_id":null,"sid":"GEN 1:2","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":1172,"end":1174},"related_span":null,"token_id":"GEN-77","related_token_id":null,"sid":"GEN 1:4","marker":"v","fix":null}
@@ -3705,7 +3705,7 @@ tokens	92	46dc03734c78d970
 cst	92	988a019bbc07a04a
 usj	2524	1b864561ab946d58
 usx	2066	d0590da479f2fc65
-vref	374	761e3d9177e98491
+vref	400	706c06176183c211
 html	3848	0dda181e9b2cdcbd
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":36,"end":37},"related_span":null,"token_id":"GEN-13","related_token_id":null,"sid":"GEN 1:2","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":1186,"end":1187},"related_span":null,"token_id":"GEN-78","related_token_id":null,"sid":"GEN 1:4","marker":"v","fix":null}
@@ -3715,7 +3715,7 @@ tokens	61	efacc5210834a431
 cst	61	dab6763e697e88c4
 usj	1238	211b6044cbc0c575
 usx	1006	b3d5ce5510ce6e66
-vref	412	5487d1ca765437de
+vref	425	e2240a52253feb38
 html	1887	c7c7a15ce9814cb9
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/inline_words/origin.usfm
@@ -3723,7 +3723,7 @@ tokens	60	aec7e3b5296896df
 cst	60	ccc6ccdf1e3414fa
 usj	1756	0645232aa5b6c01e
 usx	1549	4256a6e24ea86870
-vref	1016	0e229a9d0b1f4444
+vref	1032	392c152c16ee018c
 html	2193	a14fd8ad9f18111c
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/invalid/origin.usfm
@@ -3731,7 +3731,7 @@ tokens	59	9c60032551ef5315
 cst	59	0e6340b0039a7088
 usj	1172	e07239b27fdb6136
 usx	1204	9d6ffc9d5a91a586
-vref	286	3a5ba3890121b879
+vref	311	459710e53ed273e1
 html	1580	c2bf645616ac3755
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":23,"end":25},"related_span":{"start":26,"end":29},"token_id":"GEN-9","related_token_id":"GEN-11","sid":"GEN 1:0","marker":"p","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\v1 is not a known USFM marker.","message_params":{"marker":"v1"},"span":{"start":26,"end":29},"related_span":null,"token_id":"GEN-11","related_token_id":null,"sid":"GEN 1:0","marker":"v1","fix":null}
@@ -3746,7 +3746,7 @@ tokens	63	b0d1d9155a9a13be
 cst	63	29a926280dbc6384
 usj	1556	10f09caabe288766
 usx	1260	92be3172b676f90b
-vref	351	e91b7ed5f3713a75
+vref	365	d05407a5cfc998db
 html	2706	1e6b2b415cb4438b
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":140,"end":142},"related_span":{"start":143,"end":146},"token_id":"ISA-25","related_token_id":"ISA-27","sid":"ISA 5:0","marker":"p","fix":null}
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\q1 starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"q1"},"span":{"start":143,"end":146},"related_span":{"start":148,"end":151},"token_id":"ISA-27","related_token_id":"ISA-30","sid":"ISA 5:0","marker":"q1","fix":null}
@@ -3758,7 +3758,7 @@ tokens	102	1c34556e2fb5fc71
 cst	102	6d2dd86339b19f60
 usj	2850	d3b132cd91bfc360
 usx	2424	19d55488f9479c65
-vref	958	9b24dbfab241e039
+vref	982	6d78bbd7fcbe73df
 html	4596	1379bb1e3db07de9
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":118,"end":121},"related_span":null,"token_id":"ISA-27","related_token_id":null,"sid":"ISA 6:0","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":434,"end":437},"related_span":null,"token_id":"ISA-50","related_token_id":null,"sid":"ISA 15:0","marker":"s5","fix":null}
@@ -3769,7 +3769,7 @@ tokens	61	0f047686f542491a
 cst	61	8a4b22d0cb43a5ec
 usj	1493	b34c81762aae384f
 usx	1213	1f078971f72b5f0b
-vref	337	f3b269ec1676620a
+vref	348	8ce9c985bed46d2a
 html	2510	b98c180b4f91f6b3
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\p starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"p"},"span":{"start":140,"end":142},"related_span":{"start":143,"end":146},"token_id":"ISA-25","related_token_id":"ISA-27","sid":"ISA 5:0","marker":"p","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":143,"end":146},"related_span":null,"token_id":"ISA-27","related_token_id":null,"sid":"ISA 5:0","marker":"s5","fix":null}
@@ -3782,7 +3782,7 @@ tokens	21	197b1d5965507a17
 cst	21	62a36cd4ef2919da
 usj	610	1592c65d175594e1
 usx	573	dbfceff769b30678
-vref	299	07704b0ee16915c9
+vref	302	af85c61d49505df1
 html	798	caf2ddfa5597497b
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/job_footnote/origin.usfm
@@ -3790,7 +3790,7 @@ tokens	52	fe2a87ca888fb104
 cst	52	04a6533a2cf47b92
 usj	1067	b5621ef306ddc1d4
 usx	835	82b5a09dacbb2ca5
-vref	143	1688127d52e2eba4
+vref	152	b7e92ebe25629274
 html	1927	8826f5768e49c392
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":105,"end":108},"related_span":null,"token_id":"JOB-25","related_token_id":null,"sid":"JOB 23:0","marker":"s5","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -3799,7 +3799,7 @@ tokens	22	f3f97405450c4191
 cst	22	092ee42450a68fca
 usj	758	d338e285443fdf7f
 usx	697	141627efbad74fb3
-vref	287	a05f9f31fd58c3f6
+vref	290	2a0525299abcba40
 html	1007	7827c571033784cf
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/luk_quotes/origin.usfm
@@ -3807,7 +3807,7 @@ tokens	74	340848207a2608a4
 cst	74	f1519dfdef621a10
 usj	1796	474cd70eec5570a7
 usx	1565	a65cff38f9676f46
-vref	586	61f6704e90613d17
+vref	607	9d77c5cce55d9ead
 html	2589	0e36d5911537a9a1
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":111,"end":114},"related_span":null,"token_id":"LUK-26","related_token_id":null,"sid":"LUK 4:0","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":411,"end":414},"related_span":null,"token_id":"LUK-52","related_token_id":null,"sid":"LUK 4:19","marker":"s5","fix":null}
@@ -3819,7 +3819,7 @@ tokens	327	e23beb6274b88b04
 cst	327	739d862d4204d813
 usj	10493	f5c404db61276f0c
 usx	8147	f12680e5609d2caf
-vref	248	5ff371f7b0a18d7a
+vref	288	e0f788e1e307b7ea
 html	17791	8a2828fa47564ef8
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"MAT-9","related_token_id":null,"sid":"MAT 4:6","marker":"v","fix":null}
 {"code":"missing-whitespace-before-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} needs a space or newline before it.","message":"\\q needs a space or newline before it.","message_params":{"marker":"q"},"span":{"start":2640,"end":2643},"related_span":null,"token_id":"MAT-134","related_token_id":null,"sid":"MAT 4:6","marker":"q","fix":{"ReplaceToken":{"code":"insert-whitespace-before-marker","label":"InsertWhitespaceBeforeMarker","label_params":{},"target_token_id":"MAT-134","replacements":[{"kind":"Marker","text":"\n\\q ","marker":"q","sid":"MAT 4:6"}]}}}
@@ -3833,7 +3833,7 @@ tokens	366	6d011d3c0ace8699
 cst	366	3da6a68e64c53f80
 usj	5515	a8aae79111504edf
 usx	3895	0b133cff2fa21567
-vref	262	bb136ecfc902d618
+vref	426	d876c9014ead0318
 html	17795	4503b4ab4388a018
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":20},"related_span":null,"token_id":"MAT-9","related_token_id":null,"sid":"MAT 4:6","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":21,"end":29},"related_span":null,"token_id":"MAT-11","related_token_id":null,"sid":"MAT 4:6","marker":"zaln-s","fix":null}
@@ -3876,7 +3876,7 @@ tokens	360	0e7f95adf82f805b
 cst	360	e96e41bc740de368
 usj	11542	66fb8d24c82e7b37
 usx	8999	93a06a8ae26e0ebb
-vref	253	fc2cdc60cb46d21c
+vref	307	34750d4ed4fe836e
 html	19592	79c0bdbcf786d3aa
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"MAT-9","related_token_id":null,"sid":"MAT 4:6","marker":"v","fix":null}
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\m starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"m"},"span":{"start":7144,"end":7146},"related_span":{"start":7148,"end":7151},"token_id":"MAT-355","related_token_id":"MAT-358","sid":"MAT 4:6","marker":"m","fix":null}
@@ -3887,7 +3887,7 @@ tokens	401	a67354dfc6488779
 cst	401	bc8a9b869aac06bf
 usj	5794	e64ee4101580305e
 usx	4091	2e241af6836d7c4b
-vref	264	108dc66ddb07b54c
+vref	461	f5bef3a73192158c
 html	19597	8b56766f8e1fee78
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":20},"related_span":null,"token_id":"MAT-9","related_token_id":null,"sid":"MAT 4:6","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":21,"end":29},"related_span":null,"token_id":"MAT-11","related_token_id":null,"sid":"MAT 4:6","marker":"zaln-s","fix":null}
@@ -3933,7 +3933,7 @@ tokens	57	91dbb371e1d23f3a
 cst	57	ec21690c84820724
 usj	1905	bbf452d9ad7769ae
 usx	1635	364d468b5e03e609
-vref	270	63f6ea477a638d95
+vref	274	2225c7046c702d19
 html	3915	ed7614c4614f055c
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":226,"end":229},"related_span":null,"token_id":"GEN-31","related_token_id":null,"sid":"GEN 1:28","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -3942,7 +3942,7 @@ tokens	89	3eab26e6828cf8d7
 cst	89	2fd41932e3d74050
 usj	2246	831734b14cf8d14e
 usx	2093	dfe449649870c2f0
-vref	246	aa164eea1df85221
+vref	250	64fd94c9f93b6c09
 html	3003	a4da346a42e3dba0
 {"code":"book-code-not-uppercase","category":"document","severity":"warning","issue_type":"usfm","template":"The \\id book code \"{code}\" must be uppercase: {uppercase}.","message":"The \\id book code \"php\" must be uppercase: PHP.","message_params":{"code":"php","uppercase":"PHP"},"span":{"start":4,"end":7},"related_span":null,"token_id":"php-1","related_token_id":null,"sid":"php 0:0","marker":null,"fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":179,"end":182},"related_span":null,"token_id":"php-26","related_token_id":null,"sid":"php 0:0","marker":"s5","fix":null}
@@ -3966,7 +3966,7 @@ tokens	71	d9896729d00047d3
 cst	71	e8850b52496bbf21
 usj	2090	e64d63333b08ca79
 usx	1926	7a4b304784636c9e
-vref	876	18a75ad53ccb6304
+vref	902	625d4fedcf22a28a
 html	2930	54d3910adb1b3e17
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":404,"end":407},"related_span":null,"token_id":"PHP-36","related_token_id":null,"sid":"PHP 1:2","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":619,"end":622},"related_span":null,"token_id":"PHP-48","related_token_id":null,"sid":"PHP 1:6","marker":"s5","fix":null}
@@ -3977,7 +3977,7 @@ tokens	69	223fdc575685243b
 cst	69	83ab644617500ecc
 usj	1582	726d707c4d09e6ee
 usx	1336	044b4d1b6bc9b061
-vref	471	9ce3fb31fd947c42
+vref	485	0ccc95218df4500e
 html	2601	578d41b3246abdf1
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":42,"end":43},"related_span":null,"token_id":"GEN-12","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -3986,7 +3986,7 @@ tokens	75	11bcccb208dcf370
 cst	75	3e890acf1a4797fa
 usj	2236	18f6bf8ef1a236a8
 usx	2096	b8a8f39feccdda9b
-vref	933	cb760ab6226083eb
+vref	953	a88c1044e03f660b
 html	3159	63820f52326eff8a
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":306,"end":309},"related_span":null,"token_id":"PHP-30","related_token_id":null,"sid":"PHP 4:1","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":537,"end":540},"related_span":null,"token_id":"PHP-45","related_token_id":null,"sid":"PHP 1:2","marker":"s5","fix":null}
@@ -3997,7 +3997,7 @@ tokens	75	cb9b996150cf8cf9
 cst	75	2a9b39df37045a79
 usj	2163	ba47a04336de8ca7
 usx	2002	6d97a0c6eb7568ca
-vref	904	bf0daf59f7201009
+vref	932	d15a1c76137eae41
 html	3065	48dae7beceb538cf
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":404,"end":407},"related_span":null,"token_id":"PHP-36","related_token_id":null,"sid":"PHP 1:1","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":603,"end":606},"related_span":null,"token_id":"PHP-52","related_token_id":null,"sid":"PHP 1:4","marker":"s5","fix":null}
@@ -4008,7 +4008,7 @@ tokens	62	76e6e630e5198806
 cst	62	f3ed5c42e8b575f6
 usj	1499	df1f5d2ef6daf4b0
 usx	1218	9a3347baba329be4
-vref	320	5575d1ca085f8601
+vref	333	ed65205db170c937
 html	2527	639e65f41d74c931
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":125,"end":128},"related_span":null,"token_id":"PRO-25","related_token_id":null,"sid":"PRO 30:0","marker":"s5","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"usfm":1},"total_count":1,"suppressed_count":0}
@@ -4017,7 +4017,7 @@ tokens	95	f610546b7b8e4409
 cst	95	26bc3492c49a2c50
 usj	2276	763b0aeb30bd88a8
 usx	1727	8ab6233e7560fe20
-vref	385	2fcf4bda4a5f697d
+vref	409	df781b69e645ae6d
 html	3981	0b662d516a556f7b
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":125,"end":128},"related_span":null,"token_id":"PRO-25","related_token_id":null,"sid":"PRO 21:0","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":329,"end":332},"related_span":null,"token_id":"PRO-45","related_token_id":null,"sid":"PRO 21:10","marker":"s5","fix":null}
@@ -4027,7 +4027,7 @@ tokens	97	908aad9372a9acb9
 cst	97	2cbe4de8447965de
 usj	2164	958bbc60d2149d68
 usx	1728	31f2389114e12d3b
-vref	637	04f584fc8fccf412
+vref	672	5e32ab36ce9b6e96
 html	3223	abaea8f778a408b1
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":417,"end":420},"related_span":null,"token_id":"PSA-59","related_token_id":null,"sid":"PSA 1:2","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":592,"end":595},"related_span":null,"token_id":"PSA-77","related_token_id":null,"sid":"PSA 1:3","marker":"s5","fix":null}
@@ -4037,7 +4037,7 @@ tokens	52	babd71e0c0020e83
 cst	52	a1bdf87352906712
 usj	1208	d6f58318caca6d00
 usx	1068	6f2338c4b8cd10fe
-vref	474	a909be77fd1ac655
+vref	488	719408ff7b12726d
 html	1955	a77dcc08d666bf3d
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/tit1-1_alignment/origin.usfm
@@ -4045,7 +4045,7 @@ tokens	200	801bf991659e8f18
 cst	200	282c4455aaba0588
 usj	5465	93f5044228079260
 usx	4149	b43686586e66c6bd
-vref	167	6f5def94e09de170
+vref	194	2ec5e834ae85e8ea
 html	9500	cca5a6ce02c78b70
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":25,"end":27},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4054,7 +4054,7 @@ tokens	221	d64a08cf1df3bd77
 cst	221	1a6e86273a5b2a56
 usj	3382	39b4e4c4cf25a17a
 usx	2426	b404b4f60c31ffb3
-vref	172	3e5168e8a934831e
+vref	272	8ba74a0d3e91859c
 html	9503	dac8bf3fa0fdd4d4
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":25,"end":26},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":27,"end":34},"related_span":null,"token_id":"TIT-12","related_token_id":null,"sid":"TIT 1:1","marker":"zaln-s","fix":null}
@@ -4081,7 +4081,7 @@ tokens	200	9927ab6f157b1bd4
 cst	200	282c4455aaba0588
 usj	5483	9b59a41548fcb0ec
 usx	4167	eb8029baf03e1ac3
-vref	167	6f5def94e09de170
+vref	194	2ec5e834ae85e8ea
 html	9518	8e5d2b064c01f866
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":25,"end":27},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4090,7 +4090,7 @@ tokens	39	45fc893ec26a8916
 cst	39	a1bbe7305b7f9ed7
 usj	905	deaa97d117e30335
 usx	706	5121a53757d01d44
-vref	70	c93ba58148c66acc
+vref	73	76b8fefd83d40564
 html	1380	d92273f1b6594a76
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":80},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4099,7 +4099,7 @@ tokens	149	f0a565514ac96c41
 cst	149	adc16492c21af8a6
 usj	4836	d2c1d98c2ffddb9c
 usx	3805	b0b26d29e1c1024a
-vref	113	581402dc963d02b1
+vref	128	fa62510d290124cd
 html	8156	52dec300f83480eb
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":80},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4108,7 +4108,7 @@ tokens	166	1344a39bbf555fd4
 cst	166	88b432d109fc95d5
 usj	2337	6c0da2ce16541b1b
 usx	1666	29f3290d3ce7203e
-vref	118	76542efc32db3a95
+vref	194	bbc395167c7e5845
 html	8162	c540ccdb28073ab1
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":79},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":80,"end":87},"related_span":null,"token_id":"TIT-27","related_token_id":null,"sid":"TIT 1:12","marker":"zaln-s","fix":null}
@@ -4132,7 +4132,7 @@ tokens	165	02a5555a82b2f495
 cst	165	55578669f98f1313
 usj	2337	6c0da2ce16541b1b
 usx	1666	29f3290d3ce7203e
-vref	118	76542efc32db3a95
+vref	192	68664a2919645e73
 html	8161	7ae7c243d419d287
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":79},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\zaln-s is a milestone and needs to end with \\*.","message_params":{"marker":"zaln-s"},"span":{"start":80,"end":87},"related_span":null,"token_id":"TIT-27","related_token_id":null,"sid":"TIT 1:12","marker":"zaln-s","fix":null}
@@ -4156,7 +4156,7 @@ tokens	28	a50dcf1fe1f9e792
 cst	28	22e2fc129bba8206
 usj	614	b5f51ff6a5e37c25
 usx	507	3563edd5b07e6db5
-vref	113	581402dc963d02b1
+vref	115	d4426f1620acc72f
 html	926	176959d6193c6c63
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/tit_1_12.oldformat/origin.usfm
@@ -4164,7 +4164,7 @@ tokens	40	9ebf714ba9c6f965
 cst	40	c70ba3263eee1a43
 usj	905	deaa97d117e30335
 usx	706	5121a53757d01d44
-vref	70	c93ba58148c66acc
+vref	75	20976510e76f3eb6
 html	1380	de9f7f2880e8c139
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":79},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4173,7 +4173,7 @@ tokens	40	9ebf714ba9c6f965
 cst	40	c70ba3263eee1a43
 usj	905	deaa97d117e30335
 usx	706	5121a53757d01d44
-vref	70	c93ba58148c66acc
+vref	75	20976510e76f3eb6
 html	1380	de9f7f2880e8c139
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":79},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4182,7 +4182,7 @@ tokens	43	2e4050cd8d87d072
 cst	43	213235fb34a710f0
 usj	873	57292faf07598260
 usx	656	4ea4aa6f1ce4f31c
-vref	38	d05c77af9c8a56f7
+vref	47	6f2f64656e440e77
 html	1678	025a479ad8bae0ec
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/tit_1_12_new_line/origin.usfm
@@ -4190,7 +4190,7 @@ tokens	42	39f7ae6afad55121
 cst	42	3768ce524fe07538
 usj	907	9d6021a2341e6d99
 usx	705	56290a8cb723b198
-vref	70	c93ba58148c66acc
+vref	76	c3282f0a22b33746
 html	1379	0074d47bb1eb21c1
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":77,"end":79},"related_span":null,"token_id":"TIT-25","related_token_id":null,"sid":"TIT 1:12","marker":"v","fix":null}
 summary	{"by_category":{"structure":1},"by_severity":{"error":1},"by_issue_type":{"content":1},"total_count":1,"suppressed_count":0}
@@ -4199,7 +4199,7 @@ tokens	97	33c178445d4f9e96
 cst	97	28b8bae6880f313b
 usj	3052	147141c58af0f7c4
 usx	2877	958e6567a69d3765
-vref	1639	1928e6ee6838bde7
+vref	1687	1e614ba44d90a237
 html	4026	12592a02223c2e28
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":124,"end":127},"related_span":null,"token_id":"TIT-27","related_token_id":null,"sid":"TIT 1:0","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":526,"end":529},"related_span":null,"token_id":"TIT-44","related_token_id":null,"sid":"TIT 1:3","marker":"s5","fix":null}
@@ -4212,7 +4212,7 @@ tokens	45	c5e214277296256e
 cst	45	2237b5ffc827bbbd
 usj	1176	917f1a10149fbf93
 usx	1165	b25f5609e79332f9
-vref	801	67302c243f8fb04f
+vref	819	3a1c25c131890e51
 html	1733	0a39a3f919b420d4
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/ts_2/origin.usfm
@@ -4220,7 +4220,7 @@ tokens	48	00d85fb48c86b103
 cst	48	9af23e86a79b4dc5
 usj	1372	a6ca1f11c4a12a6d
 usx	1305	7f9ebe0fe97e56bf
-vref	801	67302c243f8fb04f
+vref	821	f7679ee92e580913
 html	1926	d51988ccae982d2f
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}
 ### testData/usfmjsTests/tstudio/origin.usfm
@@ -4228,7 +4228,7 @@ tokens	74	abf2b3d24e170b5a
 cst	74	3639b919b3a240a2
 usj	1613	c38171c56c87c000
 usx	1305	69d7ebd999ffb4df
-vref	433	231cf84af2020e6b
+vref	455	27e42c74aaa5730d
 html	2351	b359ce9f1efbabf0
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":145,"end":148},"related_span":null,"token_id":"PSA-30","related_token_id":null,"sid":"PSA 91:0","marker":"s5","fix":null}
 {"code":"empty-paragraph","category":"structure","severity":"warning","issue_type":"usfm","template":"\\{marker} starts an empty paragraph — the next paragraph begins right after, with no content in between.","message":"\\m starts an empty paragraph — the next paragraph begins right after, with no content in between.","message_params":{"marker":"m"},"span":{"start":149,"end":151},"related_span":{"start":152,"end":154},"token_id":"PSA-32","related_token_id":"PSA-34","sid":"PSA 91:0","marker":"m","fix":null}
@@ -4239,7 +4239,7 @@ tokens	57	402893b301001654
 cst	57	870158d0dc5b3fff
 usj	1724	b64b972cc3437c74
 usx	1418	257ee4455f2828b8
-vref	139	01e91ff00945df1f
+vref	150	d51f4183bfaa5c6f
 html	2699	8b525cc5548f6e1c
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":25,"end":27},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":558,"end":560},"related_span":null,"token_id":"TIT-37","related_token_id":null,"sid":"TIT 1:4","marker":"v","fix":null}
@@ -4249,7 +4249,7 @@ tokens	63	2b1ac77aa33ca85d
 cst	63	a2f21afba3038ab5
 usj	1581	2052d4f8d67ee789
 usx	1303	a5c321bebc8d3827
-vref	142	5c4daef7e8e9f815
+vref	166	c7570bde9c22ee73
 html	2699	451a9d7cb7be7de1
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":25,"end":26},"related_span":null,"token_id":"TIT-10","related_token_id":null,"sid":"TIT 1:1","marker":"v","fix":null}
 {"code":"missing-milestone-self-close","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is a milestone and needs to end with \\*.","message":"\\k-s is a milestone and needs to end with \\*.","message_params":{"marker":"k-s"},"span":{"start":225,"end":230},"related_span":null,"token_id":"TIT-20","related_token_id":null,"sid":"TIT 1:1","marker":"k-s","fix":null}
@@ -4261,7 +4261,7 @@ tokens	56	ccfcd455b2fdd432
 cst	56	aee0409dcae44518
 usj	1704	2aa089192fbd83c6
 usx	1407	eada0304497713c9
-vref	139	939786490c17a749
+vref	150	5d339ef388bec54b
 html	2693	78126d2e9aadc1f4
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":19,"end":21},"related_span":null,"token_id":"GEN-9","related_token_id":null,"sid":"GEN 1:1","marker":"v","fix":null}
 {"code":"verse-is-empty","category":"structure","severity":"error","issue_type":"content","template":"This verse has no content.","message":"This verse has no content.","message_params":{},"span":{"start":552,"end":554},"related_span":null,"token_id":"GEN-36","related_token_id":null,"sid":"GEN 1:4","marker":"v","fix":null}
@@ -4271,7 +4271,7 @@ tokens	641	9e53880743209c5c
 cst	641	b7714bcb836ddec3
 usj	16464	f58db54a004be930
 usx	14468	451728cfcd5433c6
-vref	7510	6259d09ea087746c
+vref	7805	8a840a827b49fa6a
 html	23564	096fdf3e71cd11c4
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":123,"end":126},"related_span":null,"token_id":"TIT-26","related_token_id":null,"sid":"TIT 1:0","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":961,"end":964},"related_span":null,"token_id":"TIT-87","related_token_id":null,"sid":"TIT 1:3","marker":"s5","fix":null}
@@ -4319,7 +4319,7 @@ tokens	647	a5cf3fddc804e343
 cst	647	eb5fd2de8cfd1ce2
 usj	17824	c1165d971d3b4c9c
 usx	15050	f8269a64d1805936
-vref	6681	01bc333bd0314288
+vref	6941	5a2ccbf1cc7df29e
 html	29058	497ed89a455eed80
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":364,"end":367},"related_span":null,"token_id":"TIT-26","related_token_id":null,"sid":"TIT 1:0","marker":"s5","fix":null}
 {"code":"duplicate-verse-number","category":"numbering","severity":"error","issue_type":"content","template":"Verse {verse} appears more than once in chapter {chapter, number}.","message":"Verse 2-7 appears more than once in chapter 1.","message_params":{"chapter":"1","marker":"v","verse":"2-7"},"span":{"start":764,"end":768},"related_span":null,"token_id":"TIT-68","related_token_id":null,"sid":"TIT 1:2-7","marker":"v","fix":null}
@@ -4361,7 +4361,7 @@ tokens	519	93a89f2e65645705
 cst	519	37a37769c78f416b
 usj	16346	987cdcf771566824
 usx	15129	bfda57497702c722
-vref	6982	b8302889b47bcdf3
+vref	7173	4a7d359b4d1dd9b1
 html	21005	905cc996b1d32c2c
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":3197,"end":3200},"related_span":null,"token_id":"TIT-186","related_token_id":null,"sid":"TIT 1:0","marker":"s5","fix":null}
 {"code":"unknown-marker","category":"structure","severity":"error","issue_type":"usfm","template":"\\{marker} is not a known USFM marker.","message":"\\s5 is not a known USFM marker.","message_params":{"marker":"s5"},"span":{"start":3598,"end":3601},"related_span":null,"token_id":"TIT-202","related_token_id":null,"sid":"TIT 1:3","marker":"s5","fix":null}
@@ -4392,6 +4392,6 @@ tokens	19	e19feef24db08d9a
 cst	19	d55e4810f12d3208
 usj	504	385c078ae74d4be0
 usx	484	3f6de4634b7b5f27
-vref	181	f0fb5f45559ce742
+vref	185	963e585a7d00eb82
 html	756	21bcc27d37a55f4f
 summary	{"by_category":{},"by_severity":{},"by_issue_type":{},"total_count":0,"suppressed_count":0}

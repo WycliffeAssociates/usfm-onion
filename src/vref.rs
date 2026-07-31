@@ -267,7 +267,6 @@ struct VrefVisitor {
     map: VrefMap,
     current_ref: Option<String>,
     current_text: String,
-    pending_separator: bool,
     // Persists across paragraph boundaries: once any Block has been
     // seen, this reflects the latest Block's supports-verse status, even
     // after that Block closes. Matches the pre-walker behaviour.
@@ -320,7 +319,6 @@ impl VrefVisitor {
             self.map.insert(reference, output.to_string());
         }
         self.current_text.clear();
-        self.pending_separator = false;
     }
 
     fn can_collect_text(&self, ctx: &WalkContext<'_, '_>) -> bool {
@@ -329,19 +327,14 @@ impl VrefVisitor {
             && self.current_block_supports_verse.unwrap_or(true)
     }
 
+    /// Appends a content token's bytes, verbatim.
+    ///
+    /// Nothing is inserted, removed, or rewritten: a verse projection is the source
+    /// bytes of its content tokens in order, so whatever separated two words in the
+    /// document separates them here. Normalizing — trimming, collapsing runs,
+    /// swapping a newline for a space — is a consumer's decision to make on top of a
+    /// faithful projection, not something this walker can decide for every consumer.
     fn push_collected_text(&mut self, fragment: &str) {
-        if self.pending_separator
-            && !self.current_text.is_empty()
-            && !self
-                .current_text
-                .chars()
-                .last()
-                .is_some_and(char::is_whitespace)
-            && !fragment.chars().next().is_some_and(char::is_whitespace)
-        {
-            self.current_text.push(' ');
-        }
-        self.pending_separator = false;
         self.current_text.push_str(fragment);
     }
 }
@@ -356,7 +349,6 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
     ) {
         if frame.scope_kind == StructuralScopeKind::Block {
             self.current_block_supports_verse = Some(marker_paragraph_supports_verse(frame.marker));
-            self.pending_separator = true;
             #[cfg(not(target_arch = "wasm32"))]
             {
                 self.saw_block = true;
@@ -402,11 +394,18 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
 
     fn on_newline(
         &mut self,
-        _ctx: &WalkContext<'tokens, '_>,
-        _token: &'tokens Token<'src>,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
-        self.pending_separator = true;
+        // A newline inside a verse is content, and its bytes are the separator the
+        // source already spells. Discarding it and re-deriving "probably a space"
+        // was how `gladness` and `so` came out as one word: the byte that kept them
+        // apart was thrown away, and the replacement was conditional on
+        // neighbouring whitespace that had also been thrown away.
+        if self.can_collect_text(ctx) {
+            self.current_text.push_str(token.source);
+        }
     }
 }
 
@@ -554,6 +553,21 @@ impl<'tokens, T: LintableToken> Visitor<'tokens, T> for IndexedVrefVisitor {
             self.push_token(token);
         }
     }
+
+    /// A newline inside a verse is a content token like any other: it carries the
+    /// byte that separates what surrounds it, and it has a real id and source span,
+    /// so it becomes a segment like any other and the segments still tile the text
+    /// completely. Dropping it was what made two words collide.
+    fn on_newline(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        _token_index: usize,
+    ) {
+        if self.can_collect_text(ctx) {
+            self.push_token(token);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -647,7 +661,7 @@ mod tests {
         assert_eq!(index.len(), 2, "one entry per SID");
         assert_eq!(
             index.get("GEN 1:1").expect("present").text,
-            "again",
+            "again\n",
             "the last write wins, exactly as it did before"
         );
         // And the key set still matches `to_vref`, whose own duplicate behavior is
@@ -761,13 +775,16 @@ mod tests {
                 .any(|s| s.text_span.start < a && b < s.text_span.end)
         };
 
-        // Poetry join: trailing content space stays, `\q2` delimiter does not.
+        // Poetry join: every content byte between the two words survives — the
+        // trailing space *and* the newline the source put there — while the `\q2`
+        // delimiter itself contributes nothing.
         let src = "\\id ISA\n\\c 9\n\\p\n\\v 2 The people walked in  darkness \n\\q2 have seen a great light;\n";
         let proj = usfm_to_vref_index(src)
             .get("ISA 9:2")
             .cloned()
             .expect("verse present");
-        assert!(proj.text.contains("darkness have"));
+        assert!(proj.text.contains("darkness \nhave"));
+        // The one thing that must never appear is a byte the source did not have.
         assert!(!proj.text.contains("darkness  have"));
 
         // Genuine in-content double space IS strictly interior — flaggable.
@@ -820,11 +837,11 @@ mod tests {
 
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("In the beginning God created the heavens and the earth.")
+            Some("In the beginning God created the heavens and the earth.\n")
         );
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
-            Some("The earth was without form and void.")
+            Some("The earth was without form and void.\n")
         );
     }
 
@@ -858,16 +875,16 @@ mod tests {
 
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("First part. Second part.")
+            Some("First part.\nSecond part.")
         );
     }
 
     #[test]
-    fn structural_break_inserts_separator_without_leaking_delimiters() {
+    fn a_structural_break_keeps_its_own_separator_byte_and_leaks_no_delimiter() {
         let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\nGod created.");
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("In the beginning God created.")
+            Some("In the beginning\nGod created.")
         );
 
         let malformed = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 word\\nd Lord\\nd* more.");
@@ -881,7 +898,7 @@ mod tests {
     fn to_vref_preserves_edge_content_whitespace_unless_trim_is_requested() {
         let src = "\\id GEN\n\\c 1\n\\p\n\\v 1  padded \n";
         let map = usfm_to_vref_map(src);
-        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some(" padded "));
+        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some(" padded \n"));
 
         let trimmed = usfm_to_vref_map_with_options(src, VrefOptions { trim: true });
         assert_eq!(trimmed.get("GEN 1:1").map(String::as_str), Some("padded"));
@@ -894,8 +911,10 @@ mod tests {
 
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("In the beginning.")
+            Some("In the beginning.\n")
         );
+        // No trailing newline on this one: the verse ends the file, so there is no
+        // byte there to keep. Nothing is invented to make the two look alike.
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
             Some("And God said.")
@@ -920,7 +939,7 @@ mod tests {
         );
         assert_eq!(
             map.get("GEN 1:1-2").map(String::as_str),
-            Some("The first two verses share text."),
+            Some("The first two verses share text.\n"),
         );
         assert_eq!(map.get("GEN 1:3").map(String::as_str), Some("Third."));
         assert!(
@@ -933,7 +952,10 @@ mod tests {
     #[test]
     fn verse_sequence_lexeme_is_preserved() {
         let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1,3 Combined.\n");
-        assert_eq!(map.get("GEN 1:1,3").map(String::as_str), Some("Combined."),);
+        assert_eq!(
+            map.get("GEN 1:1,3").map(String::as_str),
+            Some("Combined.\n"),
+        );
     }
 
     #[test]
@@ -968,7 +990,7 @@ mod tests {
         );
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
-            Some("Second verse — should still appear."),
+            Some("Second verse — should still appear.\n"),
             "v2 text should not be polluted by note content",
         );
     }
@@ -1043,7 +1065,7 @@ mod tests {
         let map = usfm_to_vref_map(src);
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
-            Some("Second verse."),
+            Some("Second verse.\n"),
         );
     }
 }

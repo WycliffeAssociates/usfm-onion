@@ -4088,3 +4088,91 @@ Matching the existing convention beats inventing a third.
 `attributeOffset` landed with the inbound boundary and I ran `test:packed` but not
 `golden:wasm`, leaving four snapshots stale; caught and re-blessed in its own commit
 (`49eb6f9`). A gate that exists but was not run counts as failed.
+
+## 2026-07-31 — RFC 2 (revised): verse projections preserve source bytes, never insert
+
+Owner-ruled after the first design was superseded: verse text in **both** vref surfaces is
+the verbatim source bytes of the content tokens inside the verse — text and newline tokens,
+in order — with marker tokens contributing nothing and nothing ever inserted or mutated.
+
+Two different fabrications were producing `gladnessso`:
+
+- the **index** had no `on_newline` handler at all, so a newline token inside a verse was
+  simply dropped and the words either side collided;
+- the **map** dropped it too, then set a flag that later re-derived "probably a space",
+  conditional on neighbouring whitespace it had also just discarded. Subtler, equally
+  invented.
+
+Both now append the newline token's own bytes. `push_collected_text` is a plain append; the
+`pending_separator` state is gone.
+
+### The lexer decides tagend whitespace, not us — probed, not chosen
+
+| source | tokens the lexer emits | projection |
+| --- | --- | --- |
+| `gladness\n\q2 so that` | `Text "gladness"`, `Newline "\n"`, `Marker "\q2 "`, `Text "so that"` | `"gladness\nso that\n"` |
+| `gladness \q2 so that` | `Text "gladness "`, `Marker "\q2 "`, `Text "so that"` | `"gladness so that\n"` |
+| `gladness\n\n\q2 so that` | two standalone `Newline` | `"gladness\n\nso that\n"` |
+| `gladness\n\q2\nso that` | `Marker "\q2"`, standalone `Newline` | `"gladness\n\nso that\n"` |
+| `the \nd Lord\nd* said` | `Marker "\nd "` holds its own space | `"the Lord said\n"` |
+
+A marker token's span **swallows its tagend space**, so that byte is syntax and excluded. A
+tagend *newline* is a **standalone token**, so it is content and kept — which is why case 4
+legitimately yields two newlines: both bytes are in the source. Map and index are now
+byte-identical on every case.
+
+**Empirical confirmation of the ruling's premise.** The owner's argument was that the grammar
+guarantees a real separator byte at every seam, so preserving can never lose one. Across the
+214 oracle fixtures whose vref output moved, the serialized JSON length **grew in 214 and
+shrank in 0** — if any seam had lacked a real byte, dropping the fabricated space would have
+shortened that fixture.
+
+### Blessings, characterized before committing
+
+1. `tests/lint_oracle_baseline.txt` — **214 changed lines of 4,398, line count identical, and
+   every changed line is a `vref` hash line**: no finding line, summary, or
+   token/cst/usj/usx/html hash moved. LF-clean verified.
+2. Seven `crates/usfm_onion_wasm/golden/outputs/*/vref.json` snapshots — the only deltas are
+   verse text values gaining their real separator bytes.
+
+Verse *keys* cannot move: they come from the lexeme-based `verse_ref`, untouched, and the
+"whitespace-only verse produces no entry" rule still drops a verse whose only content is a
+newline. Key-set parity between map and index is asserted as before.
+
+### Test expectations: 11 reviewed individually, one renamed
+
+Every update is the same shape — a verse keeps the newline that ends its line — with one
+instructive exception recorded in the test itself: a verse that ends the *file* has no
+trailing byte to keep, and nothing is invented to make the two cases look alike.
+`structural_break_inserts_separator_without_leaking_delimiters` is renamed
+`a_structural_break_keeps_its_own_separator_byte_and_leaks_no_delimiter`, since "inserts
+separator" is precisely the behaviour that was deleted. `vref_index_marker_joins_are_content_pure`
+now asserts `"darkness \nhave"` — both the trailing space and the newline — and keeps its
+negative assertion that no byte absent from the source ever appears.
+
+### Census — every place that flattens content into a string
+
+| site | verdict |
+| --- | --- |
+| `vref::VrefVisitor` (`to_vref` map) | fixed |
+| `vref::IndexedVrefVisitor` (vref index) | fixed |
+| `usj/import.rs` (~10 `push(' ')` sites) | **not a projection** — it *generates* USFM from USJ, where a space between a marker and its content is required syntax being written, not content being invented |
+| `html.rs` `push_attr`, `token.rs` `format_attribute_list` | **not projections** — they emit attribute syntax (` key="value"`), where the space is the format |
+| `cst`, `export_tree`, `walker`, `lint_impl::marker_balance` | structural walkers; they carry token references, never concatenate content text |
+
+So the two vref surfaces were the only content-flattening sites, and both are now faithful.
+
+### Recorded gaps (not fixed, unasked)
+
+- **Trim asymmetry.** `to_vref` has `VrefOptions.trim`, the index has no equivalent, so a
+  consumer wanting trimmed *index* text must trim it. `trim` itself survives the new
+  semantics coherently — it normalizes only the projection's edges, never interior bytes, so
+  it composes with a faithful projection rather than contradicting it. Preserve semantics
+  just makes the asymmetry more visible, since every verse now ends with its own newline.
+- **The `cfg(not(target_arch = "wasm32"))` branch is not a parity fork.** `saw_block` /
+  `seed_dependent` are bookkeeping for the native chapter-parallel vref path, which exists
+  because a whole-book walk carries two pieces of state across a `\c`. wasm never takes that
+  path, and the native path is pinned byte-identical to the serial walk by
+  `partitioned_matches_serial_over_{test_data,example_corpora}` (both re-run green here).
+  Pre-existing, and unrelated to the separator: it tracks the block-supports-verse flag,
+  which still persists across chapters.
