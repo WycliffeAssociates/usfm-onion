@@ -6,7 +6,8 @@
 
 use braid::{
     BookInput, BookTokensInput, Braid, BraidConfig, ChapterLabel, ChapterTarget, CorpusInput,
-    CorpusScope, FormatPatchError, LineEnding, PatchPreparation, ScopedOutput, SourceKey,
+    CorpusScope, FormatPatchError, IngestError, LineEnding, PatchPreparation, ScopedOutput,
+    SourceKey,
 };
 use usfm_onion::format::FormatOptions;
 use usfm_onion::lint::{LintOptions, LintScope};
@@ -24,6 +25,12 @@ const EXO_SOURCE: &str = "\\id EXO\n\\c 1\n\\p\n\\v 1 These  are the names.\n";
 const EXO_FORMATTED: &str = "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\n";
 /// Already exactly what `format` would produce.
 const ALREADY_FORMATTED: &str = "\\id LEV\n\\c 1\n\\p\n\\v 1 And he called.\n";
+/// A chapter intro with no `\p` before its first verse. Core's
+/// `insert_default_paragraph_after_chapter_intro`/`insert_structural_linebreaks`
+/// rules (both on by default) synthesize a paragraph marker and its newline —
+/// the id-less path through admission that every fixture above avoids on
+/// purpose.
+const GEN_MISSING_PARAGRAPH: &str = "\\id GEN\n\\c 1\n\\v 1 In the beginning.\n";
 
 fn braid() -> Braid {
     Braid::new(BraidConfig::new(LintOptions::scoped(LintScope::Book)), {
@@ -284,4 +291,139 @@ fn external_stateless_format_never_touches_resident_state() {
 
     assert_eq!(resident.expected_snapshot_id(), before_snapshot);
     assert_eq!(source_of(&resident, "GEN"), before_bytes);
+}
+
+/// The apply-time mint sweep, exercised for real: unlike every fixture above
+/// (chosen so formatting only edits existing tokens in place), this one
+/// genuinely inserts tokens with no id at all. Every survivor keeps its own
+/// id, every inserted token is minted a fresh one by the handle's own
+/// function, and every id in the book is unique afterward.
+#[test]
+fn format_insertions_are_minted_unique_and_survivors_keep_their_ids() {
+    for lane in LANES {
+        let mut resident = seeded(lane, vec![("GEN", GEN_MISSING_PARAGRAPH)]);
+        let before_ids: Vec<String> = resident
+            .to_tokens(braid::Scope::book(id("GEN")))
+            .unwrap()
+            .remove(0)
+            .tokens
+            .iter()
+            .map(|token| token.id().as_str().to_string())
+            .collect();
+
+        let id_ = match resident
+            .prepare_format_patch(CorpusScope::Book(id("GEN")), FormatOptions::all_enabled())
+            .unwrap()
+        {
+            PatchPreparation::Ready(id) => id,
+            PatchPreparation::Unchanged => {
+                panic!("{lane:?}: expected format to insert a paragraph marker")
+            }
+        };
+        let effect = resident.apply_format_patch(id_).unwrap();
+        assert!(!effect.is_noop(), "{lane:?}");
+
+        let after_ids: Vec<String> = resident
+            .to_tokens(braid::Scope::book(id("GEN")))
+            .unwrap()
+            .remove(0)
+            .tokens
+            .iter()
+            .map(|token| token.id().as_str().to_string())
+            .collect();
+        assert!(
+            after_ids.len() > before_ids.len(),
+            "{lane:?}: format inserted at least one token"
+        );
+
+        // Every pre-existing token is still there under its own id.
+        for original in &before_ids {
+            assert!(
+                after_ids.contains(original),
+                "{lane:?}: {original} survived formatting"
+            );
+        }
+
+        // Ids in the book are unique — the residency invariant, checked
+        // directly rather than only inferred from a successful apply.
+        let mut deduped = after_ids.clone();
+        deduped.sort();
+        deduped.dedup();
+        assert_eq!(
+            deduped.len(),
+            after_ids.len(),
+            "{lane:?}: every token id in the book is unique"
+        );
+
+        // Every id that is new relative to the pre-format book came from the
+        // handle's own minter (this file's `braid()` prefixes every minted id
+        // with "minted-"), not invented anywhere else.
+        let minted: Vec<&String> = after_ids
+            .iter()
+            .filter(|candidate| !before_ids.contains(candidate))
+            .collect();
+        assert_eq!(minted.len(), after_ids.len() - before_ids.len(), "{lane:?}");
+        for candidate in minted {
+            assert!(
+                candidate.starts_with("minted-"),
+                "{lane:?}: {candidate} did not come from the handle's minter"
+            );
+        }
+    }
+}
+
+/// A minter is BYO — braid enforces uniqueness at the residency boundary
+/// rather than trusting it. A minter that hands back an id already present in
+/// the book must make `apply_format_patch` reject atomically, not corrupt the
+/// resident book with a duplicate id.
+#[test]
+fn a_hostile_minter_returning_a_colliding_id_is_rejected_atomically() {
+    for lane in LANES {
+        // Parsed ids for this fixture are positional (`GEN-0`, `GEN-1`, ...);
+        // `GEN-6` is the book's `\v` marker in both lanes (the caller-tokens
+        // lane is also seeded from `parse`), chosen deliberately over an
+        // arbitrary existing id: it carries the same sid as the synthesized
+        // paragraph marker/newline, so sid resolution succeeds and the
+        // collision is caught where it is meant to be caught — the token-id
+        // uniqueness check — rather than failing earlier for an unrelated
+        // reason.
+        let mut resident = Braid::new(BraidConfig::new(LintOptions::scoped(LintScope::Book)), {
+            || "GEN-6".to_string()
+        });
+        resident
+            .replace_corpus(CorpusInput::new(vec![
+                lane.book("GEN", GEN_MISSING_PARAGRAPH),
+            ]))
+            .expect("one book");
+
+        let id_ = match resident
+            .prepare_format_patch(CorpusScope::Book(id("GEN")), FormatOptions::all_enabled())
+            .unwrap()
+        {
+            PatchPreparation::Ready(id) => id,
+            PatchPreparation::Unchanged => {
+                panic!("{lane:?}: expected format to insert a paragraph marker")
+            }
+        };
+
+        let before_snapshot = resident.expected_snapshot_id();
+        let before_bytes = source_of(&resident, "GEN");
+        let before_dirty = resident.books_awaiting_lint();
+
+        let result = resident.apply_format_patch(id_);
+        assert!(
+            matches!(
+                result,
+                Err(FormatPatchError::InvalidResult(
+                    IngestError::DuplicateTokenId { .. }
+                ))
+            ),
+            "{lane:?}: got {result:?}"
+        );
+
+        // Rejected atomically: nothing about resident state moved.
+        assert_eq!(resident.expected_snapshot_id(), before_snapshot, "{lane:?}");
+        assert_eq!(source_of(&resident, "GEN"), before_bytes, "{lane:?}");
+        assert_eq!(resident.books_awaiting_lint(), before_dirty, "{lane:?}");
+    }
 }

@@ -3636,3 +3636,57 @@ Phase E status: baseline mutation, exact `is_dirty`, `diff_baseline`, and
 `prepare_format_patch`/`apply_format_patch` land in this phase. Not built: a
 wasm/serde-facing surface for any of the above (Phase F). `to_usfm` needed no
 change — it was already scoped `All | Book | Chapter` from Phase C.
+
+## 2026-07-31 — Phase E, first-review fix: apply-time mint sweep now covered, one production bug found and fixed
+
+First-review finding on `5f042fc`: every `format_patch.rs` fixture was chosen
+to collapse whitespace on existing tokens, so `apply_format_patch`'s mint
+sweep and `admit_format`'s id-less conversion path had zero coverage — the
+exact escape route that produced findings in four prior review rounds.
+
+Added two tests exercising a fixture that genuinely inserts tokens (a chapter
+intro missing its `\p`, triggering core's on-by-default
+`insert_default_paragraph_after_chapter_intro`/`insert_structural_linebreaks`):
+
+- `format_insertions_are_minted_unique_and_survivors_keep_their_ids` — prepares
+  and applies, then asserts every pre-existing token kept its own id, every
+  inserted token carries a minted id (recognizable by this file's `"minted-"`
+  prefix), and every id in the resulting book is unique.
+- `a_hostile_minter_returning_a_colliding_id_is_rejected_atomically` — a
+  minter that always returns an id already present in the book; apply must
+  reject with resident state (snapshot id, bytes, dirty stamps) byte-identical
+  before/after.
+
+The first test caught a real production bug on first run, not a test-authoring
+mistake: `admit_format`'s anchor lookup only tried matching a synthesized
+token's `id` (always absent for a structurally-inserted token) against
+resident tokens, so it always resolved to `None`. But core's format pass
+stamps every synthesized token — including plain newlines — with the sid of
+the surrounding verse content, and `OwnedToken::from_format_token` refuses
+*any* token carrying a sid it cannot resolve against an anchor, not just
+tokens needing a book-code/number payload as the original doc comment assumed.
+Every insertion was therefore refused with `UnresolvableSid`, unconditionally.
+
+Fix (`crates/braid/src/lib.rs`, `admit_format`): added a secondary index
+mapping each resident token's sid to one token carrying it, and fall back to
+it when no id match exists. Any resident token sharing the exact sid text
+carries the identical structured form, so this never guesses a wrong answer —
+it only supplies a fact `from_format_token` was already going to accept from
+a matching anchor, sourced from a token proven to share that anchor rather
+than the one the synthesized token happened to sit next to.
+
+With the fix, the insertion test passed outright. The hostile-minter test then
+needed its chosen colliding id changed from an arbitrary existing token (whose
+mismatched sid made `UnresolvableSid` fire before the duplicate-id check ever
+ran) to the resident `\v` marker's id, which shares the synthesized tokens'
+sid — restoring the intended failure mode
+(`FormatPatchError::InvalidResult(IngestError::DuplicateTokenId)`) while
+keeping the atomicity assertions unchanged.
+
+`crates/braid/tests/format_patch.rs`: 8 → 10 tests, all green.
+
+Gates: `cargo test --workspace` green (braid 60); `cargo test --release
+--test lint_oracle -- --ignored` byte-identical; `cargo test --release -p
+braid -p usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `cargo fmt
+--all -- --check` clean (after `cargo fmt --all`, which reformatted the two
+touched files).

@@ -1248,11 +1248,20 @@ impl Braid {
     /// Unlike [`Self::admit`], there is no single fix target to fall back on
     /// as an anchor: a whole-book/chapter format pass has no one token every
     /// synthesized token descends from. A survivor (its id already resident)
-    /// anchors on itself; a token with no matching resident id converts with
-    /// no anchor at all, so one that needs a payload fact the working shape
-    /// cannot carry (a book code, a parsed number) is refused rather than
-    /// guessed from an unrelated neighbor — the same "refuse, never invent"
-    /// rule the residency checkpoint already enforces for a fix.
+    /// anchors on itself. A synthesized token — one core inserted structurally
+    /// (a default paragraph marker, a structural linebreak) — carries no id,
+    /// but core still stamps it with the sid of the verse content around it,
+    /// and every resident token sharing that sid carries the identical
+    /// structured form, so any one of them resolves it just as well as the
+    /// token the synthesized one happens to sit next to. Without this, every
+    /// structurally-inserted marker/newline in a real book would refuse with
+    /// `UnresolvableSid`, since a same-id anchor can never exist for a token
+    /// that never had a resident id in the first place. A token that needs a
+    /// payload fact neither its id nor its sid can anchor (a book code, a
+    /// parsed number — core's format pass never synthesizes either) still
+    /// converts with no anchor and is refused rather than guessed, the same
+    /// "refuse, never invent" rule the residency checkpoint already enforces
+    /// for a fix.
     fn admit_format(
         &self,
         book_index: usize,
@@ -1264,14 +1273,27 @@ impl Braid {
                 book.tokens.len(),
                 rustc_hash::FxBuildHasher,
             );
+        let mut by_sid: rustc_hash::FxHashMap<&str, &OwnedToken> = rustc_hash::FxHashMap::default();
         for token in &book.tokens {
             by_id.insert(token.id().as_str(), token);
+            if let Some(sid) = token.sid() {
+                by_sid.entry(sid).or_insert(token);
+            }
         }
 
         applied
             .iter()
             .map(|token| {
-                let anchor = token.id.as_deref().and_then(|id| by_id.get(id).copied());
+                let anchor = token
+                    .id
+                    .as_deref()
+                    .and_then(|id| by_id.get(id).copied())
+                    .or_else(|| {
+                        token
+                            .sid
+                            .as_deref()
+                            .and_then(|sid| by_sid.get(sid).copied())
+                    });
                 OwnedToken::from_format_token(token, anchor).map_err(|error| {
                     FormatPatchError::InvalidResult(IngestError::InvalidToken(error))
                 })
