@@ -668,6 +668,262 @@ mod tests {
         ));
     }
 
+    /// The reuse gate, and the strongest form of the proof available: the
+    /// republication hands back only *bytes* for the untouched book — no tokens,
+    /// no findings, nothing to re-encode from — so if the container comes out
+    /// complete and verifies, reuse provably happened rather than being inferred
+    /// from a counter.
+    #[test]
+    fn a_republication_reuses_an_untouched_books_sections_verbatim() {
+        let gen_tokens = owned_tokens(GEN);
+        let exo_tokens = owned_tokens(EXO);
+        let gen_lint = lint_of(GEN);
+        let exo_lint = lint_of(EXO);
+        let first = encode_corpus(
+            1,
+            Some(stamps()),
+            &[
+                CorpusSection::Fresh(CorpusSectionInput {
+                    book: book("GEN"),
+                    tokens: CorpusSectionTokens::Owned {
+                        tokens: &gen_tokens,
+                    },
+                    findings: Some(&gen_lint),
+                }),
+                CorpusSection::Fresh(CorpusSectionInput {
+                    book: book("EXO"),
+                    tokens: CorpusSectionTokens::Owned {
+                        tokens: &exo_tokens,
+                    },
+                    findings: Some(&exo_lint),
+                }),
+            ],
+        )
+        .expect("first publication");
+
+        // GEN is edited; EXO is untouched and comes back as bytes alone.
+        let edited = GEN.replace("beginning.", "beginning, edited.");
+        let edited_tokens = owned_tokens(&edited);
+        let edited_lint = lint_of(&edited);
+        let cached_exo = first.books[1].clone();
+        assert_eq!(cached_exo.book, book("EXO"));
+        let second = encode_corpus(
+            2,
+            Some(stamps()),
+            &[
+                CorpusSection::Fresh(CorpusSectionInput {
+                    book: book("GEN"),
+                    tokens: CorpusSectionTokens::Owned {
+                        tokens: &edited_tokens,
+                    },
+                    findings: Some(&edited_lint),
+                }),
+                CorpusSection::Cached(cached_exo.as_cached()),
+            ],
+        )
+        .expect("republication");
+
+        // Only the edited book was encoded, so only it has a bound source.
+        assert_eq!(second.sources.len(), 1);
+        assert_eq!(second.sources[0].0, book("GEN"));
+        // The reused book's sections are the first publication's bytes, exactly.
+        let reused = second
+            .books
+            .iter()
+            .find(|published| published.book == book("EXO"))
+            .expect("the reused book is in the new sidecar set");
+        assert_eq!(reused.bytes, cached_exo.bytes);
+        assert_eq!(reused.sections, cached_exo.sections);
+        assert_eq!(reused.source_hash, cached_exo.source_hash);
+        // And the edited book's are not.
+        let republished_gen = second
+            .books
+            .iter()
+            .find(|published| published.book == book("GEN"))
+            .unwrap();
+        assert_ne!(republished_gen.bytes, first.books[0].bytes);
+
+        // The whole publication still verifies, with the new snapshot id.
+        let verified = verify_corpus(
+            &second.bytes,
+            &[(book("GEN"), edited.as_str()), (book("EXO"), EXO)],
+        )
+        .expect("verifies");
+        assert_eq!(verified.snapshot_id, 2);
+        assert_eq!(verified.lint_stamps, Some(stamps()));
+        assert_eq!(
+            verified.books[1].findings.len(),
+            exo_lint.issues.len(),
+            "the reused book's findings survive the splice"
+        );
+        assert_eq!(verified.books[0].findings.len(), edited_lint.issues.len());
+    }
+
+    /// Reuse never means trust. Every way a cached section can be wrong is a typed
+    /// refusal of the whole publication — never a container carrying one section
+    /// nobody checked.
+    #[test]
+    fn a_cached_section_that_does_not_check_out_is_refused() {
+        let tokens = owned_tokens(GEN);
+        let lint = lint_of(GEN);
+        let first = encode_corpus(
+            1,
+            None,
+            &[CorpusSection::Fresh(CorpusSectionInput {
+                book: book("GEN"),
+                tokens: CorpusSectionTokens::Owned { tokens: &tokens },
+                findings: Some(&lint),
+            })],
+        )
+        .unwrap();
+        let cached = first.books[0].clone();
+
+        let refuses = |cached: CachedBookSections<'_>| {
+            matches!(
+                encode_corpus(2, None, &[CorpusSection::Cached(cached)]),
+                Err(EncodeError::InvalidSectionLayout { .. })
+            )
+        };
+
+        // (a) a claim about a different book than the bytes describe.
+        let mut wrong_book = cached.clone();
+        wrong_book.book = book("EXO");
+        assert!(refuses(wrong_book.as_cached()));
+
+        // (b) a claim about a different source than the bytes are bound to —
+        // exactly what a stale application cache looks like.
+        let mut wrong_hash = cached.clone();
+        wrong_hash.source_hash ^= 1;
+        assert!(refuses(wrong_hash.as_cached()));
+
+        // (c) a claim that a finding section is a token section.
+        let mut wrong_kind = cached.clone();
+        wrong_kind.sections[0].kind = SectionKind::Finding;
+        assert!(refuses(wrong_kind.as_cached()));
+
+        // (d) an extent that runs past the bytes it names.
+        let mut past_the_end = cached.clone();
+        past_the_end.sections[0].len += 1;
+        assert!(refuses(past_the_end.as_cached()));
+
+        // (e) a corrupted byte inside the section: its own checksum catches it,
+        // which is the check that makes a splice as safe as an encode.
+        let mut corrupt = cached.clone();
+        let at = corrupt.sections[0].offset + corrupt.sections[0].len / 2;
+        corrupt.bytes[at] ^= 0xff;
+        assert!(refuses(corrupt.as_cached()));
+
+        // (f) truncated bytes.
+        let mut truncated = cached.clone();
+        truncated.bytes.truncate(cached.bytes.len() / 2);
+        assert!(refuses(truncated.as_cached()));
+
+        // The untouched original still publishes, so none of the above poisoned
+        // anything.
+        assert!(encode_corpus(2, None, &[CorpusSection::Cached(cached.as_cached())]).is_ok());
+    }
+
+    /// One publication is one cache decision. Splicing books from two
+    /// publications that were stamped differently is the only way to build a
+    /// container whose finding sections disagree — and the corpus verifier
+    /// refuses it rather than picking one pair.
+    #[test]
+    fn a_publication_whose_books_disagree_about_their_stamps_is_refused() {
+        let gen_tokens = owned_tokens(GEN);
+        let exo_tokens = owned_tokens(EXO);
+        let gen_lint = lint_of(GEN);
+        let exo_lint = lint_of(EXO);
+        let mine = encode_corpus(
+            1,
+            Some(stamps()),
+            &[CorpusSection::Fresh(CorpusSectionInput {
+                book: book("GEN"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &gen_tokens,
+                },
+                findings: Some(&gen_lint),
+            })],
+        )
+        .unwrap();
+        let other_stamps = LintStamps {
+            config_fingerprint: 1,
+            engine_stamp: 2,
+        };
+        let theirs = encode_corpus(
+            1,
+            Some(other_stamps),
+            &[CorpusSection::Fresh(CorpusSectionInput {
+                book: book("EXO"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &exo_tokens,
+                },
+                findings: Some(&exo_lint),
+            })],
+        )
+        .unwrap();
+
+        let spliced = encode_corpus(
+            3,
+            None,
+            &[
+                CorpusSection::Cached(mine.books[0].as_cached()),
+                CorpusSection::Cached(theirs.books[0].as_cached()),
+            ],
+        )
+        .expect("the splice itself is structurally fine");
+        assert_eq!(
+            verify_corpus(&spliced.bytes, &[(book("GEN"), GEN), (book("EXO"), EXO)]).err(),
+            Some(crate::error::DecodeError::InvalidSection)
+        );
+    }
+
+    /// Same rule for a partially stamped publication: adopting the stamped half
+    /// is the partial adoption the batch contract forbids.
+    #[test]
+    fn a_partly_stamped_publication_is_refused() {
+        let gen_tokens = owned_tokens(GEN);
+        let exo_tokens = owned_tokens(EXO);
+        let gen_lint = lint_of(GEN);
+        let exo_lint = lint_of(EXO);
+        let stamped = encode_corpus(
+            1,
+            Some(stamps()),
+            &[CorpusSection::Fresh(CorpusSectionInput {
+                book: book("GEN"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &gen_tokens,
+                },
+                findings: Some(&gen_lint),
+            })],
+        )
+        .unwrap();
+        let unstamped = encode_corpus(
+            1,
+            None,
+            &[CorpusSection::Fresh(CorpusSectionInput {
+                book: book("EXO"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &exo_tokens,
+                },
+                findings: Some(&exo_lint),
+            })],
+        )
+        .unwrap();
+        let spliced = encode_corpus(
+            3,
+            None,
+            &[
+                CorpusSection::Cached(stamped.books[0].as_cached()),
+                CorpusSection::Cached(unstamped.books[0].as_cached()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            verify_corpus(&spliced.bytes, &[(book("GEN"), GEN), (book("EXO"), EXO)]).err(),
+            Some(crate::error::DecodeError::InvalidSection)
+        );
+    }
+
     /// A corpus verifier that skipped a book, or accepted a source for a book the
     /// container does not have, would hand back something a caller then treats as
     /// the whole publication.
