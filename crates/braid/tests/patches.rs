@@ -7,6 +7,9 @@
 //! parse-assigned ids while the caller lane's carry the editor's own — and a fix
 //! addresses its target by id.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use braid::{
     BookInput, BookTokensInput, Braid, BraidConfig, ChapterLabel, CorpusInput, CorpusScope,
     LineEnding, Patch, PatchError, PatchId, PatchOp, ScopedOutput, SourceKey,
@@ -216,19 +219,46 @@ fn applying_a_patch_rewrites_the_bytes_the_template_named() {
     }
 }
 
-/// Preview and apply share one code path against one snapshot, so a preview is
-/// exactly what apply would commit — and previewing mutates nothing.
+/// Preview and apply run the same pass against the same snapshot, so a preview
+/// is exactly what an apply would commit — and previewing mutates nothing,
+/// including the application's id space. A preview is a projection that never
+/// reaches residency, and an id is granted at admission, so previewing twice (or
+/// hovering a fix button ten times) must spend nothing.
 #[test]
 fn preview_shows_the_apply_without_performing_it() {
-    let mut resident = seeded(LANES[0], vec![("GEN", GEN_SOURCE)]);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&calls);
+    let mut resident = Braid::new(
+        BraidConfig::new(LintOptions::scoped(LintScope::Book)),
+        move || {
+            let next = counter.fetch_add(1, Ordering::Relaxed) + 1;
+            format!("minted-{next}")
+        },
+    );
+    resident
+        .replace_corpus(CorpusInput::new(vec![usfm("GEN", GEN_SOURCE)]))
+        .expect("one book");
+    resident.lint();
+
     let patch = resident.patches().remove(0);
     let identity = resident.expected_snapshot_id();
     let books = resident.books();
 
-    let previewed = resident.preview_patch(patch.id).expect("preview");
-    assert_eq!(resident.expected_snapshot_id(), identity);
+    let first = resident.preview_patch(patch.id).expect("preview");
+    let second = resident.preview_patch(patch.id).expect("preview again");
+    assert_eq!(first, second, "previewing twice yields the same projection");
+    assert_eq!(
+        resident.expected_snapshot_id(),
+        identity,
+        "a preview is not a mutation"
+    );
     assert_eq!(resident.books(), books);
     assert!(resident.dirty_books().is_empty());
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "a preview must never spend an id"
+    );
 
     resident.apply_patch(patch.id).expect("apply");
     let applied = resident
@@ -236,7 +266,35 @@ fn preview_shows_the_apply_without_performing_it() {
         .expect("the patched book")
         .remove(0)
         .tokens;
-    assert_eq!(previewed, applied);
+
+    // Preview equals apply, token for token, on everything the fix decides.
+    assert_eq!(
+        first
+            .iter()
+            .map(|token| (
+                token.kind,
+                token.text.as_str(),
+                token.marker.as_deref(),
+                token.sid.as_deref()
+            ))
+            .collect::<Vec<_>>(),
+        applied
+            .iter()
+            .map(|token| (
+                token.kind(),
+                token.source(),
+                token.marker_name(),
+                token.sid()
+            ))
+            .collect::<Vec<_>>()
+    );
+    // This corpus's fixes synthesize nothing, so even the apply spent no id —
+    // every token in the result was already resident and kept its own.
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    assert!(
+        first.iter().all(|token| token.id.is_some()),
+        "a survivor keeps the id it already had"
+    );
 }
 
 /// The census found six real fixture cases where two findings propose different

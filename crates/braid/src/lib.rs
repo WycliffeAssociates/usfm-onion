@@ -36,7 +36,7 @@ mod patch;
 mod state;
 
 use usfm_onion::format::FormatToken;
-use usfm_onion::lint::{LintOptions, LintSummary, apply_token_fix_with_minter};
+use usfm_onion::lint::{LintOptions, LintSummary, apply_token_fix};
 use usfm_onion::token::{BookId, OwnedToken, tokens_to_usfm_reconstruct_with_eol};
 
 use crate::corpus::{BookState, chapter_runs};
@@ -473,13 +473,20 @@ impl Braid {
 
     /// The token stream the patch would produce, without applying it.
     ///
-    /// Preview and apply share one code path and one snapshot, so a preview
+    /// Preview and apply run the *same* pass over the same snapshot, so a preview
     /// cannot describe a result the apply would not produce. The book is
     /// [`Patch::book`] — one patch is one fix, and one fix targets one book.
-    pub fn preview_patch(&mut self, id: PatchId) -> Result<Vec<OwnedToken>, PatchError> {
+    ///
+    /// A preview is a projection, not a mutation, and it is never admitted to
+    /// residency — so it mints nothing. An id is granted at admission, which is
+    /// why the tokens here are the id-optional working type: every surviving
+    /// token carries the resident id it already had, and a token the fix would
+    /// synthesize carries `None` until an apply admits it. Previewing twice, or
+    /// previewing and then applying, therefore leaves the application's own id
+    /// space exactly as it was.
+    pub fn preview_patch(&self, id: PatchId) -> Result<Vec<FormatToken>, PatchError> {
         let (book, resolved) = self.locate(id)?;
-        let resolved = resolved.clone();
-        self.applied_tokens(book, &resolved)
+        Ok(self.applied_working(book, resolved))
     }
 
     /// Applies a patch as an ordinary mutation.
@@ -492,7 +499,8 @@ impl Braid {
     pub fn apply_patch(&mut self, id: PatchId) -> Result<MutationEffect, PatchError> {
         let (book_index, resolved) = self.locate(id)?;
         let resolved = resolved.clone();
-        let tokens = self.applied_tokens(book_index, &resolved)?;
+        let working = self.applied_working(book_index, &resolved);
+        let tokens = self.admit(book_index, &resolved, working)?;
 
         let resident = &self.books[book_index];
         let candidate = resident
@@ -671,29 +679,34 @@ impl Braid {
         Ok((index, resolved))
     }
 
-    /// Runs one fix over the book's tokens and converts the result back to
-    /// resident tokens.
+    /// The fix pass itself: one book's resident tokens converted to the working
+    /// type, core's fix applied, nothing else.
     ///
-    /// This is the whole §L boundary: the pass runs over the id-optional working
-    /// type (so it may synthesize), every token it synthesized is minted an id by
-    /// the application's own function, and the conversion back demands one — an
-    /// id-less token is structurally unreachable here rather than a resident
-    /// token nothing can address. Core owns what the fix means; braid owns only
-    /// the two conversions and the identity sweep between them.
-    fn applied_tokens(
+    /// Deliberately pure — `&self`, no minter, no admission. Identity is granted
+    /// when a token becomes resident, not when a pass invents it, so a token this
+    /// produces may carry no id at all. That is what lets preview and apply share
+    /// one pass: the projection is identical, and only the apply goes on to admit
+    /// it. Core owns what the fix means; braid owns the conversions around it.
+    fn applied_working(&self, book_index: usize, resolved: &ResolvedFix) -> Vec<FormatToken> {
+        let book = &self.books[book_index];
+        let working: Vec<FormatToken> = book.tokens.iter().map(FormatToken::from).collect();
+        apply_token_fix(&working, &resolved.fix)
+    }
+
+    /// Admission: give every id-less token an id from the handle's minter, then
+    /// convert the pass's output back to resident tokens.
+    ///
+    /// The single place the application's identity function is invoked, and the
+    /// enforcement checkpoint behind it: the conversion demands an id, so the
+    /// sweep is what makes an unaddressable resident token structurally
+    /// unreachable rather than merely unlikely. Uniqueness is not assumed —
+    /// `rebuilt` still rejects a collision.
+    fn admit(
         &mut self,
         book_index: usize,
         resolved: &ResolvedFix,
+        mut applied: Vec<FormatToken>,
     ) -> Result<Vec<OwnedToken>, PatchError> {
-        let book = &self.books[book_index];
-        let working: Vec<FormatToken> = book.tokens.iter().map(FormatToken::from).collect();
-        let mut applied = {
-            let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut *self.minter);
-            apply_token_fix_with_minter(&working, &resolved.fix, &mut minter)
-        };
-        // The sweep the fix pass itself cannot do: a token core did not route
-        // through `synthetic_like` (a future pass, a caller-built template) still
-        // has to be addressable before it can become resident.
         for token in &mut applied {
             if token.id.is_none() {
                 token.id = Some((self.minter)());
@@ -897,6 +910,87 @@ mod tests {
         )
     }
 
+    /// A minter that records how many ids it granted, so a test can assert on
+    /// the *absence* of minting rather than only on its result.
+    fn counting_minter() -> (
+        std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        impl FnMut() -> String,
+    ) {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = std::sync::Arc::clone(&calls);
+        (calls, move || {
+            let next = counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            format!("app-{next}")
+        })
+    }
+
+    /// The comparable content of a working token: everything a fix decides,
+    /// excluding the id — which the pass deliberately does not decide.
+    fn working_shape(token: &FormatToken) -> (TokenKind, &str, Option<&str>, Option<&str>) {
+        (
+            token.kind,
+            token.text.as_str(),
+            token.marker.as_deref(),
+            token.sid.as_deref(),
+        )
+    }
+
+    fn resident_shape(token: &OwnedToken) -> (TokenKind, &str, Option<&str>, Option<&str>) {
+        (
+            token.kind(),
+            token.source(),
+            token.marker_name(),
+            token.sid(),
+        )
+    }
+
+    /// A synthesizing fix — the case the corpus cannot produce — proving the
+    /// preview/apply split holds where it actually matters: the projection is the
+    /// same, and only the apply spends an id.
+    ///
+    /// Minting is admission to residency, and a preview is never admitted. If a
+    /// preview minted, every hover over a fix button would burn ids out of the
+    /// application's own space, and two previews of one patch would disagree.
+    #[test]
+    fn preview_projects_a_synthesizing_fix_without_minting() {
+        let (calls, minter) = counting_minter();
+        let mut resident = seeded(minter);
+        let target = resident.books[0].tokens[0].id().as_str().to_string();
+        let resolved = insert_after(&target, "inserted");
+
+        let first = resident.applied_working(0, &resolved);
+        let second = resident.applied_working(0, &resolved);
+        assert_eq!(first, second, "a preview is deterministic");
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+            "a preview must not spend an id"
+        );
+        // The synthesized token is present and deliberately id-less.
+        assert_eq!(first.len(), resident.books[0].tokens.len() + 1);
+        assert_eq!(first[1].text, "inserted");
+        assert_eq!(first[1].id, None);
+
+        let admitted = resident
+            .admit(0, &resolved, first.clone())
+            .expect("admission");
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::Relaxed),
+            1,
+            "admission is the one place an id is granted"
+        );
+        // Preview equals apply on content, token for token.
+        assert_eq!(
+            first.iter().map(working_shape).collect::<Vec<_>>(),
+            admitted.iter().map(resident_shape).collect::<Vec<_>>()
+        );
+        assert_eq!(admitted[1].id().as_str(), "app-1");
+        // And previewing after an admission is unchanged: nothing about the
+        // resident book moved, so neither does its projection.
+        assert_eq!(resident.applied_working(0, &resolved), second);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
     #[test]
     fn a_synthesized_token_is_minted_by_the_handles_own_function() {
         let mut next = 0u32;
@@ -907,7 +1001,8 @@ mod tests {
         let target = resident.books[0].tokens[0].id().as_str().to_string();
         let resolved = insert_after(&target, "inserted");
 
-        let tokens = resident.applied_tokens(0, &resolved).expect("applies");
+        let working = resident.applied_working(0, &resolved);
+        let tokens = resident.admit(0, &resolved, working).expect("applies");
         assert_eq!(tokens.len(), resident.books[0].tokens.len() + 1);
         assert_eq!(tokens[1].source(), "inserted");
         assert_eq!(
@@ -931,7 +1026,8 @@ mod tests {
         let resolved = insert_after(&target, "inserted");
         let before = resident.expected_snapshot_id();
 
-        let tokens = resident.applied_tokens(0, &resolved).expect("rebuilds");
+        let working = resident.applied_working(0, &resolved);
+        let tokens = resident.admit(0, &resolved, working).expect("rebuilds");
         let rejected = resident.books[0].rebuilt(tokens);
         assert!(matches!(
             rejected,
