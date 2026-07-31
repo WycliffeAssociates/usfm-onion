@@ -2086,3 +2086,38 @@ the layout. The one visible consequence is that a resident finding does not
 round-trip *identically* — it comes back with a span — which is the documented
 spanless-token consequence the braid corpus gate already asserts in the other
 direction (`span.is_none()` resident, `span.is_some()` parsed).
+
+## Q. Adjudication — 2026-07-31 (owner): prepared format patches are a separate table, never field 6
+
+Ruled during Phase E first review, on the builder's flagged deviation.
+
+**Ruling.** A prepared format patch does NOT reuse the frozen lint-fix patch table
+(`Patch`/`PatchRow`/`PatchId`, §J/§N). The §N.2 row framing requires every row of one patch to
+name a single token position — true for a flattened `TokenFix`, structurally false for a book- or
+chapter-wide format pass, which touches unrelated positions and possibly several books. Forcing
+format into that shape would mean lying about the one-position invariant, inventing a grouping
+envelope over many `PatchId`s, or reopening frozen wire framing for something that never travels
+over that wire.
+
+**The frozen distinction:**
+
+- `PatchId` = serializable lint-fix recipe; wire representation is finding-section field 6 (§N).
+- `FormatPatchId { snapshot, ordinal }` = transient resident preparation; **resident-only, never
+  field 6 in v1**. Any future serialized format-patch representation is a new schema decision,
+  not an extension of §N by coincidence.
+- The two ordinal spaces are intentionally separate; neither addresses the other.
+- A preparation stores each changed book's complete post-format working-token stream, bound to
+  the snapshot it was computed against plus each targeted book's own source hash (re-checked at
+  apply). Application is wholesale replacement with atomic multi-book admission; the preparation
+  table clears whenever the snapshot id changes.
+- §L semantics carry over unchanged: preparation never mints; application mints id-less tokens
+  through the handle's minter before admission.
+
+**Companion ruling (same session): `set_baseline` upsert REVERSED.** The absent-book branch that
+installed a fresh resident book violated the epic's gate that baseline mutation cannot change
+current state (it created residency, changed the snapshot id, and reported a changed scope).
+Baseline verbs never create residency: an absent target is a typed missing-resident error, and
+baseline operations unconditionally leave current tokens, corpus identity, and mutation effects
+untouched (the resident case returns the no-op effect shape). If a cold-open "install saved
+content and declare it baseline atomically" verb is ever needed, it belongs on the restore/ingest
+surface as an explicit combined operation.
