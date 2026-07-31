@@ -2108,8 +2108,15 @@ over that wire.
 - The two ordinal spaces are intentionally separate; neither addresses the other.
 - A preparation stores each changed book's complete post-format working-token stream, bound to
   the snapshot it was computed against plus each targeted book's own source hash (re-checked at
-  apply). Application is wholesale replacement with atomic multi-book admission; the preparation
-  table clears whenever the snapshot id changes.
+  apply). Application is wholesale replacement with atomic multi-book admission.
+- **Invalidation (corrected 2026-07-31, clean-room Phase E round 1).** The preparation table
+  clears after EVERY content/residency mutation — not only when the byte-derived snapshot id
+  moves. Format consumes the token stream and which book holds which position, facts source
+  bytes do not pin: an identity-only token push (same bytes, different stable ids) or a
+  same-bytes book swap leaves the snapshot id unchanged while invalidating what a preparation
+  recorded. The original snapshot-only wording ratified exactly that gap; two public-API repros
+  (stale stream overwriting a newer token id; a panic on a swapped declared book) forced the
+  correction. Missing residency at apply is the typed `BookNotResident`, never a panic.
 - §L semantics carry over unchanged: preparation never mints; application mints id-less tokens
   through the handle's minter before admission.
 
