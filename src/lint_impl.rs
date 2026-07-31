@@ -17,6 +17,25 @@ use crate::token::{
 };
 use crate::walker::WalkableToken;
 
+/// This crate's own package version, read in this crate's build context so it
+/// names `usfm_onion`'s version rather than whichever downstream crate writes
+/// `env!("CARGO_PKG_VERSION")` in its own source (that macro always resolves
+/// against the *compiling* crate's manifest). A caller identifying the rule
+/// engine it ran against — braid's lint-cache engine stamp, for one — needs
+/// this crate's own version specifically, not its own.
+pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The lint rule engine's own semantic version: bumped when a rule's behavior
+/// changes in a way that would invalidate a lint result computed under an
+/// older engine. Deliberately independent of [`CRATE_VERSION`] (which also
+/// changes for unrelated reasons) and of `usfm_onion_wire`'s own
+/// `FINDING_SECTION_RULES_VERSION` (the wire *format*'s version — a different
+/// concern, kept in its own crate). The two numbers are equal today by
+/// convention, not by dependency: a lint-cache consumer that must not depend
+/// on wire (braid) owns and gates its own copy of this number, the same
+/// duplication judgment call already made for `canonical_order`.
+pub const RULES_VERSION: u16 = 1;
+
 /// Public token-shape contract for `lint_tokens` and friends.
 ///
 /// `LintableToken` is a supertrait of [`WalkableToken`] — every
