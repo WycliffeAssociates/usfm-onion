@@ -678,7 +678,7 @@ mod tests {
         // The no-rule-work assertion: nothing is dirty, so the next `lint()` runs
         // no rules at all.
         assert!(
-            reopened.dirty_books().is_empty(),
+            reopened.books_awaiting_lint().is_empty(),
             "a restored clean corpus must not need recompute"
         );
         let snapshot = reopened.lint();

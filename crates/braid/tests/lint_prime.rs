@@ -115,7 +115,7 @@ fn a_valid_cached_contribution_is_adopted_without_recompute() {
         report.rejected
     );
     assert!(
-        restored.dirty_books().is_empty(),
+        restored.books_awaiting_lint().is_empty(),
         "an adopted cache must not leave the book dirty"
     );
     let adopted_codes: Vec<_> = restored.lint().books[0]
@@ -159,7 +159,7 @@ fn a_source_hash_mismatch_seeds_the_book_but_rejects_its_cache() {
             reason: PrimeRejectReason::SourceHashMismatch,
         }]
     );
-    assert_eq!(restored.dirty_books(), vec![id("GEN")]);
+    assert_eq!(restored.books_awaiting_lint(), vec![id("GEN")]);
 }
 
 #[test]
@@ -277,7 +277,7 @@ fn a_fix_that_does_not_resolve_against_this_books_tokens_is_refused_as_invalid_p
             reason: PrimeRejectReason::InvalidPatch,
         }]
     );
-    assert_eq!(restored.dirty_books(), vec![id("GEN")]);
+    assert_eq!(restored.books_awaiting_lint(), vec![id("GEN")]);
 }
 
 #[test]
@@ -293,7 +293,7 @@ fn prime_lint_cache_accepts_a_valid_contribution_on_an_already_resident_book() {
             source: GEN_SOURCE.to_string(),
         }]))
         .expect("one book");
-    assert_eq!(resident.dirty_books(), vec![id("GEN")]);
+    assert_eq!(resident.books_awaiting_lint(), vec![id("GEN")]);
 
     let (config_fingerprint, engine_stamp) = matching_stamps();
     let report = resident.prime_lint_cache(LintPrimeInput {
@@ -304,7 +304,7 @@ fn prime_lint_cache_accepts_a_valid_contribution_on_an_already_resident_book() {
 
     assert_eq!(report.accepted, vec![id("GEN")]);
     assert!(report.rejected.is_empty());
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
 }
 
 #[test]

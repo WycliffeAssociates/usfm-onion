@@ -3496,3 +3496,143 @@ lint_stamps, and the core-owned `OwnedToken::hash_wire_identity` projection.
 
 Remaining: Phase E (baseline mutation, missing-baseline policy, exact is_dirty, scoped to_usfm),
 Phase F (public wasm Braid, restoreCorpus composition, reconcile helper, editor parity, pkg regen).
+
+## 2026-07-31 — Phase E, step 0: renamed `dirty_books` to name its axis
+
+Owner-directed scope addition ahead of Phase E: `Braid::dirty_books()` filtered
+`book.lint_dirty` — the lint-cache axis, cleared by a recompute — and shared the
+word "dirty" with the new baseline axis Phase E was about to add
+(`is_dirty`/exact serialized equality). Renamed to `books_awaiting_lint()` with a
+doc comment stating plainly it is the lint-recompute axis, not the baseline one;
+"dirty" on its own is now reserved for `is_dirty`. `lint_dirty` (the private
+field) keeps its name — it already names its own axis. All call sites updated
+(five test files plus `usfm_onion_wasm::publication`); no compat shim, pre-release.
+
+Gate: `cargo test --workspace` green (no behavior changed, pure rename).
+
+## 2026-07-31 — Phase E, step 1: baseline mutation and exact `is_dirty`
+
+Added `crates/braid/src/baseline.rs`: `BaselineState` (one book's declared
+baseline — exact source, hash, tokens, line ending, chapter runs) and
+`BaselineError { Scope(ScopeError), MissingBaseline { books } }`, matching the
+frozen §6.5 shape exactly.
+
+`BookState` (corpus.rs) gains an `Option<BaselineState>` field. It defaults to
+`None` on a freshly built candidate and is carried forward untouched by every
+content mutation (`rebuilt`, `inherit_cache`, and the changed-but-still-resident
+branches of `update_book`/`replace_corpus`) — a baseline changes only through
+`set_baseline`/`clear_baseline`, never as a side effect of editing current
+content. This needed a deliberate fix mid-implementation: the first pass carried
+the baseline forward through `rebuilt`/`inherit_cache` but not through
+`update_book`'s/`replace_corpus`'s "content differs, book already resident"
+branch, which was silently wiping a declared baseline on the very next edit;
+caught by `a_content_mutation_carries_the_baseline_forward_unchanged` and
+`diff_baseline_equals_the_stateless_core_diff` failing in the first test run.
+
+`Braid::set_baseline`/`clear_baseline` implemented per §5.3/§9. Deviation
+recorded (§9 does not say what happens when the named book has no current
+content, and `IngestError`'s frozen variant set has no "book not resident"
+case): `set_baseline` on a book with no current resident content installs it
+fresh — the same fallback `update_book` already uses for a book it has not
+seen before — with its baseline set to that same content, since nothing yet
+diverges from it. That case does report the new book in `changed` (current
+content genuinely came into existence); the ordinary case (book already
+resident) always returns the no-op effect shape, since only the baseline slot
+changes. `clear_baseline` on an absent baseline is a no-op, matching its
+infallible signature.
+
+`Braid::is_dirty(scope)` implemented per §9/Gate-0F-amendment-C: missing
+baseline is always dirty; `All` is dirty if any resident book is; `Chapter`
+compares only that run's own bytes against the same-label baseline run, a
+missing baseline run for that label is dirty, and duplicate labels on either
+side (current or baseline) return the typed `AmbiguousChapter`-shaped
+`ScopeError`. Hash is used as a cheap selector, never trusted as proof of
+equality on its own — a match still falls through to the exact byte
+comparison.
+
+`Braid::diff_baseline(scope)` implemented per §5.3/§9: directly wraps core's
+own `diff_skeleton(baseline_tokens, current_tokens)` in the ordinary
+`ScopedOutput` envelope, adding no diff model of its own. Errors typed
+`MissingBaseline { books }` — collecting every requested book missing a
+baseline for `All`, not just the first — rather than synthesizing an
+"everything added"/"everything unchanged" skeleton.
+
+New tests: `crates/braid/tests/baseline.rs`, 15 tests, both ingest lanes where
+applicable — missing-baseline-is-dirty, exact-equality tracking including exact
+revert, chapter-scope dirty (same-label comparison, missing baseline run,
+duplicate-label ambiguity on either side), baseline mutation leaves current
+state provably untouched (snapshot id, bytes, dirty stamps), clearing an absent
+baseline is a no-op, a content mutation carries the baseline forward, resident
+diff equals the stateless core diff byte-for-byte, chapter-scoped diff, and the
+fresh-install case.
+
+Gate: `cargo test --workspace` green; `cargo test --release --test lint_oracle
+-- --ignored` byte-identical; `cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `npm run test:packed`
+/ `test:packed:web` green (410 cases / 5,717,153 tokens, unchanged); `cargo
+fmt --all -- --check` clean.
+
+## 2026-07-31 — Phase E, step 2: `prepare_format_patch`/`apply_format_patch`
+
+Added `crates/braid/src/format_patch.rs`: `PreparedFormatBook` (one targeted
+book's post-format working-token stream plus its prepare-time hash and,
+for a chapter-scoped preparation, the chapter label it was scoped to),
+`PreparedFormatPatch` (one or more targeted books, applied atomically),
+`FormatPatchId { snapshot, ordinal }`, `PatchPreparation { Unchanged |
+Ready(FormatPatchId) }`, and `FormatPatchError { StaleSnapshot, UnknownPatch,
+InvalidResult }`. `FormatError { Scope(ScopeError) }` added to `error.rs`,
+matching freeze §6.8/owner-adjudication exactly.
+
+Deviation recorded and reasoned in the module doc comment: a prepared format
+patch does **not** reuse `Patch`/`PatchRow`/`PatchId` (the existing lint-fix
+patch table). That table's own wire framing requires every row of one patch to
+name the same token position (one fix, one position) — provable from the N.2
+patch-table ruling — while a book- or chapter-wide format pass can rewrite
+tokens throughout the run. Reusing the fix table's shape would mean either
+violating that constraint or redesigning it, both out of scope for this phase.
+Instead a prepared format patch stores each targeted book's complete
+post-format working-token stream computed once against a frozen snapshot; the
+existing PatchId/ordinal-into-book-patches space and this one are deliberately
+separate and never address each other. `apply_format_patch` is a new method,
+not a repurposing of the existing single-book `apply_patch` — Phase C's
+`apply_patch(id: PatchId)` signature is unmodified.
+
+`prepare_format_patch(scope, options)` resolves `All | Book | Chapter` to
+target books (chapter scope narrows to that run's own token slice, spliced
+back into the book — the same slice `update_chapter` cuts), runs core's
+`format` unmodified, and includes a book in the preparation only if `format`
+actually produced different tokens; an empty result set returns `Unchanged`.
+Nothing is mutated and nothing is minted at prepare time (working-token
+equality is the change test, so no serialization or minting is needed to
+decide it). `apply_format_patch(id)` mints every still-id-less token via the
+handle's own minter (the same admission checkpoint `apply_patch` uses, but
+generalized: there is no single fix target to fall back on as a synthesis
+anchor, so an unmatched token converts with no anchor and is refused rather
+than guessed if it needed one), builds every targeted book's candidate before
+touching resident state, and commits all of them or none. The reported
+`changed` scope is chapter-scoped when the preparation was chapter-scoped,
+whole-book otherwise (a whole-book/`All` format pass can touch tokens anywhere
+in the book, so it cannot honestly narrow further). Every prepared-but-unused
+format patch is dropped as soon as any mutation actually moves the snapshot
+id, since every entry is bound to the snapshot it was prepared against.
+
+New tests: `crates/braid/tests/format_patch.rs`, 8 tests — already-formatted
+scope prepares `Unchanged`; preparing mutates nothing (snapshot id, bytes,
+dirty stamps all unchanged before vs. after); book-scoped apply rewrites
+exactly what `format` would produce; chapter-scoped apply touches only that
+run; `CorpusScope::All` prepares and applies multiple changed books atomically
+while leaving an already-formatted book alone; a stale preparation (corpus
+mutated after prepare) is rejected atomically; an unknown ordinal is rejected;
+the external stateless `format`/`FormatToken` proxy never touches resident
+state.
+
+Gate: `cargo test --workspace` green; `cargo test --release --test lint_oracle
+-- --ignored` byte-identical; `cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `npm run test:packed`
+/ `test:packed:web` green (410 cases / 5,717,153 tokens, unchanged); `cargo
+fmt --all -- --check` clean.
+
+Phase E status: baseline mutation, exact `is_dirty`, `diff_baseline`, and
+`prepare_format_patch`/`apply_format_patch` land in this phase. Not built: a
+wasm/serde-facing surface for any of the above (Phase F). `to_usfm` needed no
+change — it was already scoped `All | Book | Chapter` from Phase C.

@@ -175,7 +175,7 @@ fn applying_a_patch_rewrites_the_bytes_the_template_named() {
             )],
             "the fix landed in chapter one"
         );
-        assert_eq!(resident.dirty_books(), vec![id("GEN")]);
+        assert_eq!(resident.books_awaiting_lint(), vec![id("GEN")]);
 
         let after = source_of(&resident, "GEN");
         assert_ne!(after, before);
@@ -253,7 +253,7 @@ fn preview_shows_the_apply_without_performing_it() {
         "a preview is not a mutation"
     );
     assert_eq!(resident.books(), books);
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
     assert_eq!(
         calls.load(Ordering::Relaxed),
         0,
@@ -363,7 +363,7 @@ fn rejected_applications_are_atomic() {
 
     assert_eq!(resident.expected_snapshot_id(), identity);
     assert_eq!(resident.books(), books);
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
     // The valid one still applies afterwards: a rejection is not a poisoned
     // state.
     assert!(resident.apply_patch(valid.id).is_ok());
@@ -384,7 +384,7 @@ fn a_dirty_book_publishes_no_patches() {
             "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n",
         ))
         .expect("an edit");
-    assert_eq!(resident.dirty_books(), vec![id("GEN")]);
+    assert_eq!(resident.books_awaiting_lint(), vec![id("GEN")]);
     assert!(resident.patches().is_empty());
     assert!(matches!(
         resident.patch(before[0].id),

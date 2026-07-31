@@ -114,7 +114,7 @@ fn state_fingerprint(resident: &Braid) -> (u64, Vec<(String, BookId, SourceHash)
                 )
             })
             .collect(),
-        resident.dirty_books(),
+        resident.books_awaiting_lint(),
     )
 }
 
@@ -661,7 +661,7 @@ fn a_source_key_rebinding_changes_no_semantic_identity() {
     for lane in LANES {
         let mut resident = seeded(lane);
         let before = resident.expected_snapshot_id();
-        let dirty_before = resident.dirty_books();
+        let dirty_before = resident.books_awaiting_lint();
 
         let effect = resident
             .update_book(lane.book("GEN", "moved/01-GEN.usfm", GEN_SOURCE))
@@ -671,7 +671,7 @@ fn a_source_key_rebinding_changes_no_semantic_identity() {
         // re-pulling, semantic identity holds, and caches stay valid.
         assert!(effect.is_noop(), "{lane:?}");
         assert_eq!(effect.snapshot_id, before, "{lane:?}");
-        assert_eq!(resident.dirty_books(), dirty_before, "{lane:?}");
+        assert_eq!(resident.books_awaiting_lint(), dirty_before, "{lane:?}");
         assert_eq!(
             resident.books().first().unwrap().source_key.as_str(),
             "moved/01-GEN.usfm",
@@ -694,7 +694,7 @@ fn config_updates_leave_bytes_alone_and_stale_every_book() {
         assert!(effect.is_noop(), "{lane:?}");
         assert_eq!(effect.snapshot_id, before, "{lane:?}");
         assert_eq!(
-            resident.dirty_books(),
+            resident.books_awaiting_lint(),
             vec![id("GEN"), id("EXO")],
             "{lane:?}"
         );
@@ -1090,7 +1090,7 @@ fn token_identity_separates_streams_the_source_hash_cannot() {
     // And braid itself calls this a real change, which is the property the stamp
     // exposes rather than invents.
     assert!(!effect.is_noop());
-    assert_eq!(resident.dirty_books(), vec![id("GEN")]);
+    assert_eq!(resident.books_awaiting_lint(), vec![id("GEN")]);
 
     // Same bytes *and* same ids: nothing moved.
     let identical = resident

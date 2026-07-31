@@ -337,7 +337,7 @@ fn resident_lint_equals_stateless_core_lint_over_the_whole_corpus() {
 
     // A clean corpus schedules no rule work, and linting it again changes
     // nothing.
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
     let again = resident.lint();
     assert_eq!(again.summary.total_count, total);
 }

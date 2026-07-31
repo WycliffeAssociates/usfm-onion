@@ -28,23 +28,30 @@
 //! Source bytes, hashes, and chapter runs are always derived from tokens, never
 //! the other way around.
 
+mod baseline;
 mod corpus;
 mod error;
+mod format_patch;
 mod input;
 mod lint;
 mod patch;
 mod stamps;
 mod state;
 
-use usfm_onion::format::FormatToken;
+use usfm_onion::diff::{DiffSkeleton, diff_skeleton};
+use usfm_onion::format::{FormatOptions, FormatToken, format};
 use usfm_onion::lint::{LintOptions, LintSummary, apply_token_fix};
 use usfm_onion::token::{BookId, OwnedToken, tokens_to_usfm_reconstruct_with_eol};
 
+use crate::baseline::BaselineState;
 use crate::corpus::{BookState, chapter_runs};
+use crate::format_patch::{PreparedFormatBook, PreparedFormatPatch};
 use crate::lint::accumulate;
 use crate::patch::ResolvedFix;
 
-pub use crate::error::{IngestError, PatchError, ScopeError};
+pub use crate::baseline::BaselineError;
+pub use crate::error::{FormatError, IngestError, PatchError, ScopeError};
+pub use crate::format_patch::{FormatPatchError, FormatPatchId, PatchPreparation};
 pub use crate::input::{
     BookInput, BookRestoreInput, BookTokensInput, ChapterInput, ChapterLabel, ChapterTarget,
     CorpusInput, CorpusRestoreInput, CorpusScope, LineEnding, ScopedOutput, SourceKey,
@@ -81,6 +88,12 @@ pub struct Braid {
     /// preserved — nothing here sorts.
     books: Vec<BookState>,
     snapshot_id: SnapshotId,
+    /// Prepared format patches awaiting `apply_format_patch`, keyed by their
+    /// position in this vector (their `FormatPatchId::ordinal`). Cleared
+    /// whenever a mutation actually changes the snapshot id, since every
+    /// entry is bound to the snapshot it was prepared against and would only
+    /// ever be found stale from that point on.
+    format_patches: Vec<PreparedFormatPatch>,
     /// The application's own identity function, held for the life of the handle.
     ///
     /// Core never invents a token id, so every token a fix or format pass
@@ -115,6 +128,7 @@ impl Braid {
             config,
             books: Vec::new(),
             snapshot_id: SnapshotId::of([]),
+            format_patches: Vec::new(),
             minter: Box::new(minter),
         }
     }
@@ -186,7 +200,14 @@ impl Braid {
                 Some(resident) if resident.content_eq(candidate) => {
                     candidate.inherit_cache(resident);
                 }
-                _ => changed.push(Scope::book(candidate.book)),
+                Some(resident) => {
+                    // A content change is not how a baseline changes: carry
+                    // the predecessor's forward rather than letting the fresh
+                    // candidate's default `None` erase it.
+                    candidate.baseline = resident.baseline.clone();
+                    changed.push(Scope::book(candidate.book));
+                }
+                None => changed.push(Scope::book(candidate.book)),
             }
         }
 
@@ -375,6 +396,10 @@ impl Braid {
                     self.books[index] = candidate;
                     Ok(self.effect(Vec::new(), Vec::new()))
                 } else {
+                    // A content change is not how a baseline changes: carry
+                    // the predecessor's forward rather than letting the fresh
+                    // candidate's default `None` erase it.
+                    candidate.baseline = self.books[index].baseline.clone();
                     let book = candidate.book;
                     self.books[index] = candidate;
                     Ok(self.effect(vec![Scope::book(book)], Vec::new()))
@@ -489,6 +514,63 @@ impl Braid {
                 book.lint = None;
                 book.patches.clear();
             }
+        }
+        self.effect(Vec::new(), Vec::new())
+    }
+
+    // ---- baseline --------------------------------------------------------
+
+    /// Declares one book's baseline — "what was last saved" for that book,
+    /// the reference point `is_dirty`/`diff_baseline` compare current content
+    /// against.
+    ///
+    /// Validated through the same input path as current data
+    /// (`BookState::build`), so a malformed candidate is refused with the
+    /// corpus, every baseline, and every current book exactly as they were.
+    /// When the named book is already resident, only its baseline slot
+    /// changes: current tokens, hashes, dirty stamps, and the corpus snapshot
+    /// id are untouched, so the returned effect is always the no-op shape.
+    /// When the named book has no current content yet, it is installed fresh
+    /// — the same fallback `update_book` uses for a book it has not seen
+    /// before — with its baseline set to that same content, since there is
+    /// nothing yet for it to have diverged from; that case *does* report the
+    /// new book in `changed`, because current content genuinely came into
+    /// existence.
+    pub fn set_baseline(&mut self, replacement: BookInput) -> Result<MutationEffect, IngestError> {
+        let candidate = BookState::build(replacement)?;
+        let baseline = BaselineState::of(&candidate);
+
+        match self.index_of(candidate.book) {
+            Some(index) => {
+                self.books[index].baseline = Some(baseline);
+                Ok(self.effect(Vec::new(), Vec::new()))
+            }
+            None => {
+                if let Some(other) = self
+                    .books
+                    .iter()
+                    .find(|book| book.source_key == candidate.source_key)
+                {
+                    return Err(IngestError::DuplicateSourceKey {
+                        source: other.source_key.clone(),
+                    });
+                }
+                let mut installed = candidate;
+                installed.baseline = Some(baseline);
+                let book = installed.book;
+                self.books.push(installed);
+                Ok(self.effect(vec![Scope::book(book)], Vec::new()))
+            }
+        }
+    }
+
+    /// Drops one book's baseline. Absent is a no-op — the requested end state
+    /// (no baseline) already holds. Current content is never touched, and the
+    /// returned effect is always the no-op shape: a baseline never
+    /// participates in `changed`/`removed`/`reordered`.
+    pub fn clear_baseline(&mut self, book: BookId) -> MutationEffect {
+        if let Some(index) = self.index_of(book) {
+            self.books[index].baseline = None;
         }
         self.effect(Vec::new(), Vec::new())
     }
@@ -625,6 +707,126 @@ impl Braid {
         Ok(self.effect(vec![scope], Vec::new()))
     }
 
+    /// Runs core's `format` over a scope's current tokens and freezes the
+    /// result as a snapshot-bound preparation, without mutating anything.
+    ///
+    /// `CorpusScope::Chapter` formats only that run's own tokens and splices
+    /// the result back into the book, the same slice `update_chapter` cuts —
+    /// format rules that need surrounding context (paragraph/verse spacing at
+    /// the run's own edges) still see it, but nothing outside the run moves.
+    /// `CorpusScope::All` may prepare more than one book at once; each book
+    /// that `format` leaves byte-for-byte unchanged is left out of the
+    /// preparation entirely. `Unchanged` means every targeted book was
+    /// already exactly what `format` would produce.
+    pub fn prepare_format_patch(
+        &mut self,
+        scope: CorpusScope,
+        options: FormatOptions,
+    ) -> Result<PatchPreparation, FormatError> {
+        let targets = self.resolve_format_targets(&scope)?;
+        let mut books = Vec::new();
+        for (book_index, run_index) in targets {
+            let book = &self.books[book_index];
+            let current: Vec<FormatToken> = book.tokens.iter().map(FormatToken::from).collect();
+            let (formatted, chapter) = match run_index {
+                None => (format(&current, options), None),
+                Some(run_index) => {
+                    let run = &book.runs[run_index];
+                    let mut whole = current[..run.range.start].to_vec();
+                    whole.extend(format(&current[run.range.clone()], options));
+                    whole.extend_from_slice(&current[run.range.end..]);
+                    (whole, Some(run.label.clone()))
+                }
+            };
+            if formatted != current {
+                books.push(PreparedFormatBook {
+                    book: book.book,
+                    source_hash: book.hash,
+                    chapter,
+                    tokens: formatted,
+                });
+            }
+        }
+
+        if books.is_empty() {
+            return Ok(PatchPreparation::Unchanged);
+        }
+        let id = FormatPatchId {
+            snapshot: self.snapshot_id,
+            ordinal: self.format_patches.len() as u32,
+        };
+        self.format_patches.push(PreparedFormatPatch { books });
+        Ok(PatchPreparation::Ready(id))
+    }
+
+    /// Applies a prepared format patch as one atomic mutation.
+    ///
+    /// Every targeted book's candidate is built and id-checked before
+    /// resident state is touched; if any one of them cannot become resident,
+    /// none of them commit. Every book the preparation actually changes is
+    /// marked for recompute; nothing lints implicitly.
+    pub fn apply_format_patch(
+        &mut self,
+        id: FormatPatchId,
+    ) -> Result<MutationEffect, FormatPatchError> {
+        if id.snapshot != self.snapshot_id {
+            return Err(FormatPatchError::StaleSnapshot {
+                expected: self.snapshot_id,
+                found: id.snapshot,
+            });
+        }
+        let prepared = self
+            .format_patches
+            .get(id.ordinal as usize)
+            .ok_or(FormatPatchError::UnknownPatch(id))?
+            .clone();
+
+        let mut candidates = Vec::with_capacity(prepared.books.len());
+        for entry in &prepared.books {
+            // The snapshot check above already established every resident
+            // book's hash is what it was when this preparation was built
+            // (barring a hash collision) — the same reasoning `locate` uses
+            // for a fix patch. Checked again per book anyway, at the same
+            // cost, for the same defense-in-depth reason.
+            let index = self
+                .index_of(entry.book)
+                .expect("a snapshot-matching preparation names a resident book");
+            if self.books[index].hash != entry.source_hash {
+                return Err(FormatPatchError::StaleSnapshot {
+                    expected: self.snapshot_id,
+                    found: id.snapshot,
+                });
+            }
+
+            let mut applied = entry.tokens.clone();
+            for token in &mut applied {
+                if token.id.is_none() {
+                    token.id = Some((self.minter)());
+                }
+            }
+            let tokens = self.admit_format(index, &applied)?;
+            let candidate = self.books[index]
+                .rebuilt(tokens)
+                .map_err(FormatPatchError::InvalidResult)?;
+            candidates.push((index, entry.chapter.clone(), candidate));
+        }
+
+        let mut changed = Vec::new();
+        for (index, chapter, candidate) in &candidates {
+            if !self.books[*index].content_eq(candidate) {
+                let book = self.books[*index].book;
+                changed.push(match chapter {
+                    Some(label) => Scope::chapter(book, label.clone()),
+                    None => Scope::book(book),
+                });
+            }
+        }
+        for (index, _, candidate) in candidates {
+            self.books[index] = candidate;
+        }
+        Ok(self.effect(changed, Vec::new()))
+    }
+
     // ---- reads ---------------------------------------------------------
 
     /// Current tokens for the requested scopes — the single hydration verb.
@@ -724,9 +926,152 @@ impl Braid {
         }
     }
 
-    /// Books awaiting recompute, in corpus order. Derived from authoritative
-    /// stamps rather than drained from a queue, so reading it twice is safe.
-    pub fn dirty_books(&self) -> Vec<BookId> {
+    /// Whether a scope's exact serialized bytes differ from its baseline.
+    ///
+    /// A book with no declared baseline is always dirty: there is no saved
+    /// equality proof to compare against, so absence is never read as "clean"
+    /// or synthesized into any other answer. `CorpusScope::All` is dirty if
+    /// any resident book is. `CorpusScope::Chapter` compares only that run's
+    /// own bytes against the baseline run sharing its label; a baseline with
+    /// no run of that label is dirty for the same reason a missing book
+    /// baseline is, and duplicate labels on either side — current or
+    /// baseline — make the scope ambiguous, consistent with
+    /// `update_chapter`/`to_usfm`.
+    pub fn is_dirty(&self, scope: CorpusScope) -> Result<bool, ScopeError> {
+        match scope {
+            CorpusScope::All => Ok(self.books.iter().any(Self::book_is_dirty)),
+            CorpusScope::Book(book) => {
+                let state = self.book(book).ok_or(ScopeError::BookNotFound(book))?;
+                Ok(Self::book_is_dirty(state))
+            }
+            CorpusScope::Chapter(target) => {
+                let (book_index, run_index) = self.resolve_chapter(&target)?;
+                let book = &self.books[book_index];
+                let Some(baseline) = &book.baseline else {
+                    return Ok(true);
+                };
+                let matches: Vec<usize> = baseline
+                    .runs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, run)| run.label == target.label)
+                    .map(|(index, _)| index)
+                    .collect();
+                match matches.len() {
+                    0 => Ok(true),
+                    1 => {
+                        let current_run = &book.runs[run_index];
+                        let baseline_run = &baseline.runs[matches[0]];
+                        let current_bytes = tokens_to_usfm_reconstruct_with_eol(
+                            &book.tokens[current_run.range.clone()],
+                            book.line_ending,
+                        );
+                        let baseline_bytes = tokens_to_usfm_reconstruct_with_eol(
+                            &baseline.tokens[baseline_run.range.clone()],
+                            baseline.line_ending,
+                        );
+                        Ok(current_bytes != baseline_bytes)
+                    }
+                    matches => Err(ScopeError::AmbiguousChapter { target, matches }),
+                }
+            }
+        }
+    }
+
+    /// A scope's baseline diff, reusing core's own `diff_skeleton` — braid
+    /// adds no diff model of its own. Errors typed `MissingBaseline` when any
+    /// requested book has none declared, rather than synthesizing an
+    /// "everything added" or "everything unchanged" skeleton for it.
+    pub fn diff_baseline(
+        &self,
+        scope: CorpusScope,
+    ) -> Result<ScopedOutput<DiffSkeleton<OwnedToken>>, BaselineError> {
+        match scope {
+            CorpusScope::All => {
+                let missing: Vec<BookId> = self
+                    .books
+                    .iter()
+                    .filter(|book| book.baseline.is_none())
+                    .map(|book| book.book)
+                    .collect();
+                if !missing.is_empty() {
+                    return Err(BaselineError::MissingBaseline { books: missing });
+                }
+                Ok(ScopedOutput::All(
+                    self.books
+                        .iter()
+                        .map(|book| {
+                            let baseline = book.baseline.as_ref().expect("checked missing above");
+                            SourceOutput {
+                                source_key: book.source_key.clone(),
+                                book: book.book,
+                                value: diff_skeleton(&baseline.tokens, &book.tokens),
+                            }
+                        })
+                        .collect(),
+                ))
+            }
+            CorpusScope::Book(book_id) => {
+                let book = self
+                    .book(book_id)
+                    .ok_or(ScopeError::BookNotFound(book_id))?;
+                let baseline = book
+                    .baseline
+                    .as_ref()
+                    .ok_or(BaselineError::MissingBaseline {
+                        books: vec![book_id],
+                    })?;
+                Ok(ScopedOutput::Single(diff_skeleton(
+                    &baseline.tokens,
+                    &book.tokens,
+                )))
+            }
+            CorpusScope::Chapter(target) => {
+                let (book_index, run_index) = self.resolve_chapter(&target)?;
+                let book = &self.books[book_index];
+                let baseline = book
+                    .baseline
+                    .as_ref()
+                    .ok_or(BaselineError::MissingBaseline {
+                        books: vec![book.book],
+                    })?;
+                let matches: Vec<usize> = baseline
+                    .runs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, run)| run.label == target.label)
+                    .map(|(index, _)| index)
+                    .collect();
+                match matches.len() {
+                    0 => Err(BaselineError::MissingBaseline {
+                        books: vec![book.book],
+                    }),
+                    1 => {
+                        let current_run = &book.runs[run_index];
+                        let baseline_run = &baseline.runs[matches[0]];
+                        Ok(ScopedOutput::Single(diff_skeleton(
+                            &baseline.tokens[baseline_run.range.clone()],
+                            &book.tokens[current_run.range.clone()],
+                        )))
+                    }
+                    matches => Err(BaselineError::Scope(ScopeError::AmbiguousChapter {
+                        target,
+                        matches,
+                    })),
+                }
+            }
+        }
+    }
+
+    /// Books awaiting a lint recompute, in corpus order.
+    ///
+    /// This is the lint-cache axis only — whether `lint()` has rules left to
+    /// run for a book — and says nothing about whether that book's saved
+    /// bytes differ from its baseline. "Dirty" on its own is reserved for the
+    /// baseline axis ([`Self::is_dirty`]); this name says which one it means.
+    /// Derived from authoritative stamps rather than drained from a queue, so
+    /// reading it twice is safe.
+    pub fn books_awaiting_lint(&self) -> Vec<BookId> {
         self.books
             .iter()
             .filter(|book| book.lint_dirty)
@@ -865,6 +1210,75 @@ impl Braid {
         }
     }
 
+    /// A book is dirty exactly when it has no baseline, or its exact current
+    /// bytes differ from its exact baseline bytes. The hash is only a cheap
+    /// selector for the common case — a mismatch is conclusive, but a match
+    /// still falls through to the exact byte comparison rather than being
+    /// trusted as proof of equality on its own.
+    fn book_is_dirty(book: &BookState) -> bool {
+        match &book.baseline {
+            None => true,
+            Some(baseline) => book.hash != baseline.hash || book.source != baseline.source,
+        }
+    }
+
+    /// Resolves a format scope to its target books and, for a chapter scope,
+    /// the one run within that book to format — `None` means the whole book.
+    fn resolve_format_targets(
+        &self,
+        scope: &CorpusScope,
+    ) -> Result<Vec<(usize, Option<usize>)>, ScopeError> {
+        match scope {
+            CorpusScope::All => Ok((0..self.books.len()).map(|index| (index, None)).collect()),
+            CorpusScope::Book(book) => {
+                let index = self
+                    .index_of(*book)
+                    .ok_or(ScopeError::BookNotFound(*book))?;
+                Ok(vec![(index, None)])
+            }
+            CorpusScope::Chapter(target) => {
+                let (book_index, run_index) = self.resolve_chapter(target)?;
+                Ok(vec![(book_index, Some(run_index))])
+            }
+        }
+    }
+
+    /// Converts a fully-minted format working stream back to resident tokens.
+    ///
+    /// Unlike [`Self::admit`], there is no single fix target to fall back on
+    /// as an anchor: a whole-book/chapter format pass has no one token every
+    /// synthesized token descends from. A survivor (its id already resident)
+    /// anchors on itself; a token with no matching resident id converts with
+    /// no anchor at all, so one that needs a payload fact the working shape
+    /// cannot carry (a book code, a parsed number) is refused rather than
+    /// guessed from an unrelated neighbor — the same "refuse, never invent"
+    /// rule the residency checkpoint already enforces for a fix.
+    fn admit_format(
+        &self,
+        book_index: usize,
+        applied: &[FormatToken],
+    ) -> Result<Vec<OwnedToken>, FormatPatchError> {
+        let book = &self.books[book_index];
+        let mut by_id: rustc_hash::FxHashMap<&str, &OwnedToken> =
+            rustc_hash::FxHashMap::with_capacity_and_hasher(
+                book.tokens.len(),
+                rustc_hash::FxBuildHasher,
+            );
+        for token in &book.tokens {
+            by_id.insert(token.id().as_str(), token);
+        }
+
+        applied
+            .iter()
+            .map(|token| {
+                let anchor = token.id.as_deref().and_then(|id| by_id.get(id).copied());
+                OwnedToken::from_format_token(token, anchor).map_err(|error| {
+                    FormatPatchError::InvalidResult(IngestError::InvalidToken(error))
+                })
+            })
+            .collect()
+    }
+
     /// Recomputes the content-derived snapshot id and packages the effect. The
     /// id falls out of installed state, which is why a no-op preserves it
     /// without any special case.
@@ -886,7 +1300,15 @@ impl Braid {
         removed: Vec<BookId>,
         reordered: Option<Vec<BookId>>,
     ) -> MutationEffect {
-        self.snapshot_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
+        let new_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
+        if new_id != self.snapshot_id {
+            // Every prepared format patch is bound to the snapshot it was
+            // computed against; once that snapshot is gone, every one of them
+            // can only ever be found stale, so there is nothing to keep them
+            // around for.
+            self.format_patches.clear();
+        }
+        self.snapshot_id = new_id;
         MutationEffect {
             snapshot_id: self.snapshot_id,
             changed,

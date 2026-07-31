@@ -181,7 +181,7 @@ fn no_ops_preserve_the_cache_and_the_snapshot_id() {
         .expect("one book");
     let findings = resident.lint().books[0].result.clone();
     let id_after_lint = resident.expected_snapshot_id();
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
 
     // Same content, new source key: a rebinding, not an edit.
     let rebound = resident
@@ -194,7 +194,7 @@ fn no_ops_preserve_the_cache_and_the_snapshot_id() {
     assert!(rebound.is_noop());
     assert_eq!(resident.expected_snapshot_id(), id_after_lint);
     assert!(
-        resident.dirty_books().is_empty(),
+        resident.books_awaiting_lint().is_empty(),
         "a no-op must not schedule rule work"
     );
     assert_eq!(resident.lint().books[0].result, &findings);
@@ -217,7 +217,7 @@ fn no_ops_preserve_the_cache_and_the_snapshot_id() {
         .expect("push again");
     assert!(first.is_noop() && second.is_noop());
     assert_eq!(resident.expected_snapshot_id(), id_after_lint);
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
 }
 
 /// A configuration change invalidates every cached result — and recompute is
@@ -244,7 +244,7 @@ fn a_config_change_invalidates_caches_and_recompute_is_repeatable() {
         .iter()
         .map(|book| book.result.issues.len())
         .collect();
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
 
     let mut options = LintOptions::scoped(LintScope::Book);
     options.allow_implicit_chapter_content_verse = !options.allow_implicit_chapter_content_verse;
@@ -252,7 +252,7 @@ fn a_config_change_invalidates_caches_and_recompute_is_repeatable() {
     // No tokens were rewritten, so identity and hydration are untouched — only
     // staleness moved.
     assert!(effect.is_noop());
-    assert_eq!(resident.dirty_books(), vec![id("GEN"), id("EXO")]);
+    assert_eq!(resident.books_awaiting_lint(), vec![id("GEN"), id("EXO")]);
     assert!(
         resident.patches().is_empty(),
         "patches resolved under the old configuration must stop being addressable"
@@ -272,7 +272,7 @@ fn a_config_change_invalidates_caches_and_recompute_is_repeatable() {
         .collect();
     assert_eq!(second, third, "recompute is repeatable");
     assert_eq!(first, second, "this option changes nothing for these books");
-    assert!(resident.dirty_books().is_empty());
+    assert!(resident.books_awaiting_lint().is_empty());
 }
 
 /// Exactly the dirty books recompute. A one-chapter edit makes its own book
@@ -296,7 +296,7 @@ fn one_edit_dirties_one_book() {
         )
         .expect("a real chapter edit");
     assert!(!effect.is_noop());
-    assert_eq!(resident.dirty_books(), vec![id("GEN")]);
+    assert_eq!(resident.books_awaiting_lint(), vec![id("GEN")]);
 
     let snapshot = resident.lint();
     assert_eq!(
@@ -362,7 +362,7 @@ fn restore_seeds_a_corpus_that_matches_the_parsed_one() {
         restored.expected_snapshot_id(),
         parsed.expected_snapshot_id()
     );
-    assert_eq!(restored.dirty_books(), vec![id("GEN"), id("EXO")]);
+    assert_eq!(restored.books_awaiting_lint(), vec![id("GEN"), id("EXO")]);
     let restored_findings: Vec<Vec<usfm_onion::lint::LintIssue>> = restored
         .lint()
         .books

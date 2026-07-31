@@ -10,6 +10,7 @@ use usfm_onion::parse::parse;
 use usfm_onion::token::{BookId, LineEnding, OwnedToken, tokens_to_usfm_reconstruct_with_eol};
 use usfm_onion::walker::chapter_segments;
 
+use crate::baseline::BaselineState;
 use crate::error::IngestError;
 use crate::input::{BookInput, ChapterLabel, SourceKey};
 use crate::patch::ResolvedFix;
@@ -53,6 +54,12 @@ pub(crate) struct BookState {
     /// positions are only meaningful for the token stream they were resolved
     /// against, which is the stream this book held when its result was computed.
     pub(crate) patches: Vec<ResolvedFix>,
+    /// "What was last saved" for this book, if anything has been declared —
+    /// see [`BaselineState`]. Never written by anything but
+    /// `Braid::set_baseline`/`clear_baseline`, and never inspected by an
+    /// ordinary content mutation: a candidate replacing this book (edited,
+    /// formatted, patched) always carries this field forward unchanged.
+    pub(crate) baseline: Option<BaselineState>,
 }
 
 impl BookState {
@@ -101,12 +108,17 @@ impl BookState {
             lint_dirty: true,
             lint: None,
             patches: Vec::new(),
+            baseline: None,
         })
     }
 
     /// Rebuilds bytes, hash, and runs from an already-validated token stream —
     /// the chapter-splice path, where the tokens are the mutation and
     /// everything else is derived from them.
+    ///
+    /// The predecessor's baseline carries forward untouched: a content
+    /// mutation is not how a baseline changes, so this book's "what was last
+    /// saved" reference stays exactly what it was before this edit.
     pub(crate) fn rebuilt(&self, tokens: Vec<OwnedToken>) -> Result<Self, IngestError> {
         validate_token_ids(self.book, &tokens)?;
         let source = tokens_to_usfm_reconstruct_with_eol(&tokens, self.line_ending);
@@ -122,6 +134,7 @@ impl BookState {
             lint_dirty: true,
             lint: None,
             patches: Vec::new(),
+            baseline: self.baseline.clone(),
         })
     }
 
@@ -135,6 +148,7 @@ impl BookState {
         self.lint_dirty = resident.lint_dirty;
         self.lint = resident.lint.clone();
         self.patches = resident.patches.clone();
+        self.baseline = resident.baseline.clone();
     }
 
     /// Recomputes this book's whole-book lint contribution and the patch table

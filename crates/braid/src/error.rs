@@ -188,6 +188,32 @@ impl std::fmt::Display for ScopeError {
 
 impl std::error::Error for ScopeError {}
 
+/// `prepare_format_patch` resolving its scope is the only way it can fail:
+/// core's `format` has no documented failure mode over well-formed resident
+/// tokens, so the sole producer is the same scope resolution every other
+/// scoped read already shares.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum FormatError {
+    Scope(ScopeError),
+}
+
+impl std::fmt::Display for FormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scope(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl std::error::Error for FormatError {}
+
+impl From<ScopeError> for FormatError {
+    fn from(value: ScopeError) -> Self {
+        Self::Scope(value)
+    }
+}
+
 impl IngestError {
     /// Chapter ingest resolves its target through the same lookup the read
     /// paths use, so the two error sets overlap on those variants. `target`
