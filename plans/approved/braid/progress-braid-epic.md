@@ -3848,3 +3848,27 @@ actually exercises) and added `update_chapter_carries_the_baseline_forward_uncha
 production changes. `crates/braid/tests/baseline.rs`: 16 → 19 tests. Gates:
 `cargo test --workspace` green (braid 89 across 8 binaries); `cargo fmt --all
 -- --check` clean.
+
+## 2026-07-31 — Phase E CLOSED (clean-room verdict, test-only closeout verified)
+
+Clean-room re-review verdict at `a6b97f8`: "The P1 fix is correct, and I endorse unconditional
+invalidation; the exemption complexity is not worth preserving transient handles. No new
+production defect found" — with one P2 test-honesty closeout, landed as `25ada40` and ruled
+closable without another broad review. Reviewer additionally verified: sid fallback sound under
+adversarial nested-marker attack (nested names retain `+`, recovery cannot synthesize `+` names,
+so an unrelated same-sid anchor cannot lend nesting); baseline carry-forward sound across
+update_book / inherit_cache / rebuilt seams; duplicate-label resolution sound on both sides.
+
+Director-verified on `25ada40`: workspace 607 passed / 0 failed, baseline suite 19/19, fmt
+clean; commit is test-only (`baseline.rs` + ledger).
+
+Phase E final deliverables: `set_baseline`/`clear_baseline` (SetBaselineError; never an ingest
+verb, §Q companion ruling), exact `is_dirty` (hash fast-path, byte truth), `diff_baseline`
+(core diff_skeleton, typed MissingBaseline), `prepare_format_patch`/`apply_format_patch`
+(separate FormatPatchId space per §Q; unconditional invalidation on every mutation per the §Q
+correction; typed BookNotResident), `books_awaiting_lint()` rename reserving "dirty" for the
+baseline axis, and the `admit_format` sid-keyed anchor fallback fixing unconditional
+UnresolvableSid refusal of format-inserted tokens.
+
+Remaining: Phase F only (public wasm Braid, restoreCorpus composition, reconcile helper, editor
+parity transcripts, pkg + canonical-docs regeneration).
