@@ -293,6 +293,107 @@ fn external_stateless_format_never_touches_resident_state() {
     assert_eq!(source_of(&resident, "GEN"), before_bytes);
 }
 
+/// A prepared format patch is bound to more than the byte-derived snapshot
+/// id: it also records what a specific token stream and book-identity
+/// arrangement actually was. Clean-room review found two public-API repros
+/// where `new_id == old_id` (so the naive snapshot check alone waves the
+/// stale preparation through) while the thing formatting actually consumed
+/// — the token stream or which book holds which position — had moved
+/// underneath it. Root cause: `effect_with_reorder` cleared the preparation
+/// table only when the snapshot id itself moved; it now clears
+/// unconditionally on every mutation that can touch tokens or residency, so
+/// both repros below now see the table already empty and refuse with
+/// `UnknownPatch` rather than either corrupting state or panicking.
+///
+/// Repro 1: `update_book` with the exact same bytes but a different stable
+/// token id (an ordinary editor re-push after, say, a node remount) does not
+/// change any book's hash, so the snapshot id is unchanged — yet the token
+/// stream is not what the preparation was computed against. This case only
+/// exists in the caller-tokens lane: raw USFM ingest has no way to name a
+/// token's id independently of re-parsing the same bytes.
+#[test]
+fn stale_by_identity_update_book_is_rejected_and_the_newer_id_survives() {
+    let mut resident = seeded(Lane::CallerTokens, vec![("GEN", GEN_SOURCE)]);
+    let id_ = match resident
+        .prepare_format_patch(CorpusScope::Book(id("GEN")), FormatOptions::all_enabled())
+        .unwrap()
+    {
+        PatchPreparation::Ready(id) => id,
+        PatchPreparation::Unchanged => panic!("expected a change"),
+    };
+
+    // Same bytes, different id on the book's first token — the identity-only
+    // push the byte-derived snapshot id cannot see.
+    let original = owned(GEN_SOURCE);
+    let mut renamed_working = usfm_onion::format::FormatToken::from(&original[0]);
+    renamed_working.id = Some("GEN-0-renamed".to_string());
+    let mut renamed_tokens = original.clone();
+    renamed_tokens[0] =
+        OwnedToken::from_format_token(&renamed_working, Some(&original[0])).unwrap();
+
+    let before_snapshot = resident.expected_snapshot_id();
+    resident
+        .update_book(BookInput::Tokens(BookTokensInput {
+            source_key: key("GEN.usfm"),
+            book: id("GEN"),
+            tokens: renamed_tokens,
+            line_ending: LineEnding::Lf,
+        }))
+        .unwrap();
+    // Confirms the repro's own premise: same bytes, so the same snapshot id.
+    assert_eq!(resident.expected_snapshot_id(), before_snapshot);
+
+    let result = resident.apply_format_patch(id_);
+    assert_eq!(result, Err(FormatPatchError::UnknownPatch(id_)));
+
+    // The newer id is what's resident — the stale preparation did not
+    // overwrite it, whether or not apply was rejected.
+    let current = resident
+        .to_tokens(braid::Scope::book(id("GEN")))
+        .unwrap()
+        .remove(0)
+        .tokens;
+    assert_eq!(current[0].id().as_str(), "GEN-0-renamed");
+}
+
+/// Repro 2: `replace_corpus` swaps GEN out for EXO using byte-identical
+/// source. A book's declared `BookId` is outside snapshot identity (only the
+/// ordered per-book source hashes are), so one book with one hash before and
+/// after leaves the snapshot id unchanged even though the book the
+/// preparation named (GEN) is no longer resident at all. Before the fix this
+/// reached an `expect` inside `apply_format_patch` and panicked; it must
+/// instead refuse typed, with no panic, in both lanes.
+#[test]
+fn stale_by_book_swap_replace_corpus_is_rejected_without_panicking() {
+    for lane in LANES {
+        let mut resident = seeded(lane, vec![("GEN", GEN_SOURCE)]);
+        let id_ = match resident
+            .prepare_format_patch(CorpusScope::Book(id("GEN")), FormatOptions::all_enabled())
+            .unwrap()
+        {
+            PatchPreparation::Ready(id) => id,
+            PatchPreparation::Unchanged => panic!("{lane:?}: expected a change"),
+        };
+
+        let before_snapshot = resident.expected_snapshot_id();
+        // EXO's declared book, GEN's exact bytes: one book, one hash, same
+        // as before the swap.
+        resident
+            .replace_corpus(CorpusInput::new(vec![lane.book("EXO", GEN_SOURCE)]))
+            .unwrap();
+        assert_eq!(
+            resident.expected_snapshot_id(),
+            before_snapshot,
+            "{lane:?}: confirms the repro's own premise"
+        );
+
+        let result = resident.apply_format_patch(id_);
+        assert_eq!(result, Err(FormatPatchError::UnknownPatch(id_)), "{lane:?}");
+        // No panic reached this line; EXO's content is untouched.
+        assert_eq!(source_of(&resident, "EXO"), GEN_SOURCE, "{lane:?}");
+    }
+}
+
 /// The apply-time mint sweep, exercised for real: unlike every fixture above
 /// (chosen so formatting only edits existing tokens in place), this one
 /// genuinely inserts tokens with no id at all. Every survivor keeps its own

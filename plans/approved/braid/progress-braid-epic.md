@@ -3743,3 +3743,88 @@ Gates: `cargo test --workspace` green (braid 62); `cargo test --release
 --test lint_oracle -- --ignored` byte-identical; `cargo test --release -p
 braid -p usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `cargo fmt
 --all -- --check` clean.
+
+## 2026-07-31 — Clean-room review P1 fix: prepared format patches invalidated by the wrong predicate
+
+Clean-room review of Phase E passed everything (baseline, dirty, diff,
+minting, §Q table separation, multi-book admission) except one root cause.
+
+**Root cause.** `effect_with_reorder` cleared the prepared-format-patch table
+only when the byte-derived `SnapshotId` moved. But formatting consumes the
+token stream and book identity, not just source bytes, and two ordinary
+mutations can leave the snapshot id unchanged while invalidating exactly what
+a preparation recorded:
+
+1. `update_book` with the same bytes but a different stable token id (an
+   ordinary re-push) does not change any book's hash, so the snapshot id is
+   unchanged, while the token stream the preparation was computed against is
+   gone. Applying the stale handle would silently overwrite the caller's
+   newer token id with the stale prepared stream.
+2. `replace_corpus` swapping one book's declared `BookId` for another using
+   byte-identical source (declared `BookId` is outside snapshot identity —
+   only the ordered per-book source hashes are) leaves the snapshot id
+   unchanged while the book the preparation named is no longer resident at
+   all. Applying the stale handle reached an `.expect(...)` and panicked.
+
+Same class of bug as the Phase D reuse-cache fix: a byte-derived hash alone
+does not pin token identity or declared book, so an invalidation predicate
+keyed only on bytes is provably incomplete for anything the byte hash cannot
+see.
+
+**Fix** (`crates/braid/src/lib.rs`):
+
+- `effect_with_reorder` (the choke point every mutating verb that returns a
+  `MutationEffect` runs through — `replace_corpus`, `update_book`,
+  `update_chapter`, `remove_book`, `remove_chapter`, `clear`, `update_config`,
+  `apply_patch`, `apply_format_patch`, and `set_baseline`/`clear_baseline`)
+  now clears the prepared-format-patch table unconditionally, not only when
+  the snapshot id moves. Chose "clear everywhere" over threading an exemption
+  for baseline/config verbs through every call site: those two calls cannot
+  change format input, so clearing them too costs nothing but a wasted
+  future `prepare_format_patch` call, and a single unconditional choke point
+  is far harder to get wrong than a per-verb allowlist.
+- `restore_corpus` bypasses that choke point (it returns a `RestoreReport`,
+  not a `MutationEffect`) and reseeds tokens/residency wholesale, so it gained
+  its own explicit `self.format_patches.clear()`.
+- Replaced the `.expect("a snapshot-matching preparation names a resident
+  book")` in `apply_format_patch` with a typed `FormatPatchError::
+  BookNotResident(BookId)`. With the clearing fix this path should be
+  unreachable through any sequence of public calls — but "should never" is
+  not a proof, the previous unreachability claim was exactly the kind of gap
+  this same bug exploited, and a missing-residency condition must be a typed
+  rejection, never a panic, regardless of how confident the surrounding
+  invariant is. Not folded into `StaleSnapshot`: that variant's fields would
+  read `expected == found` here, describing a staleness that, by
+  construction, is not what happened.
+
+**Tests** (`crates/braid/tests/format_patch.rs`, both repros pinned exactly as
+built):
+
+- `stale_by_identity_update_book_is_rejected_and_the_newer_id_survives` —
+  caller-tokens lane only (the repro is inherently about pushing a token
+  identity change independent of re-parsing, which raw USFM ingest cannot
+  express): prepares, then re-pushes the same book with one token's id
+  changed and its content otherwise identical, confirms the snapshot id is
+  in fact unchanged (the repro's own premise), then confirms `apply_format_patch`
+  refuses (`UnknownPatch`, since clearing already emptied the table before
+  the snapshot check would even matter) and that the *newer* token id is
+  what's resident afterward.
+- `stale_by_book_swap_replace_corpus_is_rejected_without_panicking` — both
+  lanes: prepares GEN, swaps the whole corpus for a single EXO book with
+  GEN's exact bytes, confirms the snapshot id is unchanged, then confirms
+  `apply_format_patch` refuses typed with no panic.
+
+`crates/braid/tests/format_patch.rs`: 10 → 12 tests.
+
+No exemption was implemented for baseline verbs, so no separate
+"set_baseline does not invalidate a preparation" test applies; the existing
+`preparing_a_format_patch_does_not_mutate_anything` and
+`a_stale_preparation_is_rejected_atomically` tests are unaffected and remain
+green (the latter still hits `StaleSnapshot` first, since that mutation also
+changes the snapshot id).
+
+Gates: `cargo test --workspace` green (braid 88 across 8 test binaries);
+`cargo test --release --test lint_oracle -- --ignored` byte-identical;
+`cargo test --release -p braid -p usfm_onion_wire -p usfm_onion_wasm --
+--ignored` green; `cargo fmt --all -- --check` clean. No wasm-facing code
+changed, so the packed npm gates were not re-run this round.

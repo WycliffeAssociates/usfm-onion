@@ -303,6 +303,11 @@ impl Braid {
         let seeded = candidates.iter().map(|book| book.book).collect();
         self.books = candidates;
         self.snapshot_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
+        // Bypasses `effect`/`effect_with_reorder` (this returns a
+        // `RestoreReport`, not a `MutationEffect`), so the token/residency
+        // reseed this performs needs its own explicit invalidation of every
+        // prepared format patch.
+        self.format_patches.clear();
         Ok(RestoreReport { seeded, rejected })
     }
 
@@ -768,14 +773,19 @@ impl Braid {
 
         let mut candidates = Vec::with_capacity(prepared.books.len());
         for entry in &prepared.books {
-            // The snapshot check above already established every resident
-            // book's hash is what it was when this preparation was built
-            // (barring a hash collision) — the same reasoning `locate` uses
-            // for a fix patch. Checked again per book anyway, at the same
-            // cost, for the same defense-in-depth reason.
-            let index = self
-                .index_of(entry.book)
-                .expect("a snapshot-matching preparation names a resident book");
+            // Every mutation that can change tokens or residency clears the
+            // whole preparation table (see `effect_with_reorder`), so a book
+            // this preparation named should always still be resident. That
+            // invalidation is a second, separate mechanism from the snapshot
+            // check above, not implied by it — the byte-derived snapshot id
+            // can stay the same across a book removed and a different one
+            // added with identical bytes (declared `BookId` is outside
+            // snapshot identity), so this is a real, independently reachable
+            // failure mode, not defense-in-depth for an already-impossible
+            // case. A typed rejection, never a panic.
+            let Some(index) = self.index_of(entry.book) else {
+                return Err(FormatPatchError::BookNotResident(entry.book));
+            };
             if self.books[index].hash != entry.source_hash {
                 return Err(FormatPatchError::StaleSnapshot {
                     expected: self.snapshot_id,
@@ -1308,13 +1318,18 @@ impl Braid {
         reordered: Option<Vec<BookId>>,
     ) -> MutationEffect {
         let new_id = SnapshotId::of(self.books.iter().map(|book| book.hash));
-        if new_id != self.snapshot_id {
-            // Every prepared format patch is bound to the snapshot it was
-            // computed against; once that snapshot is gone, every one of them
-            // can only ever be found stale, so there is nothing to keep them
-            // around for.
-            self.format_patches.clear();
-        }
+        // Every mutating verb that produces a `MutationEffect` runs through
+        // here, so this is the one place to drop every prepared format
+        // patch — unconditionally, not only when the byte-derived snapshot
+        // id moves. Format consumes the token stream and which book holds
+        // which position, not just source bytes: an identity-only token
+        // push (same bytes, different stable ids) or a same-bytes book swap
+        // under `replace_corpus` (declared `BookId` is outside snapshot
+        // identity) both leave `new_id == self.snapshot_id` while silently
+        // invalidating what a preparation actually recorded. Clearing here
+        // also covers the ordinary snapshot-changed case, so there is no
+        // separate conditional to keep in sync with it.
+        self.format_patches.clear();
         self.snapshot_id = new_id;
         MutationEffect {
             snapshot_id: self.snapshot_id,

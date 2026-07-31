@@ -85,6 +85,18 @@ pub enum FormatPatchError {
     },
     /// No such prepared format patch in this snapshot's table.
     UnknownPatch(FormatPatchId),
+    /// A book this preparation named is no longer resident. The preparation
+    /// table is cleared by every mutation that can change tokens or
+    /// residency (see `Braid`'s internal `effect_with_reorder`), so this
+    /// should never be reachable through the public API — recorded as a
+    /// typed variant rather than a panic precisely because "should never"
+    /// is not a proof, and a book-identity change that a byte-derived
+    /// snapshot id alone cannot see (a same-bytes book swap under
+    /// `replace_corpus`, say) is exactly the kind of gap that "should never"
+    /// has been wrong about before. Deliberately its own variant rather than
+    /// `StaleSnapshot`, which would report `expected == found` here and
+    /// describe a staleness that, by construction, is not what happened.
+    BookNotResident(BookId),
     /// Applying the preparation produced a token stream that cannot become
     /// resident.
     InvalidResult(IngestError),
@@ -100,6 +112,12 @@ impl std::fmt::Display for FormatPatchError {
             ),
             Self::UnknownPatch(id) => {
                 write!(f, "no prepared format patch with ordinal {}", id.ordinal)
+            }
+            Self::BookNotResident(book) => {
+                write!(
+                    f,
+                    "book {book} named by this preparation is no longer resident"
+                )
             }
             Self::InvalidResult(error) => {
                 write!(f, "formatted book is not resident-valid: {error}")
