@@ -3905,6 +3905,17 @@ read against a document, and a document's verses are in whatever order it puts
 them, including deliberately out-of-order editor content; the sorted keys made that
 order unrecoverable. Segment data was always correct (it is reached by SID).
 
+**Boundary shape amended by owner directive (same day):** the wasm projection is a
+single ordered entries list, `[sid, projection][]`, not `{ order, bySid }`. The shape
+is already breaking, so preserving map-lookup ergonomics bought nothing; one
+authoritative sequence beats two views one of which has to be documented as
+meaningless; and a consumer wanting O(1) lookup writes `new Map(entries)` and owns
+that container choice. The generated declaration reads
+`export type VrefIndex = [string, VerseProjection][];` — a transparent newtype over
+the pairs, which tsify renders as a clean tuple array with no named entry type
+needed. The regression asserts the tuple sequence post-serialization (order, that
+sorting would differ, and that each pair carries its whole projection).
+
 **Shape chosen.** Core's `VrefIndex` is now an order-preserving container: a
 `Vec<VrefEntry { sid, projection }>` in first-seen token order, plus a private
 `sid → position` index for lookup. Accessors are `entries()`, `sids()`, `iter()`,

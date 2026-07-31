@@ -674,26 +674,23 @@ mod tests {
             )),
         ] {
             let json = serde_json::to_value(&index).expect("serializes");
-            let order: Vec<&str> = json["order"]
-                .as_array()
-                .expect("an authoritative order array")
+            let entries = json.as_array().expect("ordered pairs, not an object");
+            let order: Vec<&str> = entries
                 .iter()
-                .map(|sid| sid.as_str().expect("sid"))
+                .map(|entry| entry[0].as_str().expect("sid"))
                 .collect();
             assert_eq!(order, expected, "the boundary must report document order");
-
-            // The lookup reaches every verse, and its own key enumeration is the
-            // sorted one that `order` exists to correct — asserted so the reason
-            // for carrying both is visible rather than assumed.
-            let by_sid = json["bySid"].as_object().expect("a lookup map");
-            assert_eq!(by_sid.len(), expected.len());
-            for sid in expected {
-                assert!(by_sid.contains_key(sid), "{sid} must be reachable");
-            }
-            let enumerated: Vec<&str> = by_sid.keys().map(String::as_str).collect();
-            assert_ne!(
-                enumerated, order,
-                "if these ever matched, this fixture stopped proving anything"
+            // Sorting is what a keyed object would have done to it, and what a
+            // consumer must never do to recover sequence.
+            let mut sorted = order.clone();
+            sorted.sort_unstable();
+            assert_ne!(order, sorted, "the fixture must distinguish the two");
+            // Each pair carries its whole projection, so the sequence is the only
+            // view a consumer needs.
+            assert!(
+                entries
+                    .iter()
+                    .all(|entry| entry[1]["text"].is_string() && entry[1]["segments"].is_array())
             );
         }
     }
