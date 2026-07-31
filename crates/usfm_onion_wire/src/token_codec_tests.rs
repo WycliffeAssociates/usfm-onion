@@ -1023,6 +1023,62 @@ const EMITTER_DIVERGENCES: [&str; 0] = [];
 /// source and every span come from the reconstruct emitter rather than off a parse.
 #[test]
 #[ignore = "walks the full corpus"]
+/// Every token of every corpus book, out through the boundary DTO and back, must
+/// come home semantically identical — the inbound conversion's corpus gate.
+///
+/// Cheap enough to ride the existing ignored suite: no encoding, no container, just
+/// the two conversions over ~1.5M tokens, which is the only scale at which a payload
+/// combination nobody thought to hand-write shows up.
+#[test]
+#[ignore = "walks the full corpus"]
+fn corpus_tokens_round_trip_through_the_boundary_dto() {
+    let mut tokens = 0usize;
+    let mut with_payload = 0usize;
+
+    for path in corpus_paths() {
+        let source = fs::read_to_string(&path).expect("fixture reads");
+        for (index, native) in parse(&source).tokens.iter().enumerate() {
+            let expected = OwnedToken::from_parsed(native);
+            let wire = crate::dto::Token::from(native);
+            let rebuilt = crate::dto::owned_token_from_dto(&wire, index as u32)
+                .unwrap_or_else(|error| panic!("{}: token {index}: {error}", path.display()));
+
+            // Identity is the whole comparison: the projection covers every fact
+            // the wire encoding reads, so agreeing on it is agreeing on all of them
+            // at once — and it catches a field a hand-written assertion list would
+            // have forgotten to check.
+            let identity = |token: &OwnedToken| {
+                use std::hash::Hasher;
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                token.hash_wire_identity(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(
+                identity(&rebuilt),
+                identity(&expected),
+                "{}: token {index} ({:?}) diverged: {rebuilt:?} vs {expected:?}",
+                path.display(),
+                expected.kind()
+            );
+            tokens += 1;
+            if expected.book_code().is_some()
+                || expected.number_info().is_some()
+                || expected.attribute_list().is_some()
+                || !expected.attributes().is_empty()
+            {
+                with_payload += 1;
+            }
+        }
+    }
+
+    println!("round-tripped {tokens} tokens ({with_payload} payload-bearing)");
+    assert!(tokens > 0, "the corpus must exercise the conversion");
+    assert!(
+        with_payload > 0,
+        "the corpus must exercise the payload-bearing kinds"
+    );
+}
+
 fn corpus_owned_token_sections_round_trip() {
     let mut books = 0usize;
     let mut tokens = 0usize;

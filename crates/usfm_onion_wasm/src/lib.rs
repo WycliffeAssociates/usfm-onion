@@ -236,6 +236,7 @@ mod tests {
                 book_code_valid: None,
                 attributes: Vec::new(),
                 attribute_source: None,
+                attribute_offset: None,
             },
         );
         // Attribute slice still lands right before \w*, independent of

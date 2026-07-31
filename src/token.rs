@@ -513,6 +513,40 @@ pub struct OwnedToken {
     payload: OwnedTokenPayload,
 }
 
+/// Every fact one owned token holds, as a boundary supplies them.
+///
+/// A borrowed input struct rather than a long argument list, so each fact is named
+/// at the call site and a new one cannot be silently absorbed into a positional
+/// slot. [`OwnedToken::from_parts`] destructures it exhaustively.
+#[derive(Debug, Clone)]
+pub struct OwnedTokenParts<'a> {
+    /// The caller's own stable id. Empty is refused: an unaddressable resident
+    /// token is what every later reconciliation would fail to find.
+    pub id: &'a str,
+    pub kind: TokenKind,
+    /// The exact bytes this token contributes to its book's source.
+    pub source: &'a str,
+    /// The canonical anchor, spelled as this library spells it (`"GEN 1:2"`).
+    pub sid: Option<&'a str>,
+    /// The marker name without its backslash. Required by the marker-like kinds,
+    /// refused on every other.
+    pub marker: Option<&'a str>,
+    /// `\+add`-style nesting. Marker and end-marker only.
+    pub nested: bool,
+    /// The book code and whether it is canonical. `BookCode` kind only.
+    pub book_code: Option<(&'a str, bool)>,
+    /// The parsed number payload. `Number` kind only.
+    pub number: Option<OwnedNumberInfo>,
+    /// The structured attribute list. Opening marker and milestone only.
+    pub attributes: &'a [OwnedAttribute],
+    /// The verbatim `|...` slice, when the token has one. Distinct from an empty
+    /// list: absent means the token carries no attribute list at all.
+    pub attribute_source: Option<&'a str>,
+    /// Distance from this token's own end to its attribute list, when the caller
+    /// remembers one. `None` places the list at the marker's closer.
+    pub attribute_offset: Option<BytePos>,
+}
+
 /// Why a working token could not become an owned resident token.
 ///
 /// Every variant names a payload fact the working shape
@@ -528,9 +562,19 @@ pub enum TokenBuildError {
     /// from the working shape, and no anchor supplied it either.
     MissingPayload { id: Box<str>, kind: TokenKind },
     /// The working token names a canonical anchor no anchor token can supply the
-    /// structured form of. Keeping the formatted string without it would leave a
-    /// token whose spelling and structured anchor disagree.
+    /// structured form of, or a boundary supplied anchor text this library would
+    /// never have written. Keeping the spelling without the structured form would
+    /// leave a token whose two views of its own address disagree.
     UnresolvableSid { id: Box<str>, sid: Box<str> },
+    /// A fact was supplied that this kind of token cannot hold — a book code on a
+    /// text token, an attribute list on an end marker, nesting on a milestone.
+    /// Refused rather than dropped: a caller that sent it believes it means
+    /// something.
+    UnexpectedPayload {
+        id: Box<str>,
+        kind: TokenKind,
+        fact: &'static str,
+    },
 }
 
 impl std::fmt::Display for TokenBuildError {
@@ -548,6 +592,9 @@ impl std::fmt::Display for TokenBuildError {
                     f,
                     "token {id} names the anchor {sid} with no structured form"
                 )
+            }
+            Self::UnexpectedPayload { id, kind, fact } => {
+                write!(f, "token {id} of kind {kind:?} cannot carry a {fact}")
             }
         }
     }
@@ -788,6 +835,164 @@ impl OwnedToken {
                 state.write_u8(*kind as u8);
             }
         }
+    }
+
+    /// Builds an owned resident token from the facts a boundary carries.
+    ///
+    /// This is the constructor a DTO boundary needs and
+    /// [`Self::from_format_token`] cannot be: a format/fix pass hands back a
+    /// working token that *descends* from a resident one, so the anchor supplies
+    /// what the working shape drops, while a caller handing over a whole book has
+    /// no anchor to descend from — it has the facts themselves, and a token stream
+    /// arriving as data must be able to say `\id GEN` without borrowing a payload
+    /// from a token that does not exist yet.
+    ///
+    /// # Two layers, two jobs
+    ///
+    /// A boundary above this one owns *shape*: whether its own wire form was
+    /// well-formed, whether a required field was absent, whether a string parsed
+    /// as the type it claims. This function owns *legality*: whether the facts,
+    /// taken together, describe a token this library can hold. A payload on the
+    /// wrong kind, a marker-bearing kind with no marker, an attribute list on an
+    /// end marker, an anchor whose text this library would never have written —
+    /// each is refused with a typed error rather than dropped, coerced, or
+    /// guessed at, because a resident token that quietly lost a fact is worse than
+    /// a rejected input.
+    ///
+    /// The parts are destructured exhaustively with no `..`, so a new token fact
+    /// is a compile error here rather than a field this constructor silently
+    /// ignores.
+    pub fn from_parts(parts: OwnedTokenParts<'_>) -> Result<Self, TokenBuildError> {
+        let OwnedTokenParts {
+            id,
+            kind,
+            source,
+            sid,
+            marker,
+            nested,
+            book_code,
+            number,
+            attributes,
+            attribute_source,
+            attribute_offset,
+        } = parts;
+
+        let id = StableTokenId::new(id.to_owned()).ok_or(TokenBuildError::MissingId)?;
+        let missing = || TokenBuildError::MissingPayload {
+            id: Box::from(id.as_str()),
+            kind,
+        };
+        let unexpected = |fact: &'static str| TokenBuildError::UnexpectedPayload {
+            id: Box::from(id.as_str()),
+            kind,
+            fact,
+        };
+
+        // The formatted anchor has to become the structured one the packed form is
+        // built from. Text this library would never have emitted is refused rather
+        // than repaired: an anchor is an address, and a repaired address points
+        // somewhere nobody named.
+        let parsed_sid = match sid {
+            None => None,
+            Some(text) => {
+                Some(
+                    Sid::parse(text).ok_or_else(|| TokenBuildError::UnresolvableSid {
+                        id: Box::from(id.as_str()),
+                        sid: Box::from(text),
+                    })?,
+                )
+            }
+        };
+
+        let marker_like = matches!(
+            kind,
+            TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone
+        );
+        if !marker_like && marker.is_some() {
+            return Err(unexpected("marker"));
+        }
+        if kind != TokenKind::BookCode && book_code.is_some() {
+            return Err(unexpected("book code"));
+        }
+        if kind != TokenKind::Number && number.is_some() {
+            return Err(unexpected("number"));
+        }
+        // Attributes belong to an opening marker or a milestone. An end marker
+        // structurally cannot carry them, and no other kind can either.
+        let attribute_bearing = matches!(kind, TokenKind::Marker | TokenKind::Milestone);
+        if !attribute_bearing
+            && (!attributes.is_empty() || attribute_source.is_some() || attribute_offset.is_some())
+        {
+            return Err(unexpected("attribute list"));
+        }
+        // Nesting is a marker-pair fact: `\+add` opens and `\+add*` closes. A
+        // milestone has no nesting concept, so accepting `true` would drop it.
+        if nested && !matches!(kind, TokenKind::Marker | TokenKind::EndMarker) {
+            return Err(unexpected("nesting"));
+        }
+
+        let attrs = (attribute_bearing && (!attributes.is_empty() || attribute_source.is_some()))
+            .then(|| OwnedMarkerAttrs {
+                attributes: attributes.to_vec().into(),
+                attribute_source: attribute_source.map(Box::from),
+                attribute_offset,
+            });
+
+        let payload = match kind {
+            TokenKind::Newline
+            | TokenKind::OptBreak
+            | TokenKind::MilestoneEnd
+            | TokenKind::Text => OwnedTokenPayload::Plain,
+            TokenKind::BookCode => {
+                let (code, is_valid) = book_code.ok_or_else(missing)?;
+                OwnedTokenPayload::BookCode(OwnedBookCode {
+                    code: Box::from(code),
+                    is_valid,
+                })
+            }
+            TokenKind::Number => OwnedTokenPayload::Number(number.ok_or_else(missing)?),
+            TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone => {
+                let marker = marker.ok_or_else(missing)?;
+                if marker.is_empty() {
+                    return Err(missing());
+                }
+                let metadata = marker_metadata(marker);
+                let structural = crate::marker_defs::structural_marker_info(marker, metadata.kind);
+                match kind {
+                    TokenKind::Marker => OwnedTokenPayload::Marker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                        attrs,
+                    },
+                    TokenKind::EndMarker => OwnedTokenPayload::EndMarker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                    },
+                    _ => OwnedTokenPayload::Milestone {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        attrs,
+                    },
+                }
+            }
+        };
+
+        Ok(Self {
+            id,
+            kind,
+            source: Box::from(source),
+            // The canonical re-print, never the caller's own text: a resident
+            // token has one spelling of its anchor, and a boundary that wrote the
+            // other spelling must not leave two in the corpus.
+            sid: parsed_sid.map(|sid| Box::from(sid.to_string().as_str())),
+            parsed_sid,
+            payload,
+        })
     }
 
     /// Copies one parsed token into the owned semantic representation.
@@ -1908,6 +2113,50 @@ impl Sid {
         self.verse.saturating_add(self.verse_end_delta as u16)
     }
 
+    /// Reads back an anchor this library wrote, and nothing else.
+    ///
+    /// Deliberately strict: a boundary that accepts an anchor as text (a DTO, an
+    /// IPC payload) has to turn it back into the structured value the packed form
+    /// is built from, and guessing at a spelling this library never emits would
+    /// invent an anchor rather than recover one. Anything that would not
+    /// round-trip is `None` for the caller to refuse, not to repair.
+    ///
+    /// Two spellings are accepted because two are written. A chapter-level anchor
+    /// (verse zero) prints as `"GEN 1"` here, while the boundary DTO's own
+    /// formatter prints the locator unconditionally and so writes `"GEN 1:0"` for
+    /// the same value. Both parse to the same `Sid`; every other form is one
+    /// spelling only (`"GEN 1:2"`, `"GEN 1:2-3"`). A caller re-printing the result
+    /// gets this type's spelling, which is what makes the two views converge
+    /// instead of multiplying.
+    pub fn parse(text: &str) -> Option<Self> {
+        let (book, locator) = text.split_once(' ')?;
+        let book = BookId::from_str(book)?;
+        let (chapter, verses) = match locator.split_once(':') {
+            // A chapter anchor: verse zero, and no locator to read.
+            None => return Some(Self::new(book, parse_sid_number(locator)?, 0)),
+            Some(parts) => parts,
+        };
+        let chapter = parse_sid_number(chapter)?;
+        match verses.split_once('-') {
+            // Verse zero here is the boundary formatter's spelling of the chapter
+            // anchor the branch above spells without a locator; both are this
+            // library's own output, so both resolve to the same value.
+            None => Some(Self::new(book, chapter, parse_sid_number(verses)?)),
+            Some((start, end)) => {
+                let verse = parse_sid_number(start)?;
+                let verse_end = parse_sid_number(end)?;
+                // `Display` writes a range only when the end is genuinely past the
+                // start, and `with_range` saturates the delta at 255 — so a text
+                // that would not survive the round trip is refused rather than
+                // silently clamped into a different anchor.
+                if verse == 0 || verse_end <= verse || verse_end - verse > u16::from(u8::MAX) {
+                    return None;
+                }
+                Some(Self::with_range(book, chapter, verse, verse_end))
+            }
+        }
+    }
+
     /// The verse-locator fragment: `"1"` for a single verse, `"1-2"` for a range.
     pub fn verse_locator(&self) -> String {
         if self.verse_end_delta == 0 {
@@ -1916,6 +2165,20 @@ impl Sid {
             format!("{}-{}", self.verse, self.verse_end())
         }
     }
+}
+
+/// One `u16` field of an anchor: digits only, no sign, no padding, no whitespace —
+/// exactly what `Display` emits and nothing a lenient integer parse would also
+/// accept.
+fn parse_sid_number(text: &str) -> Option<u16> {
+    if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    // A leading zero never comes out of `Display`, so it cannot come back in.
+    if text.len() > 1 && text.starts_with('0') {
+        return None;
+    }
+    text.parse().ok()
 }
 
 impl std::fmt::Display for Sid {
@@ -2439,5 +2702,272 @@ mod encode_attr_value_tests {
         assert_eq!(encode_attr_value("plain"), "plain");
         assert_eq!(encode_attr_value("a\"b"), "a\\\"b");
         assert_eq!(encode_attr_value("a\\b"), "a\\\\b");
+    }
+}
+
+#[cfg(test)]
+mod from_parts_tests {
+    use super::*;
+
+    fn parts<'a>(id: &'a str, kind: TokenKind, source: &'a str) -> OwnedTokenParts<'a> {
+        OwnedTokenParts {
+            id,
+            kind,
+            source,
+            sid: None,
+            marker: None,
+            nested: false,
+            book_code: None,
+            number: None,
+            attributes: &[],
+            attribute_source: None,
+            attribute_offset: None,
+        }
+    }
+
+    /// Every anchor this library writes must read back as the same value, and
+    /// anything it would never write must not read back at all. A boundary that
+    /// accepted a repaired anchor would be pointing somewhere nobody named.
+    /// Both spellings this library writes read back as the same anchor, and the
+    /// re-print is always this type's own — which is how a boundary's spelling
+    /// converges on the resident one instead of adding a second.
+    #[test]
+    fn either_spelling_of_a_chapter_anchor_parses_to_one_value() {
+        let book = BookId::from_str("GEN").unwrap();
+        for (dto_spelling, canonical) in [
+            ("GEN 0:0", Sid::new(book, 0, 0)),
+            ("GEN 1:0", Sid::new(book, 1, 0)),
+        ] {
+            assert_eq!(Sid::parse(dto_spelling), Some(canonical));
+            assert_eq!(Sid::parse(&canonical.to_string()), Some(canonical));
+            assert_ne!(
+                canonical.to_string(),
+                dto_spelling,
+                "this test is only meaningful while the two spellings differ"
+            );
+        }
+    }
+
+    #[test]
+    fn sid_parses_back_exactly_what_it_prints() {
+        let book = BookId::from_str("GEN").unwrap();
+        for sid in [
+            Sid::new(book, 0, 0),
+            Sid::new(book, 1, 0),
+            Sid::new(book, 1, 1),
+            Sid::new(book, 150, 176),
+            Sid::with_range(book, 1, 1, 2),
+            Sid::with_range(book, 3, 10, 12),
+            Sid::with_range(book, 1, 1, 256),
+        ] {
+            let text = sid.to_string();
+            assert_eq!(Sid::parse(&text), Some(sid), "{text} must round-trip");
+        }
+
+        for text in [
+            "",
+            "GEN",
+            "GENESIS 1:1",
+            "GEN 1:",
+            "GEN :1",
+            "GEN 01:1",
+            "GEN 1:01",
+            "GEN 1:2-2",
+            "GEN 1:2-1",
+            "GEN 1:1-500",
+            "GEN 1:1-",
+            "GEN 1:1:1",
+            "GEN -1:1",
+            "GEN 1:1 ",
+            " GEN 1:1",
+            "GEN 1:1a",
+        ] {
+            assert_eq!(Sid::parse(text), None, "{text:?} must not parse");
+        }
+    }
+
+    #[test]
+    fn a_boundary_token_is_built_from_its_own_facts() {
+        // The case `from_format_token` cannot serve: a book code with no anchor
+        // token to borrow a payload from.
+        let token = OwnedToken::from_parts(OwnedTokenParts {
+            sid: Some("GEN 0"),
+            book_code: Some(("GEN", true)),
+            ..parts("editor-1", TokenKind::BookCode, "GEN")
+        })
+        .expect("a book code carries its own payload");
+        assert_eq!(token.id().as_str(), "editor-1");
+        assert_eq!(token.source(), "GEN");
+        assert_eq!(token.sid(), Some("GEN 0"));
+        assert_eq!(token.parsed_sid(), Sid::parse("GEN 0"));
+        let code = token.book_code().expect("book code payload");
+        assert_eq!(&*code.code, "GEN");
+        assert!(code.is_valid);
+
+        let nested = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("add"),
+            nested: true,
+            ..parts("editor-2", TokenKind::Marker, "\\+add ")
+        })
+        .expect("a nested marker");
+        assert_eq!(nested.marker_name(), Some("add"));
+        assert!(nested.nested());
+
+        let number = OwnedToken::from_parts(OwnedTokenParts {
+            number: Some(OwnedNumberInfo {
+                start: 1,
+                end: Some(2),
+                kind: NumberRangeKind::Range,
+            }),
+            ..parts("editor-3", TokenKind::Number, "1-2")
+        })
+        .expect("a number");
+        assert_eq!(number.number_info().map(|info| info.start), Some(1));
+    }
+
+    /// Absent and empty are different facts about an attribute list, and the
+    /// difference survives: absent means the token carries no list at all.
+    #[test]
+    fn attribute_presence_permutations_survive() {
+        let attribute = OwnedAttribute {
+            source: Box::from("lemma=\"grace\""),
+            key: Box::from("lemma"),
+            value: Box::from("grace"),
+            is_default: false,
+            span: None,
+        };
+        let base = parts("editor-1", TokenKind::Marker, "\\w ");
+
+        let none = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            ..base.clone()
+        })
+        .expect("no attributes at all");
+        assert_eq!(none.attribute_list(), None);
+        assert!(none.attributes().is_empty());
+
+        let empty_verbatim = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attribute_source: Some(""),
+            ..base.clone()
+        })
+        .expect("an empty verbatim list");
+        assert_eq!(empty_verbatim.attribute_list(), Some(""));
+
+        let structured = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attributes: std::slice::from_ref(&attribute),
+            ..base.clone()
+        })
+        .expect("structured attributes with no verbatim");
+        assert_eq!(structured.attribute_list(), None);
+        assert_eq!(structured.attributes().len(), 1);
+
+        let both = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attributes: std::slice::from_ref(&attribute),
+            attribute_source: Some("|lemma=\"grace\""),
+            attribute_offset: Some(3),
+            ..base
+        })
+        .expect("both, with a remembered placement");
+        assert_eq!(both.attribute_list(), Some("|lemma=\"grace\""));
+        assert_eq!(both.attribute_offset(), Some(3));
+
+        // All four are different tokens, which is the point of keeping the
+        // distinction rather than normalizing it.
+        let identities: std::collections::BTreeSet<u64> = [none, empty_verbatim, structured, both]
+            .iter()
+            .map(|token| {
+                use std::hash::Hasher;
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                token.hash_wire_identity(&mut hasher);
+                hasher.finish()
+            })
+            .collect();
+        assert_eq!(identities.len(), 4);
+    }
+
+    /// A fact on a kind that cannot hold it is refused, not dropped: a caller that
+    /// sent it believes it means something.
+    #[test]
+    fn facts_on_the_wrong_kind_are_refused() {
+        let unexpected =
+            |parts: OwnedTokenParts<'_>, fact: &str| match OwnedToken::from_parts(parts) {
+                Err(TokenBuildError::UnexpectedPayload { fact: found, .. }) => {
+                    assert_eq!(found, fact)
+                }
+                other => panic!("expected a refused {fact}, got {other:?}"),
+            };
+
+        unexpected(
+            OwnedTokenParts {
+                book_code: Some(("GEN", true)),
+                ..parts("t", TokenKind::Text, "GEN")
+            },
+            "book code",
+        );
+        unexpected(
+            OwnedTokenParts {
+                marker: Some("p"),
+                ..parts("t", TokenKind::Text, "text")
+            },
+            "marker",
+        );
+        unexpected(
+            OwnedTokenParts {
+                number: Some(OwnedNumberInfo {
+                    start: 1,
+                    end: None,
+                    kind: NumberRangeKind::Single,
+                }),
+                ..parts("t", TokenKind::Text, "1")
+            },
+            "number",
+        );
+        // An end marker structurally cannot own an attribute list.
+        unexpected(
+            OwnedTokenParts {
+                marker: Some("w"),
+                attribute_source: Some("|x=\"y\""),
+                ..parts("t", TokenKind::EndMarker, "\\w*")
+            },
+            "attribute list",
+        );
+        // A milestone has no nesting concept, so accepting `true` would drop it.
+        unexpected(
+            OwnedTokenParts {
+                marker: Some("zaln-s"),
+                nested: true,
+                ..parts("t", TokenKind::Milestone, "\\zaln-s")
+            },
+            "nesting",
+        );
+
+        // And the payloads a kind requires are equally not optional.
+        for (kind, source) in [
+            (TokenKind::BookCode, "GEN"),
+            (TokenKind::Number, "1"),
+            (TokenKind::Marker, "\\p "),
+        ] {
+            assert!(matches!(
+                OwnedToken::from_parts(parts("t", kind, source)),
+                Err(TokenBuildError::MissingPayload { .. })
+            ));
+        }
+
+        // An unaddressable token is refused before anything else is read.
+        assert_eq!(
+            OwnedToken::from_parts(parts("", TokenKind::Text, "x")),
+            Err(TokenBuildError::MissingId)
+        );
+        // As is an anchor this library would never have written.
+        assert!(matches!(
+            OwnedToken::from_parts(OwnedTokenParts {
+                sid: Some("GENESIS 1:1"),
+                ..parts("t", TokenKind::Text, "x")
+            }),
+            Err(TokenBuildError::UnresolvableSid { .. })
+        ));
     }
 }

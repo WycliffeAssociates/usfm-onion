@@ -29,7 +29,7 @@
 //!   the container, TOC-entry, section-header, or field-entry level. The frozen
 //!   payload is `u32`, so narrower flag fields widen into it.
 
-use usfm_onion::token::BookId;
+use usfm_onion::token::{BookId, TokenBuildError};
 
 use crate::schema::SectionKind;
 
@@ -127,6 +127,50 @@ pub enum EncodeError {
     /// fix that went in.
     EmptyFix { book: BookId, code: u8 },
 }
+
+/// Why one boundary token could not become a resident token.
+///
+/// This layer owns *shape*: whether the DTO said enough, and whether what it said
+/// parses as the type it claims. Semantic legality — a payload on a kind that
+/// cannot hold it, an anchor this library would never have written — belongs to
+/// core's own builder, and arrives here as [`Self::Illegal`] carrying its verdict.
+/// Splitting it that way keeps payload legality in the module that owns the payload
+/// while keeping DTO-shape complaints where the DTO is read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenInputError {
+    /// The token's `id` is absent or empty. Nothing downstream could address it.
+    MissingId { token_idx: u32 },
+    /// A `bookCode` token supplied a code but not its validity flag, or the
+    /// reverse. The pair is one fact and half of it is not usable.
+    IncompleteBookCode { token_idx: u32 },
+    /// Core refused the assembled facts. The verdict is carried verbatim rather
+    /// than re-worded, so the reason a caller sees is the reason core gave.
+    Illegal {
+        token_idx: u32,
+        reason: TokenBuildError,
+    },
+}
+
+impl std::fmt::Display for TokenInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingId { token_idx } => {
+                write!(f, "token {token_idx} carries no id")
+            }
+            Self::IncompleteBookCode { token_idx } => {
+                write!(f, "token {token_idx} supplies half of a book code")
+            }
+            Self::Illegal { token_idx, reason } => {
+                write!(
+                    f,
+                    "token {token_idx} is not a legal resident token: {reason}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for TokenInputError {}
 
 /// Why a section set cannot be laid out canonically. Each variant mirrors a
 /// check the reader performs, so the writer can never emit a container its own

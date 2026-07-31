@@ -3967,3 +3967,68 @@ enum) plus wire `TryFrom<&Token>` mapping shape-level problems to the frozen `To
 relaxing the C4-hardened no-anchor refusals. Same session, owner also redirected the RFC 1
 boundary projection from `{order, bySid}` to a single ordered `[sid, projection][]` entries
 list — one authority, consumers build their own lookup.
+
+## 2026-07-31 — Phase F step 1b: the inbound token boundary (DTO → resident token)
+
+Every token-accepting resident verb needs boundary tokens to become resident ones, and
+nothing could do it: `from_format_token` serves a *descendant* of a resident token (the
+anchor supplies what the working shape drops), while a caller handing over a whole book
+has no anchor — it has the facts. Built as approved: core owns payload legality, wire
+owns DTO shape.
+
+**Core.** `OwnedToken::from_parts(OwnedTokenParts) -> Result<Self, TokenBuildError>`, with
+the parts destructured exhaustively and no `..`, so a new token fact is a compile error at
+the construction site — the same guarantee `hash_wire_identity` gives. It refuses rather
+than guesses: a payload on a kind that cannot hold it (`UnexpectedPayload`, naming the
+fact), a marker-bearing kind with no marker or a payload-bearing kind with no payload
+(`MissingPayload`), an empty id (`MissingId`), an anchor this library would never have
+written (`UnresolvableSid`). An end marker cannot carry an attribute list and a milestone
+cannot carry nesting; both are refusals, because a caller that sent one believes it means
+something.
+
+`Sid::parse` is the inverse the boundary needs — strict, so anchor text this library never
+emits cannot become an anchor pointing somewhere nobody named. Writing it surfaced a
+**pre-existing inconsistency worth recording: the library spells a chapter-level anchor
+two ways.** Core's `Display` writes `"GEN 1"` (verse zero, no locator); wire's `format_sid`
+— the DTO/JS spelling — writes `"GEN 1:0"`. Both parse to the same value and `from_parts`
+stores the canonical re-print, so the two views converge on core's spelling instead of
+multiplying; unifying the emitters is a separate change with golden and JS-surface reach,
+not folded in here.
+
+**Wire.** `owned_token_from_dto(&Token, token_idx)` plus the frozen `TokenInputError`
+(`MissingId`, `IncompleteBookCode`, `Illegal { reason }`). Half a book code is a shape
+complaint answered here; contradictory facts are core's verdict carried verbatim rather
+than re-worded. `token_idx` is in the error because "one token out of a book's worth is
+wrong" is only actionable with a position.
+
+**The corpus gate earned its keep — it caught three bugs the hand-written cases did not**,
+over 5,716,969 tokens (1,347,793 payload-bearing), comparing whole-token identity via the
+wire-identity projection rather than a hand-listed field set:
+
+1. **Attribute placement had no DTO field.** The verbatim `|...` slice crossed the boundary
+   but not *where it sat*, so a round trip fell back to the closer rule and re-emitted
+   alignment lists somewhere else — byte-losslessness kept only for layouts that happen to
+   match the fallback. `Token.attributeOffset?: number` added, populated on the way out,
+   read on the way in, and computed in the JS materializer from the packed list span so the
+   cross-language equivalence gate still sees identical objects.
+2. **Attribute values are escape-decoded outbound.** The DTO gives JS the logical string
+   (`\"` → `"`); core holds the source spelling, which is what the emitter writes back.
+   Re-encoding the decoded string is exact only for the escapes this library recognizes, so
+   the verbatim slice is now the authority and re-encoding is the fallback for an attribute
+   the caller authored.
+3. **Recovering the value needed the key, not a delimiter search.** A default attribute's
+   slice *is* its value and may contain quotes of its own (`|"caption"`), or — when the
+   source is malformed — several `key="value"` pairs the parser could only read as one
+   default attribute (`|lemma= strong="l"`). Hunting for `="` cut those in the wrong place;
+   the attribute's own key says which shape it is.
+
+Each has a named regression beside the corpus gate, and the standing dimensions are covered:
+both id lanes (parse-assigned positional and a caller's own opaque ids), hostile DTOs (payload
+on the wrong kind, half a book code, unparseable anchor, attribute list on an end marker,
+marker kind with no marker), and all three attribute-presence facts (absent, empty verbatim,
+structured without verbatim).
+
+Gates: `cargo test --workspace` 619 passed / 0 failed; oracle `--ignored` byte-identical;
+release ignored braid 3 / wire 5+2 / wasm 1; `test:packed` and `test:packed:web` 410 cases /
+5,717,153 tokens with the new field carried by both materializers; `cargo fmt --all --check`
+clean.

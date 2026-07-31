@@ -60,10 +60,13 @@ use usfm_onion::markers::{
 };
 use usfm_onion::token::{
     AttributeItem as NativeAttributeItem, MarkerMetadata as NativeMarkerMetadata,
-    NumberRangeKind as NativeNumberRangeKind, SerializableAttribute, SerializableToken,
-    Sid as NativeSid, Span as NativeSpan, Token as NativeToken, TokenData as NativeTokenData,
-    TokenKind as NativeTokenKind, UsfmToken,
+    NumberRangeKind as NativeNumberRangeKind, OwnedAttribute as NativeOwnedAttribute,
+    OwnedNumberInfo as NativeOwnedNumberInfo, OwnedToken, OwnedTokenParts, SerializableAttribute,
+    SerializableToken, Sid as NativeSid, Span as NativeSpan, Token as NativeToken,
+    TokenData as NativeTokenData, TokenKind as NativeTokenKind, UsfmToken, encode_attr_value,
 };
+
+use crate::error::TokenInputError;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -885,6 +888,140 @@ pub struct Token {
     /// its verbatim" rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attribute_source: Option<String>,
+    /// Bytes from the end of this token's own source to the start of its attribute
+    /// list, when the token remembers a placement.
+    ///
+    /// The other half of what `attribute_source` promises: an attribute list does
+    /// not sit next to the marker that owns it, and one placement rule cannot
+    /// express every real layout — an alignment list sits at the opener, a wordlist
+    /// list can sit past a nested closer. Carrying the verbatim text without its
+    /// position makes a round trip byte-lossless only for the layouts that happen
+    /// to match the fallback. `None` means no remembered placement, and an emitter
+    /// places the list at the marker's closer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribute_offset: Option<u32>,
+}
+
+/// The remembered distance from a token's own end to its attribute list.
+///
+/// `checked_sub` rather than a saturating one, mirroring core: a list recorded as
+/// starting before the token that owns it is not a distance this can represent, so
+/// it falls back to the closer rule instead of pretending to be zero.
+fn attribute_offset(
+    attrs: Option<&usfm_onion::token::MarkerAttrs<'_>>,
+    owner_end: u32,
+) -> Option<u32> {
+    attrs
+        .and_then(|attrs| attrs.attribute_source)
+        .and_then(|(span, _)| span.start.checked_sub(owner_end))
+}
+
+/// Turns one boundary token into a resident token.
+///
+/// The inbound half of the token boundary, and the exact counterpart of
+/// `From<&Token>` going out. Two layers do two jobs here: this function reads the
+/// DTO — whether it said enough, whether what it said parses — while core's
+/// `OwnedToken::from_parts` decides whether the facts together describe a token the
+/// library can hold. Neither guesses: a DTO that is short a field and a DTO whose
+/// fields contradict each other are both refusals, with the second carrying core's
+/// own verdict rather than a re-worded one.
+///
+/// `token_idx` names the position in the caller's array, which is the only address
+/// a caller can act on when one token out of a book's worth is wrong.
+pub fn owned_token_from_dto(token: &Token, token_idx: u32) -> Result<OwnedToken, TokenInputError> {
+    if token.id.is_empty() {
+        return Err(TokenInputError::MissingId { token_idx });
+    }
+    let book_code = match (token.book_code.as_deref(), token.book_code_valid) {
+        (None, None) => None,
+        (Some(code), Some(is_valid)) => Some((code, is_valid)),
+        // Half a book code is not a usable fact, and picking a default validity
+        // would be inventing the answer the caller failed to give.
+        _ => return Err(TokenInputError::IncompleteBookCode { token_idx }),
+    };
+    let attributes: Vec<NativeOwnedAttribute> =
+        token.attributes.iter().map(owned_attribute).collect();
+
+    OwnedToken::from_parts(OwnedTokenParts {
+        id: &token.id,
+        kind: token.kind.into(),
+        source: &token.source,
+        sid: token.sid.as_deref(),
+        marker: token.marker.as_deref(),
+        // Absent means not nested: a token that never mentions nesting is the
+        // ordinary case, and every marker-free kind refuses a `true` outright.
+        nested: token.nested.unwrap_or(false),
+        book_code,
+        number: token
+            .number_info
+            .as_ref()
+            .map(|number| NativeOwnedNumberInfo {
+                start: number.start,
+                end: number.end,
+                kind: number.kind.into(),
+            }),
+        attributes: &attributes,
+        attribute_source: token.attribute_source.as_deref(),
+        attribute_offset: token.attribute_offset,
+    })
+    .map_err(|reason| TokenInputError::Illegal { token_idx, reason })
+}
+
+/// One boundary attribute as core holds it. The span travels as-is — including
+/// absent, which is what an editor-authored attribute honestly has.
+///
+/// The value needs recovering rather than copying: the outbound conversion decodes
+/// USFM escapes so a JS consumer sees the logical string (`\"` becomes `"`), while
+/// core holds the source spelling, which is what the emitter writes back. Re-encoding
+/// the decoded string would be exact only for the escapes this library recognizes,
+/// so the verbatim `text` — the attribute's own `key="value"` slice — is the
+/// authority when it carries one, and re-encoding is the fallback for an attribute
+/// the caller authored and therefore has no verbatim spelling of.
+fn owned_attribute(attribute: &AttributeItem) -> NativeOwnedAttribute {
+    let value = verbatim_value(attribute)
+        .map(Box::from)
+        .unwrap_or_else(|| Box::from(encode_attr_value(&attribute.value).as_str()));
+    NativeOwnedAttribute {
+        source: Box::from(attribute.text.as_str()),
+        key: Box::from(attribute.key.as_str()),
+        value,
+        is_default: attribute.is_default,
+        span: attribute
+            .span
+            .as_ref()
+            .map(|span| NativeSpan::new(span.start, span.end)),
+    }
+}
+
+/// The value exactly as it is spelled in an attribute's verbatim slice.
+///
+/// Read structurally, from the attribute's own key rather than by hunting for a
+/// `="` in the text: a default attribute's slice *is* its value and may contain
+/// anything at all — quotes of its own (`|"caption"`), or, when the source is
+/// malformed, several `key="value"` pairs the parser could not split
+/// (`|lemma= strong="l" …` parses as one default attribute). Searching for a
+/// delimiter would cut those in the wrong place; the key says which shape this is.
+///
+/// `None` only when there is no verbatim slice at all, which is what an attribute
+/// the caller authored has.
+fn verbatim_value(attribute: &AttributeItem) -> Option<&str> {
+    if attribute.text.is_empty() {
+        return None;
+    }
+    if attribute.key.is_empty() {
+        return Some(&attribute.text);
+    }
+    let rest = attribute
+        .text
+        .strip_prefix(attribute.key.as_str())?
+        .strip_prefix('=')?;
+    // Quoted is the well-formed spelling; an unquoted remainder is kept verbatim
+    // rather than "corrected", since the emitter has to write back what was read.
+    Some(
+        rest.strip_prefix('"')
+            .and_then(|inner| inner.strip_suffix('"'))
+            .unwrap_or(rest),
+    )
 }
 
 impl<'a> From<&NativeToken<'a>> for Token {
@@ -904,6 +1041,7 @@ impl<'a> From<&NativeToken<'a>> for Token {
             book_code_valid: None,
             attributes: Vec::new(),
             attribute_source: None,
+            attribute_offset: None,
         };
 
         match &token.data {
@@ -925,6 +1063,7 @@ impl<'a> From<&NativeToken<'a>> for Token {
                     .as_deref()
                     .and_then(|a| a.attribute_source)
                     .map(|(_, slice)| slice.to_string());
+                value.attribute_offset = attribute_offset(attrs.as_deref(), token.span.end);
             }
             NativeTokenData::EndMarker {
                 metadata,
@@ -952,6 +1091,7 @@ impl<'a> From<&NativeToken<'a>> for Token {
                     .as_deref()
                     .and_then(|a| a.attribute_source)
                     .map(|(_, slice)| slice.to_string());
+                value.attribute_offset = attribute_offset(attrs.as_deref(), token.span.end);
             }
             NativeTokenData::BookCode { code, is_valid } => {
                 value.book_code = Some((*code).to_string());
@@ -1926,5 +2066,225 @@ mod tests {
                 kind: TextDiffRunKind::Added
             }]
         );
+    }
+}
+
+#[cfg(test)]
+mod owned_token_from_dto_tests {
+    use super::*;
+    use usfm_onion::parse::parse;
+
+    fn dto(kind: TokenKind, source: &str) -> Token {
+        Token {
+            id: "editor-1".to_string(),
+            kind,
+            source: source.to_string(),
+            span: None,
+            sid: None,
+            marker: None,
+            nested: None,
+            marker_metadata: None,
+            structural: None,
+            number_info: None,
+            book_code: None,
+            book_code_valid: None,
+            attributes: Vec::new(),
+            attribute_source: None,
+            attribute_offset: None,
+        }
+    }
+
+    /// The inbound and outbound halves of the token boundary must describe the same
+    /// token. Both id lanes are exercised: parse-assigned positional ids, and a
+    /// caller's own opaque ids — the editor's case, and the one where nothing but
+    /// the DTO's own `id` field can carry the identity.
+    #[test]
+    fn a_token_survives_the_round_trip_in_both_id_lanes() {
+        let source = "\\id GEN Genesis\n\\c 1\n\\p\n\\v 1-2 a \\w gracious|lemma=\"grace\"\\w* \\add \\+add b\\+add*\\add* c\n";
+        let parsed = parse(source);
+        let owned: Vec<OwnedToken> = parsed.tokens.iter().map(OwnedToken::from_parsed).collect();
+        // The fixture has to actually exercise the payload-bearing kinds, or the
+        // round trip proves only that plain text survives.
+        assert!(owned.iter().any(|token| token.book_code().is_some()));
+        assert!(owned.iter().any(|token| token.number_info().is_some()));
+        assert!(owned.iter().any(|token| token.nested()));
+        assert!(owned.iter().any(|token| token.attribute_list().is_some()));
+        assert!(owned.iter().any(|token| token.sid().is_some()));
+
+        for relabel in [false, true] {
+            for (index, native) in parsed.tokens.iter().enumerate() {
+                let mut wire = Token::from(native);
+                if relabel {
+                    wire.id = format!("editor-{index}");
+                }
+                let rebuilt = owned_token_from_dto(&wire, index as u32)
+                    .unwrap_or_else(|error| panic!("token {index} must convert: {error}"));
+
+                let expected = &owned[index];
+                assert_eq!(rebuilt.kind(), expected.kind());
+                assert_eq!(rebuilt.source(), expected.source());
+                assert_eq!(rebuilt.sid(), expected.sid());
+                assert_eq!(rebuilt.parsed_sid(), expected.parsed_sid());
+                assert_eq!(rebuilt.marker_name(), expected.marker_name());
+                assert_eq!(rebuilt.nested(), expected.nested());
+                assert_eq!(
+                    rebuilt.book_code().map(|code| (&code.code, code.is_valid)),
+                    expected.book_code().map(|code| (&code.code, code.is_valid))
+                );
+                assert_eq!(rebuilt.number_info(), expected.number_info());
+                assert_eq!(rebuilt.attribute_list(), expected.attribute_list());
+                assert_eq!(rebuilt.attributes(), expected.attributes());
+                assert_eq!(
+                    rebuilt.id().as_str(),
+                    if relabel {
+                        format!("editor-{index}")
+                    } else {
+                        expected.id().as_str().to_string()
+                    }
+                );
+            }
+        }
+    }
+
+    /// Shape problems belong to this layer; legality belongs to core's builder. Each
+    /// refusal must name the one that actually applies, so a caller can tell "you
+    /// sent me half a fact" from "those facts cannot coexist".
+    #[test]
+    fn hostile_dtos_are_refused_by_the_layer_that_owns_the_complaint() {
+        let mut idless = dto(TokenKind::Text, "x");
+        idless.id = String::new();
+        assert_eq!(
+            owned_token_from_dto(&idless, 7),
+            Err(TokenInputError::MissingId { token_idx: 7 })
+        );
+
+        // Half a book code: shape, not legality.
+        let mut half = dto(TokenKind::BookCode, "GEN");
+        half.book_code = Some("GEN".to_string());
+        assert_eq!(
+            owned_token_from_dto(&half, 1),
+            Err(TokenInputError::IncompleteBookCode { token_idx: 1 })
+        );
+        let mut other_half = dto(TokenKind::BookCode, "GEN");
+        other_half.book_code_valid = Some(true);
+        assert_eq!(
+            owned_token_from_dto(&other_half, 1),
+            Err(TokenInputError::IncompleteBookCode { token_idx: 1 })
+        );
+
+        // A book-code payload on a text token: core's verdict, carried verbatim.
+        let mut wrong_kind = dto(TokenKind::Text, "GEN");
+        wrong_kind.book_code = Some("GEN".to_string());
+        wrong_kind.book_code_valid = Some(true);
+        assert!(matches!(
+            owned_token_from_dto(&wrong_kind, 2),
+            Err(TokenInputError::Illegal {
+                token_idx: 2,
+                reason: usfm_onion::token::TokenBuildError::UnexpectedPayload { .. }
+            })
+        ));
+
+        // An anchor this library would never have written.
+        let mut bad_sid = dto(TokenKind::Text, "x");
+        bad_sid.sid = Some("GENESIS 1:1".to_string());
+        assert!(matches!(
+            owned_token_from_dto(&bad_sid, 3),
+            Err(TokenInputError::Illegal {
+                reason: usfm_onion::token::TokenBuildError::UnresolvableSid { .. },
+                ..
+            })
+        ));
+
+        // An attribute list on an end marker, which structurally cannot hold one.
+        let mut closing = dto(TokenKind::EndMarker, "\\w*");
+        closing.marker = Some("w".to_string());
+        closing.attribute_source = Some("|lemma=\"grace\"".to_string());
+        assert!(matches!(
+            owned_token_from_dto(&closing, 4),
+            Err(TokenInputError::Illegal {
+                reason: usfm_onion::token::TokenBuildError::UnexpectedPayload { .. },
+                ..
+            })
+        ));
+
+        // A marker-bearing kind with no marker name.
+        assert!(matches!(
+            owned_token_from_dto(&dto(TokenKind::Marker, "\\p "), 5),
+            Err(TokenInputError::Illegal {
+                reason: usfm_onion::token::TokenBuildError::MissingPayload { .. },
+                ..
+            })
+        ));
+    }
+
+    /// Three shapes the corpus gate caught and the hand-written cases had not: an
+    /// escaped value, a bare default attribute whose own value is quoted, and a
+    /// malformed slice the parser could only read as one default attribute. Each
+    /// must come back spelled exactly as the source spelled it, because the
+    /// emitter writes that spelling back out.
+    #[test]
+    fn an_attributes_value_comes_back_spelled_as_the_source_spelled_it() {
+        for source in [
+            // Escapes: the outbound DTO decodes them for JS, so rebuilding has to
+            // recover the source spelling rather than re-encode the logical string.
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\fig caption|alt=\"He said: \\\"hi\\\"\" src=\"x.jpg\"\\fig* b\n",
+            // A default attribute whose value carries quotes of its own.
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\w word|\"quoted\"\\w* b\n",
+            // Malformed: one unquoted key swallows the rest as a default value.
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\w word|lemma= strong=\"l\"\\w* b\n",
+            // Keyed and empty, which must stay empty rather than becoming absent.
+            "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\w word|lemma=\"\"\\w* b\n",
+        ] {
+            let parsed = parse(source);
+            let attributed = parsed
+                .tokens
+                .iter()
+                .position(|token| token.attributes().is_some_and(|list| !list.is_empty()))
+                .unwrap_or_else(|| panic!("fixture must carry attributes: {source:?}"));
+            let native = &parsed.tokens[attributed];
+            let expected = OwnedToken::from_parsed(native);
+            let rebuilt =
+                owned_token_from_dto(&Token::from(native), attributed as u32).expect("converts");
+            assert_eq!(
+                rebuilt.attributes(),
+                expected.attributes(),
+                "attribute spelling changed for {source:?}"
+            );
+            // Placement is the other half of byte-losslessness, and it has a DTO
+            // field for exactly this reason.
+            assert_eq!(rebuilt.attribute_offset(), expected.attribute_offset());
+            assert_eq!(rebuilt.attribute_list(), expected.attribute_list());
+        }
+    }
+
+    /// Attribute presence is three distinct facts, and each has to survive the
+    /// boundary as itself: no list at all, an empty verbatim list, and a structured
+    /// list with no verbatim spelling.
+    #[test]
+    fn attribute_presence_permutations_survive_the_boundary() {
+        let mut none = dto(TokenKind::Marker, "\\w ");
+        none.marker = Some("w".to_string());
+        let mut empty = none.clone();
+        empty.attribute_source = Some(String::new());
+        let mut structured = none.clone();
+        structured.attributes = vec![AttributeItem {
+            span: None,
+            text: "lemma=\"grace\"".to_string(),
+            key: "lemma".to_string(),
+            value: "grace".to_string(),
+            is_default: false,
+        }];
+
+        let none = owned_token_from_dto(&none, 0).expect("converts");
+        let empty = owned_token_from_dto(&empty, 0).expect("converts");
+        let structured = owned_token_from_dto(&structured, 0).expect("converts");
+        assert_eq!(none.attribute_list(), None);
+        assert!(none.attributes().is_empty());
+        assert_eq!(empty.attribute_list(), Some(""));
+        assert_eq!(structured.attribute_list(), None);
+        assert_eq!(structured.attributes().len(), 1);
+        // A boundary token states no remembered placement, so the emitter places
+        // the list at the marker's closer rather than at a distance nobody gave.
+        assert_eq!(structured.attribute_offset(), None);
     }
 }

@@ -530,6 +530,14 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
   if (first + count > attributes.entryCount) fail("invalidSection");
   if (listStart !== SPAN_ABSENT) {
     token.attributeSource = sourceText(listStart, listStart + listLen);
+    // Where the list sat, as a distance from this token's own end — the other half
+    // of what the verbatim slice promises, since one placement rule cannot express
+    // every real layout. A list recorded as starting before its owner is not a
+    // distance this can state, so it is left absent and the emitter falls back to
+    // placing at the marker's closer.
+    if (token.span !== undefined && listStart >= token.span.end) {
+      token.attributeOffset = listStart - token.span.end;
+    }
   } else if (listLen !== 0) {
     fail("invalidSection");
   }

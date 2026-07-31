@@ -49,9 +49,9 @@ pub use markers::{
 };
 pub use token::{
     AttributeEntryToken, AttributeItem, BookCodeToken, LexResult, Lexeme, LexemeKind,
-    MarkerMetadata, MarkerToken, NumberRangeKind, NumberRangeToken, ParseAnalysis, ParseResult,
-    ScanResult, ScanToken, ScanTokenKind, Sid, Token, TokenBuildError, TokenData, TokenId,
-    TokenKind,
+    MarkerMetadata, MarkerToken, NumberRangeKind, NumberRangeToken, OwnedTokenParts, ParseAnalysis,
+    ParseResult, ScanResult, ScanToken, ScanTokenKind, Sid, Token, TokenBuildError, TokenData,
+    TokenId, TokenKind,
 };
 pub use usj::{UsjDocument, UsjElement, UsjError, UsjNode};
 pub use usx::UsxError;
