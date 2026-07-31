@@ -49,7 +49,10 @@ fn push_str(bytes: &mut Vec<u8>, value: &str) {
 pub(crate) fn catalog_ordinal(name: &str) -> Option<u16> {
     let catalog = marker_catalog();
     let entry = catalog.get(name)?;
-    let index = catalog.all().iter().position(|candidate| std::ptr::eq(candidate, entry))?;
+    let index = catalog
+        .all()
+        .iter()
+        .position(|candidate| std::ptr::eq(candidate, entry))?;
     u16::try_from(index).ok()
 }
 
