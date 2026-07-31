@@ -1034,3 +1034,76 @@ fn resident_tokens_keep_the_ids_and_sids_their_source_gave_them() {
         .tokens;
     assert_eq!(verse_sid(&pulled), sid);
 }
+
+/// A book's bytes are its tokens' text concatenated, so byte-identical content
+/// can carry entirely different token facts — different stable ids above all,
+/// which is what an editor re-pushing a paragraph produces. The source hash
+/// cannot see that; the token-identity stamp is the fact a consumer caching
+/// anything token-derived keys on instead.
+#[test]
+fn token_identity_separates_streams_the_source_hash_cannot() {
+    let mut resident = braid();
+    resident
+        .replace_corpus(CorpusInput::new(vec![BookInput::Usfm {
+            source_key: key("GEN.usfm"),
+            book: id("GEN"),
+            source: GEN_SOURCE.to_string(),
+        }]))
+        .expect("one book");
+    let before = resident.books().remove(0);
+    let identity_before = resident.expected_snapshot_id();
+
+    // The same bytes, carrying the caller's own ids — relabelled through the
+    // residency boundary, which is the only way to give a resident token a new id.
+    let relabelled: Vec<OwnedToken> = owned(GEN_SOURCE)
+        .iter()
+        .enumerate()
+        .map(|(index, token)| {
+            let mut working = usfm_onion::format::FormatToken::from(token);
+            working.id = Some(format!("editor-{index}"));
+            OwnedToken::from_format_token(&working, Some(token)).expect("relabelled")
+        })
+        .collect();
+    let effect = resident
+        .update_book(BookInput::Tokens(BookTokensInput {
+            source_key: key("GEN.usfm"),
+            book: id("GEN"),
+            tokens: relabelled,
+            line_ending: LineEnding::Lf,
+        }))
+        .expect("a token push");
+
+    let after = resident.books().remove(0);
+    assert_eq!(
+        after.source_hash, before.source_hash,
+        "not one byte changed, so the source hash cannot have"
+    );
+    assert_eq!(
+        resident.expected_snapshot_id(),
+        identity_before,
+        "corpus identity is source bytes only, deliberately"
+    );
+    assert_ne!(
+        after.token_identity, before.token_identity,
+        "the ids moved, so the token identity must"
+    );
+    // And braid itself calls this a real change, which is the property the stamp
+    // exposes rather than invents.
+    assert!(!effect.is_noop());
+    assert_eq!(resident.dirty_books(), vec![id("GEN")]);
+
+    // Same bytes *and* same ids: nothing moved.
+    let identical = resident
+        .update_book(BookInput::Usfm {
+            source_key: key("GEN.usfm"),
+            book: id("GEN"),
+            source: GEN_SOURCE.to_string(),
+        })
+        .expect("a parsed replacement");
+    let restored = resident.books().remove(0);
+    assert!(
+        !identical.is_noop(),
+        "the ids moved back, so this is a change"
+    );
+    assert_eq!(restored.token_identity, before.token_identity);
+}

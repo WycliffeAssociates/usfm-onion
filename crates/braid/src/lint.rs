@@ -12,7 +12,7 @@ use usfm_onion::lint::{LintResult, LintSummary};
 use usfm_onion::token::{BookId, OwnedToken};
 
 use crate::input::SourceKey;
-use crate::state::{SnapshotId, SourceHash};
+use crate::state::{SnapshotId, SourceHash, TokenIdentity};
 
 /// The complete resident lint snapshot, in corpus order.
 ///
@@ -34,6 +34,9 @@ pub struct BookLintSnapshot<'a> {
     pub source_key: &'a SourceKey,
     pub book: BookId,
     pub source_hash: SourceHash,
+    /// See [`TokenIdentity`]: what a consumer caching something derived from
+    /// these tokens must key on beyond the source hash.
+    pub token_identity: TokenIdentity,
     pub tokens: &'a [OwnedToken],
     pub result: &'a LintResult,
 }

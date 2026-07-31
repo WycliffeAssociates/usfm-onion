@@ -12,11 +12,15 @@ use usfm_onion::lint::{CRATE_VERSION, LintOptions, RULES_VERSION};
 use xxhash_rust::xxh3::Xxh3;
 
 /// xxh3-64 over the effective lint configuration's canonical form (the
-/// enabled rule set and every per-rule setting). Two configurations that
-/// would make `lint_tokens` behave identically fingerprint identically;
-/// anything that could change a finding changes the fingerprint. A cached
-/// lint contribution is only reused when this matches exactly — never
-/// partially, never "close enough".
+/// enabled rule set and every per-rule setting).
+///
+/// This is a deterministic representation of the configuration *as supplied*,
+/// not a semantic normalization of it: anything that could change a finding
+/// changes the fingerprint, but two configurations that would lint identically
+/// may still fingerprint differently (a reordered `enabled_codes` list, say).
+/// That is the safe direction — it can only refuse a cache that would in fact
+/// have been valid, never accept one that would not. A cached lint contribution
+/// is reused only on an exact match: never partially, never "close enough".
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LintConfigFingerprint(pub u64);

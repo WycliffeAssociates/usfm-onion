@@ -18,6 +18,89 @@ impl SourceHash {
     }
 }
 
+/// xxhash3-64 over everything one book's token stream carries that its source
+/// bytes do not pin.
+///
+/// A book's bytes are the concatenation of its tokens' own text, so two different
+/// token streams can serialize identically while differing in every fact a
+/// serializer never writes: the stable ids, the canonical anchors, marker
+/// nesting, book-code validity, parsed number payloads, attribute structure. An
+/// editor re-pushing byte-identical content under fresh ids is the ordinary case
+/// — braid already treats it as a real change (`content_eq` compares tokens, not
+/// just hashes), and this is the same fact as a stamp, so a consumer holding
+/// something derived from the *tokens* (a packed section, a cached anything) can
+/// tell staleness without re-reading the whole stream.
+///
+/// Deliberately not part of [`SnapshotId`]: corpus identity covers source bytes
+/// only, on purpose, so that publishing or restoring the same bytes lands the
+/// same id. This is a per-book fact a consumer keys its own caches on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct TokenIdentity(pub u64);
+
+impl TokenIdentity {
+    /// Hashes every field the owned-token representation holds — including the
+    /// source text, so the stamp is self-sufficient rather than only meaningful
+    /// beside a source hash.
+    ///
+    /// Field-by-field rather than through a derived `Hash`: core's `OwnedToken`
+    /// keeps its payload private and derives no `Hash`, and spelling the fields
+    /// out here is also what makes an addition to that payload a visible decision
+    /// on this side rather than a silent change of meaning.
+    pub(crate) fn of(tokens: &[OwnedToken]) -> Self {
+        let mut hasher = Xxh3::new();
+        for token in tokens {
+            hasher.update(token.id().as_str().as_bytes());
+            hasher.update(&[0]);
+            hasher.update(&[token.kind() as u8]);
+            hasher.update(token.source().as_bytes());
+            hasher.update(&[0]);
+            if let Some(sid) = token.sid() {
+                hasher.update(sid.as_bytes());
+            }
+            hasher.update(&[0]);
+            if let Some(sid) = token.parsed_sid() {
+                hasher.update(sid.book.as_str().as_bytes());
+                hasher.update(&sid.chapter.to_le_bytes());
+                hasher.update(&sid.verse.to_le_bytes());
+                hasher.update(&sid.verse_end().to_le_bytes());
+            }
+            hasher.update(&[0]);
+            if let Some(marker) = token.marker_name() {
+                hasher.update(marker.as_bytes());
+            }
+            hasher.update(&[0, u8::from(token.nested())]);
+            if let Some(code) = token.book_code() {
+                hasher.update(code.code.as_bytes());
+                hasher.update(&[u8::from(code.is_valid)]);
+            }
+            hasher.update(&[0]);
+            if let Some(number) = token.number_info() {
+                hasher.update(&number.start.to_le_bytes());
+                hasher.update(&number.end.unwrap_or(u32::MAX).to_le_bytes());
+                hasher.update(&[number.kind as u8]);
+            }
+            hasher.update(&[0]);
+            if let Some(list) = token.attribute_list() {
+                hasher.update(list.as_bytes());
+            }
+            hasher.update(&[0]);
+            if let Some(offset) = token.attribute_offset() {
+                hasher.update(&offset.to_le_bytes());
+            }
+            hasher.update(&[0]);
+            for attribute in token.attributes() {
+                hasher.update(attribute.key.as_bytes());
+                hasher.update(&[0]);
+                hasher.update(attribute.value.as_bytes());
+                hasher.update(&[0, u8::from(attribute.is_default)]);
+            }
+            hasher.update(&[0]);
+        }
+        Self(hasher.digest())
+    }
+}
+
 /// The resident corpus's content-derived identity: xxhash3-64 over the ordered
 /// per-book source hashes.
 ///
@@ -172,6 +255,9 @@ pub struct BookEntry {
     pub source_key: SourceKey,
     pub book: BookId,
     pub source_hash: SourceHash,
+    /// Everything this book's tokens carry that its bytes do not pin — the fact a
+    /// consumer caching anything token-derived has to key on alongside the hash.
+    pub token_identity: TokenIdentity,
     pub line_ending: LineEnding,
 }
 

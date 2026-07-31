@@ -2012,10 +2012,21 @@ book with findings (66 books ≈ 1 KB).
 **Absence is meaningful, not a default.** A finding section without field 9
 carries findings that may be *read* but never *adopted* as a warm cache: nothing
 in the bytes says what produced them. `encode_corpus` refuses stamps for a
-publication with no findings (a licence covering nothing), and `verify_corpus`
-refuses a publication where only some finding sections are stamped, or where two
-of them disagree — one publication is one cache decision, and adopting the
-stamped half is the partial adoption §O.3 forbids.
+publication with **no finding sections at all** (a licence covering nothing), and
+`verify_corpus` refuses a publication where only some finding sections are
+stamped, or where two of them disagree — one publication is one cache decision,
+and adopting the stamped half is the partial adoption §O.3 forbids. A cached
+section offered back for reuse must record exactly the stamps the publication being
+written claims, presence included; splicing one recorded under a different pair
+would sign a statement about those findings that is not true of them
+(`LayoutRefusal::CachedSectionStampMismatch`).
+
+The distinction the format draws is **no finding section** (lint was not computed
+for that book) versus **a finding section with no rows** (lint was computed and
+found nothing). The second is evidence and is stamped like any other result: an
+all-clean project has to be able to restore "nothing to report", or reopening it
+re-runs every rule to rediscover that. "Zero issues" is therefore never a reason to
+withhold stamps — only "zero finding sections" is.
 
 **Blast radius, reported not silent:** the pre-existing goldens' bytes are
 unchanged, because `encode_book` (the single-book entry point they are generated

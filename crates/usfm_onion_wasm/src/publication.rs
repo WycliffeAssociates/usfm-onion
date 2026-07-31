@@ -10,7 +10,7 @@
 //! `restoreCorpus` are Phase F; what exists now is the Rust composition the
 //! native host and that class will both call.
 
-use braid::{Braid, LintConfigFingerprint, LintEngineStamp, SourceHash};
+use braid::{Braid, LintConfigFingerprint, LintEngineStamp, SourceHash, TokenIdentity};
 use usfm_onion::token::BookId;
 use usfm_onion_wire::corpus_codec::{
     CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
@@ -21,14 +21,22 @@ use usfm_onion_wire::error::EncodeError;
 /// One book's last published sections, with the facts that decide whether they
 /// may be published again unchanged.
 ///
-/// The source hash alone is not enough: a configuration change rewrites what a
-/// book's findings *are* while leaving its bytes alone, and the published section
-/// carries those findings. Keying on the stamps as well is what stops a
-/// republication from serving findings the current configuration would not
-/// produce.
+/// Three facts, because a section is derived from all three and the source hash
+/// pins only one of them:
+///
+/// - the **source hash**, the bytes the section's spans are bound to;
+/// - the **token identity**, everything the token stream carries that its bytes do
+///   not — the stable ids above all. An editor re-pushing byte-identical content
+///   under fresh ids changes every id in the section and every finding anchor and
+///   fix target that names one, while the bytes stay identical; serving the old
+///   sections there would hand back a publication addressing tokens that no longer
+///   exist;
+/// - the **stamps**, because a configuration change rewrites what a book's
+///   findings *are* while leaving both of the above alone.
 #[derive(Debug, Clone)]
 struct CachedBook {
     source_hash: SourceHash,
+    token_identity: TokenIdentity,
     stamps: LintStamps,
     published: PublishedBook,
 }
@@ -82,6 +90,7 @@ impl PublicationCache {
             let cached = self.books.iter().find(|(candidate, cached)| {
                 *candidate == book.book
                     && cached.source_hash == book.source_hash
+                    && cached.token_identity == book.token_identity
                     && cached.stamps == stamps
             });
             match cached {
@@ -102,37 +111,34 @@ impl PublicationCache {
             }
         }
 
-        let has_findings = snapshot
-            .books
-            .iter()
-            .any(|book| !book.result.issues.is_empty());
+        // Every book publishes a finding section, so every publication carries
+        // the stamps that license adopting them. An *empty* finding section is
+        // evidence, not the absence of it: "lint ran over this book and found
+        // nothing" is exactly what a clean project needs to restore, and without
+        // stamps beside it a fully clean corpus would re-run every rule on reopen.
+        // The distinction the format draws is no finding section at all (not
+        // computed) versus a finding section with no rows (computed, clean).
         let EncodedCorpus {
             bytes,
             sources,
             books,
-        } = encode_corpus(
-            snapshot.id.0,
-            // Stamps describe findings; a corpus that produced none is published
-            // without a licence for a cache that would hold nothing.
-            has_findings.then_some(stamps),
-            &sections,
-        )?;
+        } = encode_corpus(snapshot.id.0, Some(stamps), &sections)?;
 
         // Replaced wholesale from what the publication actually contains, so the
         // cache can never describe a book the last publication did not carry.
         self.books = books
             .into_iter()
             .map(|published| {
-                let source_hash = snapshot
+                let resident = snapshot
                     .books
                     .iter()
                     .find(|book| book.book == published.book)
-                    .map(|book| book.source_hash)
                     .expect("every published book is a resident book");
                 (
                     published.book,
                     CachedBook {
-                        source_hash,
+                        source_hash: resident.source_hash,
+                        token_identity: resident.token_identity,
                         stamps,
                         published,
                     },
@@ -163,6 +169,10 @@ mod tests {
     use usfm_onion_wire::corpus_codec::verify_corpus;
 
     fn resident() -> Braid {
+        empty_resident()
+    }
+
+    fn empty_resident() -> Braid {
         let mut next = 0u32;
         Braid::new(
             BraidConfig::new(LintOptions::scoped(LintScope::Book)),
@@ -363,6 +373,194 @@ mod tests {
 
     fn first_snapshot_id(publication: &Publication) -> u64 {
         u64::from_le_bytes(publication.bytes[32..40].try_into().expect("header slice"))
+    }
+
+    /// The reviewer's identity-only repro: byte-identical content re-pushed under
+    /// different stable ids. The source hash cannot see it, so a cache keyed on
+    /// the hash alone would serve the old sections — old ids, and finding anchors
+    /// and fix targets naming tokens that no longer exist.
+    #[test]
+    fn an_identity_only_mutation_re_encodes_and_republishes_the_new_ids() {
+        let mut resident = resident();
+        resident
+            .replace_corpus(CorpusInput::new(vec![usfm("GEN", GEN), usfm("EXO", EXO)]))
+            .expect("two books");
+        let hash_before = resident
+            .books()
+            .into_iter()
+            .find(|entry| entry.book == book("GEN"))
+            .expect("resident")
+            .source_hash;
+        let mut cache = PublicationCache::default();
+        let first = cache.publish(&mut resident).expect("first publication");
+        assert_eq!(first.encoded.len(), 2);
+        let before = verify(&first, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
+        let old_anchor = before.books[0]
+            .findings
+            .iter()
+            .find_map(|finding| finding.token_id.clone())
+            .expect("GEN's findings anchor on tokens");
+
+        // The same bytes, carrying the editor's own ids: relabelled through the
+        // residency boundary, the only way a resident token gets a new id.
+        let relabelled: Vec<OwnedToken> = parse(GEN)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>()
+            .iter()
+            .enumerate()
+            .map(|(index, token)| {
+                let mut working = usfm_onion::format::FormatToken::from(token);
+                working.id = Some(format!("editor-{index}"));
+                OwnedToken::from_format_token(&working, Some(token)).expect("relabelled")
+            })
+            .collect();
+        let effect = resident
+            .update_book(BookInput::Tokens(braid::BookTokensInput {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: book("GEN"),
+                tokens: relabelled,
+                line_ending: braid::LineEnding::Lf,
+            }))
+            .expect("an identity-only push");
+        assert!(!effect.is_noop());
+        let entry = resident
+            .books()
+            .into_iter()
+            .find(|entry| entry.book == book("GEN"))
+            .unwrap();
+        assert_eq!(entry.source_hash, hash_before, "not one byte changed");
+
+        let second = cache.publish(&mut resident).expect("republication");
+        assert_eq!(
+            second.encoded,
+            vec![book("GEN")],
+            "an identity-only change must re-encode"
+        );
+        assert_eq!(second.reused, vec![book("EXO")]);
+
+        let after = verify(&second, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
+        let new_anchor = after.books[0]
+            .findings
+            .iter()
+            .find_map(|finding| finding.token_id.clone())
+            .expect("the findings still anchor on tokens");
+        assert_ne!(
+            new_anchor, old_anchor,
+            "the published anchors are the new ids"
+        );
+        assert!(
+            new_anchor.starts_with("editor-"),
+            "the anchor is the caller's own id, got {new_anchor}"
+        );
+        // Every fix target too, since a fix addresses its token by id.
+        for finding in &after.books[0].findings {
+            if let Some(fix) = &finding.fix {
+                assert!(
+                    fix.target_token_id().starts_with("editor-"),
+                    "a published fix must target a token that exists"
+                );
+            }
+        }
+    }
+
+    /// A clean project must be able to restore its *negative* lint result: "lint
+    /// ran and found nothing" is evidence, and without it reopening a clean corpus
+    /// re-runs every rule. The proof is end to end through the real warm path —
+    /// publish, verify, prime a fresh handle from what the bytes said — and the
+    /// no-rule-work assertion is that nothing is left dirty afterwards.
+    #[test]
+    fn an_all_clean_corpus_restores_its_empty_findings_and_reopens_with_no_rule_work() {
+        // Two books with nothing to report.
+        const CLEAN_GEN: &str = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\n";
+        const CLEAN_EXO: &str = "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\n";
+        let mut resident = resident();
+        resident
+            .replace_corpus(CorpusInput::new(vec![
+                usfm("GEN", CLEAN_GEN),
+                usfm("EXO", CLEAN_EXO),
+            ]))
+            .expect("two books");
+        {
+            let snapshot = resident.lint();
+            assert_eq!(
+                snapshot.summary.total_count, 0,
+                "the fixture must actually be clean"
+            );
+        }
+
+        let mut cache = PublicationCache::default();
+        let publication = cache.publish(&mut resident).expect("publishes");
+        let verified = verify(
+            &publication,
+            &[(book("GEN"), CLEAN_GEN), (book("EXO"), CLEAN_EXO)],
+        );
+        // The evidence: a finding section per book, empty, and stamped.
+        assert!(verified.books.iter().all(|book| book.findings.is_empty()));
+        assert_eq!(
+            verified.lint_stamps,
+            Some(LintStamps {
+                config_fingerprint: LintConfigFingerprint::of(&resident.config().lint).0,
+                engine_stamp: LintEngineStamp::current().0,
+            }),
+            "an empty result is still a result, and still needs its licence"
+        );
+
+        // The cold open: a fresh handle seeded from the decoded publication.
+        let mut reopened = empty_resident();
+        let report = reopened
+            .restore_corpus(braid::CorpusRestoreInput::new(
+                LintConfigFingerprint::of(&reopened.config().lint),
+                LintEngineStamp::current(),
+                [(book("GEN"), CLEAN_GEN), (book("EXO"), CLEAN_EXO)]
+                    .into_iter()
+                    .zip(&verified.books)
+                    .map(|((book_id, source), verified)| braid::BookRestoreInput {
+                        source_key: SourceKey::new(format!("{book_id}.usfm")).unwrap(),
+                        book: book_id,
+                        source: source.to_string(),
+                        tokens: parse(source)
+                            .tokens
+                            .iter()
+                            .map(OwnedToken::from_parsed)
+                            .collect(),
+                        line_ending: braid::LineEnding::Lf,
+                        lint: Some(braid::BookLintPrime {
+                            book: book_id,
+                            source_hash: braid::SourceHash(
+                                u64::from_str_radix(&verified.receipt.source_hash, 16)
+                                    .expect("hex hash"),
+                            ),
+                            result: usfm_onion::lint::LintResult {
+                                issues: verified.findings.clone(),
+                                summary: Default::default(),
+                            },
+                        }),
+                    })
+                    .collect(),
+            ))
+            .expect("the seed is well-formed");
+        assert_eq!(report.seeded, vec![book("GEN"), book("EXO")]);
+        assert!(
+            report.rejected.is_empty(),
+            "a clean book's cached result must be adoptable: {:?}",
+            report.rejected
+        );
+        // The no-rule-work assertion: nothing is dirty, so the next `lint()` runs
+        // no rules at all.
+        assert!(
+            reopened.dirty_books().is_empty(),
+            "a restored clean corpus must not need recompute"
+        );
+        let snapshot = reopened.lint();
+        assert_eq!(snapshot.summary.total_count, 0);
+        assert!(
+            snapshot
+                .books
+                .iter()
+                .all(|book| book.result.issues.is_empty())
+        );
     }
 
     // ---- corpus scale -------------------------------------------------------

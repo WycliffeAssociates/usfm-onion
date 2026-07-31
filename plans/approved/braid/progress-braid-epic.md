@@ -3366,3 +3366,60 @@ findings — pinned by its own test.
 ### Stops
 
 None.
+
+## 2026-07-31 — Phase D clean-room fix round: four P1s + one P2 landed
+
+Reviewer verdict on the Phase D composition batch was NOT DISPATCHABLE with four P1s and a doc P2, all
+confirmed by triage. The §P amendments and boundary choices passed adjudication; these are the holes
+found inside them.
+
+- **P1-1 — the reuse key was blind to token identity.** Braid counts token identity as a content change
+  even when the bytes are identical, but the adapter's cache key was `(book, source_hash, stamps)`, so
+  an `update_book` with byte-identical tokens under fresh ids was served the *old* sections — old ids,
+  and finding anchors and fix targets naming tokens that no longer exist. Braid now exposes the missing
+  fact as a stamp: `TokenIdentity` (xxh3-64 over everything the owned-token encoding carries that the
+  source hash does not pin — the stable ids first, plus the canonical anchors, marker nesting,
+  book-code validity, parsed numbers, and attribute structure, all of which a byte-identical stream can
+  differ in because a book's bytes are its tokens' text concatenated). Exposed on `BookEntry` and
+  `BookLintSnapshot`, computed beside the source hash in `BookState::build`/`rebuilt`. `SnapshotId` was
+  deliberately **not** widened (§J.5 keeps it source-only). The adapter's key is now
+  `(book, source_hash, token_identity, stamps)`. Regressions: the reviewer's identity-only repro at
+  adapter level (re-encode happens, and the republished anchors *and fix targets* are the new
+  `editor-*` ids) and at braid level (same bytes, same corpus identity, different token identity).
+- **P1-2 — splices bypassed stamp agreement.** A cached finding section recorded under old stamps could
+  be spliced into a publication claiming new ones, signing a lie about how those findings were
+  produced. Cached finding sections must now record exactly the requested pair, presence included:
+  `LayoutRefusal::CachedSectionStampMismatch`. All three disagreement directions are tested (different
+  pair, licence vanishing, licence appearing) plus both agreeing cases.
+- **P1-3 — `verify_corpus` accepted orphan finding sections.** The corpus universe was built from token
+  entries, so a finding entry for a book with no token section was never opened — an unverified section
+  in a container the caller then treats as whole. Every finding entry must now pair with a token entry
+  of the same book. Both the writer and the reader refuse the shape, so exercising the *reader* needed
+  bytes no writer here can produce: new malformed golden `orphan-finding-section` (renames the token
+  section, orphaning the finding section beside it, restamped) drives both `decode_book` and
+  `verify_corpus`.
+- **P1-4 — clean corpora could not restore their negative cache.** The adapter emitted stamps only when
+  some book had an issue, so a fully clean project reopened with no licence and re-ran every rule. An
+  empty `LintResult` is evidence; the distinction the format draws is **no finding section** (not
+  computed) versus **a finding section with zero rows** (computed, clean). Publish now always stamps,
+  freeze §P.1's wording is corrected to "no finding sections", and the regression runs the whole warm
+  path end to end: an all-clean corpus publishes, verifies, primes a fresh handle from the decoded
+  bytes, and reopens with `dirty_books()` empty — the no-rule-work assertion.
+- **P2-5** — `LintConfigFingerprint`'s doc no longer claims semantic normalization: it is a
+  deterministic representation of the configuration *as supplied*, so a reordered `enabled_codes` may
+  fingerprint differently, which errs toward refusing a valid cache rather than accepting an invalid one.
+
+### Gates after the round
+
+`cargo test --workspace` **574 passed, 0 failed** (core 282, braid 60, wire 201, wasm 32). Lint oracle
+`--ignored` byte-identical. Release ignored: braid corpus 3, wire lib 4 + corpus 2, **wasm 1 — the
+Phase D corpus gate still passes with the widened cache key** (66 books published, decoded, compared;
+one chapter edited → 1 re-encoded, 65 spliced byte-identically). `npm run test:packed` /
+`test:packed:web` green at 410 cases / 5,717,153 tokens; **malformed goldens 16 → 17** (the new
+`orphan-finding-section` vector), good goldens unchanged at 15, no existing golden's bytes changed.
+`pkg-bundler`/`pkg-web` restored, never committed.
+
+### New public API from this round
+
+`braid::TokenIdentity` (+ `BookEntry.token_identity`, `BookLintSnapshot.token_identity`);
+`usfm_onion_wire::LayoutRefusal::CachedSectionStampMismatch`.

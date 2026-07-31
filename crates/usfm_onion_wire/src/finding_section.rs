@@ -314,18 +314,7 @@ impl<'wire> FindingColumns<'wire> {
         {
             return Err(DecodeError::InvalidSection);
         }
-        let lint_stamps = match section.field(finding_field::LINT_STAMPS) {
-            None => None,
-            Some(field) => {
-                if field.count != 1 || field.bytes.len() != LINT_STAMPS_LEN {
-                    return Err(DecodeError::InvalidSection);
-                }
-                Some(LintStamps {
-                    config_fingerprint: u64_at(field.bytes, 0)?,
-                    engine_stamp: u64_at(field.bytes, 8)?,
-                })
-            }
-        };
+        let lint_stamps = section_lint_stamps(section)?;
 
         Ok(Self {
             rows,
@@ -339,6 +328,29 @@ impl<'wire> FindingColumns<'wire> {
 
     pub(crate) fn rows(&self) -> &[FindingRow<'wire>] {
         &self.rows
+    }
+}
+
+/// The lint stamps a finding section records, read from standalone or in-container
+/// section bytes.
+///
+/// Separate from [`FindingColumns`] because the splice path needs this one fact
+/// out of a section it is not decoding: whether the findings inside were produced
+/// under the stamps the publication being written claims.
+pub(crate) fn section_lint_stamps(
+    section: &Section<'_>,
+) -> Result<Option<LintStamps>, DecodeError> {
+    match section.field(finding_field::LINT_STAMPS) {
+        None => Ok(None),
+        Some(field) => {
+            if field.count != 1 || field.bytes.len() != LINT_STAMPS_LEN {
+                return Err(DecodeError::InvalidSection);
+            }
+            Ok(Some(LintStamps {
+                config_fingerprint: u64_at(field.bytes, 0)?,
+                engine_stamp: u64_at(field.bytes, 8)?,
+            }))
+        }
     }
 }
 

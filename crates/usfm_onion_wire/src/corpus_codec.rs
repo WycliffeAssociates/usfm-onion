@@ -35,6 +35,7 @@ use crate::container::{
 };
 use crate::error::{EncodeError, LayoutRefusal};
 use crate::finding_codec::{decode_finding_section, encode_findings_with};
+use crate::finding_section::section_lint_stamps;
 use crate::schema::SectionKind;
 
 // Re-exported so the composition surface is one import: the stamps are part of
@@ -294,13 +295,31 @@ pub fn encode_corpus(
             // The whole reuse contract in one call: the bytes must be a
             // structurally valid, checksum-intact section that says it is the book
             // and source the caller claims. Nothing is adopted on a caller's word.
-            let header = inspect_section(bytes)
+            let section = inspect_section(bytes)
                 .map_err(|_| refuse(cached.book, LayoutRefusal::CachedSectionUnreadable))?;
+            let header = section.header;
             if header.book != cached.book
                 || header.source_hash != cached.source_hash
                 || header.kind != extent.kind
             {
                 return Err(refuse(cached.book, LayoutRefusal::CachedSectionMismatch));
+            }
+            // Structure and binding are not enough: a finding section records the
+            // stamps its findings were produced under, and splicing one into a
+            // publication that claims different stamps would sign a statement
+            // about those findings that is not true of them. Presence has to agree
+            // too — an unstamped section in a stamped publication would silently
+            // become adoptable, and a stamped one in an unstamped publication
+            // would carry a licence the publication does not grant.
+            if header.kind == SectionKind::Finding {
+                let recorded = section_lint_stamps(&section)
+                    .map_err(|_| refuse(cached.book, LayoutRefusal::CachedSectionUnreadable))?;
+                if recorded != lint_stamps {
+                    return Err(refuse(
+                        cached.book,
+                        LayoutRefusal::CachedSectionStampMismatch,
+                    ));
+                }
             }
             container_sections.push(ContainerSection::Encoded { header, bytes });
         }
@@ -403,6 +422,16 @@ pub fn verify_corpus(
                 return Err(DecodeError::InvalidToc);
             }
             order.push(entry.book);
+        }
+    }
+    // The corpus is the set of books that have *tokens*, so a finding section for
+    // a book with none is a section this walk would never open — and an unopened
+    // section is one that was never verified, in a container a caller is about to
+    // treat as whole. Same trust parity as the single-book verifier, which refuses
+    // a finding section it cannot pair.
+    for entry in toc {
+        if entry.kind == SectionKind::Finding && !order.contains(&entry.book) {
+            return Err(DecodeError::InvalidToc);
         }
     }
     if order.len() != sources.len() {
@@ -828,12 +857,100 @@ mod tests {
         assert!(encode_corpus(2, None, &[CorpusSection::Cached(cached.as_cached())]).is_ok());
     }
 
-    /// One publication is one cache decision. Splicing books from two
-    /// publications that were stamped differently is the only way to build a
-    /// container whose finding sections disagree — and the corpus verifier
-    /// refuses it rather than picking one pair.
+    /// A cached finding section records the stamps its findings were produced
+    /// under. Splicing it into a publication that claims different ones — the
+    /// case a caller hits by re-publishing after a config change while still
+    /// holding yesterday's sidecar — would sign a claim that is not true of those
+    /// findings, so it is refused. Presence has to agree in both directions too.
     #[test]
-    fn a_publication_whose_books_disagree_about_their_stamps_is_refused() {
+    fn a_cached_finding_section_must_match_the_publications_stamps() {
+        let tokens = owned_tokens(GEN);
+        let lint = lint_of(GEN);
+        let section = |stamps: Option<LintStamps>| {
+            encode_corpus(
+                1,
+                stamps,
+                &[CorpusSection::Fresh(CorpusSectionInput {
+                    book: book("GEN"),
+                    tokens: CorpusSectionTokens::Owned { tokens: &tokens },
+                    findings: Some(&lint),
+                })],
+            )
+            .expect("publishes")
+        };
+        let stamped = section(Some(stamps()));
+        let unstamped = section(None);
+        let other = LintStamps {
+            config_fingerprint: 99,
+            engine_stamp: 98,
+        };
+
+        let republish = |cached: &PublishedBook, stamps: Option<LintStamps>| {
+            encode_corpus(2, stamps, &[CorpusSection::Cached(cached.as_cached())])
+        };
+        // Different stamps.
+        assert!(matches!(
+            republish(&stamped.books[0], Some(other)),
+            Err(EncodeError::InvalidSectionLayout {
+                reason: LayoutRefusal::CachedSectionStampMismatch,
+                ..
+            })
+        ));
+        // Stamped section, unstamped publication: the licence would vanish.
+        assert!(matches!(
+            republish(&stamped.books[0], None),
+            Err(EncodeError::InvalidSectionLayout {
+                reason: LayoutRefusal::CachedSectionStampMismatch,
+                ..
+            })
+        ));
+        // Unstamped section, stamped publication: the licence would appear.
+        assert!(matches!(
+            republish(&unstamped.books[0], Some(stamps())),
+            Err(EncodeError::InvalidSectionLayout {
+                reason: LayoutRefusal::CachedSectionStampMismatch,
+                ..
+            })
+        ));
+        // Agreement in either direction publishes.
+        assert!(republish(&stamped.books[0], Some(stamps())).is_ok());
+        assert!(republish(&unstamped.books[0], None).is_ok());
+    }
+
+    /// Hand-assembles a container out of finished sections, bypassing
+    /// [`encode_corpus`]'s own refusals — a stand-in for a producer this crate
+    /// would refuse to be, so the *decoder*'s independent checks are exercised
+    /// rather than only the encoder's.
+    fn splice(publications: &[&EncodedCorpus]) -> Vec<u8> {
+        let mut sections = Vec::new();
+        let inspected: Vec<_> = publications
+            .iter()
+            .flat_map(|published| {
+                published.books.iter().flat_map(|book| {
+                    book.sections.iter().map(move |extent| {
+                        let bytes = &book.bytes[extent.offset..extent.offset + extent.len];
+                        (
+                            crate::container::inspect_section(bytes).expect("valid"),
+                            bytes,
+                        )
+                    })
+                })
+            })
+            .collect();
+        for (section, bytes) in &inspected {
+            sections.push(crate::container::ContainerSection::Encoded {
+                header: section.header,
+                bytes,
+            });
+        }
+        crate::container::write_container_sections(9, &sections).expect("writes")
+    }
+
+    /// One publication is one cache decision, and the decoder does not take the
+    /// encoder's word for it: a container whose finding sections disagree about
+    /// their stamps is refused rather than having one pair picked for it.
+    #[test]
+    fn a_container_whose_books_disagree_about_their_stamps_is_refused() {
         let gen_tokens = owned_tokens(GEN);
         let exo_tokens = owned_tokens(EXO);
         let gen_lint = lint_of(GEN);
@@ -850,59 +967,90 @@ mod tests {
             })],
         )
         .unwrap();
-        let other_stamps = LintStamps {
+        let theirs = |stamps: Option<LintStamps>| {
+            encode_corpus(
+                1,
+                stamps,
+                &[CorpusSection::Fresh(CorpusSectionInput {
+                    book: book("EXO"),
+                    tokens: CorpusSectionTokens::Owned {
+                        tokens: &exo_tokens,
+                    },
+                    findings: Some(&exo_lint),
+                })],
+            )
+            .unwrap()
+        };
+
+        // Two different stamp pairs.
+        let disagreeing = theirs(Some(LintStamps {
             config_fingerprint: 1,
             engine_stamp: 2,
-        };
-        let theirs = encode_corpus(
-            1,
-            Some(other_stamps),
-            &[CorpusSection::Fresh(CorpusSectionInput {
-                book: book("EXO"),
-                tokens: CorpusSectionTokens::Owned {
-                    tokens: &exo_tokens,
-                },
-                findings: Some(&exo_lint),
-            })],
-        )
-        .unwrap();
-
-        let spliced = encode_corpus(
-            3,
-            None,
-            &[
-                CorpusSection::Cached(mine.books[0].as_cached()),
-                CorpusSection::Cached(theirs.books[0].as_cached()),
-            ],
-        )
-        .expect("the splice itself is structurally fine");
+        }));
+        let spliced = splice(&[&mine, &disagreeing]);
         assert_eq!(
-            verify_corpus(&spliced.bytes, &[(book("GEN"), GEN), (book("EXO"), EXO)]).err(),
+            verify_corpus(&spliced, &[(book("GEN"), GEN), (book("EXO"), EXO)]).err(),
             Some(crate::error::DecodeError::InvalidSection)
         );
+
+        // Stamped and unstamped: adopting the stamped half is the partial
+        // adoption the batch contract forbids.
+        let spliced = splice(&[&mine, &theirs(None)]);
+        assert_eq!(
+            verify_corpus(&spliced, &[(book("GEN"), GEN), (book("EXO"), EXO)]).err(),
+            Some(crate::error::DecodeError::InvalidSection)
+        );
+
+        // The same splice with one agreed pair verifies, so it is the disagreement
+        // being refused and not the splice itself.
+        let spliced = splice(&[&mine, &theirs(Some(stamps()))]);
+        assert!(verify_corpus(&spliced, &[(book("GEN"), GEN), (book("EXO"), EXO)]).is_ok());
     }
 
-    /// Same rule for a partially stamped publication: adopting the stamped half
-    /// is the partial adoption the batch contract forbids.
+    /// A finding section whose book has no token section is a section the corpus
+    /// walk would never open — and an unopened section is an unverified one, in a
+    /// container the caller is about to treat as whole.
     #[test]
-    fn a_partly_stamped_publication_is_refused() {
-        let gen_tokens = owned_tokens(GEN);
-        let exo_tokens = owned_tokens(EXO);
-        let gen_lint = lint_of(GEN);
-        let exo_lint = lint_of(EXO);
-        let stamped = encode_corpus(
+    fn a_finding_section_with_no_token_section_is_refused() {
+        let tokens = owned_tokens(GEN);
+        let lint = lint_of(GEN);
+        let published = encode_corpus(
             1,
-            Some(stamps()),
+            None,
             &[CorpusSection::Fresh(CorpusSectionInput {
                 book: book("GEN"),
-                tokens: CorpusSectionTokens::Owned {
-                    tokens: &gen_tokens,
-                },
-                findings: Some(&gen_lint),
+                tokens: CorpusSectionTokens::Owned { tokens: &tokens },
+                findings: Some(&lint),
             })],
         )
         .unwrap();
-        let unstamped = encode_corpus(
+        let sidecar = &published.books[0];
+        let finding = sidecar
+            .sections
+            .iter()
+            .find(|section| section.kind == SectionKind::Finding)
+            .expect("the publication has findings");
+        let bytes = &sidecar.bytes[finding.offset..finding.offset + finding.len];
+        let section = crate::container::inspect_section(bytes).expect("valid section");
+
+        // A container of nothing but that finding section. The writer refuses to
+        // build one, so it is assembled here the way a foreign producer could.
+        let orphan_only = crate::container::write_container_sections(
+            1,
+            &[crate::container::ContainerSection::Encoded {
+                header: section.header,
+                bytes,
+            }],
+        );
+        assert!(
+            orphan_only.is_err(),
+            "this crate's own writer refuses to orphan a finding section"
+        );
+
+        // With a *different* book's tokens beside it, the writer's pairing check
+        // is satisfied per book and only the reader can catch the orphan.
+        let exo_tokens = owned_tokens(EXO);
+        let exo = encode_corpus(
             1,
             None,
             &[CorpusSection::Fresh(CorpusSectionInput {
@@ -910,22 +1058,45 @@ mod tests {
                 tokens: CorpusSectionTokens::Owned {
                     tokens: &exo_tokens,
                 },
-                findings: Some(&exo_lint),
+                findings: None,
             })],
         )
         .unwrap();
-        let spliced = encode_corpus(
-            3,
-            None,
+        let exo_token_section = {
+            let sidecar = &exo.books[0];
+            let extent = sidecar.sections[0];
+            let bytes = &sidecar.bytes[extent.offset..extent.offset + extent.len];
+            (
+                crate::container::inspect_section(bytes).expect("valid"),
+                bytes,
+            )
+        };
+        let crafted = crate::container::write_container_sections(
+            1,
             &[
-                CorpusSection::Cached(stamped.books[0].as_cached()),
-                CorpusSection::Cached(unstamped.books[0].as_cached()),
+                crate::container::ContainerSection::Encoded {
+                    header: exo_token_section.0.header,
+                    bytes: exo_token_section.1,
+                },
+                crate::container::ContainerSection::Encoded {
+                    header: section.header,
+                    bytes,
+                },
             ],
-        )
-        .unwrap();
+        );
+        // Even the writer catches this one, because a finding section pairs by
+        // book *and* source hash — which is the same rule the reader applies.
+        assert!(crafted.is_err());
+
+        // Which leaves the reader's own check to be exercised on bytes no writer
+        // here can produce: the golden vector crafts exactly that container by
+        // renaming the token section, orphaning the finding section beside it.
+        let mut crafted = published.bytes.clone();
+        crate::finding_goldens::orphan_finding_section(&mut crafted);
         assert_eq!(
-            verify_corpus(&spliced.bytes, &[(book("GEN"), GEN), (book("EXO"), EXO)]).err(),
-            Some(crate::error::DecodeError::InvalidSection)
+            verify_corpus(&crafted, &[(book("EXO"), GEN)]).err(),
+            Some(crate::error::DecodeError::InvalidToc),
+            "the orphaned finding section must refuse the whole container"
         );
     }
 

@@ -56,6 +56,7 @@ pub use crate::stamps::{LintConfigFingerprint, LintEngineStamp};
 pub use crate::state::{
     BookEntry, BookLintPrime, LintPrimeInput, MutationEffect, PrimeRejectReason, PrimeRejection,
     PrimeReport, RestoreReport, Scope, ScopeSet, ScopeTokens, SnapshotId, SourceHash,
+    TokenIdentity,
 };
 
 /// Resident configuration. Lint options live here so every recompute uses one
@@ -137,6 +138,7 @@ impl Braid {
                 source_key: book.source_key.clone(),
                 book: book.book,
                 source_hash: book.hash,
+                token_identity: book.token_identity,
                 line_ending: book.line_ending,
             })
             .collect()
@@ -524,6 +526,7 @@ impl Braid {
                 source_key: &book.source_key,
                 book: book.book,
                 source_hash: book.hash,
+                token_identity: book.token_identity,
                 tokens: &book.tokens,
                 result,
             });

@@ -13,7 +13,7 @@ use usfm_onion::walker::chapter_segments;
 use crate::error::IngestError;
 use crate::input::{BookInput, ChapterLabel, SourceKey};
 use crate::patch::ResolvedFix;
-use crate::state::SourceHash;
+use crate::state::{SourceHash, TokenIdentity};
 
 /// One contiguous chapter run: its label and its token range in the book.
 ///
@@ -34,6 +34,9 @@ pub(crate) struct BookState {
     /// The exact bytes this book would be saved as.
     pub(crate) source: String,
     pub(crate) hash: SourceHash,
+    /// The token stream's own identity — see [`TokenIdentity`]. Derived here with
+    /// the hash so every path that installs a book computes both or neither.
+    pub(crate) token_identity: TokenIdentity,
     pub(crate) tokens: Vec<OwnedToken>,
     pub(crate) runs: Vec<ChapterRun>,
     pub(crate) line_ending: LineEnding,
@@ -90,6 +93,7 @@ impl BookState {
             source_key,
             book,
             hash: SourceHash::of(&source),
+            token_identity: TokenIdentity::of(&tokens),
             source,
             runs: chapter_runs(&tokens),
             tokens,
@@ -110,6 +114,7 @@ impl BookState {
             source_key: self.source_key.clone(),
             book: self.book,
             hash: SourceHash::of(&source),
+            token_identity: TokenIdentity::of(&tokens),
             source,
             runs: chapter_runs(&tokens),
             tokens,

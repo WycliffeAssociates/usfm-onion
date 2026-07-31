@@ -449,7 +449,7 @@ fn read_section<'a>(
 /// A section validated here is one a reader will accept in the container it is
 /// spliced into, because a section's bytes mean the same thing wherever they sit
 /// on the 16-byte grid.
-pub(crate) fn inspect_section(bytes: &[u8]) -> Result<SectionHeader, DecodeError> {
+pub(crate) fn inspect_section(bytes: &[u8]) -> Result<Section<'_>, DecodeError> {
     let (header, directory_count) = read_section_header_inner(bytes, None)?;
     let section_bytes = bytes
         .get(..usize::try_from(header.section_len).map_err(|_| DecodeError::OffsetOverflow)?)
@@ -465,8 +465,8 @@ pub(crate) fn inspect_section(bytes: &[u8]) -> Result<SectionHeader, DecodeError
         header.checksum,
         false,
     )?;
-    read_directory(section_bytes, &header, directory_count)?;
-    Ok(header)
+    let fields = read_directory(section_bytes, &header, directory_count)?;
+    Ok(Section { header, fields })
 }
 
 /// Returns the validated header plus the raw directory entry count, which is a

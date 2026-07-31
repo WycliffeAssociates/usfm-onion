@@ -155,6 +155,10 @@ pub enum LayoutRefusal {
     /// Bytes offered back for reuse are a readable section describing a different
     /// book, source, or kind than the caller claims they are.
     CachedSectionMismatch,
+    /// A finding section offered back for reuse records different lint stamps
+    /// than the publication being written. Splicing it would sign a claim about
+    /// how those findings were produced that is not true of them.
+    CachedSectionStampMismatch,
     /// A section claiming positional token ids also carries the explicit id
     /// column or its dictionary, which that flag asserts are omitted.
     PositionalIdConflict { field_id: u16 },
@@ -242,6 +246,9 @@ impl std::fmt::Display for LayoutRefusal {
             Self::CachedSectionMismatch => {
                 f.write_str("a section offered for reuse describes different content than claimed")
             }
+            Self::CachedSectionStampMismatch => f.write_str(
+                "a finding section offered for reuse was recorded under different lint stamps",
+            ),
         }
     }
 }

@@ -269,6 +269,25 @@ fn patch_row_position_out_of_range(bytes: &mut Vec<u8>) {
 /// the record/row partition still adds up and the only rule broken is "a fix
 /// edits something". The writer cannot produce this shape at all, which is why
 /// the vector has to be built by corrupting one that it can.
+/// Renames the *token* section — its TOC entry and its own header — to a book the
+/// container has no other section for, which orphans the finding section that was
+/// paired with it.
+///
+/// This crate's writer cannot produce such a container (a finding section is
+/// written only when a token section with the same book and source hash exists),
+/// so the shape has to be crafted at the byte level, which is exactly what a
+/// foreign producer could hand a reader.
+#[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
+pub(crate) fn orphan_finding_section(bytes: &mut Vec<u8>) {
+    let (token_offset, _) = section_bounds(bytes)[0];
+    // TOC entry 0 sits right after the 48-byte container header; its book is at
+    // entry offset 1..4, and the section header restates it at 10..13.
+    bytes[48 + 1..48 + 4].copy_from_slice(b"EXO");
+    bytes[token_offset + 10..token_offset + 13].copy_from_slice(b"EXO");
+    restamp_section(bytes, token_offset);
+    restamp_container(bytes);
+}
+
 #[allow(clippy::ptr_arg)] // shares a `fn(&mut Vec<u8>)` pointer type with truncate_below_header, which needs Vec::truncate
 fn zero_row_patch_record(bytes: &mut Vec<u8>) {
     let (offset, _) = section_bounds(bytes)[1];
@@ -370,6 +389,13 @@ fn malformed_vectors() -> Vec<MalformedVector> {
             corrupt: patch_index_column_not_dense,
             expected: DecodeError::InvalidSection,
             proves: "the patch addressing column is dense and ascending; a skipped index leaves a record no finding claims and rejects",
+        },
+        MalformedVector {
+            name: "orphan-finding-section",
+            base: "several-codes",
+            corrupt: orphan_finding_section,
+            expected: DecodeError::InvalidToc,
+            proves: "a finding section whose book has no token section is refused rather than left unopened in a container the caller treats as whole — the writer cannot produce this shape, so only a reader check catches it",
         },
         MalformedVector {
             name: "nonzero-related-reserved",
