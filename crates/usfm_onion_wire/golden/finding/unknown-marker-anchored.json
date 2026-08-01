@@ -1,0 +1,5 @@
+{
+  "name": "unknown-marker-anchored",
+  "kind": "good",
+  "proves": "unknown-marker's marker is recovered from the anchored token's own descriptor (MarkerRef::AnchoredToken), zero marker-ref bytes"
+}

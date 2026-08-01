@@ -1,0 +1,7 @@
+{
+  "name": "orphan-finding-section",
+  "kind": "malformed",
+  "base": "several-codes",
+  "expectedError": "InvalidToc",
+  "proves": "a finding section whose book has no token section is refused rather than left unopened in a container the caller treats as whole — the writer cannot produce this shape, so only a reader check catches it"
+}

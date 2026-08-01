@@ -12,8 +12,29 @@ use crate::marker_defs::{
 };
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
-use crate::token::{NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind, UsfmToken};
+use crate::token::{
+    BookId, NumberRangeKind, Sid, Span, Token, TokenData, TokenId, TokenKind, UsfmToken,
+};
 use crate::walker::WalkableToken;
+
+/// This crate's own package version, read in this crate's build context so it
+/// names `usfm_onion`'s version rather than whichever downstream crate writes
+/// `env!("CARGO_PKG_VERSION")` in its own source (that macro always resolves
+/// against the *compiling* crate's manifest). A caller identifying the rule
+/// engine it ran against — braid's lint-cache engine stamp, for one — needs
+/// this crate's own version specifically, not its own.
+pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The lint rule engine's own semantic version: bumped when a rule's behavior
+/// changes in a way that would invalidate a lint result computed under an
+/// older engine. Deliberately independent of [`CRATE_VERSION`] (which also
+/// changes for unrelated reasons) and of `usfm_onion_wire`'s own
+/// `FINDING_SECTION_RULES_VERSION` (the wire *format*'s version — a different
+/// concern, kept in its own crate). The two numbers are equal today by
+/// convention, not by dependency: a lint-cache consumer that must not depend
+/// on wire (braid) owns and gates its own copy of this number, the same
+/// duplication judgment call already made for `canonical_order`.
+pub const RULES_VERSION: u16 = 1;
 
 /// Public token-shape contract for `lint_tokens` and friends.
 ///
@@ -222,6 +243,17 @@ pub enum LintCode {
     /// because the fix is deterministic — uppercase it. `Warning`, anchored at
     /// the book-code token.
     BookCodeNotUppercase,
+    /// A `\id` book code that IS a canonical USFM identifier, but disagrees
+    /// with [`LintOptions::declared_book`] — the caller's out-of-band
+    /// authoritative book id. Requires a declared-book context; with none
+    /// (the default), this never fires and a valid-but-wrong `\id` produces
+    /// no finding, exactly like today. Distinct from [`Self::InvalidBookCode`]:
+    /// that fires when the code isn't canonical at all, independent of any
+    /// declared context, and takes priority over this one when both would
+    /// otherwise apply to the same token. `Warning` (the manifest book is
+    /// authoritative for residency; the source `\id` stays lintable content,
+    /// not a hard error), anchored at the book-code token.
+    BookIdMismatch,
 }
 
 impl LintCode {
@@ -263,6 +295,7 @@ impl LintCode {
             Self::ContentAfterBlankMarker => "content-after-blank-marker",
             Self::InvalidBookCode => "invalid-book-code",
             Self::BookCodeNotUppercase => "book-code-not-uppercase",
+            Self::BookIdMismatch => "book-id-mismatch",
         }
     }
 
@@ -343,7 +376,20 @@ impl LintCode {
             Self::BookCodeNotUppercase => {
                 "The \\id book code \"{code}\" must be uppercase: {uppercase}."
             }
+            Self::BookIdMismatch => {
+                "The \\id book code \"{found}\" does not match the declared book \"{expected}\"."
+            }
         }
+    }
+
+    /// Renders this code's stable template with its validated message arguments.
+    ///
+    /// Wire decoders need the same English compatibility message core emitted,
+    /// but must not gain an arbitrary-template renderer that could fork the
+    /// catalog contract.  Keeping the code lookup here makes the template and
+    /// renderer one core-owned operation.
+    pub fn render_message(self, params: &MessageParams) -> String {
+        render_template(self.template(), params)
     }
 
     pub fn category(self) -> LintCategory {
@@ -353,7 +399,8 @@ impl LintCode {
             | Self::DuplicateIdMarker
             | Self::IdMarkerNotAtFileStart
             | Self::InvalidBookCode
-            | Self::BookCodeNotUppercase => LintCategory::Document,
+            | Self::BookCodeNotUppercase
+            | Self::BookIdMismatch => LintCategory::Document,
             Self::EmptyParagraph
             | Self::VerseIsEmpty
             | Self::UnknownToken
@@ -388,7 +435,8 @@ impl LintCode {
             Self::EmptyParagraph
             | Self::MissingContentSpaceAfterCloseMarker
             | Self::InvalidBookCode
-            | Self::BookCodeNotUppercase => LintSeverity::Warning,
+            | Self::BookCodeNotUppercase
+            | Self::BookIdMismatch => LintSeverity::Warning,
             _ => LintSeverity::Error,
         }
     }
@@ -426,7 +474,8 @@ impl LintCode {
             | Self::VerseInSectionOrOtherParagraph
             | Self::ContentAfterBlankMarker
             | Self::InvalidBookCode
-            | Self::BookCodeNotUppercase => LintIssueType::Usfm,
+            | Self::BookCodeNotUppercase
+            | Self::BookIdMismatch => LintIssueType::Usfm,
         }
     }
 
@@ -441,7 +490,9 @@ impl LintCode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// No `Eq`/`PartialEq` derive: see the manual `impl` below, which excludes
+/// `position`/`related_position` from equality.
+#[derive(Debug, Clone, Serialize)]
 pub struct LintIssue {
     pub code: LintCode,
     pub category: LintCategory,
@@ -466,7 +517,49 @@ pub struct LintIssue {
     pub sid: Option<String>,
     pub marker: Option<String>,
     pub fix: Option<TokenFix>,
+    /// Position of the primary token (`token_id`) in the slice `lint_tokens`
+    /// was called with, recorded when the finding was created rather than
+    /// resolved afterward from `token_id` — resolving it from an id has
+    /// nothing to resolve for a caller whose tokens carry no id at all (e.g.
+    /// `into_format_tokens`'s public output), which would lose ordering
+    /// entirely for exactly those findings.
+    /// [`NO_TOKEN_POSITION`] means anchor-only (no primary token at all).
+    /// Not part of the wire/JS contract (`#[serde(skip)]`) and not part of a
+    /// finding's semantic identity (excluded from equality below): it is a
+    /// sort-key artifact of one particular call, not a fact about the
+    /// finding itself. A cross-crate constructor that has no real position
+    /// to report (wire's decoder, test fixtures) uses `NO_TOKEN_POSITION`.
+    #[serde(skip)]
+    pub position: u32,
+    /// Same, for `related_token_id`.
+    #[serde(skip)]
+    pub related_position: u32,
 }
+
+/// Sentinel for "no position" on [`LintIssue::position`]/`related_position`
+/// — anchor-only, or a related token that doesn't exist.
+pub const NO_TOKEN_POSITION: u32 = u32::MAX;
+
+impl PartialEq for LintIssue {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+            && self.category == other.category
+            && self.severity == other.severity
+            && self.issue_type == other.issue_type
+            && self.template == other.template
+            && self.message == other.message
+            && self.message_params == other.message_params
+            && self.span == other.span
+            && self.related_span == other.related_span
+            && self.token_id == other.token_id
+            && self.related_token_id == other.related_token_id
+            && self.sid == other.sid
+            && self.marker == other.marker
+            && self.fix == other.fix
+    }
+}
+
+impl Eq for LintIssue {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub struct LintSummary {
@@ -552,6 +645,14 @@ pub struct LintOptions {
     pub disabled_codes: Vec<LintCode>,
     pub suppressed: Vec<LintSuppression>,
     pub allow_implicit_chapter_content_verse: bool,
+    /// The caller's out-of-band authoritative book id (e.g. a resident
+    /// manifest entry), if any. `None` (the default via [`Self::scoped`]) is
+    /// stateless lint exactly as before this field existed: no caller
+    /// constructs this any other way without opting in, so every existing
+    /// call site keeps `None` and [`LintCode::BookIdMismatch`] never fires.
+    /// `Some(book)` lets that rule fire when the source's own `\id` is a
+    /// valid-but-different canonical code.
+    pub declared_book: Option<BookId>,
 }
 
 impl LintOptions {
@@ -565,6 +666,7 @@ impl LintOptions {
             disabled_codes: Vec::new(),
             suppressed: Vec::new(),
             allow_implicit_chapter_content_verse: false,
+            declared_book: None,
         }
     }
 }
@@ -1034,6 +1136,22 @@ const WHITESPACE_CODES: &[LintCode] = &[
 ];
 
 pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec<T> {
+    let mut minter: Option<&mut dyn FnMut() -> String> = None;
+    apply_token_fix_with_minter(tokens, fix, &mut minter)
+}
+
+/// [`apply_token_fix`], but every token a `TokenFix` synthesizes (an
+/// `InsertAfter`, or a `ReplaceToken` with more than one replacement) is
+/// minted a fresh id via `minter`. The replacement/insert token that reuses
+/// the target's own clone (index 0 of a `ReplaceToken`) already has that
+/// token's id and is never re-minted. See
+/// [`crate::format::mint_synthetic_id`] for the seam's contract;
+/// `apply_token_fix` is unchanged and still passes no minter.
+pub fn apply_token_fix_with_minter<T: FormattableToken>(
+    tokens: &[T],
+    fix: &TokenFix,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) -> Vec<T> {
     let Some(index) = tokens
         .iter()
         .position(|token| token.id() == Some(fix.target_token_id()))
@@ -1050,7 +1168,7 @@ pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec
                 return next_tokens;
             }
             let replacement_tokens =
-                build_replacement_tokens(&anchor, replacements, ReplacementMode::Replace);
+                build_replacement_tokens(&anchor, replacements, ReplacementMode::Replace, minter);
             next_tokens.splice(index..=index, replacement_tokens);
         }
         TokenFix::DeleteToken { .. } => {
@@ -1061,7 +1179,7 @@ pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec
                 return next_tokens;
             }
             let insert_tokens =
-                build_replacement_tokens(&anchor, insert, ReplacementMode::InsertAfter);
+                build_replacement_tokens(&anchor, insert, ReplacementMode::InsertAfter, minter);
             next_tokens.splice(index + 1..index + 1, insert_tokens);
         }
     }
@@ -1095,19 +1213,22 @@ fn build_replacement_tokens<T: FormattableToken>(
     anchor: &T,
     templates: &[crate::format::TokenTemplate],
     mode: ReplacementMode,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) -> Vec<T> {
     let mut built = Vec::with_capacity(templates.len());
     for (index, template) in templates.iter().enumerate() {
         let mut token = if index == 0 && matches!(mode, ReplacementMode::Replace) {
             anchor.clone()
         } else {
-            T::synthetic_like(
+            let mut synthetic = T::synthetic_like(
                 Some(anchor),
                 template.kind,
                 template.text.clone(),
                 template.marker.clone(),
                 template.sid.clone(),
-            )
+            );
+            crate::format::mint_synthetic_id(&mut synthetic, &mut *minter);
+            synthetic
         };
         token.set_kind(template.kind);
         token.set_text(template.text.clone());
@@ -1141,7 +1262,8 @@ fn lint_empty_paragraphs<T: LintableToken>(
             LintCode::EmptyParagraph,
             marker_params(marker),
             token,
-            Some(&tokens[boundary_index]),
+            index,
+            Some((&tokens[boundary_index], boundary_index)),
         ));
     }
 }
@@ -1157,7 +1279,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
 
         if enabled.has(LintCode::UnknownToken)
             && token.kind() == TokenKind::Text
-            && let Some(issue) = lint_unknown_token_like(token)
+            && let Some(issue) = lint_unknown_token_like(token, index)
         {
             issues.push(issue);
         }
@@ -1175,6 +1297,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         LintCode::MissingChapterNumber,
                         MessageParams::default(),
                         token,
+                        index,
                     ));
                 }
             }
@@ -1185,6 +1308,7 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         LintCode::MissingVerseNumber,
                         MessageParams::default(),
                         token,
+                        index,
                     ));
                 }
                 if enabled.has(LintCode::VerseIsEmpty)
@@ -1196,7 +1320,8 @@ fn lint_expectation_and_unknown_token_rules<T: LintableToken>(
                         LintCode::VerseIsEmpty,
                         MessageParams::default(),
                         &tokens[next_index],
-                        Some(token),
+                        next_index,
+                        Some((token, index)),
                     ));
                 }
             }
@@ -1224,24 +1349,38 @@ fn lint_structure_rules<T: LintableToken>(
 
         if token_kind == TokenKind::BookCode {
             let code = token.source().trim();
-            if !code.is_empty() && !crate::lexer::is_valid_book_code(code) {
-                let upper = code.to_uppercase();
-                if crate::lexer::is_valid_book_code(&upper) {
-                    if enabled.has(LintCode::BookCodeNotUppercase) {
+            if !code.is_empty() {
+                if !crate::lexer::is_valid_book_code(code) {
+                    let upper = code.to_uppercase();
+                    if crate::lexer::is_valid_book_code(&upper) {
+                        if enabled.has(LintCode::BookCodeNotUppercase) {
+                            issues.push(simple_issue(
+                                LintCode::BookCodeNotUppercase,
+                                message_params([("code", code.to_string()), ("uppercase", upper)]),
+                                token,
+                                index,
+                            ));
+                        }
+                    } else if enabled.has(LintCode::InvalidBookCode) {
                         issues.push(simple_issue(
-                            LintCode::BookCodeNotUppercase,
-                            message_params([
-                                ("code", code.to_string()),
-                                ("uppercase", upper),
-                            ]),
+                            LintCode::InvalidBookCode,
+                            message_params([("code", code.to_string())]),
                             token,
+                            index,
                         ));
                     }
-                } else if enabled.has(LintCode::InvalidBookCode) {
+                } else if enabled.has(LintCode::BookIdMismatch)
+                    && let Some(expected) = options.declared_book
+                    && expected.as_str() != code
+                {
                     issues.push(simple_issue(
-                        LintCode::InvalidBookCode,
-                        message_params([("code", code.to_string())]),
+                        LintCode::BookIdMismatch,
+                        message_params([
+                            ("expected", expected.as_str().to_string()),
+                            ("found", code.to_string()),
+                        ]),
                         token,
+                        index,
                     ));
                 }
             }
@@ -1256,6 +1395,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::IdMarkerNotAtFileStart,
                     MessageParams::default(),
                     token,
+                    index,
                 ));
             }
             if enabled.has(LintCode::DuplicateIdMarker) && marker == "id" {
@@ -1264,6 +1404,7 @@ fn lint_structure_rules<T: LintableToken>(
                         LintCode::DuplicateIdMarker,
                         MessageParams::default(),
                         token,
+                        index,
                     ));
                 }
                 id_seen = true;
@@ -1300,6 +1441,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("marker", marker.to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1312,6 +1454,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::ContentBeforeFirstChapter,
                     message_params([("kind", "verse".to_string()), ("marker", "v".to_string())]),
                     token,
+                    index,
                 ));
             }
 
@@ -1329,6 +1472,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::VerseOutsideExplicitParagraph,
                     MessageParams::default(),
                     token,
+                    index,
                 ));
             }
 
@@ -1340,6 +1484,7 @@ fn lint_structure_rules<T: LintableToken>(
                     LintCode::NoteSubmarkerOutsideNote,
                     marker_params(marker),
                     token,
+                    index,
                 ));
             }
 
@@ -1354,6 +1499,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("target", "chapter".to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1368,6 +1514,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("target", "verse".to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1401,6 +1548,7 @@ fn lint_structure_rules<T: LintableToken>(
                         ("context", spec_context_name(validation_context).to_string()),
                     ]),
                     token,
+                    index,
                 ));
             }
 
@@ -1449,6 +1597,8 @@ fn lint_structure_rules<T: LintableToken>(
             sid: None,
             marker: Some("id".to_string()),
             fix: None,
+            position: NO_TOKEN_POSITION,
+            related_position: NO_TOKEN_POSITION,
         });
     }
 }
@@ -1458,7 +1608,8 @@ fn lint_unknown_markers<T: LintableToken>(
     range: std::ops::Range<usize>,
     issues: &mut Vec<LintIssue>,
 ) {
-    for token in &tokens[range] {
+    let start = range.start;
+    for (offset, token) in tokens[range].iter().enumerate() {
         if token.kind() != TokenKind::Marker {
             continue;
         }
@@ -1472,6 +1623,7 @@ fn lint_unknown_markers<T: LintableToken>(
             LintCode::UnknownMarker,
             marker_params(marker),
             token,
+            start + offset,
         ));
     }
 }
@@ -1481,7 +1633,8 @@ fn lint_unknown_close_markers<T: LintableToken>(
     range: std::ops::Range<usize>,
     issues: &mut Vec<LintIssue>,
 ) {
-    for token in &tokens[range] {
+    let start = range.start;
+    for (offset, token) in tokens[range].iter().enumerate() {
         if token.kind() != TokenKind::EndMarker {
             continue;
         }
@@ -1495,6 +1648,7 @@ fn lint_unknown_close_markers<T: LintableToken>(
             LintCode::UnknownCloseMarker,
             marker_params(marker),
             token,
+            start + offset,
         ));
     }
 }
@@ -1523,6 +1677,7 @@ fn lint_chapter_rules<T: LintableToken>(
                     ]),
                     "c",
                     &tokens[number_index],
+                    number_index,
                 ));
             }
             seen_chapters.insert(chapter);
@@ -1579,6 +1734,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 ]),
                 "v",
                 number_token,
+                number_index,
             ));
             continue;
         }
@@ -1605,6 +1761,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 ]),
                 "v",
                 number_token,
+                number_index,
             ));
         }
 
@@ -1615,6 +1772,7 @@ fn lint_number_and_verse_rules<T: LintableToken>(
                 MessageParams::default(),
                 "v",
                 number_token,
+                number_index,
             ));
         }
 
@@ -1712,6 +1870,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                     LintCode::MissingWhitespaceBeforeMarker,
                     marker_params(marker),
                     token,
+                    index,
                 );
                 if !prefix.is_empty() && token.id().is_some() {
                     issue = issue.with_fix(prepend_ws_fix(
@@ -1755,12 +1914,13 @@ fn lint_whitespace_rules<T: LintableToken>(
             // genuine content riding the same line (`\b here`), anchored
             // at that content rather than at the marker.
             if enabled.has(LintCode::ContentAfterBlankMarker)
-                && let Some(content) = content_after_blank_marker(tokens, index)
+                && let Some(content_index) = content_after_blank_marker(tokens, index)
             {
                 issues.push(simple_issue(
                     LintCode::ContentAfterBlankMarker,
                     marker_params(marker),
-                    content,
+                    &tokens[content_index],
+                    content_index,
                 ));
             }
         } else if !after_name_satisfied_by_marker_token {
@@ -1787,6 +1947,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                             LintCode::MissingHorizontalWhitespaceAfterMarkerName,
                             marker_params(marker),
                             token,
+                            index,
                         );
                         if !prefix.is_empty() && token.id().is_some() {
                             issue = issue.with_fix(append_ws_fix(
@@ -1815,6 +1976,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                             LintCode::MissingTagEndDelimiterAfterMarker,
                             marker_params(marker),
                             token,
+                            index,
                         );
                         if !prefix.is_empty() && token.id().is_some() {
                             issue = issue.with_fix(append_ws_fix(
@@ -1859,6 +2021,7 @@ fn lint_whitespace_rules<T: LintableToken>(
                     LintCode::MissingContentSpaceAfterCloseMarker,
                     marker_params(marker),
                     token,
+                    index,
                 ));
             }
         }
@@ -1877,7 +2040,7 @@ fn requirement_demands_leading_ws(req: crate::whitespace::StructuralWhitespaceRe
     )
 }
 
-fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
+fn lint_unknown_token_like<T: LintableToken>(token: &T, index: usize) -> Option<LintIssue> {
     let text = token.source();
     let trimmed = text.trim_start_matches([' ', '\t']);
     let remainder = trimmed.strip_prefix('\\')?;
@@ -1902,6 +2065,7 @@ fn lint_unknown_token_like<T: LintableToken>(token: &T) -> Option<LintIssue> {
         message_params([("text", token.source().to_string())]),
         marker,
         token,
+        index,
     ))
 }
 
@@ -1932,6 +2096,7 @@ fn lint_number_predecessor<T: LintableToken>(
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
             MessageParams::default(),
             token,
+            index,
         ));
         return;
     };
@@ -1944,6 +2109,7 @@ fn lint_number_predecessor<T: LintableToken>(
             LintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
             MessageParams::default(),
             token,
+            index,
         ));
     }
 }
@@ -2251,15 +2417,18 @@ fn marker_is_intentionally_empty_block(marker: &str) -> bool {
 /// is allowed and skipped, so `\b \n` returns `None` (clean) while
 /// `\b here` returns the `here` token (flagged). End-of-input with only
 /// horizontal whitespace also counts as clean.
-fn content_after_blank_marker<T: LintableToken>(tokens: &[T], marker_index: usize) -> Option<&T> {
+fn content_after_blank_marker<T: LintableToken>(
+    tokens: &[T],
+    marker_index: usize,
+) -> Option<usize> {
     use crate::whitespace::{is_horizontal_whitespace_char, is_newline_char};
-    for token in &tokens[marker_index + 1..] {
+    for (offset, token) in tokens[marker_index + 1..].iter().enumerate() {
         for ch in token.source().chars() {
             if is_newline_char(ch) {
                 return None;
             }
             if !is_horizontal_whitespace_char(ch) {
-                return Some(token);
+                return Some(marker_index + 1 + offset);
             }
         }
     }
@@ -2336,7 +2505,8 @@ fn issue<T: LintableToken, U: LintableToken>(
     code: LintCode,
     params: MessageParams,
     token: &T,
-    related: Option<&U>,
+    index: usize,
+    related: Option<(&U, usize)>,
 ) -> LintIssue {
     let template = code.template();
     let message = render_template(template, &params);
@@ -2349,12 +2519,14 @@ fn issue<T: LintableToken, U: LintableToken>(
         message,
         message_params: params,
         span: token.span(),
-        related_span: related.and_then(LintableToken::span),
+        related_span: related.and_then(|(token, _)| token.span()),
         token_id: token.id(),
-        related_token_id: related.and_then(LintableToken::id),
+        related_token_id: related.and_then(|(token, _)| token.id()),
         sid: token.sid(),
         marker: token.marker().map(ToOwned::to_owned),
         fix: None,
+        position: index as u32,
+        related_position: related.map_or(NO_TOKEN_POSITION, |(_, index)| index as u32),
     }
 }
 
@@ -2413,8 +2585,13 @@ fn append_ws_fix<T: LintableToken>(code: &str, label: &str, target: &T, suffix: 
     }
 }
 
-fn simple_issue<T: LintableToken>(code: LintCode, params: MessageParams, token: &T) -> LintIssue {
-    issue(code, params, token, None::<&T>)
+fn simple_issue<T: LintableToken>(
+    code: LintCode,
+    params: MessageParams,
+    token: &T,
+    index: usize,
+) -> LintIssue {
+    issue(code, params, token, index, None::<(&T, usize)>)
 }
 
 fn simple_issue_with_marker<T: LintableToken>(
@@ -2422,8 +2599,9 @@ fn simple_issue_with_marker<T: LintableToken>(
     params: MessageParams,
     marker: &str,
     token: &T,
+    index: usize,
 ) -> LintIssue {
-    let mut issue = simple_issue(code, params, token);
+    let mut issue = simple_issue(code, params, token, index);
     issue.marker = Some(marker.to_string());
     issue
 }
@@ -2436,27 +2614,41 @@ fn marker_params(marker: &str) -> MessageParams {
 
 /// Canonical output order for findings. Independent of the order rule groups
 /// happen to run in, so callers see a stable sequence and a chapter-parallel
-/// linter (which produces findings out of segment order) can sort to the same
-/// result. Ordered by primary source position, then the stable lint-code
-/// identifier, then related span; spanless document findings sort last. `token_id`
-/// / `marker` / `message` are pure tie-breakers for determinism. Deliberately
-/// NOT ordered by SID — duplicate, malformed, or decreasing references are valid
-/// linter inputs and must not drive output order.
+/// linter (which produces findings out of segment order) sorts to the same
+/// result. Ordered by the primary token's position in the token stream, then
+/// the stable kebab-case lint code, then the related token's position;
+/// anchor-only findings ([`LintIssue::position`] == [`NO_TOKEN_POSITION`],
+/// e.g. a missing `\id`) sort last.
+///
+/// Position is recorded on each [`LintIssue`] at the moment a rule creates
+/// it (every `issue`/`simple_issue*` call takes the token's own index in the
+/// slice `lint_tokens` was given), not resolved afterward from `token_id`.
+/// Resolving it afterward from a `token_id -> index` map has nothing to
+/// resolve for a caller whose tokens carry no id at all (e.g.
+/// `usfm_onion::format::into_format_tokens`'s public output), so every
+/// finding over such tokens would silently lose position ordering. Recording
+/// position at creation time works identically whether or not the caller's
+/// tokens carry ids, or spans either — position is defined purely by "which
+/// element of the slice this was," which exists for any token type.
+///
+/// Deliberately NOT comparing `token_id`/`related_token_id` strings, even as
+/// a tie-breaker: a token id is caller-opaque and may not compare the same
+/// way in Rust (UTF-8 byte order) as in a JS reconciler over the same data
+/// (UTF-16 code unit order); comparing only the recorded position numbers
+/// keeps this order reproducible without a string comparator in either
+/// language. Deliberately NOT ordered by SID either — duplicate, malformed,
+/// or decreasing references are valid linter inputs and must not drive
+/// output order.
+///
+/// `usfm_onion_wire`'s `finding_codec::canonical_order` uses this same
+/// 3-key shape independently, not by sharing code with this function — see
+/// its doc comment for why.
 fn canonical_sort(issues: &mut [LintIssue]) {
-    fn span_key(span: Option<Span>) -> (u8, u32, u32) {
-        match span {
-            Some(span) => (0, span.start, span.end),
-            None => (1, u32::MAX, u32::MAX),
-        }
-    }
     issues.sort_by(|a, b| {
-        span_key(a.span)
-            .cmp(&span_key(b.span))
+        a.position
+            .cmp(&b.position)
             .then_with(|| a.code.code().cmp(b.code.code()))
-            .then_with(|| span_key(a.related_span).cmp(&span_key(b.related_span)))
-            .then_with(|| a.token_id.cmp(&b.token_id))
-            .then_with(|| a.marker.cmp(&b.marker))
-            .then_with(|| a.message.cmp(&b.message))
+            .then_with(|| a.related_position.cmp(&b.related_position))
     });
 }
 
@@ -2469,6 +2661,14 @@ fn dedupe_issues(issues: Vec<LintIssue>) -> Vec<LintIssue> {
             issue.span.map(|span| (span.start, span.end)),
             issue.related_span.map(|span| (span.start, span.end)),
             issue.token_id.clone(),
+            // Without these, two distinct findings that are both id-less and
+            // spanless (bare caller tokens with neither) collapse to the same
+            // (code, None, None, None) identity and one is silently dropped
+            // before the position-aware sort ever runs. Position always
+            // distinguishes them: it names the token, not just what the
+            // token happened to carry.
+            issue.position,
+            issue.related_position,
         );
         if seen.insert(identity) {
             deduped.push(issue);
@@ -2570,6 +2770,7 @@ mod tests {
         LintCode::ContentAfterBlankMarker,
         LintCode::InvalidBookCode,
         LintCode::BookCodeNotUppercase,
+        LintCode::BookIdMismatch,
     ];
 
     /// Compile-time exhaustiveness anchor: adding a `LintCode` variant breaks
@@ -2607,7 +2808,8 @@ mod tests {
             | LintCode::VerseInSectionOrOtherParagraph
             | LintCode::ContentAfterBlankMarker
             | LintCode::InvalidBookCode
-            | LintCode::BookCodeNotUppercase => {}
+            | LintCode::BookCodeNotUppercase
+            | LintCode::BookIdMismatch => {}
         }
     }
 
@@ -2669,6 +2871,7 @@ mod tests {
                         disabled_codes: disabled.clone(),
                         suppressed: Vec::new(),
                         allow_implicit_chapter_content_verse: false,
+                        declared_book: None,
                     };
                     let bitmask = EnabledCodes::new(&options);
 
@@ -2740,6 +2943,28 @@ mod tests {
     }
 
     #[test]
+    fn code_owned_renderer_matches_every_emitted_issue_message() {
+        // The wire may reconstruct messages only through `LintCode`; this
+        // checks the public seam against core's existing issue construction,
+        // including select and number templates exercised by these inputs.
+        for source in [
+            "\\id php\n",
+            "\\p\n\\p text\n",
+            "\\c 1\n\\v 1\n",
+            "\\c 1\n\\p \\v 1 text\n",
+        ] {
+            for issue in lint_usfm(source, LintOptions::scoped(LintScope::Book)).issues {
+                assert_eq!(
+                    issue.code.render_message(&issue.message_params),
+                    issue.message,
+                    "{}",
+                    issue.code.code()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn missing_whitespace_before_marker_is_flagged() {
         // `\p` arrives directly after the previous text token with no
         // separating whitespace — `\p`'s row demands
@@ -2775,6 +3000,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Marker,
@@ -2786,6 +3013,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
 
@@ -2819,6 +3048,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Number,
@@ -2830,6 +3061,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
 
@@ -3017,6 +3250,91 @@ mod tests {
         assert_eq!(from_source, from_tokens);
     }
 
+    /// `into_format_tokens`'s public output carries no id at all
+    /// (`FormatToken::id` is `None` unless something later calls `set_id`),
+    /// so canonical order must not be resolved through an id -> position
+    /// lookup — it has nothing to resolve. Linting the same source directly
+    /// and via a round trip through `into_format_tokens` must produce the
+    /// same finding order (ignoring `position`/`related_position`, which
+    /// `PartialEq` already excludes since they are call-specific, not part
+    /// of a finding's identity).
+    #[test]
+    fn lint_tokens_over_id_less_format_tokens_preserves_position_order() {
+        let source = "\\id GEN\n\\zzz x\n\\v x";
+        let parsed = parse(source);
+        let from_parsed_tokens = lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book));
+
+        let format_tokens = crate::format::into_format_tokens(&parsed.tokens);
+        assert!(
+            format_tokens.iter().all(|token| token.id.is_none()),
+            "into_format_tokens must still emit no ids, or this test proves nothing"
+        );
+        let from_format_tokens = lint_tokens(&format_tokens, LintOptions::scoped(LintScope::Book));
+
+        assert!(
+            from_format_tokens.issues.len() > 1,
+            "this fixture must produce more than one finding, or order is not under test"
+        );
+        // Compare the *sequence* of codes, not full `LintIssue` equality:
+        // `token_id`/`sid` legitimately differ (bare `FormatToken`s carry
+        // neither), which is expected type-shape divergence, not an
+        // ordering bug. Canonical order is exactly this sequence.
+        let codes = |result: &LintResult| {
+            result
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            codes(&from_parsed_tokens),
+            codes(&from_format_tokens),
+            "id-less caller tokens must preserve the same canonical order as parsed tokens"
+        );
+    }
+
+    /// Two distinct findings that are both id-less and spanless (bare
+    /// caller tokens carrying neither) must not collapse into one:
+    /// `dedupe_issues`'s identity tuple has to include `position`/
+    /// `related_position`, or two `\v` markers at different positions, each
+    /// missing its number, hash to the same `(code, None, None, None)` key
+    /// and one is silently dropped before the position-aware sort ever
+    /// runs.
+    #[test]
+    fn dedupe_does_not_collapse_distinct_findings_on_id_less_spanless_tokens() {
+        let bare_verse_marker = FormatToken {
+            kind: TokenKind::Marker,
+            text: "\\v".to_string(),
+            marker: Some("v".to_string()),
+            sid: None,
+            id: None,
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+            attribute_source: None,
+            attributes: Vec::new(),
+        };
+        let tokens = vec![bare_verse_marker.clone(), bare_verse_marker];
+
+        let options = LintOptions {
+            enabled_codes: Some(vec![LintCode::MissingVerseNumber]),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_tokens(&tokens, options);
+
+        assert_eq!(
+            result
+                .issues
+                .iter()
+                .filter(|issue| issue.code == LintCode::MissingVerseNumber)
+                .count(),
+            2,
+            "one finding per \\v marker, not deduped into one: {:?}",
+            result.issues
+        );
+    }
+
     #[test]
     fn lint_accepts_editor_tokens_without_conversion() {
         let tokens = vec![
@@ -3063,6 +3381,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Text,
@@ -3074,6 +3394,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
 
@@ -3130,7 +3452,10 @@ mod tests {
             .expect("an unrecognized book code must fire InvalidBookCode");
         assert_eq!(issue.severity, LintSeverity::Warning);
         assert_eq!(issue.category, LintCategory::Document);
-        assert_eq!(issue.message_params.get("code").map(String::as_str), Some("ZZZ"));
+        assert_eq!(
+            issue.message_params.get("code").map(String::as_str),
+            Some("ZZZ")
+        );
         // Must NOT also fire the casing rule.
         assert!(
             !result
@@ -3153,9 +3478,15 @@ mod tests {
             .find(|issue| issue.code == LintCode::BookCodeNotUppercase)
             .expect("a miscased-but-valid book code must fire BookCodeNotUppercase");
         assert_eq!(issue.severity, LintSeverity::Warning);
-        assert_eq!(issue.message_params.get("code").map(String::as_str), Some("php"));
+        assert_eq!(
+            issue.message_params.get("code").map(String::as_str),
+            Some("php")
+        );
         // The deterministic fix target is carried so braid can uppercase it.
-        assert_eq!(issue.message_params.get("uppercase").map(String::as_str), Some("PHP"));
+        assert_eq!(
+            issue.message_params.get("uppercase").map(String::as_str),
+            Some("PHP")
+        );
         assert!(
             !result
                 .issues
@@ -3181,6 +3512,109 @@ mod tests {
                 "valid code {code} must not fire either book-code rule"
             );
         }
+    }
+
+    /// With no declared-book context (the default — `LintOptions::scoped`
+    /// never sets one), a valid-but-different-from-any-expectation `\id`
+    /// produces no finding at all. This is the "stateless callers retain
+    /// current behavior" half of the declared-book seam.
+    #[test]
+    fn no_declared_book_context_leaves_a_valid_but_wrong_code_unflagged() {
+        let result = lint_usfm(
+            "\\id 2CO\n\\c 1\n\\v 1 text",
+            LintOptions::scoped(LintScope::Book),
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch),
+            "BookIdMismatch must never fire without a declared_book context"
+        );
+    }
+
+    /// A declared book that disagrees with a valid source `\id` — the gap
+    /// the declared-book context exists to close.
+    #[test]
+    fn declared_book_context_fires_mismatch_for_a_valid_but_different_code() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("1CO").expect("1CO is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_usfm("\\id 2CO\n\\c 1\n\\v 1 text", options);
+        let issue = result
+            .issues
+            .iter()
+            .find(|issue| issue.code == LintCode::BookIdMismatch)
+            .expect("a declared book disagreeing with a valid \\id must fire BookIdMismatch");
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert_eq!(issue.category, LintCategory::Document);
+        assert_eq!(
+            issue.message_params.get("expected").map(String::as_str),
+            Some("1CO")
+        );
+        assert_eq!(
+            issue.message_params.get("found").map(String::as_str),
+            Some("2CO")
+        );
+    }
+
+    #[test]
+    fn declared_book_context_does_not_fire_when_codes_match() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("GEN").expect("GEN is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_usfm("\\id GEN\n\\c 1\n\\v 1 text", options);
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch)
+        );
+    }
+
+    /// `InvalidBookCode` takes priority: a code that fails canonical
+    /// validation altogether is a different problem than "wrong book", and a
+    /// declared context must not turn on a second finding for the same token.
+    #[test]
+    fn declared_book_context_still_prioritizes_invalid_book_code() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("GEN").expect("GEN is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Book)
+        };
+        let result = lint_usfm("\\id ZZZ\n\\c 1\n\\v 1 text", options);
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::InvalidBookCode)
+        );
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch),
+            "an already-invalid code must not also fire BookIdMismatch"
+        );
+    }
+
+    /// `BookIdMismatch` is `LintCategory::Document`, so it inherits the same
+    /// chapter-scope suppression `InvalidBookCode`/`BookCodeNotUppercase`
+    /// already get — a chapter-grain caller must not get book-head behavior.
+    #[test]
+    fn declared_book_context_is_suppressed_in_chapter_scope() {
+        let options = LintOptions {
+            declared_book: Some(BookId::from_str("1CO").expect("1CO is a valid BookId")),
+            ..LintOptions::scoped(LintScope::Chapter(1))
+        };
+        let result = lint_usfm("\\id 2CO\n\\c 1\n\\v 1 text", options);
+        assert!(
+            !result
+                .issues
+                .iter()
+                .any(|issue| issue.code == LintCode::BookIdMismatch)
+        );
     }
 
     #[test]
@@ -3419,6 +3853,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: TokenKind::Number,
@@ -3430,6 +3866,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
         let invalid_range_result =

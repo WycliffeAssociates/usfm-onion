@@ -1,0 +1,7 @@
+{
+  "name": "nonzero-patch-row-reserved",
+  "kind": "malformed",
+  "base": "whitespace-fix-patch",
+  "expectedError": "InvalidSection",
+  "proves": "a patch row's reserved half-word must be zero; a nonzero value is a future producer's field this build cannot honour"
+}

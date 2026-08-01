@@ -1,0 +1,7 @@
+{
+  "name": "out-of-range-index",
+  "kind": "malformed",
+  "base": "explicit-ids",
+  "expectedError": "InvalidSection",
+  "proves": "an index column value naming no dictionary entry (and not the none-sentinel) rejects rather than reading out of bounds"
+}

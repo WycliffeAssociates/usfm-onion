@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::marker_defs::{
     MarkerDefKind, MarkerFamily, MarkerIndex, StructuralMarkerInfo, resolve_marker_metadata,
@@ -233,7 +233,10 @@ pub type Lexeme<'a> = ScanToken<'a>;
 pub type LexemeKind = ScanTokenKind;
 pub type LexResult<'a> = ScanResult<'a>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// `Deserialize` as well as `Serialize`: a token kind travels back *into* the
+/// library on the resident boundary (a patch's replacement template, a native
+/// host's IPC payload), not only out of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenKind {
     Newline,
     OptBreak,
@@ -386,6 +389,965 @@ impl<'a> Token<'a> {
     }
 }
 
+/// Opaque identifier supplied by a resident token source.
+///
+/// Identity is stable only within one book. Onion compares it byte-for-byte
+/// but does not assign meaning to its contents.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StableTokenId(Box<str>);
+
+impl StableTokenId {
+    /// Returns `None` for an empty identifier, which cannot address a token.
+    pub fn new(value: impl Into<Box<str>>) -> Option<Self> {
+        let value = value.into();
+        (!value.is_empty()).then_some(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for StableTokenId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Display for StableTokenId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// One USFM attribute entry retained with its source spelling.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OwnedAttribute {
+    pub source: Box<str>,
+    pub key: Box<str>,
+    pub value: Box<str>,
+    pub is_default: bool,
+    /// Byte span in the source this attribute was parsed from. `None` for an
+    /// attribute an editor synthesized or structurally edited — never
+    /// fabricated from some other token's span, since that would misreport a
+    /// position the attribute never actually occupied.
+    pub span: Option<Span>,
+}
+
+/// Parsed number payload carried by a `TokenKind::Number` token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedNumberInfo {
+    pub start: u32,
+    pub end: Option<u32>,
+    pub kind: NumberRangeKind,
+}
+
+/// Parsed book-code payload carried by a `TokenKind::BookCode` token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedBookCode {
+    pub code: Box<str>,
+    pub is_valid: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OwnedMarkerAttrs {
+    attributes: Box<[OwnedAttribute]>,
+    attribute_source: Option<Box<str>>,
+    /// Bytes from the end of the owning token's own source to the start of the
+    /// attribute list, in the stream this token came from.
+    ///
+    /// The verbatim attribute text always survived the drop to owned tokens; its
+    /// *position* did not, and one placement rule cannot express every real
+    /// layout — an alignment list sits at the opener, a wordlist list can sit
+    /// past a nested closer, and an unclosed `\fig`'s list sits in the middle of
+    /// the following text. A distance from the owner is the smallest fact that
+    /// covers all of them, and unlike an absolute offset it stays meaningful
+    /// after tokens elsewhere in the stream are edited.
+    ///
+    /// `None` for tokens built without positions (editor- or DTO-authored): those
+    /// never had a position to remember, and the emitter falls back to placing
+    /// the list at the marker's closer.
+    attribute_offset: Option<BytePos>,
+}
+
+/// The payload variant follows `kind` exactly. Keeping it private prevents a
+/// boundary caller from creating impossible marker/attribute combinations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OwnedTokenPayload {
+    Plain,
+    Marker {
+        marker: Box<str>,
+        metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
+        nested: bool,
+        attrs: Option<OwnedMarkerAttrs>,
+    },
+    EndMarker {
+        marker: Box<str>,
+        metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
+        nested: bool,
+    },
+    Milestone {
+        marker: Box<str>,
+        metadata: MarkerMetadata,
+        structural: StructuralMarkerInfo,
+        attrs: Option<OwnedMarkerAttrs>,
+    },
+    BookCode(OwnedBookCode),
+    Number(OwnedNumberInfo),
+}
+
+/// Owned semantic token for token streams that outlive their parsed source.
+///
+/// Parsed tokens borrow source text and carry byte spans; this type retains
+/// the semantic payload and any verbatim attribute list needed to emit the
+/// token stream without retaining the original source buffer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedToken {
+    id: StableTokenId,
+    kind: TokenKind,
+    source: Box<str>,
+    sid: Option<Box<str>>,
+    parsed_sid: Option<Sid>,
+    payload: OwnedTokenPayload,
+}
+
+/// Every fact one owned token holds, as a boundary supplies them.
+///
+/// A borrowed input struct rather than a long argument list, so each fact is named
+/// at the call site and a new one cannot be silently absorbed into a positional
+/// slot. [`OwnedToken::from_parts`] destructures it exhaustively.
+#[derive(Debug, Clone)]
+pub struct OwnedTokenParts<'a> {
+    /// The caller's own stable id. Empty is refused: an unaddressable resident
+    /// token is what every later reconciliation would fail to find.
+    pub id: &'a str,
+    pub kind: TokenKind,
+    /// The exact bytes this token contributes to its book's source.
+    pub source: &'a str,
+    /// The canonical anchor, spelled as this library spells it (`"GEN 1:2"`).
+    pub sid: Option<&'a str>,
+    /// The marker name without its backslash. Required by the marker-like kinds,
+    /// refused on every other.
+    pub marker: Option<&'a str>,
+    /// `\+add`-style nesting. Marker and end-marker only.
+    pub nested: bool,
+    /// The book code and whether it is canonical. `BookCode` kind only.
+    pub book_code: Option<(&'a str, bool)>,
+    /// The parsed number payload. `Number` kind only.
+    pub number: Option<OwnedNumberInfo>,
+    /// The structured attribute list. Opening marker and milestone only.
+    pub attributes: &'a [OwnedAttribute],
+    /// The verbatim `|...` slice, when the token has one. Distinct from an empty
+    /// list: absent means the token carries no attribute list at all.
+    pub attribute_source: Option<&'a str>,
+    /// Distance from this token's own end to its attribute list, when the caller
+    /// remembers one. `None` places the list at the marker's closer.
+    pub attribute_offset: Option<BytePos>,
+}
+
+/// Why a working token could not become an owned resident token.
+///
+/// Every variant names a payload fact the working shape
+/// ([`crate::format::FormattableToken`]) does not carry and that this token
+/// cannot be given honestly — so the conversion refuses instead of inventing
+/// one. All three are checkpoint failures at a residency boundary, never
+/// something a well-formed format or fix pass produces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TokenBuildError {
+    /// The working token carries no id, so nothing could address it.
+    MissingId,
+    /// This kind's payload (a book code, a parsed number) is not reconstructible
+    /// from the working shape, and no anchor supplied it either.
+    MissingPayload { id: Box<str>, kind: TokenKind },
+    /// The working token names a canonical anchor no anchor token can supply the
+    /// structured form of, or a boundary supplied anchor text this library would
+    /// never have written. Keeping the spelling without the structured form would
+    /// leave a token whose two views of its own address disagree.
+    UnresolvableSid { id: Box<str>, sid: Box<str> },
+    /// A fact was supplied that this kind of token cannot hold — a book code on a
+    /// text token, an attribute list on an end marker, nesting on a milestone.
+    /// Refused rather than dropped: a caller that sent it believes it means
+    /// something.
+    ///
+    /// `fact` is a `Cow` rather than a `&'static str` so this error can cross a
+    /// serde boundary: a borrowed `'static` label cannot be deserialized (the
+    /// deserializer's lifetime would have to outlive `'static`), and a resident host
+    /// serializes these errors straight to its IPC channel. Construction still
+    /// borrows, so naming the fact costs no allocation; only a value read back from
+    /// bytes owns its label.
+    UnexpectedPayload {
+        id: Box<str>,
+        kind: TokenKind,
+        fact: std::borrow::Cow<'static, str>,
+    },
+}
+
+impl std::fmt::Display for TokenBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingId => f.write_str("working token carries no id"),
+            Self::MissingPayload { id, kind } => {
+                write!(
+                    f,
+                    "token {id} of kind {kind:?} has no reconstructible payload"
+                )
+            }
+            Self::UnresolvableSid { id, sid } => {
+                write!(
+                    f,
+                    "token {id} names the anchor {sid} with no structured form"
+                )
+            }
+            Self::UnexpectedPayload { id, kind, fact } => {
+                write!(f, "token {id} of kind {kind:?} cannot carry a {fact}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for TokenBuildError {}
+
+impl OwnedToken {
+    /// Rebuilds an owned resident token from a format/fix pass's working token.
+    ///
+    /// This is the residency checkpoint for the id-optional working type: a
+    /// token with no id cannot be addressed by anything downstream, so it is
+    /// refused here rather than stored unaddressable.
+    ///
+    /// `anchor` is the resident token this working token descends from — the
+    /// same-id token for one the pass modified, or the fix's target for one it
+    /// synthesized. It supplies exactly the payload facts a working token has no
+    /// field for: marker nesting, a book code, a parsed number, an attribute
+    /// list's remembered placement, and the structured form of a canonical
+    /// anchor. Passing `None` states there is no such predecessor, and then a
+    /// kind that needs one of those facts is refused rather than guessed.
+    ///
+    /// Facts the working token *does* carry always win: kind, source text,
+    /// marker name, and the formatted anchor are read from it, never from the
+    /// anchor token.
+    pub fn from_format_token(
+        token: &crate::format::FormatToken,
+        anchor: Option<&Self>,
+    ) -> Result<Self, TokenBuildError> {
+        // Field access, not the `FormattableToken` accessors: `FormatToken`
+        // implements two traits that both declare `marker`, so the fields are
+        // the unambiguous reading.
+        let id = StableTokenId::new(token.id.clone().ok_or(TokenBuildError::MissingId)?)
+            .ok_or(TokenBuildError::MissingId)?;
+        let kind = token.kind;
+        let missing_payload = || TokenBuildError::MissingPayload {
+            id: Box::from(id.as_str()),
+            kind,
+        };
+
+        // The formatted spelling comes from the working token; its structured
+        // form can only come from an anchor that spells the same anchor, since
+        // re-parsing the display string here would fork core's own formatting.
+        let (sid, parsed_sid) = match token.sid.as_deref() {
+            None => (None, None),
+            Some(text) => {
+                let inherited = anchor
+                    .filter(|anchor| anchor.sid() == Some(text))
+                    .and_then(|anchor| anchor.parsed_sid);
+                match inherited {
+                    Some(parsed) => (Some(Box::from(text)), Some(parsed)),
+                    None => {
+                        return Err(TokenBuildError::UnresolvableSid {
+                            id: Box::from(id.as_str()),
+                            sid: Box::from(text),
+                        });
+                    }
+                }
+            }
+        };
+
+        let payload = match kind {
+            TokenKind::Newline
+            | TokenKind::OptBreak
+            | TokenKind::MilestoneEnd
+            | TokenKind::Text => OwnedTokenPayload::Plain,
+            // A book code and a parsed number are payloads the working shape
+            // either omits entirely or carries verbatim; an anchor may only
+            // supply one while the token's own text still spells it.
+            TokenKind::BookCode => OwnedTokenPayload::BookCode(
+                anchor
+                    .filter(|anchor| anchor.source() == token.text)
+                    .and_then(Self::book_code)
+                    .cloned()
+                    .ok_or_else(missing_payload)?,
+            ),
+            TokenKind::Number => OwnedTokenPayload::Number(match token.number_info {
+                Some((start, end, kind)) => OwnedNumberInfo { start, end, kind },
+                None => anchor
+                    .filter(|anchor| anchor.source() == token.text)
+                    .and_then(Self::number_info)
+                    .cloned()
+                    .ok_or_else(missing_payload)?,
+            }),
+            TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone => {
+                let marker = token.marker.as_deref().ok_or_else(missing_payload)?;
+                let metadata = marker_metadata(marker);
+                let structural = token.structural.unwrap_or_else(|| {
+                    crate::marker_defs::structural_marker_info(marker, metadata.kind)
+                });
+                // Nesting is a spelling fact (`\+add`) the working type has no
+                // field for, so it survives only from an anchor spelling the
+                // same marker. A synthesized token is new content, and new
+                // content is not nested.
+                let nested = anchor
+                    .filter(|anchor| anchor.marker_name() == Some(marker))
+                    .is_some_and(|anchor| anchor.nested());
+                let attrs = rebuilt_marker_attrs(token, anchor);
+                match kind {
+                    TokenKind::Marker => OwnedTokenPayload::Marker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                        attrs,
+                    },
+                    TokenKind::EndMarker => OwnedTokenPayload::EndMarker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                    },
+                    _ => OwnedTokenPayload::Milestone {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        attrs,
+                    },
+                }
+            }
+        };
+
+        Ok(Self {
+            id,
+            kind,
+            source: Box::from(token.text.as_str()),
+            sid,
+            parsed_sid,
+            payload,
+        })
+    }
+
+    /// Feeds everything the packed wire encoding derives from this token into
+    /// `state`, exhaustively.
+    ///
+    /// This exists so a consumer can key a cache on "the same token stream" rather
+    /// than on the book's bytes, which pin far less than they look like they do: a
+    /// book's source is its tokens' text concatenated, so two streams can
+    /// serialize identically while differing in every fact a serializer never
+    /// writes — stable ids above all, and the canonical anchors, nesting,
+    /// book-code validity, parsed numbers, and attribute spellings with them.
+    ///
+    /// # Why it lives here, and why it cannot silently rot
+    ///
+    /// The payload is private to this module, so an outside crate can only reach it
+    /// through accessors — and an accessor-based projection is exactly the thing
+    /// that goes quietly stale, because adding a field to a private struct compiles
+    /// fine everywhere that never learned to ask for it. Every value below is
+    /// reached by **destructuring with no `..` anywhere**: this token, every payload
+    /// variant, the marker-attribute record, each attribute, and each name-derived
+    /// struct. Adding a field to any of them is therefore a compile error at this
+    /// site, which is the whole guarantee — a caller does not have to trust that
+    /// this list is complete, because it cannot compile while being incomplete.
+    ///
+    /// Fields that are *deliberately* excluded are destructured and ignored by
+    /// name, with the reason, rather than skipped: an exclusion is a decision, and
+    /// a new field must force that decision to be made again.
+    ///
+    /// Every `Option` gets a presence byte and every variable-length value is
+    /// length-framed, so `None` cannot hash like `Some("")` and `("ab", "c")`
+    /// cannot hash like `("a", "bc")`. The hasher, and therefore the algorithm and
+    /// the digest's meaning, belong to the caller.
+    pub fn hash_wire_identity<H: std::hash::Hasher>(&self, state: &mut H) {
+        // No `..`: a new field here is a compile error, by design.
+        let Self {
+            id,
+            kind,
+            source,
+            sid,
+            parsed_sid,
+            payload,
+        } = self;
+        framed(state, id.as_str().as_bytes());
+        state.write_u8(*kind as u8);
+        framed(state, source.as_bytes());
+        optional(state, sid.as_deref(), |state, sid| {
+            framed(state, sid.as_bytes())
+        });
+        optional(state, parsed_sid.as_ref(), |state, sid| {
+            let Sid {
+                book,
+                chapter,
+                verse,
+                verse_end_delta,
+            } = sid;
+            framed(state, book.as_str().as_bytes());
+            state.write_u16(*chapter);
+            state.write_u16(*verse);
+            state.write_u8(*verse_end_delta);
+        });
+
+        match payload {
+            OwnedTokenPayload::Plain => state.write_u8(0),
+            OwnedTokenPayload::Marker {
+                marker,
+                metadata,
+                structural,
+                nested,
+                attrs,
+            } => {
+                state.write_u8(1);
+                framed(state, marker.as_bytes());
+                ignore_name_derived(metadata, structural);
+                state.write_u8(u8::from(*nested));
+                hash_marker_attrs(state, attrs.as_ref());
+            }
+            OwnedTokenPayload::EndMarker {
+                marker,
+                metadata,
+                structural,
+                nested,
+            } => {
+                state.write_u8(2);
+                framed(state, marker.as_bytes());
+                ignore_name_derived(metadata, structural);
+                state.write_u8(u8::from(*nested));
+            }
+            OwnedTokenPayload::Milestone {
+                marker,
+                metadata,
+                structural,
+                attrs,
+            } => {
+                state.write_u8(3);
+                framed(state, marker.as_bytes());
+                ignore_name_derived(metadata, structural);
+                hash_marker_attrs(state, attrs.as_ref());
+            }
+            OwnedTokenPayload::BookCode(OwnedBookCode { code, is_valid }) => {
+                state.write_u8(4);
+                framed(state, code.as_bytes());
+                state.write_u8(u8::from(*is_valid));
+            }
+            OwnedTokenPayload::Number(OwnedNumberInfo { start, end, kind }) => {
+                state.write_u8(5);
+                state.write_u32(*start);
+                optional(state, end.as_ref(), |state, end| state.write_u32(*end));
+                state.write_u8(*kind as u8);
+            }
+        }
+    }
+
+    /// Builds an owned resident token from the facts a boundary carries.
+    ///
+    /// This is the constructor a DTO boundary needs and
+    /// [`Self::from_format_token`] cannot be: a format/fix pass hands back a
+    /// working token that *descends* from a resident one, so the anchor supplies
+    /// what the working shape drops, while a caller handing over a whole book has
+    /// no anchor to descend from — it has the facts themselves, and a token stream
+    /// arriving as data must be able to say `\id GEN` without borrowing a payload
+    /// from a token that does not exist yet.
+    ///
+    /// # Two layers, two jobs
+    ///
+    /// A boundary above this one owns *shape*: whether its own wire form was
+    /// well-formed, whether a required field was absent, whether a string parsed
+    /// as the type it claims. This function owns *legality*: whether the facts,
+    /// taken together, describe a token this library can hold. A payload on the
+    /// wrong kind, a marker-bearing kind with no marker, an attribute list on an
+    /// end marker, an anchor whose text this library would never have written —
+    /// each is refused with a typed error rather than dropped, coerced, or
+    /// guessed at, because a resident token that quietly lost a fact is worse than
+    /// a rejected input.
+    ///
+    /// The parts are destructured exhaustively with no `..`, so a new token fact
+    /// is a compile error here rather than a field this constructor silently
+    /// ignores.
+    pub fn from_parts(parts: OwnedTokenParts<'_>) -> Result<Self, TokenBuildError> {
+        let OwnedTokenParts {
+            id,
+            kind,
+            source,
+            sid,
+            marker,
+            nested,
+            book_code,
+            number,
+            attributes,
+            attribute_source,
+            attribute_offset,
+        } = parts;
+
+        let id = StableTokenId::new(id.to_owned()).ok_or(TokenBuildError::MissingId)?;
+        let missing = || TokenBuildError::MissingPayload {
+            id: Box::from(id.as_str()),
+            kind,
+        };
+        let unexpected = |fact: &'static str| TokenBuildError::UnexpectedPayload {
+            id: Box::from(id.as_str()),
+            kind,
+            fact: std::borrow::Cow::Borrowed(fact),
+        };
+
+        // The formatted anchor has to become the structured one the packed form is
+        // built from. Text this library would never have emitted is refused rather
+        // than repaired: an anchor is an address, and a repaired address points
+        // somewhere nobody named.
+        let parsed_sid = match sid {
+            None => None,
+            Some(text) => {
+                Some(
+                    Sid::parse(text).ok_or_else(|| TokenBuildError::UnresolvableSid {
+                        id: Box::from(id.as_str()),
+                        sid: Box::from(text),
+                    })?,
+                )
+            }
+        };
+
+        let marker_like = matches!(
+            kind,
+            TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone
+        );
+        if !marker_like && marker.is_some() {
+            return Err(unexpected("marker"));
+        }
+        if kind != TokenKind::BookCode && book_code.is_some() {
+            return Err(unexpected("book code"));
+        }
+        if kind != TokenKind::Number && number.is_some() {
+            return Err(unexpected("number"));
+        }
+        // Attributes belong to an opening marker or a milestone. An end marker
+        // structurally cannot carry them, and no other kind can either.
+        let attribute_bearing = matches!(kind, TokenKind::Marker | TokenKind::Milestone);
+        if !attribute_bearing
+            && (!attributes.is_empty() || attribute_source.is_some() || attribute_offset.is_some())
+        {
+            return Err(unexpected("attribute list"));
+        }
+        // `attribute_offset` records where a *carried* attribute list — verbatim
+        // text or structured attributes — sits relative to this token's own end;
+        // it is not itself a list. Supplying an offset with neither is a
+        // contradiction (an offset for a list that, by the caller's own other
+        // fields, does not exist), and refused rather than silently dropped —
+        // the boundary this constructor exists to police.
+        if attribute_bearing
+            && attribute_offset.is_some()
+            && attributes.is_empty()
+            && attribute_source.is_none()
+        {
+            return Err(unexpected("attribute offset with no attribute list"));
+        }
+        // Nesting is a marker-pair fact: `\+add` opens and `\+add*` closes. A
+        // milestone has no nesting concept, so accepting `true` would drop it.
+        if nested && !matches!(kind, TokenKind::Marker | TokenKind::EndMarker) {
+            return Err(unexpected("nesting"));
+        }
+
+        let attrs = (attribute_bearing && (!attributes.is_empty() || attribute_source.is_some()))
+            .then(|| OwnedMarkerAttrs {
+                attributes: attributes.to_vec().into(),
+                attribute_source: attribute_source.map(Box::from),
+                attribute_offset,
+            });
+
+        let payload = match kind {
+            TokenKind::Newline
+            | TokenKind::OptBreak
+            | TokenKind::MilestoneEnd
+            | TokenKind::Text => OwnedTokenPayload::Plain,
+            TokenKind::BookCode => {
+                let (code, is_valid) = book_code.ok_or_else(missing)?;
+                OwnedTokenPayload::BookCode(OwnedBookCode {
+                    code: Box::from(code),
+                    is_valid,
+                })
+            }
+            TokenKind::Number => OwnedTokenPayload::Number(number.ok_or_else(missing)?),
+            TokenKind::Marker | TokenKind::EndMarker | TokenKind::Milestone => {
+                let marker = marker.ok_or_else(missing)?;
+                if marker.is_empty() {
+                    return Err(missing());
+                }
+                let metadata = marker_metadata(marker);
+                let structural = crate::marker_defs::structural_marker_info(marker, metadata.kind);
+                match kind {
+                    TokenKind::Marker => OwnedTokenPayload::Marker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                        attrs,
+                    },
+                    TokenKind::EndMarker => OwnedTokenPayload::EndMarker {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        nested,
+                    },
+                    _ => OwnedTokenPayload::Milestone {
+                        marker: Box::from(marker),
+                        metadata,
+                        structural,
+                        attrs,
+                    },
+                }
+            }
+        };
+
+        Ok(Self {
+            id,
+            kind,
+            source: Box::from(source),
+            // The canonical re-print, never the caller's own text: a resident
+            // token has one spelling of its anchor, and a boundary that wrote the
+            // other spelling must not leave two in the corpus.
+            sid: parsed_sid.map(|sid| Box::from(sid.to_string().as_str())),
+            parsed_sid,
+            payload,
+        })
+    }
+
+    /// Copies one parsed token into the owned semantic representation.
+    pub fn from_parsed(value: &Token<'_>) -> Self {
+        let kind = value.kind();
+        let payload = match &value.data {
+            TokenData::Newline
+            | TokenData::OptBreak
+            | TokenData::MilestoneEnd
+            | TokenData::Text => OwnedTokenPayload::Plain,
+            TokenData::Marker {
+                name,
+                metadata,
+                structural,
+                nested,
+                attrs,
+            } => OwnedTokenPayload::Marker {
+                marker: Box::from(*name),
+                metadata: *metadata,
+                structural: *structural,
+                nested: *nested,
+                attrs: owned_marker_attrs(attrs, value.span.end),
+            },
+            TokenData::EndMarker {
+                name,
+                metadata,
+                structural,
+                nested,
+            } => OwnedTokenPayload::EndMarker {
+                marker: Box::from(*name),
+                metadata: *metadata,
+                structural: *structural,
+                nested: *nested,
+            },
+            TokenData::Milestone {
+                name,
+                metadata,
+                structural,
+                attrs,
+            } => OwnedTokenPayload::Milestone {
+                marker: Box::from(*name),
+                metadata: *metadata,
+                structural: *structural,
+                attrs: owned_marker_attrs(attrs, value.span.end),
+            },
+            TokenData::BookCode { code, is_valid } => OwnedTokenPayload::BookCode(OwnedBookCode {
+                code: Box::from(*code),
+                is_valid: *is_valid,
+            }),
+            TokenData::Number { start, end, kind } => OwnedTokenPayload::Number(OwnedNumberInfo {
+                start: *start,
+                end: *end,
+                kind: *kind,
+            }),
+        };
+
+        Self {
+            id: StableTokenId(Box::from(format!(
+                "{}-{}",
+                value.id.book_code, value.id.index
+            ))),
+            kind,
+            source: Box::from(value.source),
+            sid: value.sid.map(|sid| Box::from(sid.to_string())),
+            parsed_sid: value.sid,
+            payload,
+        }
+    }
+
+    pub fn id(&self) -> &StableTokenId {
+        &self.id
+    }
+
+    pub fn kind(&self) -> TokenKind {
+        self.kind
+    }
+
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    pub fn sid(&self) -> Option<&str> {
+        self.sid.as_deref()
+    }
+
+    pub fn marker_name(&self) -> Option<&str> {
+        match &self.payload {
+            OwnedTokenPayload::Marker { marker, .. }
+            | OwnedTokenPayload::EndMarker { marker, .. }
+            | OwnedTokenPayload::Milestone { marker, .. } => Some(marker),
+            _ => None,
+        }
+    }
+
+    pub fn nested(&self) -> bool {
+        match self.payload {
+            OwnedTokenPayload::Marker { nested, .. }
+            | OwnedTokenPayload::EndMarker { nested, .. } => nested,
+            _ => false,
+        }
+    }
+
+    /// The compact canonical anchor, when this token has one.
+    ///
+    /// Distinct from [`Self::sid`], which is the formatted spelling: the packed
+    /// wire anchor is eight bytes built from the structured value, and
+    /// re-parsing the string form to recover it would fork core's formatting.
+    pub fn parsed_sid(&self) -> Option<Sid> {
+        self.parsed_sid
+    }
+
+    pub fn number_info(&self) -> Option<&OwnedNumberInfo> {
+        match &self.payload {
+            OwnedTokenPayload::Number(number) => Some(number),
+            _ => None,
+        }
+    }
+
+    pub fn book_code(&self) -> Option<&OwnedBookCode> {
+        match &self.payload {
+            OwnedTokenPayload::BookCode(book_code) => Some(book_code),
+            _ => None,
+        }
+    }
+
+    pub fn attributes(&self) -> &[OwnedAttribute] {
+        match &self.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => &attrs.attributes,
+            _ => &[],
+        }
+    }
+
+    /// Distance from the end of this token's own source to the start of its
+    /// attribute list, when the token remembers one. `None` means no remembered
+    /// position, and a serializer places the list at the marker's closer.
+    pub fn attribute_offset(&self) -> Option<BytePos> {
+        match &self.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => attrs.attribute_offset,
+            _ => None,
+        }
+    }
+
+    pub fn attribute_list(&self) -> Option<&str> {
+        match &self.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => attrs.attribute_source.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// The structural facts parse recorded for this marker. Crate-visible for
+    /// the format boundary, which must hand a working token exactly what parse
+    /// recorded rather than re-deriving it from the marker name.
+    pub(crate) fn structural(&self) -> Option<StructuralMarkerInfo> {
+        match self.payload {
+            OwnedTokenPayload::Marker { structural, .. }
+            | OwnedTokenPayload::EndMarker { structural, .. }
+            | OwnedTokenPayload::Milestone { structural, .. } => Some(structural),
+            _ => None,
+        }
+    }
+
+    fn marker_index(&self) -> MarkerIndex {
+        match self.payload {
+            OwnedTokenPayload::Marker { metadata, .. }
+            | OwnedTokenPayload::EndMarker { metadata, .. }
+            | OwnedTokenPayload::Milestone { metadata, .. } => metadata.index,
+            _ => MarkerIndex::UNKNOWN,
+        }
+    }
+}
+
+/// Writes a length-framed byte string, so concatenations cannot collide.
+fn framed<H: std::hash::Hasher>(state: &mut H, bytes: &[u8]) {
+    state.write_u64(bytes.len() as u64);
+    state.write(bytes);
+}
+
+/// Writes a presence byte, then the value when there is one: `None` and an empty
+/// `Some` are different facts and must hash differently.
+fn optional<H: std::hash::Hasher, T>(
+    state: &mut H,
+    value: Option<T>,
+    write: impl FnOnce(&mut H, T),
+) {
+    match value {
+        None => state.write_u8(0),
+        Some(value) => {
+            state.write_u8(1);
+            write(state, value);
+        }
+    }
+}
+
+/// The two marker facts the wire encoder deliberately re-derives from the marker
+/// name rather than reading off the token (`marker_metadata` /
+/// `structural_marker_info`, exactly as decoding does), so they cannot make one
+/// name's encoding differ and must not make its identity differ either.
+///
+/// Destructured with no `..` and ignored by name: adding a field to either struct
+/// breaks this line, which forces the "does the encoder read this?" question to be
+/// answered again instead of inheriting a stale answer.
+fn ignore_name_derived(metadata: &MarkerMetadata, structural: &StructuralMarkerInfo) {
+    let MarkerMetadata {
+        canonical: _,
+        kind: _,
+        family: _,
+        index: _,
+    } = metadata;
+    let StructuralMarkerInfo {
+        scope_kind: _,
+        inline_context: _,
+        note_context: _,
+    } = structural;
+}
+
+/// One marker/milestone's attribute record, exhaustively.
+fn hash_marker_attrs<H: std::hash::Hasher>(state: &mut H, attrs: Option<&OwnedMarkerAttrs>) {
+    optional(state, attrs, |state, attrs| {
+        let OwnedMarkerAttrs {
+            attributes,
+            attribute_source,
+            attribute_offset,
+        } = attrs;
+        state.write_u64(attributes.len() as u64);
+        for attribute in attributes.iter() {
+            let OwnedAttribute {
+                source,
+                key,
+                value,
+                is_default,
+                // The parse-time span of an attribute inside its original
+                // document. The owned encoder never reads it: it locates each
+                // attribute by finding `source` in the text it just emitted, so a
+                // remembered span cannot change the bytes and must not change the
+                // identity either.
+                span: _,
+            } = attribute;
+            // `source` is load-bearing for exactly that reason — it is the
+            // spelling the encoder searches for — so two attributes that agree on
+            // key, value, and default while spelling themselves differently are
+            // not the same token.
+            framed(state, source.as_bytes());
+            framed(state, key.as_bytes());
+            framed(state, value.as_bytes());
+            state.write_u8(u8::from(*is_default));
+        }
+        // Presence is the distinction the wire draws too: no verbatim list at all
+        // is a token with no attribute row, while an empty one is a row with an
+        // empty span.
+        optional(state, attribute_source.as_deref(), |state, source| {
+            framed(state, source.as_bytes())
+        });
+        optional(state, attribute_offset.as_ref(), |state, offset| {
+            state.write_u32(*offset)
+        });
+    });
+}
+
+/// The attribute record a rebuilt token keeps.
+///
+/// An untouched list survives verbatim from its anchor — including the
+/// remembered placement distance, which is the one attribute fact a working
+/// token has no field for. A list the caller actually edited is rebuilt from the
+/// working token with no placement, which is exactly the "touch an attribute,
+/// drop its verbatim position" rule the emitter already falls back on.
+fn rebuilt_marker_attrs(
+    token: &crate::format::FormatToken,
+    anchor: Option<&OwnedToken>,
+) -> Option<OwnedMarkerAttrs> {
+    if token.attributes.is_empty() && token.attribute_source.is_none() {
+        return None;
+    }
+    let unchanged = anchor.filter(|anchor| {
+        anchor.attribute_list() == token.attribute_source.as_deref()
+            && anchor.attributes() == token.attributes.as_slice()
+    });
+    if let Some(anchor) = unchanged {
+        match &anchor.payload {
+            OwnedTokenPayload::Marker {
+                attrs: Some(attrs), ..
+            }
+            | OwnedTokenPayload::Milestone {
+                attrs: Some(attrs), ..
+            } => return Some(attrs.clone()),
+            _ => {}
+        }
+    }
+    Some(OwnedMarkerAttrs {
+        attributes: token.attributes.clone().into(),
+        attribute_source: token.attribute_source.as_deref().map(Box::from),
+        attribute_offset: None,
+    })
+}
+
+fn owned_marker_attrs(
+    attrs: &Option<Box<MarkerAttrs<'_>>>,
+    owner_end: BytePos,
+) -> Option<OwnedMarkerAttrs> {
+    attrs.as_deref().map(|attrs| OwnedMarkerAttrs {
+        attributes: attrs
+            .attributes
+            .iter()
+            .map(|attribute| OwnedAttribute {
+                source: Box::from(attribute.source),
+                key: Box::from(attribute.key),
+                value: Box::from(attribute.value),
+                is_default: attribute.is_default,
+                span: Some(attribute.span),
+            })
+            .collect(),
+        attribute_source: attrs.attribute_source.map(|(_, source)| Box::from(source)),
+        // `checked_sub` rather than a saturating one: a list recorded as starting
+        // before the token that owns it is not a distance this can represent, so
+        // it falls back to the closer rule instead of pretending to be zero.
+        attribute_offset: attrs
+            .attribute_source
+            .and_then(|(span, _)| span.start.checked_sub(owner_end)),
+    })
+}
+
 /// Serialize a token stream back to USFM, lossless byte-for-byte against the
 /// original source.
 ///
@@ -509,16 +1471,18 @@ impl<'a> SerializableAttribute for AttributeItem<'a> {
 /// list means the entire list is reconstructed, not just the changed entry.
 /// An editor that never touches attributes never has to think about this.
 ///
-/// # The one sanctioned divergence between the two emitters
+/// # Where the list lands
 ///
 /// [`tokens_to_usfm`] (native, span-based) and [`tokens_to_usfm_reconstruct`]
-/// (this trait, spanless) agree on every well-formed input, but not on
-/// malformed ones: a marker with an attribute list that is never closed (a
-/// parser-recovery scenario) keeps its exact byte offset under span-drain,
-/// while the spanless/closer-shape emitter — having no matching closer to
-/// trigger the drain — pushes it to the end of the token stream instead.
-/// Native callers get byte-exact recovery; owned/wire tokens do not, because
-/// they have no span to recover a position from.
+/// (this trait, spanless) agree byte for byte whenever the token remembers where
+/// its list sat — see [`SerializableToken::attribute_offset`]. That covers every
+/// parse-origin stream, including the malformed shapes an unclosed marker
+/// produces: the list is placed at its recorded distance from the owning token
+/// rather than at a closer that never arrives.
+///
+/// A token with no remembered position — editor- or DTO-authored, which never had
+/// one — falls back to the closer rule: the list is emitted at the marker's
+/// closer, or at end of stream if none arrives.
 /// Base contract every token shape satisfies, regardless of which
 /// higher-level trait (`SerializableToken`, `WalkableToken`, …) a consumer
 /// needs on top. `marker()` is `None` for non-marker kinds (Text, Number,
@@ -534,6 +1498,16 @@ pub trait SerializableToken: UsfmToken {
 
     fn attributes(&self) -> &[Self::Attr];
     fn attribute_list(&self) -> Option<&str>;
+
+    /// Bytes from the end of this token's own source to the start of its
+    /// attribute list, for tokens that remember where the list sat.
+    ///
+    /// Defaults to `None`, which means "no remembered position" and leaves
+    /// [`tokens_to_usfm_reconstruct`] placing the list at the marker's closer —
+    /// the behavior every implementor had before this existed.
+    fn attribute_offset(&self) -> Option<BytePos> {
+        None
+    }
 }
 
 impl<'a> UsfmToken for Token<'a> {
@@ -557,6 +1531,16 @@ impl<'a> SerializableToken for Token<'a> {
         Token::attributes(self).unwrap_or(&[])
     }
 
+    fn attribute_offset(&self) -> Option<BytePos> {
+        match &self.data {
+            TokenData::Marker { attrs, .. } | TokenData::Milestone { attrs, .. } => attrs
+                .as_deref()
+                .and_then(|attrs| attrs.attribute_source)
+                .and_then(|(span, _)| span.start.checked_sub(self.span.end)),
+            _ => None,
+        }
+    }
+
     fn attribute_list(&self) -> Option<&str> {
         match &self.data {
             TokenData::Marker {
@@ -567,6 +1551,135 @@ impl<'a> SerializableToken for Token<'a> {
             } => attrs.attribute_source.map(|(_, slice)| slice),
             _ => None,
         }
+    }
+}
+
+impl SerializableAttribute for OwnedAttribute {
+    fn key(&self) -> &str {
+        &self.key
+    }
+
+    fn value(&self) -> &str {
+        &self.value
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+}
+
+impl UsfmToken for OwnedToken {
+    fn kind(&self) -> TokenKind {
+        self.kind()
+    }
+
+    fn source(&self) -> &str {
+        self.source()
+    }
+
+    fn marker(&self) -> Option<&str> {
+        self.marker_name()
+    }
+}
+
+impl SerializableToken for OwnedToken {
+    type Attr = OwnedAttribute;
+
+    fn attributes(&self) -> &[Self::Attr] {
+        self.attributes()
+    }
+
+    fn attribute_list(&self) -> Option<&str> {
+        self.attribute_list()
+    }
+
+    fn attribute_offset(&self) -> Option<BytePos> {
+        OwnedToken::attribute_offset(self)
+    }
+}
+
+impl crate::walker::WalkableToken for OwnedToken {
+    fn structural(&self) -> Option<StructuralMarkerInfo> {
+        self.structural()
+    }
+}
+
+impl crate::lint::LintableToken for OwnedToken {
+    fn sid(&self) -> Option<String> {
+        self.sid().map(ToOwned::to_owned)
+    }
+
+    fn id(&self) -> Option<String> {
+        Some(self.id().to_string())
+    }
+
+    fn number_info(&self) -> Option<(u32, Option<u32>, NumberRangeKind)> {
+        self.number_info()
+            .map(|number| (number.start, number.end, number.kind))
+    }
+
+    fn allows_effective_context(&self, context: crate::marker_defs::SpecContext) -> bool {
+        crate::marker_defs::marker_allows_effective_context_for_index(self.marker_index(), context)
+    }
+}
+
+impl crate::diff::DiffableToken for OwnedToken {
+    fn sid(&self) -> Option<&str> {
+        self.sid()
+    }
+
+    fn sid_string(&self) -> Option<String> {
+        self.parsed_sid
+            .map(|sid| sid.to_string())
+            .or_else(|| self.sid().map(ToOwned::to_owned))
+    }
+
+    fn sid_key(&self) -> crate::diff::SidKey<'_> {
+        match self.parsed_sid {
+            Some(sid) => crate::diff::SidKey::Compact(sid),
+            None => match self.sid() {
+                Some(sid) => crate::diff::SidKey::Text(sid),
+                None => crate::diff::SidKey::Empty,
+            },
+        }
+    }
+
+    fn text(&self) -> &str {
+        self.source()
+    }
+
+    fn id(&self) -> Option<&str> {
+        Some(self.id().as_str())
+    }
+
+    fn kind_key(&self) -> Option<&str> {
+        Some(owned_token_kind_key(self.kind()))
+    }
+
+    fn marker_key(&self) -> Option<&str> {
+        self.marker_name()
+    }
+
+    fn number_range(&self) -> Option<(u32, Option<u32>)> {
+        self.number_info().map(|number| (number.start, number.end))
+    }
+
+    fn book_code(&self) -> Option<&str> {
+        self.book_code().map(|book_code| book_code.code.as_ref())
+    }
+}
+
+fn owned_token_kind_key(kind: TokenKind) -> &'static str {
+    match kind {
+        TokenKind::Newline => "verticalWhitespace",
+        TokenKind::OptBreak => "optBreak",
+        TokenKind::Marker => "marker",
+        TokenKind::EndMarker => "endMarker",
+        TokenKind::Milestone => "milestone",
+        TokenKind::MilestoneEnd => "milestoneEnd",
+        TokenKind::BookCode => "bookCode",
+        TokenKind::Number => "number",
+        TokenKind::Text => "text",
     }
 }
 
@@ -656,6 +1769,12 @@ struct Pending<'t, T: SerializableToken + ?Sized> {
     marker_name: String,
     shape: CloserShape,
     attrs: PendingAttrs<'t, T>,
+    /// Row that queued this list. A list is not emitted next to its marker, so a
+    /// span recorder cannot infer the owner from emission order.
+    row: usize,
+    /// Output position this list must be emitted at, for a token that remembered
+    /// where it sat. `None` falls back to the closer rule.
+    target: Option<usize>,
 }
 
 fn is_paragraph_marker<T: SerializableToken>(token: &T) -> bool {
@@ -664,7 +1783,12 @@ fn is_paragraph_marker<T: SerializableToken>(token: &T) -> bool {
     }
     token
         .marker()
-        .map(|name| matches!(closer_shape(TokenKind::Marker, name), CloserShape::ParagraphBoundary))
+        .map(|name| {
+            matches!(
+                closer_shape(TokenKind::Marker, name),
+                CloserShape::ParagraphBoundary
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -701,27 +1825,146 @@ fn emit_pending<T: SerializableToken>(output: &mut String, attrs: PendingAttrs<'
 /// verbatim `attribute_list()` slice when present, else reconstructs from
 /// `attributes()`.
 ///
-/// Agrees with [`tokens_to_usfm`] on every well-formed input (see the
-/// `tokens_to_usfm_reconstruct_parity` test). The one sanctioned divergence:
-/// a malformed/unclosed attribute-bearing marker's attribute list lands at
-/// end-of-stream here (no closer ever arrives to trigger the drain) instead
-/// of at its original byte position — a real difference from `tokens_to_usfm`,
-/// but the same recovery behavior the previous wasm-side emitter already had.
+/// A token that remembers where its list sat ([`SerializableToken::attribute_offset`],
+/// which every parse-origin token carries) has the list placed at that distance
+/// instead, which is what makes this agree with [`tokens_to_usfm`] byte for byte —
+/// including for unclosed markers, where the closer rule alone had to fall back to
+/// end-of-stream. See the `tokens_to_usfm_reconstruct_parity` tests.
 pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String {
+    reconstruct(tokens, None, None)
+}
+
+/// The line ending a token stream serializes its newline tokens with.
+///
+/// Two variants only: these are the endings a USFM file is written with. A
+/// lone `\r` is a legal newline to the lexer but is not a writable choice
+/// here, so [`Self::detect`] reports it as [`Self::Lf`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LineEnding {
+    Lf,
+    CrLf,
+}
+
+impl LineEnding {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Lf => "\n",
+            Self::CrLf => "\r\n",
+        }
+    }
+
+    /// The first line ending in `source` wins; `Lf` when there is none.
+    ///
+    /// A file with mixed endings has no single answer, and this deliberately
+    /// does not invent one — it reports what the file leads with, and a
+    /// caller keeping the exact source bytes never re-emits until an edit
+    /// forces it.
+    pub fn detect(source: &str) -> Self {
+        match source.find('\n') {
+            Some(0) | None => Self::Lf,
+            Some(index) if source.as_bytes()[index - 1] == b'\r' => Self::CrLf,
+            Some(_) => Self::Lf,
+        }
+    }
+}
+
+/// [`tokens_to_usfm_reconstruct`] with every newline token emitted as
+/// `line_ending` instead of its own source.
+///
+/// Exists because a token stream and the line ending it must be saved with are
+/// independent facts once tokens outlive their file: an editor pushing tokens
+/// into a resident CRLF book supplies `\n` newline tokens, and a book that
+/// serialized them verbatim would flip its own file's endings on first edit.
+/// Emission stays here, in the one emitter, rather than in a caller
+/// post-processing newline tokens it does not own.
+///
+/// Only `TokenKind::Newline` tokens are affected; no other token source,
+/// attribute list, or whitespace is touched.
+pub fn tokens_to_usfm_reconstruct_with_eol<T: SerializableToken>(
+    tokens: &[T],
+    line_ending: LineEnding,
+) -> String {
+    reconstruct(tokens, None, Some(line_ending))
+}
+
+/// Where one token's bytes landed in a reconstructed source.
+///
+/// `token` and `attribute_list` are not adjacent and cannot be derived from one
+/// another: a token that remembers where its list sat
+/// ([`SerializableToken::attribute_offset`]) has it placed at that remembered
+/// distance; a positionless token falls back to the historical rule of its
+/// closer, or end-of-stream for an unclosed marker — either way, the list may
+/// land thousands of bytes after the marker that owns it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReconstructedSpans {
+    /// The token's own text, excluding any attribute list — the same slice a
+    /// parsed [`Token`]'s `span` covers.
+    pub token: Span,
+    /// Where this token's attribute list was emitted, when it has one.
+    pub attribute_list: Option<Span>,
+}
+
+/// [`tokens_to_usfm_reconstruct`], plus where every token's bytes landed.
+///
+/// Exists because spanless owned tokens cannot be encoded to the packed wire
+/// format, which stores span columns: the caller serializes and gets the spans
+/// as a by-product of the single emission pass, rather than re-lexing the result
+/// or having owned tokens carry span state that could go stale. This emitter is
+/// the only code that knows where a deferred attribute list actually lands.
+///
+/// Spans index the returned `String`, so they are only meaningful against it.
+pub fn tokens_to_usfm_reconstruct_spanned<T: SerializableToken>(
+    tokens: &[T],
+) -> (String, Vec<ReconstructedSpans>) {
+    let mut spans = vec![
+        ReconstructedSpans {
+            token: Span::new(0, 0),
+            attribute_list: None,
+        };
+        tokens.len()
+    ];
+    let output = reconstruct(tokens, Some(&mut spans), None);
+    (output, spans)
+}
+
+/// The one implementation both entry points use, so the spanned variant cannot
+/// drift from the plain one. `spans` is `None` on the plain path, which is the
+/// per-keystroke editor path and pays nothing for recording it would discard.
+fn reconstruct<T: SerializableToken>(
+    tokens: &[T],
+    mut spans: Option<&mut Vec<ReconstructedSpans>>,
+    line_ending: Option<LineEnding>,
+) -> String {
     let mut output = String::new();
     let mut pending: Vec<Pending<'_, T>> = Vec::new();
 
-    for token in tokens {
+    for (row, token) in tokens.iter().enumerate() {
+        // Positioned lists first, in ascending target order, so a stream that
+        // remembers its layout reproduces it byte for byte. This is the same rule
+        // the span-based emitter applies to absolute offsets, expressed as a
+        // distance from the owning token instead.
+        while let Some(index) = due_pending(&pending, output.len()) {
+            let drained = pending.remove(index);
+            emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
+        }
+        // Then the closer rule, for lists with no remembered position.
         while let Some(top) = pending.last() {
-            if token_closes(top, token) {
+            if top.target.is_none() && token_closes(top, token) {
                 let drained = pending.pop().unwrap();
-                emit_pending(&mut output, drained.attrs);
+                emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
             } else {
                 break;
             }
         }
 
-        output.push_str(token.source());
+        let start = output.len();
+        match line_ending {
+            Some(ending) if token.kind() == TokenKind::Newline => output.push_str(ending.as_str()),
+            _ => output.push_str(token.source()),
+        }
+        if let Some(spans) = spans.as_deref_mut() {
+            spans[row].token = Span::new(start as BytePos, output.len() as BytePos);
+        }
 
         let has_attrs = token.attribute_list().is_some() || !token.attributes().is_empty();
         if matches!(token.kind(), TokenKind::Marker | TokenKind::Milestone)
@@ -736,15 +1979,49 @@ pub fn tokens_to_usfm_reconstruct<T: SerializableToken>(tokens: &[T]) -> String 
                 marker_name: name.to_string(),
                 shape: closer_shape(token.kind(), name),
                 attrs,
+                row,
+                target: token
+                    .attribute_offset()
+                    .map(|offset| output.len() + offset as usize),
             });
         }
     }
 
+    // End of stream: anything positioned is due by definition, then the
+    // closer-ruled remainder flushes LIFO as it always has.
+    while let Some(index) = due_pending(&pending, output.len()) {
+        let drained = pending.remove(index);
+        emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
+    }
     while let Some(drained) = pending.pop() {
-        emit_pending(&mut output, drained.attrs);
+        emit_pending_recorded(&mut output, drained, spans.as_deref_mut());
     }
 
     output
+}
+
+/// Index of the positioned pending list with the smallest target that `position`
+/// has reached. Linear because `pending` is bounded by marker nesting depth.
+fn due_pending<T: SerializableToken>(pending: &[Pending<'_, T>], position: usize) -> Option<usize> {
+    pending
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.target.is_some_and(|target| target <= position))
+        .min_by_key(|(_, entry)| entry.target)
+        .map(|(index, _)| index)
+}
+
+fn emit_pending_recorded<T: SerializableToken>(
+    output: &mut String,
+    pending: Pending<'_, T>,
+    spans: Option<&mut Vec<ReconstructedSpans>>,
+) {
+    let start = output.len();
+    let row = pending.row;
+    emit_pending(output, pending.attrs);
+    if let Some(spans) = spans {
+        spans[row].attribute_list = Some(Span::new(start as BytePos, output.len() as BytePos));
+    }
 }
 
 /// Three-byte USFM book code (`GEN`, `EXO`, …) stored as raw ASCII bytes.
@@ -800,6 +2077,18 @@ impl Serialize for BookId {
     }
 }
 
+/// Mirrors [`Self::serialize`]: a 3-byte ASCII-alphanumeric string, validated
+/// the same way [`Self::from_str`] validates one. Added for the declared-book
+/// lint context (`LintOptions::declared_book`), the first `BookId` field on a
+/// type that also derives `Deserialize`.
+impl<'de> Deserialize<'de> for BookId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        BookId::from_str(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid BookId: {s:?}")))
+    }
+}
+
 /// Canonical scripture reference: book + chapter + verse. 8 bytes, `Copy`,
 /// no lifetime. `verse == 0` means "no verse yet" (chapter-scope sid). Bridge
 /// verses (`\v 1-2`) store their range end as `verse_end_delta`, a `u8` offset
@@ -844,6 +2133,50 @@ impl Sid {
         self.verse.saturating_add(self.verse_end_delta as u16)
     }
 
+    /// Reads back an anchor this library wrote, and nothing else.
+    ///
+    /// Deliberately strict: a boundary that accepts an anchor as text (a DTO, an
+    /// IPC payload) has to turn it back into the structured value the packed form
+    /// is built from, and guessing at a spelling this library never emits would
+    /// invent an anchor rather than recover one. Anything that would not
+    /// round-trip is `None` for the caller to refuse, not to repair.
+    ///
+    /// Two spellings are accepted because two are written. A chapter-level anchor
+    /// (verse zero) prints as `"GEN 1"` here, while the boundary DTO's own
+    /// formatter prints the locator unconditionally and so writes `"GEN 1:0"` for
+    /// the same value. Both parse to the same `Sid`; every other form is one
+    /// spelling only (`"GEN 1:2"`, `"GEN 1:2-3"`). A caller re-printing the result
+    /// gets this type's spelling, which is what makes the two views converge
+    /// instead of multiplying.
+    pub fn parse(text: &str) -> Option<Self> {
+        let (book, locator) = text.split_once(' ')?;
+        let book = BookId::from_str(book)?;
+        let (chapter, verses) = match locator.split_once(':') {
+            // A chapter anchor: verse zero, and no locator to read.
+            None => return Some(Self::new(book, parse_sid_number(locator)?, 0)),
+            Some(parts) => parts,
+        };
+        let chapter = parse_sid_number(chapter)?;
+        match verses.split_once('-') {
+            // Verse zero here is the boundary formatter's spelling of the chapter
+            // anchor the branch above spells without a locator; both are this
+            // library's own output, so both resolve to the same value.
+            None => Some(Self::new(book, chapter, parse_sid_number(verses)?)),
+            Some((start, end)) => {
+                let verse = parse_sid_number(start)?;
+                let verse_end = parse_sid_number(end)?;
+                // `Display` writes a range only when the end is genuinely past the
+                // start, and `with_range` saturates the delta at 255 — so a text
+                // that would not survive the round trip is refused rather than
+                // silently clamped into a different anchor.
+                if verse == 0 || verse_end <= verse || verse_end - verse > u16::from(u8::MAX) {
+                    return None;
+                }
+                Some(Self::with_range(book, chapter, verse, verse_end))
+            }
+        }
+    }
+
     /// The verse-locator fragment: `"1"` for a single verse, `"1-2"` for a range.
     pub fn verse_locator(&self) -> String {
         if self.verse_end_delta == 0 {
@@ -854,13 +2187,34 @@ impl Sid {
     }
 }
 
+/// One `u16` field of an anchor: digits only, no sign, no padding, no whitespace —
+/// exactly what `Display` emits and nothing a lenient integer parse would also
+/// accept.
+fn parse_sid_number(text: &str) -> Option<u16> {
+    if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    // A leading zero never comes out of `Display`, so it cannot come back in.
+    if text.len() > 1 && text.starts_with('0') {
+        return None;
+    }
+    text.parse().ok()
+}
+
+/// The one place a `Sid` becomes text.
+///
+/// Every other formatter in this workspace delegates here. There used to be
+/// several hand-rolled copies, and they disagreed about one case — a chapter-level
+/// anchor, where the verse is zero — so the same token could report `"GEN 1"`
+/// resident and `"GEN 1:0"` at the boundary. The canonical spelling is the explicit
+/// one: pre-verse material in a chapter names verse zero, and a reader should not
+/// have to know that a missing locator means the same thing.
+///
+/// [`Sid::parse`] still accepts the bare form, because this library used to write
+/// it and content recorded then must still read back. Nothing emits it again.
 impl std::fmt::Display for Sid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.verse == 0 {
-            write!(f, "{} {}", self.book, self.chapter)
-        } else {
-            write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())
-        }
+        write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())
     }
 }
 
@@ -936,6 +2290,254 @@ mod sid_size_guard {
         let book = BookId::from_str("GEN").unwrap();
         let sid = Sid::with_range(book, 1, 1, 2);
         assert_eq!(sid.to_string(), "GEN 1:1-2");
+    }
+}
+
+#[cfg(test)]
+mod owned_token_tests {
+    use super::{
+        OwnedAttribute, OwnedToken, StableTokenId, TokenKind, tokens_to_usfm_reconstruct,
+        tokens_to_usfm_reconstruct_spanned,
+    };
+    use crate::diff::{DiffableToken, derive_canonical_sids};
+    use crate::lint::{LintOptions, LintScope, LintableToken, lint_tokens};
+    use crate::parse::parse;
+
+    #[test]
+    fn stable_token_id_rejects_an_empty_address() {
+        assert!(StableTokenId::new("").is_none());
+        assert_eq!(
+            StableTokenId::new("editor-42").unwrap().as_str(),
+            "editor-42"
+        );
+    }
+
+    #[test]
+    fn owned_tokens_preserve_semantics_and_verbatim_attributes() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 \\w grace|lemma=\"grace\"\\w*\n";
+        let parsed = parse(source);
+        let expected_word_id = parsed
+            .tokens
+            .iter()
+            .find(|token| token.kind() == TokenKind::Marker && token.marker_name() == Some("w"))
+            .map(|token| format!("{}-{}", token.id.book_code, token.id.index))
+            .expect("parsed character marker");
+        let tokens = parsed
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+
+        let word = tokens
+            .iter()
+            .find(|token| token.kind() == TokenKind::Marker && token.marker_name() == Some("w"))
+            .expect("parsed character marker");
+        assert_eq!(word.id().as_str(), expected_word_id);
+        assert_eq!(word.attributes().len(), 1);
+        assert_eq!(word.attributes()[0].key.as_ref(), "lemma");
+        assert_eq!(word.attribute_list(), Some("|lemma=\"grace\""));
+
+        assert_eq!(tokens_to_usfm_reconstruct(&tokens), source);
+        assert_eq!(
+            derive_canonical_sids(&tokens, "GEN"),
+            derive_canonical_sids(&parsed.tokens, "GEN")
+        );
+        assert_eq!(
+            lint_tokens(&tokens, LintOptions::scoped(LintScope::Book))
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>(),
+            lint_tokens(&parsed.tokens, LintOptions::scoped(LintScope::Book))
+                .issues
+                .iter()
+                .map(|issue| issue.code)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// A token stream with no remembered positions — the shape an editor or a
+    /// wire DTO produces. Exercises the `SerializableToken::attribute_offset`
+    /// default rather than asserting it indirectly.
+    struct PositionlessToken {
+        kind: TokenKind,
+        source: String,
+        marker: Option<String>,
+        attribute_list: Option<String>,
+    }
+
+    impl super::UsfmToken for PositionlessToken {
+        fn kind(&self) -> TokenKind {
+            self.kind
+        }
+
+        fn source(&self) -> &str {
+            &self.source
+        }
+
+        fn marker(&self) -> Option<&str> {
+            self.marker.as_deref()
+        }
+    }
+
+    impl super::SerializableToken for PositionlessToken {
+        type Attr = OwnedAttribute;
+
+        fn attributes(&self) -> &[Self::Attr] {
+            &[]
+        }
+
+        fn attribute_list(&self) -> Option<&str> {
+            self.attribute_list.as_deref()
+        }
+        // `attribute_offset` deliberately not implemented: the default is what
+        // every ingest path relies on.
+    }
+
+    #[test]
+    fn owned_tokens_remember_where_their_attribute_list_sat() {
+        // The four shapes an emitter with only a closer rule could not reproduce.
+        for source in [
+            "\\p And\\fig something | and some more text\n",
+            "\\p \\w \\+pn Proper Noun\\+pn*|keyword\\w* def\n",
+            "\\p \\qt1-s |sid=\"a\"\nwho=\"Paul\"\\*said\n",
+            "\\k-s | x-tw=\"a\"\n\\w b|c=\"d\"\\w*\n\\k-e\\*\n",
+        ] {
+            let owned = parse(source)
+                .tokens
+                .iter()
+                .map(OwnedToken::from_parsed)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                tokens_to_usfm_reconstruct(&owned),
+                source,
+                "owned round trip for {source:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn attribute_offset_is_the_distance_from_the_owning_token() {
+        // `\\w ` ends at 3 and its list starts at 7, four bytes later, past the
+        // intervening text token. An offset from the owner — not an absolute
+        // position — is what stays meaningful when other tokens are edited.
+        let source = "\\p \\w abc|k=\"v\"\\w*";
+        let owned = parse(source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+        let word = owned
+            .iter()
+            .find(|token| token.marker_name() == Some("w"))
+            .expect("character marker");
+        assert_eq!(word.attribute_offset(), Some(3));
+        assert_eq!(word.attribute_list(), Some("|k=\"v\""));
+
+        // A milestone whose list sits immediately after the opener remembers zero.
+        let owned = parse("\\k-s | x=\"a\"\ntext\\k-e\\*")
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+        let opener = owned
+            .iter()
+            .find(|token| token.marker_name() == Some("k-s"))
+            .expect("milestone opener");
+        assert_eq!(opener.attribute_offset(), Some(0));
+    }
+
+    #[test]
+    fn tokens_without_a_remembered_position_still_emit_at_the_closer() {
+        let token =
+            |kind, source: &str, marker: Option<&str>, list: Option<&str>| PositionlessToken {
+                kind,
+                source: source.to_string(),
+                marker: marker.map(ToOwned::to_owned),
+                attribute_list: list.map(ToOwned::to_owned),
+            };
+        let tokens = [
+            token(TokenKind::Marker, "\\w ", Some("w"), Some("|k=\"v\"")),
+            token(TokenKind::Text, "word", None, None),
+            token(TokenKind::EndMarker, "\\w*", Some("w"), None),
+        ];
+        // Unchanged behavior: with nothing remembered, the list goes to the closer.
+        assert_eq!(tokens_to_usfm_reconstruct(&tokens), "\\w word|k=\"v\"\\w*");
+    }
+
+    #[test]
+    fn spanned_reconstruct_agrees_with_the_plain_emitter_and_locates_every_token() {
+        // An attribute-bearing marker is the case that matters: its list is
+        // emitted at the closer, so the concatenation of token sources is not
+        // the source and a span cannot be a running offset.
+        let source = "\\id GEN\n\\c 1\n\\p \\w grace|lemma=\"grace\"\\w* and more\n";
+        let parsed = parse(source);
+        let tokens = parsed
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+
+        let (rebuilt, spans) = tokens_to_usfm_reconstruct_spanned(&tokens);
+        assert_eq!(rebuilt, source);
+        assert_eq!(rebuilt, tokens_to_usfm_reconstruct(&tokens));
+        assert_eq!(spans.len(), tokens.len());
+
+        for (token, span) in tokens.iter().zip(&spans) {
+            assert_eq!(
+                &rebuilt[span.token.as_range()],
+                token.source(),
+                "token span must name the token's own text"
+            );
+            assert_eq!(
+                span.attribute_list.map(|list| &rebuilt[list.as_range()]),
+                token.attribute_list(),
+                "attribute-list span must name the verbatim list"
+            );
+        }
+
+        // The list lands after the marker's own text, not adjacent to it.
+        let word = spans
+            .iter()
+            .zip(&tokens)
+            .find(|(_, token)| token.marker_name() == Some("w"))
+            .map(|(span, _)| *span)
+            .expect("character marker");
+        let list = word.attribute_list.expect("verbatim list");
+        assert!(list.start > word.token.end);
+    }
+
+    #[test]
+    fn owned_token_keeps_verse_zero_diff_spelling() {
+        let parsed = parse("\\id GEN\n\\c 1\n\\p\n");
+        let tokens = parsed
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect::<Vec<_>>();
+        let (parsed_token, owned_token) = parsed
+            .tokens
+            .iter()
+            .zip(&tokens)
+            .find(|(parsed_token, _)| {
+                parsed_token
+                    .sid
+                    .is_some_and(|sid| sid.chapter == 1 && sid.verse == 0)
+            })
+            .expect("chapter-scope token");
+
+        assert_eq!(
+            DiffableToken::sid_string(owned_token),
+            DiffableToken::sid_string(parsed_token)
+        );
+        assert_eq!(
+            DiffableToken::sid_string(owned_token).as_deref(),
+            Some("GEN 1:0")
+        );
+        assert_eq!(
+            LintableToken::sid(owned_token),
+            parsed_token.sid.map(|sid| sid.to_string())
+        );
     }
 }
 
@@ -1031,6 +2633,91 @@ mod tokens_to_usfm_reconstruct_parity {
             assert_parity(source);
         }
     }
+
+    #[test]
+    fn agrees_where_the_list_is_nowhere_near_the_closer() {
+        // Each of these used to diverge, because the emitter's only rule was "at
+        // the marker's closer" and none of them puts the list there. They agree now
+        // that the token remembers the distance to its own list.
+        for source in [
+            // Unclosed marker: the list sits mid-text and no closer ever arrives.
+            "\\p And\\fig something | and some more text\n",
+            // List belongs to the nested marker but sits *after* its closer.
+            "\\p \\w \\+pn Proper Noun\\+pn*|keyword\\w* def\n",
+            // List split by a newline: the remainder parses as text.
+            "\\p \\qt1-s |sid=\"a\"\nwho=\"Paul\"\\*said\n",
+            // Old-format alignment: list at the opener, closer lines below.
+            "\\k-s | x-tw=\"a\"\n\\w b|c=\"d\"\\w*\n\\k-e\\*\n",
+        ] {
+            assert_parity(source);
+        }
+    }
+}
+
+#[cfg(test)]
+mod line_ending_tests {
+    use super::{
+        LineEnding, OwnedToken, tokens_to_usfm_reconstruct, tokens_to_usfm_reconstruct_with_eol,
+    };
+    use crate::parse::parse;
+
+    fn owned(source: &str) -> Vec<OwnedToken> {
+        parse(source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect()
+    }
+
+    #[test]
+    fn detect_reports_what_the_source_leads_with() {
+        assert_eq!(LineEnding::detect("\\id GEN\r\n\\c 1\n"), LineEnding::CrLf);
+        assert_eq!(LineEnding::detect("\\id GEN\n\\c 1\r\n"), LineEnding::Lf);
+        assert_eq!(LineEnding::detect("\\id GEN"), LineEnding::Lf);
+        // A leading newline has no preceding byte to inspect, and a lone `\r`
+        // is not a writable ending — both report Lf rather than panicking or
+        // inventing a third variant.
+        assert_eq!(LineEnding::detect("\n\\id GEN"), LineEnding::Lf);
+        assert_eq!(LineEnding::detect("\\id GEN\r\\c 1"), LineEnding::Lf);
+    }
+
+    #[test]
+    fn the_override_rewrites_newline_tokens_and_nothing_else() {
+        // The editor's push direction: tokens carry `\n` newlines because that
+        // is what a JS editor produces, while the resident book must keep
+        // saving CRLF. Only the newline tokens change — the `\w` attribute
+        // list, its spacing, and every other token source survive verbatim.
+        let tokens = owned("\\id GEN\n\\c 1\n\\p\n\\v 1 \\w a|lemma=\"b\"\\w*\n");
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::CrLf),
+            "\\id GEN\r\n\\c 1\r\n\\p\r\n\\v 1 \\w a|lemma=\"b\"\\w*\r\n"
+        );
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::Lf),
+            tokens_to_usfm_reconstruct(&tokens)
+        );
+    }
+
+    #[test]
+    fn the_override_normalizes_a_mixed_ending_stream_both_ways() {
+        // A stream that came from a mixed-EOL file: the override is what makes
+        // one book's saved bytes consistent, in either direction.
+        let tokens = owned("\\id GEN\r\n\\c 1\n\\p\r\n");
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::Lf),
+            "\\id GEN\n\\c 1\n\\p\n"
+        );
+        assert_eq!(
+            tokens_to_usfm_reconstruct_with_eol(&tokens, LineEnding::CrLf),
+            "\\id GEN\r\n\\c 1\r\n\\p\r\n"
+        );
+        // Without an override the emitter stays verbatim — mixed input is
+        // never silently normalized.
+        assert_eq!(
+            tokens_to_usfm_reconstruct(&tokens),
+            "\\id GEN\r\n\\c 1\n\\p\r\n"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1042,5 +2729,301 @@ mod encode_attr_value_tests {
         assert_eq!(encode_attr_value("plain"), "plain");
         assert_eq!(encode_attr_value("a\"b"), "a\\\"b");
         assert_eq!(encode_attr_value("a\\b"), "a\\\\b");
+    }
+}
+
+#[cfg(test)]
+mod from_parts_tests {
+    use super::*;
+
+    fn parts<'a>(id: &'a str, kind: TokenKind, source: &'a str) -> OwnedTokenParts<'a> {
+        OwnedTokenParts {
+            id,
+            kind,
+            source,
+            sid: None,
+            marker: None,
+            nested: false,
+            book_code: None,
+            number: None,
+            attributes: &[],
+            attribute_source: None,
+            attribute_offset: None,
+        }
+    }
+
+    /// Every anchor this library writes must read back as the same value, and
+    /// anything it would never write must not read back at all. A boundary that
+    /// accepted a repaired anchor would be pointing somewhere nobody named.
+    /// A chapter-level anchor has one spelling now — the explicit `C:0` — and the
+    /// bare form this library used to write still reads, because content recorded
+    /// then must still round-trip. Acceptance is ingest-only; nothing emits it.
+    #[test]
+    fn a_chapter_anchor_has_one_spelling_and_accepts_the_historical_one() {
+        let book = BookId::from_str("GEN").unwrap();
+        for (chapter, canonical, historical) in [
+            (0u16, "GEN 0:0", "GEN 0"),
+            (1, "GEN 1:0", "GEN 1"),
+            (150, "GEN 150:0", "GEN 150"),
+        ] {
+            let sid = Sid::new(book, chapter, 0);
+            assert_eq!(sid.to_string(), canonical, "one canonical spelling");
+            assert_eq!(Sid::parse(canonical), Some(sid));
+            assert_eq!(
+                Sid::parse(historical),
+                Some(sid),
+                "{historical} is this library's own older output"
+            );
+            // And re-printing what was ingested converges on the canonical form,
+            // which is what keeps the older spelling from propagating.
+            assert_eq!(
+                Sid::parse(historical).expect("parses").to_string(),
+                canonical
+            );
+        }
+    }
+
+    #[test]
+    fn sid_parses_back_exactly_what_it_prints() {
+        let book = BookId::from_str("GEN").unwrap();
+        for sid in [
+            Sid::new(book, 0, 0),
+            Sid::new(book, 1, 0),
+            Sid::new(book, 1, 1),
+            Sid::new(book, 150, 176),
+            Sid::with_range(book, 1, 1, 2),
+            Sid::with_range(book, 3, 10, 12),
+            Sid::with_range(book, 1, 1, 256),
+        ] {
+            let text = sid.to_string();
+            assert_eq!(Sid::parse(&text), Some(sid), "{text} must round-trip");
+        }
+
+        for text in [
+            "",
+            "GEN",
+            "GENESIS 1:1",
+            "GEN 1:",
+            "GEN :1",
+            "GEN 01:1",
+            "GEN 1:01",
+            "GEN 1:2-2",
+            "GEN 1:2-1",
+            "GEN 1:1-500",
+            "GEN 1:1-",
+            "GEN 1:1:1",
+            "GEN -1:1",
+            "GEN 1:1 ",
+            " GEN 1:1",
+            "GEN 1:1a",
+        ] {
+            assert_eq!(Sid::parse(text), None, "{text:?} must not parse");
+        }
+    }
+
+    #[test]
+    fn a_boundary_token_is_built_from_its_own_facts() {
+        // The case `from_format_token` cannot serve: a book code with no anchor
+        // token to borrow a payload from.
+        let token = OwnedToken::from_parts(OwnedTokenParts {
+            sid: Some("GEN 0:0"),
+            book_code: Some(("GEN", true)),
+            ..parts("editor-1", TokenKind::BookCode, "GEN")
+        })
+        .expect("a book code carries its own payload");
+        assert_eq!(token.id().as_str(), "editor-1");
+        assert_eq!(token.source(), "GEN");
+        assert_eq!(token.sid(), Some("GEN 0:0"));
+        assert_eq!(token.parsed_sid(), Sid::parse("GEN 0:0"));
+        let code = token.book_code().expect("book code payload");
+        assert_eq!(&*code.code, "GEN");
+        assert!(code.is_valid);
+
+        let nested = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("add"),
+            nested: true,
+            ..parts("editor-2", TokenKind::Marker, "\\+add ")
+        })
+        .expect("a nested marker");
+        assert_eq!(nested.marker_name(), Some("add"));
+        assert!(nested.nested());
+
+        let number = OwnedToken::from_parts(OwnedTokenParts {
+            number: Some(OwnedNumberInfo {
+                start: 1,
+                end: Some(2),
+                kind: NumberRangeKind::Range,
+            }),
+            ..parts("editor-3", TokenKind::Number, "1-2")
+        })
+        .expect("a number");
+        assert_eq!(number.number_info().map(|info| info.start), Some(1));
+    }
+
+    /// Absent and empty are different facts about an attribute list, and the
+    /// difference survives: absent means the token carries no list at all.
+    #[test]
+    fn attribute_presence_permutations_survive() {
+        let attribute = OwnedAttribute {
+            source: Box::from("lemma=\"grace\""),
+            key: Box::from("lemma"),
+            value: Box::from("grace"),
+            is_default: false,
+            span: None,
+        };
+        let base = parts("editor-1", TokenKind::Marker, "\\w ");
+
+        let none = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            ..base.clone()
+        })
+        .expect("no attributes at all");
+        assert_eq!(none.attribute_list(), None);
+        assert!(none.attributes().is_empty());
+
+        let empty_verbatim = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attribute_source: Some(""),
+            ..base.clone()
+        })
+        .expect("an empty verbatim list");
+        assert_eq!(empty_verbatim.attribute_list(), Some(""));
+
+        let structured = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attributes: std::slice::from_ref(&attribute),
+            ..base.clone()
+        })
+        .expect("structured attributes with no verbatim");
+        assert_eq!(structured.attribute_list(), None);
+        assert_eq!(structured.attributes().len(), 1);
+
+        let both = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attributes: std::slice::from_ref(&attribute),
+            attribute_source: Some("|lemma=\"grace\""),
+            attribute_offset: Some(3),
+            ..base
+        })
+        .expect("both, with a remembered placement");
+        assert_eq!(both.attribute_list(), Some("|lemma=\"grace\""));
+        assert_eq!(both.attribute_offset(), Some(3));
+
+        // All four are different tokens, which is the point of keeping the
+        // distinction rather than normalizing it.
+        let identities: std::collections::BTreeSet<u64> = [none, empty_verbatim, structured, both]
+            .iter()
+            .map(|token| {
+                use std::hash::Hasher;
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                token.hash_wire_identity(&mut hasher);
+                hasher.finish()
+            })
+            .collect();
+        assert_eq!(identities.len(), 4);
+    }
+
+    /// An `attribute_offset` names where a *carried* attribute list sits; it is
+    /// not itself a list. A caller supplying an offset while asserting neither a
+    /// structured list nor a verbatim one is a contradiction the boundary must
+    /// refuse rather than silently drop the offset and admit an attribute-bearing
+    /// token that spells no attributes at all.
+    #[test]
+    fn an_attribute_offset_with_no_attribute_list_is_refused() {
+        let base = parts("editor-1", TokenKind::Marker, "\\w ");
+        let result = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attribute_offset: Some(3),
+            ..base
+        });
+        match result {
+            Err(TokenBuildError::UnexpectedPayload { fact, .. }) => {
+                assert_eq!(fact, "attribute offset with no attribute list");
+            }
+            other => panic!("expected a refused contradictory offset, got {other:?}"),
+        }
+    }
+
+    /// A fact on a kind that cannot hold it is refused, not dropped: a caller that
+    /// sent it believes it means something.
+    #[test]
+    fn facts_on_the_wrong_kind_are_refused() {
+        let unexpected =
+            |parts: OwnedTokenParts<'_>, fact: &str| match OwnedToken::from_parts(parts) {
+                Err(TokenBuildError::UnexpectedPayload { fact: found, .. }) => {
+                    assert_eq!(found, fact)
+                }
+                other => panic!("expected a refused {fact}, got {other:?}"),
+            };
+
+        unexpected(
+            OwnedTokenParts {
+                book_code: Some(("GEN", true)),
+                ..parts("t", TokenKind::Text, "GEN")
+            },
+            "book code",
+        );
+        unexpected(
+            OwnedTokenParts {
+                marker: Some("p"),
+                ..parts("t", TokenKind::Text, "text")
+            },
+            "marker",
+        );
+        unexpected(
+            OwnedTokenParts {
+                number: Some(OwnedNumberInfo {
+                    start: 1,
+                    end: None,
+                    kind: NumberRangeKind::Single,
+                }),
+                ..parts("t", TokenKind::Text, "1")
+            },
+            "number",
+        );
+        // An end marker structurally cannot own an attribute list.
+        unexpected(
+            OwnedTokenParts {
+                marker: Some("w"),
+                attribute_source: Some("|x=\"y\""),
+                ..parts("t", TokenKind::EndMarker, "\\w*")
+            },
+            "attribute list",
+        );
+        // A milestone has no nesting concept, so accepting `true` would drop it.
+        unexpected(
+            OwnedTokenParts {
+                marker: Some("zaln-s"),
+                nested: true,
+                ..parts("t", TokenKind::Milestone, "\\zaln-s")
+            },
+            "nesting",
+        );
+
+        // And the payloads a kind requires are equally not optional.
+        for (kind, source) in [
+            (TokenKind::BookCode, "GEN"),
+            (TokenKind::Number, "1"),
+            (TokenKind::Marker, "\\p "),
+        ] {
+            assert!(matches!(
+                OwnedToken::from_parts(parts("t", kind, source)),
+                Err(TokenBuildError::MissingPayload { .. })
+            ));
+        }
+
+        // An unaddressable token is refused before anything else is read.
+        assert_eq!(
+            OwnedToken::from_parts(parts("", TokenKind::Text, "x")),
+            Err(TokenBuildError::MissingId)
+        );
+        // As is an anchor this library would never have written.
+        assert!(matches!(
+            OwnedToken::from_parts(OwnedTokenParts {
+                sid: Some("GENESIS 1:1"),
+                ..parts("t", TokenKind::Text, "x")
+            }),
+            Err(TokenBuildError::UnresolvableSid { .. })
+        ));
     }
 }

@@ -287,6 +287,7 @@
       }
     },
     {
+      "attributeOffset": 8,
       "attributeSource": "|lemma=\"grace\" ",
       "attributes": [
         {

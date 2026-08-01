@@ -1,0 +1,7 @@
+{
+  "name": "nonzero-related-reserved",
+  "kind": "malformed",
+  "base": "related-span-unclosed-marker",
+  "expectedError": "InvalidSection",
+  "proves": "the 16-byte related record's trailing reserved word must be zero; a nonzero value rejects"
+}

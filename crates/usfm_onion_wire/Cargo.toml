@@ -1,0 +1,23 @@
+[package]
+name = "usfm_onion_wire"
+description = "Target-agnostic wire contract for usfm_onion: serde DTOs and the packed container codec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+wasm = ["dep:tsify", "dep:wasm-bindgen"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tsify = { version = "0.5.6", optional = true }
+usfm_onion = { path = "../.." }
+wasm-bindgen = { version = "0.2", optional = true }
+# Container/section integrity checksums are xxhash3-64. Pure Rust with no build
+# script or C dependency, so it compiles unchanged for wasm32-unknown-unknown.
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+serde_json = "1"

@@ -1,0 +1,5 @@
+{
+  "name": "related-span-unclosed-marker",
+  "kind": "good",
+  "proves": "an unclosed \\f carries a related span pointing back at the opening marker, exercising the 16-byte related record"
+}

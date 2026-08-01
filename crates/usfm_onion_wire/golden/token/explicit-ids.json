@@ -1,0 +1,5 @@
+{
+  "name": "explicit-ids",
+  "kind": "good",
+  "proves": "opaque caller-supplied stable ids round-trip via the id column + dictionary, flag clear"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "sid-fidelity-sequence-anchor-only",
+  "kind": "good",
+  "proves": "a sequence's anchor (verse 1) cannot distinguish it from a bare verse: AnchorOnly fidelity"
+}

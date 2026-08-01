@@ -1,0 +1,29 @@
+[package]
+name = "braid"
+description = "Resident USFM corpus: ordered books, validated mutation lifecycle, and current-truth token pulls"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+# Plain serde derives over braid's own lifecycle types — what a native
+# (Tauri) resident host needs, with no tsify or wasm-bindgen in the binary.
+# The `wasm` feature that adds tsify/wasm-bindgen glue lands with the wasm
+# composition root, not here.
+serde = ["dep:serde"]
+
+[dev-dependencies]
+serde_json = "1"
+
+[dependencies]
+# Token-id uniqueness and label-duplicate checks are string-keyed sets over a
+# whole book, which is exactly what this crate's clippy.toml wants FxHash for.
+rustc-hash = "2"
+serde = { version = "1", features = ["derive"], optional = true }
+usfm_onion = { path = "../.." }
+# Per-book source hashes and the content-derived snapshot id are xxhash3-64,
+# the same persisted fingerprint the wire container uses. Braid computes its
+# own (it never depends on wire); the algorithm and seed are what must match.
+xxhash-rust = { version = "0.8", features = ["xxh3"] }

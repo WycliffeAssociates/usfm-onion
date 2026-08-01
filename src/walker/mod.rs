@@ -1040,7 +1040,8 @@ mod tests {
             token: &'tokens T,
             _token_index: usize,
         ) {
-            self.events.push(format!("verse[{}]", token.source().trim()));
+            self.events
+                .push(format!("verse[{}]", token.source().trim()));
         }
 
         fn on_text(

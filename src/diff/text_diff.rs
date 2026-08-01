@@ -7,8 +7,8 @@
 use serde::Serialize;
 use similar::{ChangeTag, TextDiff};
 
-use super::skeleton::{DecisionStatus, DecisionUnit, DiffSkeleton, diff_skeleton};
 use super::DiffableToken;
+use super::skeleton::{DecisionStatus, DecisionUnit, DiffSkeleton, diff_skeleton};
 
 /// Requested granularity for the intra-unit text diff. `None` computes
 /// nothing.
@@ -271,13 +271,21 @@ mod tests {
 
     #[test]
     fn unchanged_status_returns_none() {
-        let u = unit(DecisionStatus::Unchanged, vec![tok("a", "text")], vec![tok("a", "text")]);
+        let u = unit(
+            DecisionStatus::Unchanged,
+            vec![tok("a", "text")],
+            vec![tok("a", "text")],
+        );
         assert_eq!(unit_text_diff(&u, TextDiffMode::Words), None);
     }
 
     #[test]
     fn moved_status_returns_none() {
-        let u = unit(DecisionStatus::Moved, vec![tok("a", "text")], vec![tok("a", "text")]);
+        let u = unit(
+            DecisionStatus::Moved,
+            vec![tok("a", "text")],
+            vec![tok("a", "text")],
+        );
         assert_eq!(unit_text_diff(&u, TextDiffMode::Words), None);
     }
 
@@ -315,7 +323,11 @@ mod tests {
 
     #[test]
     fn deleted_status_is_a_single_removed_run() {
-        let u = unit(DecisionStatus::Deleted, vec![tok("old text", "text")], vec![]);
+        let u = unit(
+            DecisionStatus::Deleted,
+            vec![tok("old text", "text")],
+            vec![],
+        );
         let diff = unit_text_diff(&u, TextDiffMode::Words).expect("Deleted yields Some");
         assert_eq!(
             diff.baseline,
@@ -361,14 +373,15 @@ mod tests {
         let diff = unit_text_diff(&u, TextDiffMode::Words).expect("Modified yields Some");
         // Only Unchanged/Removed on the baseline side, only Unchanged/Added
         // on the current side.
-        assert!(diff
-            .baseline
-            .iter()
-            .all(|r| matches!(r.kind, TextDiffRunKind::Unchanged | TextDiffRunKind::Removed)));
-        assert!(diff
-            .current
-            .iter()
-            .all(|r| matches!(r.kind, TextDiffRunKind::Unchanged | TextDiffRunKind::Added)));
+        assert!(diff.baseline.iter().all(|r| matches!(
+            r.kind,
+            TextDiffRunKind::Unchanged | TextDiffRunKind::Removed
+        )));
+        assert!(
+            diff.current
+                .iter()
+                .all(|r| matches!(r.kind, TextDiffRunKind::Unchanged | TextDiffRunKind::Added))
+        );
         let baseline_text: String = diff.baseline.iter().map(|r| r.text.as_str()).collect();
         let current_text: String = diff.current.iter().map(|r| r.text.as_str()).collect();
         assert_eq!(baseline_text, "the quick fox");

@@ -1,0 +1,7 @@
+{
+  "name": "unknown-patch-op",
+  "kind": "malformed",
+  "base": "whitespace-fix-patch",
+  "expectedError": "InvalidDiscriminant",
+  "proves": "a patch row's op byte outside the frozen insert/replace/delete set rejects rather than defaulting to one of them"
+}

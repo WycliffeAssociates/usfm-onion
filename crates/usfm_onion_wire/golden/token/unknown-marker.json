@@ -1,0 +1,5 @@
+{
+  "name": "unknown-marker",
+  "kind": "good",
+  "proves": "a marker absent from the catalog keeps its name via the descriptor dictionary, with all-None catalog metadata"
+}

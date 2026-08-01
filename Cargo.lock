@@ -51,6 +51,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
+name = "braid"
+version = "0.1.0"
+dependencies = [
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "usfm_onion",
+ "xxhash-rust",
+]
+
+[[package]]
 name = "bstr"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -774,7 +785,7 @@ checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
 name = "usfm_onion"
-version = "0.0.9"
+version = "0.1.0"
 dependencies = [
  "criterion",
  "logos",
@@ -790,28 +801,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "usfm_onion_dto"
-version = "0.0.9"
-dependencies = [
- "serde",
- "serde_json",
- "tsify",
- "usfm_onion",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "usfm_onion_wasm"
-version = "0.0.9"
+version = "0.1.0"
 dependencies = [
+ "braid",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
  "tsify",
  "usfm_onion",
- "usfm_onion_dto",
+ "usfm_onion_wire",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "usfm_onion_wire"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tsify",
+ "usfm_onion",
+ "wasm-bindgen",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -926,6 +939,12 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aee1b19627c7c60102ab80d3a9cbe18de90bfe03bfa6c3715447681f0e8c8af6"
 
 [[package]]
 name = "zerocopy"

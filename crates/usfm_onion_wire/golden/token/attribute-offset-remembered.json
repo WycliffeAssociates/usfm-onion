@@ -1,0 +1,5 @@
+{
+  "name": "attribute-offset-remembered",
+  "kind": "good",
+  "proves": "an owned token remembers its attribute list's offset from its own end, so the derived source is byte-identical even though the list is emitted at the marker's closer, not adjacent to its span"
+}

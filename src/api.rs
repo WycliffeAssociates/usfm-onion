@@ -442,7 +442,7 @@ fn format_token_with_identity(token: &Token<'_>) -> FormatToken {
 }
 
 fn format_sid(sid: Sid) -> String {
-    format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
+    sid.to_string()
 }
 
 fn format_token_id(id: TokenId<'_>) -> String {
@@ -543,6 +543,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
             crate::FormatToken {
                 kind: crate::TokenKind::Text,
@@ -554,6 +556,8 @@ mod tests {
                 structural: None,
                 number_info: None,
                 marker_profile: None,
+                attribute_source: None,
+                attributes: Vec::new(),
             },
         ];
         let issue = TokenStream::from_tokens(malformed_tokens.clone())

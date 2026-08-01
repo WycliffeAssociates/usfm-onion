@@ -1,0 +1,5 @@
+{
+  "name": "sid-fidelity-exact-bare",
+  "kind": "good",
+  "proves": "a bare verse number is Exact fidelity"
+}

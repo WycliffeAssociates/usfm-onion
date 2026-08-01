@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::marker_defs::StructuralMarkerInfo;
 use crate::markers::{MarkerKind, lookup_marker};
 use crate::parse::parse;
-use crate::token::{NumberRangeKind, Span, Token, TokenData, TokenKind};
+use crate::token::{
+    NumberRangeKind, OwnedAttribute, OwnedToken, SerializableToken, Span, Token, TokenData,
+    TokenKind,
+};
 
 const POETRY_MARKERS: &[&str] = &[
     "q", "q1", "q2", "q3", "q4", "q5", "qc", "qa", "qm", "qm1", "qm2", "qm3", "qd",
@@ -325,7 +328,9 @@ pub struct FormatLabel {
     pub params: MessageParams,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// `Deserialize` as well as `Serialize`: a template is patch *input* on the
+/// resident boundary, so it has to survive a round trip back into the library.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenTemplate {
     pub kind: TokenKind,
     pub text: String,
@@ -403,6 +408,24 @@ pub struct FormatToken {
     pub structural: Option<StructuralMarkerInfo>,
     pub number_info: Option<(u32, Option<u32>, NumberRangeKind)>,
     pub marker_profile: Option<FormatMarkerProfile>,
+    /// Verbatim `|...` attribute-list text (the same shape as
+    /// `dto::Token.attributeSource`/`OwnedToken::attribute_list()`), carried
+    /// as one opaque string rather than parsed apart. Format never inspects
+    /// or edits attribute content — no rule needs to — so a single string
+    /// field that survives `Clone` and gets placed back on emission (see
+    /// [`format_tokens_to_usfm`]) is the whole fix: nothing downstream has
+    /// to special-case it. `None` when the token has no attribute list or
+    /// when a caller edited it structurally (see `attributes` below).
+    pub attribute_source: Option<String>,
+    /// The structured attribute list — the same shape as `dto::Token.attributes`.
+    /// A caller (an editor) that edits an attribute's value clears
+    /// `attribute_source` (the "touch an attribute, drop its verbatim" rule)
+    /// and leaves the edit here instead; `format_tokens_to_usfm`'s reconstruct
+    /// path already falls back to rendering this list from structure whenever
+    /// `attribute_source` is `None`, so carrying it through is what makes an
+    /// edited attribute survive a format/fix pass rather than a verbatim
+    /// string that no longer matches. Empty when the token has no attributes.
+    pub attributes: Vec<OwnedAttribute>,
 }
 
 impl FormatToken {
@@ -435,22 +458,99 @@ impl<'a> From<&Token<'a>> for FormatToken {
             marker_profile: token
                 .marker_name()
                 .map(|marker| build_marker_profile(marker, token.kind(), structural)),
+            attribute_source: token.attribute_list().map(ToOwned::to_owned),
+            attributes: SerializableToken::attributes(token)
+                .iter()
+                .map(|attribute| OwnedAttribute {
+                    source: Box::from(attribute.source),
+                    key: Box::from(attribute.key),
+                    value: Box::from(attribute.value),
+                    is_default: attribute.is_default,
+                    span: Some(attribute.span),
+                })
+                .collect(),
         }
     }
 }
 
+/// The working shape of a resident owned token.
+///
+/// This is the inbound half of the residency boundary a caller crosses to run a
+/// format or fix pass over owned tokens: the pass needs an id-optional working
+/// type it may synthesize into, and [`crate::token::OwnedToken::from_format_token`]
+/// is the outbound half that turns the result back into resident tokens. The
+/// facts this conversion drops (marker nesting, book codes, an attribute list's
+/// remembered placement) are exactly the ones that conversion takes from an
+/// anchor token, so a round trip through here loses nothing as long as each
+/// output token knows which resident token it descends from.
+impl From<&OwnedToken> for FormatToken {
+    fn from(token: &OwnedToken) -> Self {
+        let marker = token.marker_name().map(ToOwned::to_owned);
+        Self {
+            kind: token.kind(),
+            text: token.source().to_string(),
+            sid: token.sid().map(ToOwned::to_owned),
+            id: Some(token.id().as_str().to_string()),
+            // Owned tokens carry no span at all (that is what makes them
+            // outlive their source), so there is none to report.
+            span: None,
+            structural: token.structural(),
+            number_info: token
+                .number_info()
+                .map(|number| (number.start, number.end, number.kind)),
+            marker_profile: marker
+                .as_deref()
+                .map(|marker| build_marker_profile(marker, token.kind(), token.structural())),
+            attribute_source: token.attribute_list().map(ToOwned::to_owned),
+            attributes: token.attributes().to_vec(),
+            marker,
+        }
+    }
+}
+
+impl SerializableToken for FormatToken {
+    type Attr = OwnedAttribute;
+
+    fn attributes(&self) -> &[Self::Attr] {
+        &self.attributes
+    }
+
+    fn attribute_list(&self) -> Option<&str> {
+        self.attribute_source.as_deref()
+    }
+
+    // No `attribute_offset` override: `None` (the default) means every
+    // attribute list places at its marker's closer, never at a remembered
+    // byte distance. Format is a normalizing pass, not a byte-exact one —
+    // token order can shift — so the closer rule is the correct choice
+    // here, not a fallback for a missing feature.
+}
+
+/// An attribute-bearing marker's list does not sit next to the marker's own
+/// text in USFM — `\w gracious|lemma="x" \w*` stores the list on the
+/// *opening* token but it reads after the content, right before `\w*`.
+/// [`crate::token::tokens_to_usfm_reconstruct`] already solves exactly this
+/// placement problem generically over any [`SerializableToken`] (it is what
+/// keeps owned/editor-authored streams, which have no reliable span, byte-
+/// correct); reusing it here — rather than a second, naive "append after
+/// this token" concatenation — is the whole attribute-passthrough fix. No
+/// rule in this module reads or writes attribute content anywhere.
 pub fn format_tokens_to_usfm(tokens: &[FormatToken]) -> String {
-    tokens
-        .iter()
-        .map(FormatToken::to_usfm_fragment)
-        .collect::<String>()
+    crate::token::tokens_to_usfm_reconstruct(tokens)
 }
 
 pub trait FormattableToken: Clone {
     fn id(&self) -> Option<&str> {
         None
     }
-    fn set_id(&mut self, _id: String) {}
+    /// No default: a no-op default here would let an implementor pass the
+    /// `_with_minter` seam's guarantee silently — the minter mints an id,
+    /// `set_id` discards it, and callers relying on every token being
+    /// addressable would find out only when something downstream can't
+    /// find the token it was promised. Every implementor must decide, in
+    /// its own visible code, what happens to a set id — even if that
+    /// decision is "nothing" — rather than inherit silence from the trait.
+    fn set_id(&mut self, id: String);
     fn kind(&self) -> TokenKind;
     fn set_kind(&mut self, kind: TokenKind);
     fn text(&self) -> &str;
@@ -473,6 +573,18 @@ pub trait FormattableToken: Clone {
     fn marker_profile(&self) -> Option<FormatMarkerProfile> {
         None
     }
+    /// Verbatim `|...` attribute-list text. Defaults to `None`/no-op so a
+    /// token type that never carries attributes (most `LintableToken`-only
+    /// test fixtures, editor types that model attributes some other way)
+    /// implements nothing extra — the same shape `sid`/`structural` already
+    /// use. A type that does carry attributes overrides both, and gets them
+    /// preserved through every format/fix pass with zero changes to the
+    /// pass itself: passthrough is `Clone` plus this one pair of accessors,
+    /// not per-rule bookkeeping.
+    fn attribute_source(&self) -> Option<&str> {
+        None
+    }
+    fn set_attribute_source(&mut self, _source: Option<String>) {}
     fn synthetic_like(
         anchor: Option<&Self>,
         kind: TokenKind,
@@ -480,6 +592,29 @@ pub trait FormattableToken: Clone {
         marker: Option<String>,
         sid: Option<String>,
     ) -> Self;
+}
+
+/// Attaches a fresh id to a token the formatter/fix-applier just synthesized,
+/// when a minter is supplied.
+///
+/// Core never invents an id itself (address-agnostic — ids come from a
+/// caller or from `assign_ids` at parse time, never fabricated mid-pipeline)
+/// and never uses randomness (`std` has none, and determinism is a format
+/// invariant, not an implementation detail). With no minter — every call
+/// site before this seam existed, and every call site today unless a caller
+/// opts in — a synthesized token keeps its historical no-id shape
+/// (`synthetic_like` itself never calls `set_id`). A caller that needs every
+/// resident token addressable supplies a minter that is a pure function of
+/// how many times it has already been called in this pass, e.g.
+/// `{book}-p{patch}-{n}` — reproducible across runs, unique per book by
+/// construction; ingest/apply validation remains the collision backstop.
+pub(crate) fn mint_synthetic_id<T: FormattableToken>(
+    token: &mut T,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) {
+    if let Some(mint) = minter.as_deref_mut() {
+        token.set_id(mint());
+    }
 }
 
 impl FormattableToken for FormatToken {
@@ -539,6 +674,14 @@ impl FormattableToken for FormatToken {
         self.marker_profile
     }
 
+    fn attribute_source(&self) -> Option<&str> {
+        self.attribute_source.as_deref()
+    }
+
+    fn set_attribute_source(&mut self, source: Option<String>) {
+        self.attribute_source = source;
+    }
+
     fn synthetic_like(
         anchor: Option<&Self>,
         kind: TokenKind,
@@ -559,6 +702,11 @@ impl FormattableToken for FormatToken {
             structural: None,
             number_info: None,
             marker_profile,
+            // A synthesized token (an inserted linebreak, a default `\p`, a
+            // template-built fix replacement) is new content that never had
+            // an attribute list of its own.
+            attribute_source: None,
+            attributes: Vec::new(),
         }
     }
 }
@@ -582,7 +730,8 @@ pub fn format_mut_default<T: FormattableToken>(tokens: &mut Vec<T>) {
 }
 
 pub fn format_tokens<T: FormattableToken>(tokens: &mut Vec<T>, options: FormatOptions) {
-    format_tokens_owned(tokens, options);
+    let mut minter: Option<&mut dyn FnMut() -> String> = None;
+    format_tokens_owned(tokens, options, &mut minter);
 }
 
 pub fn format_tokens_profile<T: FormattableToken>(
@@ -590,7 +739,8 @@ pub fn format_tokens_profile<T: FormattableToken>(
     options: FormatOptions,
 ) -> (Vec<T>, FormatTimings) {
     let mut working = tokens.to_vec();
-    let profile = format_tokens_owned(&mut working, options);
+    let mut minter: Option<&mut dyn FnMut() -> String> = None;
+    let profile = format_tokens_owned(&mut working, options, &mut minter);
     (working, profile)
 }
 
@@ -599,6 +749,40 @@ pub fn format_usfm(source: &str, options: FormatOptions) -> String {
     let mut tokens = into_format_tokens(&parsed.tokens);
     format_tokens(&mut tokens, options);
     format_tokens_to_usfm(&tokens)
+}
+
+/// [`format`], but every token the formatter synthesizes (inserted structural
+/// linebreaks, a default `\p` after a bare chapter intro, a marker token
+/// recovered from malformed text) is minted a fresh id via `minter`. See
+/// [`mint_synthetic_id`] for the seam's contract; `format`/`format_tokens`
+/// are unchanged and still pass no minter.
+pub fn format_with_minter<T: FormattableToken + Clone>(
+    tokens: &[T],
+    options: FormatOptions,
+    minter: &mut dyn FnMut() -> String,
+) -> Vec<T> {
+    let mut working = tokens.to_vec();
+    format_tokens_with_minter(&mut working, options, minter);
+    working
+}
+
+/// [`format_mut`] with a synthetic-id minter — see [`format_with_minter`].
+pub fn format_mut_with_minter<T: FormattableToken>(
+    tokens: &mut Vec<T>,
+    options: FormatOptions,
+    minter: &mut dyn FnMut() -> String,
+) {
+    format_tokens_with_minter(tokens, options, minter);
+}
+
+/// [`format_tokens`] with a synthetic-id minter — see [`format_with_minter`].
+pub fn format_tokens_with_minter<T: FormattableToken>(
+    tokens: &mut Vec<T>,
+    options: FormatOptions,
+    minter: &mut dyn FnMut() -> String,
+) {
+    let mut minter: Option<&mut dyn FnMut() -> String> = Some(minter);
+    format_tokens_owned(tokens, options, &mut minter);
 }
 
 fn push_token_merging_text<T: FormattableToken>(tokens: &mut Vec<T>, token: T) {
@@ -633,11 +817,12 @@ where
 fn format_tokens_owned<T: FormattableToken>(
     tokens: &mut Vec<T>,
     options: FormatOptions,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) -> FormatTimings {
     let profile = FormatTimings::default();
     let mut scratch = Vec::new();
 
-    normalize_tokens_in_place(tokens, &mut scratch, options);
+    normalize_tokens_in_place(tokens, &mut scratch, options, &mut *minter);
 
     if options.bridge_consecutive_verse_markers
         || options.remove_orphan_empty_verse_before_contentful_verse
@@ -662,11 +847,21 @@ fn format_tokens_owned<T: FormattableToken>(
         if options.insert_default_paragraph_after_chapter_intro
             && needs_default_paragraph_after_chapter_intro(tokens.as_slice())
         {
-            rewrite_tokens(
+            // Inlined rather than routed through `rewrite_tokens`'s generic
+            // `FnMut` closure: a closure capturing `minter` (a `&mut Option<
+            // &mut dyn FnMut() -> String>`) by move would only be callable
+            // once, and reborrowing it back out on every call is exactly the
+            // friction `rewrite_tokens`'s single-call sites don't otherwise
+            // pay for. Same swap/clear shape `rewrite_tokens` uses.
+            std::mem::swap(tokens, &mut scratch);
+            tokens.clear();
+            tokens.reserve(scratch.len());
+            insert_default_paragraph_after_chapter_intro_into(
+                scratch.as_slice(),
                 tokens,
-                &mut scratch,
-                insert_default_paragraph_after_chapter_intro_into,
+                &mut *minter,
             );
+            scratch.clear();
         }
     }
 
@@ -675,7 +870,7 @@ fn format_tokens_owned<T: FormattableToken>(
     }
 
     if options.insert_structural_linebreaks {
-        insert_structural_linebreaks_in_place(tokens, &mut scratch);
+        insert_structural_linebreaks_in_place(tokens, &mut scratch, minter);
     }
 
     if options.collapse_consecutive_linebreaks {
@@ -693,6 +888,7 @@ fn normalize_tokens_in_place<T: FormattableToken>(
     tokens: &mut Vec<T>,
     scratch: &mut Vec<T>,
     options: FormatOptions,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) {
     let mut input = std::mem::take(tokens)
         .into_iter()
@@ -708,7 +904,7 @@ fn normalize_tokens_in_place<T: FormattableToken>(
         let next_after_next = input.get(index + 2).and_then(|token| token.as_ref());
 
         if options.recover_malformed_markers
-            && let Some(recovered) = recover_malformed_markers(&token)
+            && let Some(recovered) = recover_malformed_markers(&token, &mut *minter)
         {
             for recovered_token in recovered {
                 push_token_merging_text(tokens, recovered_token);
@@ -750,6 +946,7 @@ fn normalize_tokens_in_place<T: FormattableToken>(
 fn insert_structural_linebreaks_in_place<T: FormattableToken>(
     tokens: &mut Vec<T>,
     scratch: &mut Vec<T>,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) {
     std::mem::swap(tokens, scratch);
     tokens.clear();
@@ -771,7 +968,7 @@ fn insert_structural_linebreaks_in_place<T: FormattableToken>(
             && prev_out.is_some()
             && !prev_out.is_some_and(|t| t.kind() == TokenKind::Newline)
         {
-            tokens.push(new_newline_like(&token));
+            tokens.push(new_newline_like(&token, &mut *minter));
         }
 
         let kind = token.kind();
@@ -797,14 +994,17 @@ fn insert_structural_linebreaks_in_place<T: FormattableToken>(
 
         if needs_newline_after {
             let anchor = tokens.last().expect("pushed token should exist");
-            tokens.push(new_newline_like(anchor));
+            tokens.push(new_newline_like(anchor, &mut *minter));
         }
     }
 
     scratch.clear();
 }
 
-fn recover_malformed_markers<T: FormattableToken>(token: &T) -> Option<Vec<T>> {
+fn recover_malformed_markers<T: FormattableToken>(
+    token: &T,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) -> Option<Vec<T>> {
     if token.kind() != TokenKind::Text {
         return None;
     }
@@ -834,24 +1034,52 @@ fn recover_malformed_markers<T: FormattableToken>(token: &T) -> Option<Vec<T>> {
         return None;
     }
 
+    // Splitting one token into several must not duplicate its identity onto
+    // every fragment: the original id (if any) goes to whichever fragment
+    // is emitted first — mirroring the same "first replacement reuses the
+    // target's own clone" rule `build_replacement_tokens` already applies —
+    // and every fragment after that is synthetic and gets minted, never a
+    // second copy of an id something else in the pipeline may already be
+    // addressing.
+    let mut original_id = token.id().map(ToOwned::to_owned);
     let mut out = Vec::new();
+
     if slash_index > 0 {
-        let mut prefix = token.clone();
-        prefix.set_text(text[..slash_index].to_string());
+        let mut prefix = T::synthetic_like(
+            Some(token),
+            TokenKind::Text,
+            text[..slash_index].to_string(),
+            None,
+            token.sid().map(ToOwned::to_owned),
+        );
+        if let Some(id) = original_id.take() {
+            prefix.set_id(id);
+        }
         out.push(prefix);
     }
 
-    out.push(T::synthetic_like(
+    let mut recovered_marker = T::synthetic_like(
         Some(token),
         TokenKind::Marker,
         format!("\\{marker}"),
         Some(marker.clone()),
         token.sid().map(ToOwned::to_owned),
-    ));
+    );
+    match original_id.take() {
+        Some(id) => recovered_marker.set_id(id),
+        None => mint_synthetic_id(&mut recovered_marker, minter),
+    }
+    out.push(recovered_marker);
 
     if rest.len() > 1 {
-        let mut suffix = token.clone();
-        suffix.set_text(rest[1..].to_string());
+        let mut suffix = T::synthetic_like(
+            Some(token),
+            TokenKind::Text,
+            rest[1..].to_string(),
+            None,
+            token.sid().map(ToOwned::to_owned),
+        );
+        mint_synthetic_id(&mut suffix, minter);
         out.push(suffix);
     }
 
@@ -1167,6 +1395,7 @@ fn cleanup_bridge_enumerator_at<T: FormattableToken>(tokens: &mut [T], index: us
 fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(
     tokens: &[T],
     out: &mut Vec<T>,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
 ) {
     let mut in_chapter_intro = false;
     let mut saw_para_marker_in_intro = false;
@@ -1208,13 +1437,15 @@ fn insert_default_paragraph_after_chapter_intro_into<T: FormattableToken>(
             }
 
             if is_verse_marker && !saw_para_marker_in_intro {
-                out.push(T::synthetic_like(
+                let mut default_paragraph = T::synthetic_like(
                     Some(token),
                     TokenKind::Marker,
                     "\\p".to_string(),
                     Some("p".to_string()),
                     token.sid().map(ToOwned::to_owned),
-                ));
+                );
+                mint_synthetic_id(&mut default_paragraph, &mut *minter);
+                out.push(default_paragraph);
                 saw_para_marker_in_intro = true;
             }
 
@@ -1387,14 +1618,19 @@ fn normalize_marker_whitespace_at_line_start_in_place<T: FormattableToken>(token
     }
 }
 
-fn new_newline_like<T: FormattableToken>(anchor: &T) -> T {
-    T::synthetic_like(
+fn new_newline_like<T: FormattableToken>(
+    anchor: &T,
+    minter: &mut Option<&mut dyn FnMut() -> String>,
+) -> T {
+    let mut newline = T::synthetic_like(
         Some(anchor),
         TokenKind::Newline,
         "\n".to_string(),
         None,
         anchor.sid().map(ToOwned::to_owned),
-    )
+    );
+    mint_synthetic_id(&mut newline, minter);
+    newline
 }
 
 fn is_text_like(kind: TokenKind) -> bool {
@@ -2044,6 +2280,113 @@ mod tests {
         assert!(output.contains("\\v 1"));
     }
 
+    /// `\w gracious|lemma="grace" \w*` must survive a full `format` pass.
+    /// Before `FormatToken` carried `attribute_source`, this silently emitted
+    /// `\w gracious\w*` — the attribute list vanished because it was never in
+    /// any field `format_tokens_to_usfm` read, not because any rule
+    /// deliberately stripped it.
+    #[test]
+    fn format_preserves_attribute_bearing_tokens_round_trip() {
+        let source =
+            "\\id GEN\n\\c 1\n\\p\n\\v 2 the second verse \\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        assert!(
+            tokens.iter().any(|token| token.attribute_source.is_some()),
+            "into_format_tokens must actually carry the attribute list, or this test proves nothing"
+        );
+        format_tokens(&mut tokens, FormatOptions::default());
+        let output = format_tokens_to_usfm(&tokens);
+        assert!(
+            output.contains("\\w gracious|lemma=\"grace\" \\w*"),
+            "attribute list must survive a format pass: {output:?}"
+        );
+    }
+
+    /// Same fixture, but every token is id-less (as `into_format_tokens`
+    /// itself already produces) — attribute passthrough must not depend on
+    /// id presence, since the two are unrelated fields on `FormatToken`.
+    #[test]
+    fn format_preserves_attributes_on_id_less_tokens() {
+        let source = "\\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let tokens = into_format_tokens(&parsed.tokens);
+        assert!(tokens.iter().all(|token| token.id.is_none()));
+        let mut tokens = tokens;
+        format_tokens(&mut tokens, FormatOptions::default());
+        assert_eq!(
+            format_tokens_to_usfm(&tokens),
+            "\\w gracious|lemma=\"grace\" \\w*"
+        );
+    }
+
+    /// Same fixture, but every token is minted an id first (the C1 seam) —
+    /// attribute passthrough must not depend on id *absence* either.
+    #[test]
+    fn format_preserves_attributes_on_id_bearing_tokens() {
+        let source = "\\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        for (index, token) in tokens.iter_mut().enumerate() {
+            token.set_id(format!("synthetic-{index}"));
+        }
+        assert!(tokens.iter().all(|token| token.id.is_some()));
+        format_tokens(&mut tokens, FormatOptions::default());
+        assert_eq!(
+            format_tokens_to_usfm(&tokens),
+            "\\w gracious|lemma=\"grace\" \\w*"
+        );
+    }
+
+    /// The other half of the attribute-passthrough gate: a caller (an editor) that edits an
+    /// attribute's structured value clears `attribute_source` (the
+    /// "touch an attribute, drop its verbatim" rule) and expects the edit
+    /// itself, not the stale verbatim text, to survive. `attribute_source`
+    /// alone cannot express this — it is exactly what the edit invalidated —
+    /// so `format_tokens_to_usfm` must fall back to reconstructing from
+    /// `attributes` whenever `attribute_source` is `None`.
+    #[test]
+    fn format_preserves_a_structurally_edited_attribute() {
+        let source = "\\w gracious|lemma=\"grace\" \\w*";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        let attr_token = tokens
+            .iter_mut()
+            .find(|token| !token.attributes.is_empty())
+            .expect("expected attribute-bearing token");
+        attr_token.attributes[0].value = Box::from("changed");
+        attr_token.attribute_source = None;
+        format_tokens(&mut tokens, FormatOptions::default());
+        assert_eq!(
+            format_tokens_to_usfm(&tokens),
+            "\\w gracious|lemma=\"changed\"\\w*"
+        );
+    }
+
+    /// Tokens the formatter itself synthesizes (inserted structural
+    /// linebreaks, a default `\p`) are new content and must never invent an
+    /// attribute list — `synthetic_like`'s `attribute_source: None` is the
+    /// whole rule, with no per-call-site bookkeeping needed. Proven by
+    /// count: this fixture has none to begin with, format adds tokens, and
+    /// the attribute-bearing count must stay exactly zero throughout.
+    #[test]
+    fn synthesized_tokens_never_carry_an_attribute_list() {
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        assert!(tokens.iter().all(|token| token.attribute_source.is_none()));
+        let original_count = tokens.len();
+        format_tokens(&mut tokens, FormatOptions::all_enabled());
+        assert!(
+            tokens.len() > original_count,
+            "this fixture must actually synthesize tokens, or the test proves nothing"
+        );
+        assert!(
+            tokens.iter().all(|token| token.attribute_source.is_none()),
+            "no synthesized token may invent an attribute list"
+        );
+    }
+
     #[test]
     fn format_rule_has_stable_machine_identifiers() {
         let rule = FormatRule::InsertDefaultParagraphAfterChapterIntro;
@@ -2072,6 +2415,575 @@ mod tests {
             assert!(opts.collapse_consecutive_linebreaks);
             assert!(opts.normalize_marker_whitespace_at_line_start);
             assert!(opts.ensure_inline_separators);
+        }
+    }
+
+    /// A minter that counts its own calls — a pure function of call count,
+    /// e.g. `{book}-p{patch}-{n}`, the shape a deterministic minter needs.
+    fn counting_minter() -> impl FnMut() -> String {
+        let mut count: u32 = 0;
+        move || {
+            count += 1;
+            format!("synthetic-{count}")
+        }
+    }
+
+    /// With no minter — every call site before this seam existed, and every
+    /// call site today unless a caller opts in — synthesized tokens keep
+    /// their historical no-id shape. This is the byte-identity half of the
+    /// seam: nothing changes for `format_tokens`'s existing callers.
+    #[test]
+    fn format_tokens_without_a_minter_leaves_synthesized_tokens_with_no_id() {
+        // Triggers both structural-linebreak insertion (`\c 1\p\v 1 …` has no
+        // newlines between markers) and default-paragraph insertion (a verse
+        // directly after `\c 1` with no `\p`).
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let mut tokens = into_format_tokens(&parsed.tokens);
+        format_tokens(&mut tokens, FormatOptions::all_enabled());
+        assert!(
+            tokens.iter().all(|token| token.id.is_none()),
+            "no synthesized token should carry an id without a minter"
+        );
+    }
+
+    /// With a minter, every token the formatter synthesizes — an inserted
+    /// structural linebreak and a default `\p` after a bare chapter intro —
+    /// gets a fresh id. Pre-existing (non-synthetic) tokens are untouched.
+    #[test]
+    fn format_tokens_with_minter_mints_every_synthesized_token() {
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let tokens = into_format_tokens(&parsed.tokens);
+        let original_count = tokens.len();
+
+        let mut minter = counting_minter();
+        let mut minted = tokens.clone();
+        format_tokens_with_minter(&mut minted, FormatOptions::all_enabled(), &mut minter);
+
+        // Original tokens carried no id; the only tokens with one afterward
+        // are the ones the formatter created.
+        let with_id: Vec<_> = minted.iter().filter(|token| token.id.is_some()).collect();
+        assert!(
+            !with_id.is_empty(),
+            "this fixture must actually exercise synthesis, or the test proves nothing"
+        );
+        assert!(
+            minted.len() > original_count,
+            "synthesis must have added tokens"
+        );
+        for token in &with_id {
+            assert!(
+                token
+                    .id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("synthetic-")),
+                "every id must come from the supplied minter, not be invented"
+            );
+        }
+        // Minted ids are unique — one per synthesized token, in call order.
+        let mut ids: Vec<&str> = with_id.iter().filter_map(|t| t.id.as_deref()).collect();
+        let unique_count = {
+            ids.sort_unstable();
+            ids.dedup();
+            ids.len()
+        };
+        assert_eq!(unique_count, with_id.len());
+
+        // Formatted USFM text is identical whether or not a minter was
+        // supplied: minting only touches the id field, never source/kind/
+        // marker/text, so this is oracle-neutral by construction.
+        let mut unminted = tokens;
+        format_tokens(&mut unminted, FormatOptions::all_enabled());
+        assert_eq!(
+            format_tokens_to_usfm(&unminted),
+            format_tokens_to_usfm(&minted)
+        );
+    }
+
+    /// Two independent runs over the same input with freshly-constructed,
+    /// identically-behaved minters produce identical ids — the seam adds no
+    /// hidden nondeterminism (no clock, no randomness, just call count).
+    #[test]
+    fn format_tokens_with_minter_is_deterministic_across_runs() {
+        let source = "\\id GEN\n\\c 1\\v 1 In the beginning.";
+        let parsed = parse(source);
+        let tokens = into_format_tokens(&parsed.tokens);
+
+        let mut first = tokens.clone();
+        format_tokens_with_minter(
+            &mut first,
+            FormatOptions::all_enabled(),
+            &mut counting_minter(),
+        );
+        let mut second = tokens;
+        format_tokens_with_minter(
+            &mut second,
+            FormatOptions::all_enabled(),
+            &mut counting_minter(),
+        );
+
+        let ids = |v: &[FormatToken]| v.iter().map(|t| t.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&first), ids(&second));
+    }
+
+    /// `FormattableToken::set_id` has no default body specifically so a
+    /// minted id can't be silently dropped by an implementor that never
+    /// wrote a real one. This exercises the trait-level guarantee directly,
+    /// through `id()`, for both in-tree implementors — not just by reading
+    /// `FormatToken`'s own `id` field, which would only prove the field
+    /// exists, not that the trait contract holds.
+    #[test]
+    fn a_minted_id_is_observable_through_the_trait_after_set_id() {
+        fn assert_round_trips<T: FormattableToken>(mut token: T) {
+            token.set_id("synthetic-1".to_string());
+            assert_eq!(token.id(), Some("synthetic-1"));
+        }
+
+        assert_round_trips(FormatToken {
+            kind: TokenKind::Text,
+            text: String::new(),
+            marker: None,
+            sid: None,
+            id: None,
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+            attribute_source: None,
+            attributes: Vec::new(),
+        });
+        assert_round_trips(EditorToken {
+            kind: TokenKind::Text,
+            text: String::new(),
+            marker: None,
+            sid: None,
+            id: String::new(),
+            lane: 0,
+        });
+    }
+
+    /// Direct unit test of the malformed-marker recovery path: a `Text`
+    /// token whose content embeds an unescaped marker the parser didn't
+    /// split out gets recovered into its own token, which is exactly as
+    /// synthetic as an inserted linebreak and must be minted the same way.
+    #[test]
+    fn recover_malformed_markers_mints_the_recovered_marker_token() {
+        let glued = FormatToken {
+            kind: TokenKind::Text,
+            text: "before\\q1 after".to_string(),
+            marker: None,
+            sid: None,
+            id: None,
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+            attribute_source: None,
+            attributes: Vec::new(),
+        };
+        let mut mint_fn = counting_minter();
+        let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
+        let recovered =
+            recover_malformed_markers(&glued, &mut minter).expect("embedded \\q1 must recover");
+        assert_eq!(recovered.len(), 3, "prefix text, marker, suffix text");
+        assert_eq!(recovered[0].text, "before");
+        assert!(
+            recovered[0].id.is_none(),
+            "the prefix clone is not synthetic"
+        );
+        assert_eq!(recovered[1].kind, TokenKind::Marker);
+        assert_eq!(recovered[1].marker.as_deref(), Some("q1"));
+        assert_eq!(
+            recovered[1].id.as_deref(),
+            Some("synthetic-1"),
+            "the recovered marker token is synthetic and must be minted"
+        );
+        assert_eq!(recovered[2].text, "after");
+        assert_eq!(
+            recovered[2].id.as_deref(),
+            Some("synthetic-2"),
+            "the suffix is synthetic too and must be minted, not left with the (absent) original id"
+        );
+    }
+
+    /// An *identified* token split three ways must not hand the same stable
+    /// id to more than one fragment — duplicate ids are an error condition
+    /// downstream, so this has to be fixed at the source. The first
+    /// fragment (the prefix, here) keeps the original identity, and every
+    /// fragment after it is synthetic and gets its own minted id.
+    #[test]
+    fn recover_malformed_markers_does_not_duplicate_the_original_id() {
+        let identified = FormatToken {
+            kind: TokenKind::Text,
+            text: "before\\q1 after".to_string(),
+            marker: None,
+            sid: None,
+            id: Some("GEN-7".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+            attribute_source: None,
+            attributes: Vec::new(),
+        };
+        let mut mint_fn = counting_minter();
+        let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
+        let recovered = recover_malformed_markers(&identified, &mut minter)
+            .expect("embedded \\q1 must recover");
+
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(
+            recovered[0].id.as_deref(),
+            Some("GEN-7"),
+            "the first fragment (the prefix) keeps the original identity"
+        );
+        assert_ne!(recovered[1].id.as_deref(), Some("GEN-7"));
+        assert_ne!(recovered[2].id.as_deref(), Some("GEN-7"));
+        assert_ne!(
+            recovered[1].id, recovered[2].id,
+            "no two fragments may share an id, minted or otherwise"
+        );
+        let ids: std::collections::HashSet<_> =
+            recovered.iter().map(|token| token.id.clone()).collect();
+        assert_eq!(ids.len(), 3, "all three fragment ids must be distinct");
+    }
+
+    /// Same recovery, but with no prefix (the malformed marker starts the
+    /// text): the recovered marker token itself is the first fragment and
+    /// must inherit the identity instead of the (nonexistent) prefix.
+    #[test]
+    fn recover_malformed_markers_gives_the_original_id_to_the_marker_when_there_is_no_prefix() {
+        let identified = FormatToken {
+            kind: TokenKind::Text,
+            text: "\\q1 after".to_string(),
+            marker: None,
+            sid: None,
+            id: Some("GEN-9".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+            attribute_source: None,
+            attributes: Vec::new(),
+        };
+        let mut mint_fn = counting_minter();
+        let mut minter: Option<&mut dyn FnMut() -> String> = Some(&mut mint_fn);
+        let recovered = recover_malformed_markers(&identified, &mut minter)
+            .expect("embedded \\q1 must recover");
+
+        assert_eq!(recovered.len(), 2, "marker, suffix text — no prefix");
+        assert_eq!(recovered[0].kind, TokenKind::Marker);
+        assert_eq!(
+            recovered[0].id.as_deref(),
+            Some("GEN-9"),
+            "with no prefix, the marker itself is the first fragment"
+        );
+        assert_ne!(recovered[1].id.as_deref(), Some("GEN-9"));
+    }
+
+    /// `apply_token_fix_with_minter`: an `InsertAfter` fix's new token is
+    /// synthetic and gets minted; a `ReplaceToken` fix's first replacement
+    /// reuses the target's own clone (its existing id, never re-minted),
+    /// while any additional replacement is synthetic and gets minted.
+    #[test]
+    fn apply_token_fix_with_minter_mints_only_the_synthesized_tokens() {
+        use crate::format::TokenTemplate;
+
+        let target = FormatToken {
+            kind: TokenKind::Marker,
+            text: "\\p".to_string(),
+            marker: Some("p".to_string()),
+            sid: None,
+            id: Some("GEN-3".to_string()),
+            span: None,
+            structural: None,
+            number_info: None,
+            marker_profile: None,
+            attribute_source: None,
+            attributes: Vec::new(),
+        };
+        let tokens = vec![target.clone()];
+
+        let fix = TokenFixForTest::insert_after(
+            "GEN-3",
+            vec![TokenTemplate {
+                kind: TokenKind::Newline,
+                text: "\n".to_string(),
+                marker: None,
+                sid: None,
+            }],
+        );
+        let mut minter = counting_minter();
+        let mut minter_opt: Option<&mut dyn FnMut() -> String> = Some(&mut minter);
+        let result = crate::lint::apply_token_fix_with_minter(&tokens, &fix, &mut minter_opt);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[0].id.as_deref(),
+            Some("GEN-3"),
+            "target is untouched"
+        );
+        assert_eq!(
+            result[1].id.as_deref(),
+            Some("synthetic-1"),
+            "the inserted token is synthetic and must be minted"
+        );
+    }
+
+    /// A source exercising every payload the working type cannot carry:
+    /// a book code, a parsed verse number, a nested character marker
+    /// (`\+add`), and a marker with a verbatim attribute list.
+    const BOUNDARY_SOURCE: &str = "\\id GEN Genesis\n\\c 1\n\\p\n\\v 1 a \\w gracious|lemma=\"grace\"\\w* \\add \\+add b\\+add*\\add* c\n";
+
+    fn owned_boundary_tokens() -> Vec<OwnedToken> {
+        crate::parse::parse(BOUNDARY_SOURCE)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect()
+    }
+
+    /// The residency boundary must be lossless in both directions when each
+    /// output token knows the resident token it descends from. Without this,
+    /// a fix or format pass over resident tokens would quietly rewrite every
+    /// book-code, nested-marker, and attribute-bearing token in the book —
+    /// the working type has no field for any of those facts.
+    #[test]
+    fn owned_tokens_survive_a_round_trip_through_the_working_type() {
+        let owned = owned_boundary_tokens();
+        assert!(owned.iter().any(|token| token.nested()));
+        assert!(owned.iter().any(|token| token.book_code().is_some()));
+        assert!(owned.iter().any(|token| token.number_info().is_some()));
+        assert!(owned.iter().any(|token| token.attribute_list().is_some()));
+        assert!(owned.iter().any(|token| token.attribute_offset().is_some()));
+
+        for token in &owned {
+            let working = FormatToken::from(token);
+            let rebuilt = OwnedToken::from_format_token(&working, Some(token))
+                .expect("a token rebuilt against its own anchor");
+            assert_eq!(&rebuilt, token, "round trip changed {token:?}");
+        }
+    }
+
+    /// With no anchor, the conversion refuses rather than inventing the
+    /// payloads it cannot see — the whole point of the checkpoint.
+    #[test]
+    fn rebuilding_without_an_anchor_refuses_what_it_cannot_know() {
+        use crate::token::TokenBuildError;
+
+        for token in owned_boundary_tokens() {
+            let working = FormatToken::from(&token);
+            let rebuilt = OwnedToken::from_format_token(&working, None);
+            match token.kind() {
+                // Anchorless rebuilds are refused for a token whose formatted
+                // anchor has no structured form to pair with (which every
+                // token after `\c 1` carries here), and never for a plain
+                // anchorless one.
+                _ if token.sid().is_some() => assert!(
+                    matches!(rebuilt, Err(TokenBuildError::UnresolvableSid { .. })),
+                    "{token:?} rebuilt to {rebuilt:?}"
+                ),
+                _ => {
+                    let rebuilt = rebuilt.expect("a payload-free token needs no anchor");
+                    // Nesting is the one fact an anchorless rebuild resets:
+                    // new content is not nested.
+                    assert!(!rebuilt.nested());
+                }
+            }
+        }
+
+        let mut idless = FormatToken::from(&owned_boundary_tokens()[0]);
+        idless.id = None;
+        assert_eq!(
+            OwnedToken::from_format_token(&idless, None),
+            Err(TokenBuildError::MissingId)
+        );
+
+        // A book code and a parsed number are the two payloads no anchor-free
+        // working token can supply, independent of the anchor question above.
+        let owned = owned_boundary_tokens();
+        for kind in [TokenKind::BookCode, TokenKind::Number] {
+            let token = owned
+                .iter()
+                .find(|token| token.kind() == kind)
+                .expect("the fixture carries both kinds");
+            let mut working = FormatToken::from(token);
+            working.sid = None;
+            working.number_info = None;
+            assert!(
+                matches!(
+                    OwnedToken::from_format_token(&working, None),
+                    Err(TokenBuildError::MissingPayload { .. })
+                ),
+                "{kind:?} must refuse an anchorless rebuild"
+            );
+        }
+    }
+
+    /// The end-to-end shape braid's resident fix application uses: convert,
+    /// apply a real `TokenFix` with a minter, convert back. Only the fix's own
+    /// token changes; every other resident token comes back byte-identical.
+    #[test]
+    fn a_fix_over_the_working_type_changes_only_its_own_token() {
+        let owned = owned_boundary_tokens();
+        let working: Vec<FormatToken> = owned.iter().map(FormatToken::from).collect();
+        let target = owned
+            .iter()
+            .find(|token| token.marker_name() == Some("p"))
+            .expect("the paragraph marker");
+
+        let fix = TokenFixForTest::insert_after(
+            target.id().as_str(),
+            vec![crate::format::TokenTemplate {
+                kind: TokenKind::Text,
+                text: "inserted".to_string(),
+                marker: None,
+                sid: None,
+            }],
+        );
+        let mut minter = counting_minter();
+        let mut minter_opt: Option<&mut dyn FnMut() -> String> = Some(&mut minter);
+        let applied = crate::lint::apply_token_fix_with_minter(&working, &fix, &mut minter_opt);
+
+        let by_id: BTreeMap<&str, &OwnedToken> = owned
+            .iter()
+            .map(|token| (token.id().as_str(), token))
+            .collect();
+        let rebuilt: Vec<OwnedToken> = applied
+            .iter()
+            .map(|token| {
+                let anchor = token
+                    .id
+                    .as_deref()
+                    .and_then(|id| by_id.get(id).copied())
+                    .or(Some(target));
+                OwnedToken::from_format_token(token, anchor).expect("rebuild")
+            })
+            .collect();
+
+        assert_eq!(rebuilt.len(), owned.len() + 1);
+        let inserted = rebuilt
+            .iter()
+            .position(|token| token.source() == "inserted")
+            .expect("the synthesized token");
+        assert_eq!(rebuilt[inserted].id().as_str(), "synthetic-1");
+        let survivors: Vec<&OwnedToken> = rebuilt
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != inserted)
+            .map(|(_, token)| token)
+            .collect();
+        assert_eq!(survivors, owned.iter().collect::<Vec<_>>());
+    }
+
+    /// The two distinctions the wire encoding draws that a naive projection
+    /// misses, pinned where the projection lives.
+    ///
+    /// An absent attribute list is a token with no attribute row at all; an empty
+    /// one is a row with an empty span. And the encoder locates each attribute by
+    /// searching for its own `source` spelling in the text it just emitted, so two
+    /// attributes agreeing on key, value, and default while spelling themselves
+    /// differently produce different bytes.
+    #[test]
+    fn wire_identity_separates_attribute_presence_and_spelling() {
+        use std::hash::Hasher;
+
+        fn identity(token: &OwnedToken) -> u64 {
+            // Any `Hasher` will do — the projection owns completeness, the caller
+            // owns the algorithm. `DefaultHasher` keeps this test dependency-free.
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            token.hash_wire_identity(&mut hasher);
+            hasher.finish()
+        }
+
+        // A marker carrying a verbatim attribute list, and the same token with the
+        // list structurally edited away to empty.
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 a \\w gracious|lemma=\"grace\"\\w* b\n";
+        let owned: Vec<OwnedToken> = crate::parse::parse(source)
+            .tokens
+            .iter()
+            .map(OwnedToken::from_parsed)
+            .collect();
+        let with_list = owned
+            .iter()
+            .find(|token| token.attribute_list().is_some())
+            .expect("the fixture carries a verbatim list");
+
+        let mut working = FormatToken::from(with_list);
+        working.attribute_source = None;
+        let absent = OwnedToken::from_format_token(&working, Some(with_list)).expect("rebuilt");
+        working.attribute_source = Some(String::new());
+        let empty = OwnedToken::from_format_token(&working, Some(with_list)).expect("rebuilt");
+        assert_eq!(absent.attribute_list(), None);
+        assert_eq!(empty.attribute_list(), Some(""));
+        assert_ne!(
+            identity(&absent),
+            identity(&empty),
+            "no list and an empty list are different facts on the wire"
+        );
+
+        // Two attributes that differ only in their own spelling: same key, same
+        // value, same default, different verbatim text.
+        let mut respelled = working.clone();
+        respelled.attribute_source = with_list.attribute_list().map(ToOwned::to_owned);
+        respelled.attributes = with_list
+            .attributes()
+            .iter()
+            .map(|attribute| OwnedAttribute {
+                source: Box::from(format!(" {}", attribute.source).as_str()),
+                key: attribute.key.clone(),
+                value: attribute.value.clone(),
+                is_default: attribute.is_default,
+                span: attribute.span,
+            })
+            .collect();
+        let respelled =
+            OwnedToken::from_format_token(&respelled, Some(with_list)).expect("rebuilt");
+        assert_eq!(
+            respelled.attributes().len(),
+            with_list.attributes().len(),
+            "same attributes, one spelling apart"
+        );
+        assert_eq!(respelled.attributes()[0].key, with_list.attributes()[0].key);
+        assert_ne!(
+            identity(&respelled),
+            identity(with_list),
+            "the encoder searches for the source spelling, so it is identity"
+        );
+
+        // And the framing itself: a token whose id and source are the same bytes
+        // split differently must not collide.
+        let mut a = FormatToken::from(&owned[0]);
+        a.id = Some("ab".to_string());
+        a.text = "c".to_string();
+        let mut b = a.clone();
+        b.id = Some("a".to_string());
+        b.text = "bc".to_string();
+        let a = OwnedToken::from_format_token(&a, Some(&owned[0])).expect("rebuilt");
+        let b = OwnedToken::from_format_token(&b, Some(&owned[0])).expect("rebuilt");
+        assert_ne!(
+            identity(&a),
+            identity(&b),
+            "variable fields are length-framed"
+        );
+    }
+
+    /// Builds a `TokenFix::InsertAfter` for the test above without depending
+    /// on `lint_impl`'s private constructors.
+    struct TokenFixForTest;
+    impl TokenFixForTest {
+        fn insert_after(
+            target_token_id: &str,
+            insert: Vec<crate::format::TokenTemplate>,
+        ) -> crate::lint::TokenFix {
+            crate::lint::TokenFix::InsertAfter {
+                code: "test".to_string(),
+                label: "test".to_string(),
+                label_params: Default::default(),
+                target_token_id: target_token_id.to_string(),
+                insert,
+            }
         }
     }
 }

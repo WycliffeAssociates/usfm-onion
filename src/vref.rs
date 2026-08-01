@@ -160,9 +160,90 @@ pub struct VerseProjection {
     pub segments: Vec<Segment>,
 }
 
-/// `sid` → its lossless verse projection. Same key set as [`VrefMap`]; the
-/// difference is losslessness plus the segment map.
-pub type VrefIndex = BTreeMap<String, VerseProjection>;
+/// One verse's entry in a [`VrefIndex`], in the position the token stream put it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VrefEntry {
+    pub sid: String,
+    pub projection: VerseProjection,
+}
+
+/// Every verse's lossless projection, in **first-seen token order**, with a
+/// by-SID lookup beside it. Same key set as [`VrefMap`]; the difference is
+/// losslessness, the segment map, and order.
+///
+/// Order is part of the contract, not an implementation detail. A projection is
+/// read against a document — an editor buffer, a file — and a document's verses
+/// are in whatever order it actually puts them, including deliberately
+/// out-of-order content: `\v 19` before `\v 2`, chapter 10 before chapter 2. A
+/// sorted container at this boundary silently replaces that with an order the
+/// document never had, and a consumer cannot recover the real one from the sorted
+/// keys. So the entries are the authority and the lookup is the convenience;
+/// nothing here sorts, and a consumer must never sort SIDs to recover sequence.
+///
+/// Serializes as its entries, in order, for the same reason.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct VrefIndex {
+    entries: Vec<VrefEntry>,
+    /// SID → position in `entries`. Skipped by serialization: it is derivable
+    /// from the entries and would be a second, sorted view of the same data.
+    #[serde(skip)]
+    positions: BTreeMap<String, usize>,
+}
+
+impl VrefIndex {
+    /// The verses in first-seen token order — the authoritative sequence.
+    pub fn entries(&self) -> &[VrefEntry] {
+        &self.entries
+    }
+
+    /// The SIDs in first-seen token order.
+    pub fn sids(&self) -> impl Iterator<Item = &str> {
+        self.entries.iter().map(|entry| entry.sid.as_str())
+    }
+
+    /// Iterates entries in first-seen token order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &VerseProjection)> {
+        self.entries
+            .iter()
+            .map(|entry| (entry.sid.as_str(), &entry.projection))
+    }
+
+    pub fn get(&self, sid: &str) -> Option<&VerseProjection> {
+        self.positions
+            .get(sid)
+            .and_then(|position| self.entries.get(*position))
+            .map(|entry| &entry.projection)
+    }
+
+    pub fn contains_key(&self, sid: &str) -> bool {
+        self.positions.contains_key(sid)
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Records one verse's projection.
+    ///
+    /// A SID that has already been seen keeps its original position and takes the
+    /// new projection — the same "one entry per SID, last write wins" the map this
+    /// replaced had, with the position it now also has to answer for made
+    /// explicit: where the verse first appeared in the stream.
+    fn insert(&mut self, sid: String, projection: VerseProjection) {
+        match self.positions.get(&sid) {
+            Some(position) => self.entries[*position].projection = projection,
+            None => {
+                self.positions.insert(sid.clone(), self.entries.len());
+                self.entries.push(VrefEntry { sid, projection });
+            }
+        }
+    }
+}
 
 pub fn usfm_to_vref_index(source: &str) -> VrefIndex {
     let parsed = parse(source);
@@ -175,9 +256,37 @@ pub fn usfm_to_vref_index(source: &str) -> VrefIndex {
 /// each token's own id. Driven by the generic [`walk`], which resolves
 /// chapter/verse opens from the slice exactly as `walk_tokens` does.
 pub fn tokens_to_vref_index<T: LintableToken>(tokens: &[T]) -> VrefIndex {
-    let mut visitor = IndexedVrefVisitor::default();
+    tokens_to_vref_index_seeded(tokens, None).0
+}
+
+/// [`tokens_to_vref_index`], seeded with the one visitor state a whole-book
+/// walk carries across a `\c` boundary and never clears: whether the most
+/// recently opened paragraph-like block supports verse content
+/// (`None` until the first block anywhere opens). Also returns that same
+/// fact as it stands after this slice, so a caller walking a book one
+/// chapter run at a time — the resident vref cache, not a whole-book call —
+/// can seed the next run from this run's own outgoing state instead of
+/// starting every run assuming `None`, which is what a bare per-run
+/// `tokens_to_vref_index` call over a slice would silently do and is
+/// wrong exactly when an earlier chapter's trailing block does not support
+/// verses (`\s1` heading and no `\p` before the next `\c`) and a later
+/// chapter opens straight into a `\v` with no block of its own.
+///
+/// A whole-book walk over the same tokens agrees with calling this once per
+/// chapter run and chaining outgoing into the next incoming: the flag is
+/// carried, never reset, so there is nothing else a per-run caller has to
+/// reconstruct.
+pub fn tokens_to_vref_index_seeded<T: LintableToken>(
+    tokens: &[T],
+    incoming_block_state: Option<bool>,
+) -> (VrefIndex, Option<bool>) {
+    let mut visitor = IndexedVrefVisitor {
+        current_block_supports_verse: incoming_block_state,
+        ..IndexedVrefVisitor::default()
+    };
     walk(tokens, &mut visitor);
-    visitor.finish()
+    let outgoing_block_state = visitor.current_block_supports_verse;
+    (visitor.finish(), outgoing_block_state)
 }
 
 #[derive(Debug, Default)]
@@ -186,7 +295,6 @@ struct VrefVisitor {
     map: VrefMap,
     current_ref: Option<String>,
     current_text: String,
-    pending_separator: bool,
     // Persists across paragraph boundaries: once any Block has been
     // seen, this reflects the latest Block's supports-verse status, even
     // after that Block closes. Matches the pre-walker behaviour.
@@ -239,7 +347,6 @@ impl VrefVisitor {
             self.map.insert(reference, output.to_string());
         }
         self.current_text.clear();
-        self.pending_separator = false;
     }
 
     fn can_collect_text(&self, ctx: &WalkContext<'_, '_>) -> bool {
@@ -248,19 +355,14 @@ impl VrefVisitor {
             && self.current_block_supports_verse.unwrap_or(true)
     }
 
+    /// Appends a content token's bytes, verbatim.
+    ///
+    /// Nothing is inserted, removed, or rewritten: a verse projection is the source
+    /// bytes of its content tokens in order, so whatever separated two words in the
+    /// document separates them here. Normalizing — trimming, collapsing runs,
+    /// swapping a newline for a space — is a consumer's decision to make on top of a
+    /// faithful projection, not something this walker can decide for every consumer.
     fn push_collected_text(&mut self, fragment: &str) {
-        if self.pending_separator
-            && !self.current_text.is_empty()
-            && !self
-                .current_text
-                .chars()
-                .last()
-                .is_some_and(char::is_whitespace)
-            && !fragment.chars().next().is_some_and(char::is_whitespace)
-        {
-            self.current_text.push(' ');
-        }
-        self.pending_separator = false;
         self.current_text.push_str(fragment);
     }
 }
@@ -275,7 +377,6 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
     ) {
         if frame.scope_kind == StructuralScopeKind::Block {
             self.current_block_supports_verse = Some(marker_paragraph_supports_verse(frame.marker));
-            self.pending_separator = true;
             #[cfg(not(target_arch = "wasm32"))]
             {
                 self.saw_block = true;
@@ -321,11 +422,18 @@ impl<'tokens, 'src> Visitor<'tokens, Token<'src>> for VrefVisitor {
 
     fn on_newline(
         &mut self,
-        _ctx: &WalkContext<'tokens, '_>,
-        _token: &'tokens Token<'src>,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens Token<'src>,
         _token_index: usize,
     ) {
-        self.pending_separator = true;
+        // A newline inside a verse is content, and its bytes are the separator the
+        // source already spells. Discarding it and re-deriving "probably a space"
+        // was how `gladness` and `so` came out as one word: the byte that kept them
+        // apart was thrown away, and the replacement was conditional on
+        // neighbouring whitespace that had also been thrown away.
+        if self.can_collect_text(ctx) {
+            self.current_text.push_str(token.source);
+        }
     }
 }
 
@@ -473,6 +581,21 @@ impl<'tokens, T: LintableToken> Visitor<'tokens, T> for IndexedVrefVisitor {
             self.push_token(token);
         }
     }
+
+    /// A newline inside a verse is a content token like any other: it carries the
+    /// byte that separates what surrounds it, and it has a real id and source span,
+    /// so it becomes a segment like any other and the segments still tile the text
+    /// completely. Dropping it was what made two words collide.
+    fn on_newline(
+        &mut self,
+        ctx: &WalkContext<'tokens, '_>,
+        token: &'tokens T,
+        _token_index: usize,
+    ) {
+        if self.can_collect_text(ctx) {
+            self.push_token(token);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -506,6 +629,78 @@ mod tests {
             .expect("segment boundaries fall on whole codepoints")
     }
 
+    /// A document's verses are in whatever order the document puts them, and a
+    /// projection read against that document has to say so. This fixture is
+    /// deliberately out of order in both dimensions a sorted container would
+    /// silently "fix": verse 19 before verse 2 inside a chapter, and chapter 10
+    /// before chapter 2. The emitted sequence must be the stream's, and a consumer
+    /// must never have to sort — sorting is precisely what loses the answer.
+    const OUT_OF_ORDER: &str = "\\id GEN\n\\c 29\n\\p\n\\v 19 nineteen\n\\v 2 two\n\\c 10\n\\p\n\\v 1 ten one\n\\c 2\n\\p\n\\v 1 two one\n";
+
+    #[test]
+    fn vref_index_emits_first_seen_token_order() {
+        let index = usfm_to_vref_index(OUT_OF_ORDER);
+        let order: Vec<&str> = index.sids().collect();
+        assert_eq!(
+            order,
+            ["GEN 29:19", "GEN 29:2", "GEN 10:1", "GEN 2:1"],
+            "the projection must report the document's own order"
+        );
+        // Every one of those pairs is a case where sorting would have differed:
+        // lexicographic order puts "GEN 10:1" first and "GEN 29:19" before
+        // "GEN 29:2"; numeric order puts chapter 2 first.
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        assert_ne!(
+            order, sorted,
+            "the fixture must actually distinguish the two"
+        );
+
+        // Order is the authority, the lookup is the convenience — and they agree.
+        for sid in &order {
+            assert!(
+                index.get(sid).is_some(),
+                "{sid} must be reachable by lookup"
+            );
+        }
+        assert_eq!(index.len(), order.len());
+
+        // Post-serialization is where a sorted container betrays itself, since a
+        // JSON object would emit its keys sorted. The serialized form is the
+        // ordered entries.
+        let json = serde_json::to_value(&index).expect("serializes");
+        let serialized: Vec<&str> = json
+            .as_array()
+            .expect("an ordered array, not an object")
+            .iter()
+            .map(|entry| entry["sid"].as_str().expect("sid"))
+            .collect();
+        assert_eq!(serialized, order);
+    }
+
+    /// The container changed; the duplicate-SID answer did not. One entry per SID
+    /// with the last projection written is what the map did, and the position that
+    /// entry now also has to answer for is its first-seen one.
+    #[test]
+    fn a_repeated_sid_keeps_its_first_position_and_takes_the_last_projection() {
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 first\n\\v 2 second\n\\v 1 again\n";
+        let index = usfm_to_vref_index(source);
+        assert_eq!(index.sids().collect::<Vec<_>>(), ["GEN 1:1", "GEN 1:2"]);
+        assert_eq!(index.len(), 2, "one entry per SID");
+        assert_eq!(
+            index.get("GEN 1:1").expect("present").text,
+            "again\n",
+            "the last write wins, exactly as it did before"
+        );
+        // And the key set still matches `to_vref`, whose own duplicate behavior is
+        // unchanged.
+        let map = usfm_to_vref_map(source);
+        assert_eq!(
+            index.sids().collect::<std::collections::BTreeSet<_>>(),
+            map.keys().map(String::as_str).collect()
+        );
+    }
+
     // Test 1 — scope parity: the index collects exactly the verses `to_vref`
     // does (notes/headings excluded, whitespace-only verses dropped).
     #[test]
@@ -513,7 +708,8 @@ mod tests {
         for &src in VREF_INDEX_FIXTURES {
             let index = usfm_to_vref_index(src);
             let map = usfm_to_vref_map(src);
-            let index_keys: std::collections::BTreeSet<_> = index.keys().cloned().collect();
+            let index_keys: std::collections::BTreeSet<_> =
+                index.sids().map(str::to_owned).collect();
             let map_keys: std::collections::BTreeSet<_> = map.keys().cloned().collect();
             assert_eq!(index_keys, map_keys, "key sets diverge for: {src:?}");
         }
@@ -526,7 +722,7 @@ mod tests {
     fn vref_index_fragments_are_source_backed_content() {
         for &src in VREF_INDEX_FIXTURES {
             let index = usfm_to_vref_index(src);
-            for (sid, proj) in &index {
+            for (sid, proj) in index.iter() {
                 let mut rebuilt = String::new();
                 for seg in &proj.segments {
                     rebuilt.push_str(&utf16_slice(&proj.text, seg.text_span));
@@ -546,7 +742,7 @@ mod tests {
     fn vref_index_segments_partition_text_contiguously() {
         for &src in VREF_INDEX_FIXTURES {
             let index = usfm_to_vref_index(src);
-            for (sid, proj) in &index {
+            for (sid, proj) in index.iter() {
                 let mut cursor = 0u32;
                 for seg in &proj.segments {
                     assert_eq!(
@@ -582,7 +778,7 @@ mod tests {
     fn vref_index_segment_source_spans_map_to_original_bytes() {
         for &src in VREF_INDEX_FIXTURES {
             let index = usfm_to_vref_index(src);
-            for (sid, proj) in &index {
+            for (sid, proj) in index.iter() {
                 for seg in &proj.segments {
                     let from_source =
                         &src[seg.source_span.start as usize..seg.source_span.end as usize];
@@ -607,12 +803,16 @@ mod tests {
                 .any(|s| s.text_span.start < a && b < s.text_span.end)
         };
 
-        // Poetry join: trailing content space stays, `\q2` delimiter does not.
+        // Poetry join: every content byte between the two words survives — the
+        // trailing space *and* the newline the source put there — while the `\q2`
+        // delimiter itself contributes nothing.
         let src = "\\id ISA\n\\c 9\n\\p\n\\v 2 The people walked in  darkness \n\\q2 have seen a great light;\n";
         let proj = usfm_to_vref_index(src)
-            .remove("ISA 9:2")
+            .get("ISA 9:2")
+            .cloned()
             .expect("verse present");
-        assert!(proj.text.contains("darkness have"));
+        assert!(proj.text.contains("darkness \nhave"));
+        // The one thing that must never appear is a byte the source did not have.
         assert!(!proj.text.contains("darkness  have"));
 
         // Genuine in-content double space IS strictly interior — flaggable.
@@ -625,7 +825,8 @@ mod tests {
         // Inline char marker: delimiter before `Lord` is markup and drops out.
         let src2 = "\\id GEN\n\\c 1\n\\p\n\\v 1 word \\nd Lord\\nd* more text.\n";
         let proj2 = usfm_to_vref_index(src2)
-            .remove("GEN 1:1")
+            .get("GEN 1:1")
+            .cloned()
             .expect("verse present");
         assert!(proj2.text.contains("word Lord"));
         assert!(!proj2.text.contains("word  Lord"));
@@ -664,11 +865,11 @@ mod tests {
 
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("In the beginning God created the heavens and the earth.")
+            Some("In the beginning God created the heavens and the earth.\n")
         );
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
-            Some("The earth was without form and void.")
+            Some("The earth was without form and void.\n")
         );
     }
 
@@ -702,16 +903,16 @@ mod tests {
 
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("First part. Second part.")
+            Some("First part.\nSecond part.")
         );
     }
 
     #[test]
-    fn structural_break_inserts_separator_without_leaking_delimiters() {
+    fn a_structural_break_keeps_its_own_separator_byte_and_leaks_no_delimiter() {
         let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning\nGod created.");
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("In the beginning God created.")
+            Some("In the beginning\nGod created.")
         );
 
         let malformed = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1 word\\nd Lord\\nd* more.");
@@ -725,7 +926,7 @@ mod tests {
     fn to_vref_preserves_edge_content_whitespace_unless_trim_is_requested() {
         let src = "\\id GEN\n\\c 1\n\\p\n\\v 1  padded \n";
         let map = usfm_to_vref_map(src);
-        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some(" padded "));
+        assert_eq!(map.get("GEN 1:1").map(String::as_str), Some(" padded \n"));
 
         let trimmed = usfm_to_vref_map_with_options(src, VrefOptions { trim: true });
         assert_eq!(trimmed.get("GEN 1:1").map(String::as_str), Some("padded"));
@@ -738,8 +939,10 @@ mod tests {
 
         assert_eq!(
             map.get("GEN 1:1").map(String::as_str),
-            Some("In the beginning.")
+            Some("In the beginning.\n")
         );
+        // No trailing newline on this one: the verse ends the file, so there is no
+        // byte there to keep. Nothing is invented to make the two look alike.
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
             Some("And God said.")
@@ -764,7 +967,7 @@ mod tests {
         );
         assert_eq!(
             map.get("GEN 1:1-2").map(String::as_str),
-            Some("The first two verses share text."),
+            Some("The first two verses share text.\n"),
         );
         assert_eq!(map.get("GEN 1:3").map(String::as_str), Some("Third."));
         assert!(
@@ -777,7 +980,10 @@ mod tests {
     #[test]
     fn verse_sequence_lexeme_is_preserved() {
         let map = usfm_to_vref_map("\\id GEN\n\\c 1\n\\p\n\\v 1,3 Combined.\n");
-        assert_eq!(map.get("GEN 1:1,3").map(String::as_str), Some("Combined."),);
+        assert_eq!(
+            map.get("GEN 1:1,3").map(String::as_str),
+            Some("Combined.\n"),
+        );
     }
 
     #[test]
@@ -812,7 +1018,7 @@ mod tests {
         );
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
-            Some("Second verse — should still appear."),
+            Some("Second verse — should still appear.\n"),
             "v2 text should not be polluted by note content",
         );
     }
@@ -887,7 +1093,7 @@ mod tests {
         let map = usfm_to_vref_map(src);
         assert_eq!(
             map.get("GEN 1:2").map(String::as_str),
-            Some("Second verse."),
+            Some("Second verse.\n"),
         );
     }
 }

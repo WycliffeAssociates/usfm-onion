@@ -1,59 +1,57 @@
-use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value as swb_to_js_value;
-use tsify::Tsify;
+//! WebAssembly bindings for `usfm_onion`.
+//!
+//! One module per responsibility: the boundary value types and their conversions
+//! ([`dto`]), the stateless one-shot exports ([`stateless`]), the resident corpus
+//! handle ([`resident`]), and the publication adapter it composes
+//! ([`publication`]). This root holds only what belongs to the crate as a whole —
+//! the hand-written TypeScript section, and the re-exports that keep every public
+//! item reachable at the crate root whichever module declares it.
+
 use wasm_bindgen::prelude::*;
 
-use usfm_onion::cst::{CstDocument as NativeCstDocument, CstNode as NativeCstNode, parse_cst};
+// Only what this root's own test module reaches for; everything else moved with
+// the code that uses it.
+#[cfg(test)]
 use usfm_onion::diff::{
-    Anchor as NativeAnchor, CoveredBy as NativeCoveredBy, DecisionUnit as NativeDecisionUnit,
-    DiffSkeleton as NativeDiffSkeleton, DiffableToken, Slot as NativeSlot,
-    TextDiffMode as NativeTextDiffMode, UnitId as NativeUnitId,
-    derive_canonical_sids as native_derive_canonical_sids,
-    diff_skeleton as native_diff_skeleton,
-    diff_skeleton_by_chapter as native_diff_skeleton_by_chapter,
-    diff_skeleton_canonical as native_diff_skeleton_canonical,
-    merge_diff_blocks as native_merge_diff_blocks, revert_diff_block as native_revert_diff_block,
-    unit_text_diff as native_unit_text_diff,
+    TextDiffMode as NativeTextDiffMode, unit_text_diff as native_unit_text_diff,
 };
-use usfm_onion::format::{
-    FormatOptions as NativeFormatOptions, FormatRule as NativeFormatRule,
-    FormatToken as NativeFormatToken, format_tokens as native_format_tokens, format_tokens_to_usfm,
-    format_usfm,
-};
-use usfm_onion::html::{
-    HtmlCallerScope as NativeHtmlCallerScope, HtmlCallerStyle as NativeHtmlCallerStyle,
-    HtmlNoteMode as NativeHtmlNoteMode, HtmlOptions as NativeHtmlOptions, usfm_to_html,
-};
+#[cfg(test)]
 use usfm_onion::lint::{
-    LintCode as NativeLintCode, LintOptions as NativeLintOptions, LintResult as NativeLintResult,
-    LintScope as NativeLintScope, LintSuppression as NativeLintSuppression, LintableToken,
-    TokenFix as NativeTokenFix, apply_token_fix, lint_tokens, lint_usfm,
+    LintCode as NativeLintCode, LintOptions as NativeLintOptions, LintScope as NativeLintScope,
+    lint_tokens,
 };
-use usfm_onion::marker_defs::StructuralMarkerInfo as NativeStructuralMarkerInfo;
-use usfm_onion::markers::{is_known_marker, marker_catalog, marker_info};
+#[cfg(test)]
 use usfm_onion::parse::parse as native_parse;
-use usfm_onion::token::{
-    NumberRangeKind as NativeNumberRangeKind, Span as NativeSpan, Token as NativeToken,
-    TokenKind as NativeTokenKind, UsfmToken, tokens_to_usfm, tokens_to_usfm_reconstruct,
-};
-use usfm_onion::usj::usfm_to_usj;
-use usfm_onion::usx::usfm_to_usx;
-use usfm_onion::vref::{
-    Segment as NativeSegment, Utf16Span as NativeUtf16Span,
-    VerseProjection as NativeVerseProjection, VrefIndex as NativeVrefIndex,
-    VrefMap as NativeVrefMap, VrefOptions as NativeVrefOptions, tokens_to_vref_index,
-    usfm_to_vref_index, usfm_to_vref_map_with_options,
-};
-use usfm_onion::walker::WalkableToken;
-pub use usfm_onion_dto::{
+#[cfg(test)]
+use usfm_onion::token::tokens_to_usfm_reconstruct;
+
+pub use usfm_onion_wire::dto::{
     AttributeItem, BlockBehavior, ClosingBehavior, CoveredSide, DecisionStatus, DecisionUnitKind,
     DiffOptions, HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory,
     LintCode, LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily,
-    MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide,
-    NoteFamily, NoteSubkind, NumberInfo, NumberRangeKind, ParagraphCategory, SlotRole, Span,
-    SpecContext, StructuralMarkerInfo, StructuralScopeKind, TextDiffMode, TextDiffRun,
-    TextDiffRunKind, Token, TokenKind, UnitTextDiff, format_sid, map_marker_info,
+    MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide, NoteFamily,
+    NoteSubkind, NumberInfo, NumberRangeKind, PackedBookReceipt, PackedDecodeError,
+    PackedMarkerDescriptor, ParagraphCategory, SlotRole, Span, SpecContext, StructuralMarkerInfo,
+    StructuralScopeKind, TextDiffMode, TextDiffRun, TextDiffRunKind, Token, TokenKind,
+    UnitTextDiff, format_sid, map_marker_info,
 };
+
+pub mod dto;
+// The composing adapter is reached through the resident handle; nothing else in
+// this crate constructs one, and the handle itself lands next.
+#[allow(dead_code)]
+pub mod publication;
+pub mod resident;
+pub mod stateless;
+
+/// The native-vs-wasm parity transcript generator. Test-only: it needs the
+/// same `pub(crate)` DTO conversions `resident`'s wasm bindings call, so it
+/// lives inside the crate rather than as an external integration test.
+#[cfg(test)]
+mod parity;
+
+pub use crate::dto::*;
+pub use crate::stateless::*;
 
 // TODO: eventually move off of this ideally
 #[wasm_bindgen(typescript_custom_section)]
@@ -100,1459 +98,6 @@ export type UsjElement =
   | ({ type: "unmatched"; marker: string; content?: UsjNode[] } & Record<string, Value>)
   | ({ type: "optbreak" } & Record<string, Value>);
 "#;
-
-// ---------------------------------------------------------------------------
-// Value types — schema-of-record for the JS surface. tsify-derived TS types
-// emit from these directly; their wire format is the byte-for-byte
-// contract recorded under `crates/usfm_onion_wasm/golden/outputs/`.
-// ---------------------------------------------------------------------------
-
-/// Diff result grouped by book and chapter: `{ "GEN": { 1: [...], 2: [...] } }`.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(transparent)]
-pub struct DiffsByChapterMap(
-    pub std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>>,
-);
-
-/// Verse-reference map: `{ "GEN 1:1": "...", "GEN 1:2": "...", ... }`.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(transparent)]
-pub struct VrefMap(pub std::collections::BTreeMap<String, String>);
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct VrefOptions {
-    #[serde(default)]
-    trim: Option<bool>,
-}
-
-/// UTF-16 code-unit offsets into a `VerseProjection.text`. Deliberately a
-/// distinct type from `Span` (byte offsets into the source) so the unit is
-/// unmistakable on the wire — JS/DOM consumers index `text` in UTF-16.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct Utf16Span {
-    start: u32,
-    end: u32,
-}
-
-/// One in-scope text token's contribution to a verse projection, with both
-/// resolution anchors: `sourceSpan` (bytes into source, for raw buffers) and
-/// `tokenId` (== the editor's DOM `data-id`). `textSpan` is UTF-16 into `text`.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct Segment {
-    token_id: String,
-    source_span: Span,
-    text_span: Utf16Span,
-}
-
-/// Lossless plain-text projection of one verse plus its segment map back to
-/// source / token coordinates.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct VerseProjection {
-    text: String,
-    segments: Vec<Segment>,
-}
-
-/// `sid` -> lossless verse projection. Same key set as `VrefMap`; the
-/// difference is losslessness plus the segment map.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(transparent)]
-pub struct VrefIndex(pub std::collections::BTreeMap<String, VerseProjection>);
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct CstNode {
-    token_index: usize,
-    children: Vec<CstNode>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct CstDocument {
-    tokens: Vec<Token>,
-    roots: Vec<CstNode>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct LintSuppression {
-    code: LintCode,
-    sid: String,
-}
-
-/// What the caller is linting. Gates the document-level rules: they run only
-/// for `"front"` and `"book"`, never a bare `{ chapter }` slice. TS shape:
-/// `"front" | { chapter: number } | "book"`.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub enum LintScope {
-    Front,
-    Chapter(u32),
-    Book,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct LintOptions {
-    /// Required — no default. A defaulted scope would let a chapter-grain
-    /// caller silently get whole-book id-behavior.
-    scope: LintScope,
-    #[serde(default)]
-    enabled_codes: Option<Vec<LintCode>>,
-    #[serde(default)]
-    disabled_codes: Vec<LintCode>,
-    #[serde(default)]
-    suppressed: Vec<LintSuppression>,
-    #[serde(default)]
-    allow_implicit_chapter_content_verse: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct LintIssue {
-    code: LintCode,
-    category: LintCategory,
-    severity: LintSeverity,
-    issue_type: LintIssueType,
-    template: String,
-    message: String,
-    message_params: std::collections::BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    span: Option<Span>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    related_span: Option<Span>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    token_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    related_token_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    sid: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    marker: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    fix: Option<TokenFix>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct LintSummary {
-    by_category: std::collections::BTreeMap<LintCategory, usize>,
-    by_severity: std::collections::BTreeMap<LintSeverity, usize>,
-    by_issue_type: std::collections::BTreeMap<LintIssueType, usize>,
-    total_count: usize,
-    suppressed_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct LintResult {
-    issues: Vec<LintIssue>,
-    summary: LintSummary,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(
-    tag = "type",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-pub enum TokenFix {
-    ReplaceToken {
-        code: String,
-        label: String,
-        label_params: std::collections::BTreeMap<String, String>,
-        target_token_id: String,
-        replacements: Vec<TokenTemplate>,
-    },
-    DeleteToken {
-        code: String,
-        label: String,
-        label_params: std::collections::BTreeMap<String, String>,
-        target_token_id: String,
-    },
-    InsertAfter {
-        code: String,
-        label: String,
-        label_params: std::collections::BTreeMap<String, String>,
-        target_token_id: String,
-        insert: Vec<TokenTemplate>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct TokenTemplate {
-    kind: TokenKind,
-    text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    marker: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    sid: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct FormatOptions {
-    #[serde(default)]
-    recover_malformed_markers: Option<bool>,
-    #[serde(default)]
-    collapse_whitespace_in_text: Option<bool>,
-    #[serde(default)]
-    ensure_inline_separators: Option<bool>,
-    #[serde(default)]
-    remove_duplicate_verse_numbers: Option<bool>,
-    #[serde(default)]
-    normalize_spacing_after_paragraph_markers: Option<bool>,
-    #[serde(default)]
-    remove_unwanted_linebreaks: Option<bool>,
-    #[serde(default)]
-    bridge_consecutive_verse_markers: Option<bool>,
-    #[serde(default)]
-    remove_orphan_empty_verse_before_contentful_verse: Option<bool>,
-    #[serde(default)]
-    remove_bridge_verse_enumerators: Option<bool>,
-    #[serde(default)]
-    move_chapter_label_after_chapter_marker: Option<bool>,
-    #[serde(default)]
-    insert_default_paragraph_after_chapter_intro: Option<bool>,
-    #[serde(default)]
-    remove_empty_paragraphs: Option<bool>,
-    #[serde(default)]
-    insert_structural_linebreaks: Option<bool>,
-    #[serde(default)]
-    collapse_consecutive_linebreaks: Option<bool>,
-    #[serde(default)]
-    normalize_marker_whitespace_at_line_start: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct FormatResult {
-    tokens: Vec<Token>,
-    usfm: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct HtmlOptions {
-    #[serde(default)]
-    wrap_root: bool,
-    #[serde(default)]
-    prefer_native_elements: Option<bool>,
-    #[serde(default)]
-    note_mode: Option<HtmlNoteMode>,
-    #[serde(default)]
-    caller_style: Option<HtmlCallerStyle>,
-    #[serde(default)]
-    caller_scope: Option<HtmlCallerScope>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct Anchor {
-    unit_id: String,
-    sid: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct Slot {
-    unit_id: String,
-    role: SlotRole,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    after: Option<Anchor>,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct DupContext {
-    baseline_count: u32,
-    current_count: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct CoveredBy {
-    unit_id: String,
-    sid: String,
-    side: CoveredSide,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct DecisionUnit {
-    id: String,
-    kind: DecisionUnitKind,
-    status: DecisionStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    baseline_sid: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    current_sid: Option<String>,
-    baseline_tokens: Vec<Token>,
-    current_tokens: Vec<Token>,
-    displaced: bool,
-    relabeled: bool,
-    dup_context: DupContext,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    covered_by: Option<CoveredBy>,
-    is_whitespace_change: bool,
-    is_usfm_structure_change: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    text_diff: Option<UnitTextDiff>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct DiffSkeleton {
-    slots: Vec<Slot>,
-    units: Vec<DecisionUnit>,
-}
-
-/// Staged decisions for [`wasm_merge_diff_blocks`]: `Record<string,
-/// MergeSide>` plus the default applied to any unit not present in the map.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct MergeRequest {
-    decisions: std::collections::BTreeMap<String, MergeSide>,
-    default_side: MergeSide,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct LintCodeMeta {
-    code: LintCode,
-    category: LintCategory,
-    severity: LintSeverity,
-    issue_type: LintIssueType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct FormatRuleMeta {
-    code: String,
-    label_key: String,
-}
-
-/// Owned token shape that satisfies the library's `WalkableToken`,
-/// `LintableToken`, and `DiffableToken` traits with **native** enum
-/// types. The JS-facing `Token` carries the FFI mirror enums
-/// (`TokenKind`, `StructuralMarkerInfo`, …); converting them on every
-/// trait-method access inside a walker would cost several enum
-/// conversions per token per walker pass — tens of thousands of extra
-/// match statements for a Luke-sized document. So token-in entry
-/// points do one linear `Token` → `WalkToken` pass at call time and
-/// the walker runs over these.
-#[derive(Debug, Clone)]
-struct WalkToken {
-    id: String,
-    kind: NativeTokenKind,
-    text: String,
-    span: Option<NativeSpan>,
-    sid: Option<String>,
-    marker: Option<String>,
-    structural: Option<NativeStructuralMarkerInfo>,
-    number_info: Option<(u32, Option<u32>, NativeNumberRangeKind)>,
-}
-
-impl UsfmToken for WalkToken {
-    fn kind(&self) -> NativeTokenKind {
-        self.kind
-    }
-
-    fn marker(&self) -> Option<&str> {
-        self.marker.as_deref()
-    }
-
-    fn source(&self) -> &str {
-        &self.text
-    }
-}
-
-impl WalkableToken for WalkToken {
-    fn structural(&self) -> Option<NativeStructuralMarkerInfo> {
-        self.structural
-    }
-}
-
-impl LintableToken for WalkToken {
-    fn span(&self) -> Option<NativeSpan> {
-        self.span
-    }
-
-    fn sid(&self) -> Option<String> {
-        self.sid.clone()
-    }
-
-    fn id(&self) -> Option<String> {
-        Some(self.id.clone())
-    }
-
-    fn number_info(&self) -> Option<(u32, Option<u32>, NativeNumberRangeKind)> {
-        self.number_info
-    }
-}
-
-impl DiffableToken for WalkToken {
-    fn sid(&self) -> Option<&str> {
-        self.sid.as_deref()
-    }
-
-    fn text(&self) -> &str {
-        &self.text
-    }
-
-    fn id(&self) -> Option<&str> {
-        Some(&self.id)
-    }
-
-    fn kind_key(&self) -> Option<&str> {
-        Some(token_kind_wire_key(self.kind))
-    }
-
-    fn marker_key(&self) -> Option<&str> {
-        self.marker.as_deref()
-    }
-}
-
-#[wasm_bindgen]
-pub struct ParsedUsfm {
-    source: String,
-}
-
-#[wasm_bindgen]
-pub struct UsfmMarkerCatalog;
-
-#[wasm_bindgen]
-impl ParsedUsfm {
-    fn new(source: String) -> Self {
-        Self { source }
-    }
-
-    pub fn tokens(&self) -> Vec<Token> {
-        let parsed = native_parse(&self.source);
-        map_tokens(&parsed.tokens)
-    }
-
-    pub fn cst(&self) -> CstDocument {
-        let cst = parse_cst(&self.source);
-        map_cst_document(&cst)
-    }
-
-    pub fn lint(&self, options: LintOptions) -> LintResult {
-        map_lint_result(lint_usfm(&self.source, lint_options_into_native(options)))
-    }
-
-    #[wasm_bindgen(js_name = applyTokenFix)]
-    pub fn apply_token_fix(&self, fix: TokenFix) -> Vec<Token> {
-        let parsed = native_parse(&self.source);
-        let native_tokens = parsed
-            .tokens
-            .iter()
-            .map(format_token_with_identity)
-            .collect::<Vec<_>>();
-        let result = apply_token_fix(&native_tokens, &token_fix_into_native(fix));
-        result.iter().map(map_format_token).collect()
-    }
-
-    #[wasm_bindgen(js_name = revertDiffBlock)]
-    pub fn revert_diff_block(
-        &self,
-        current: &ParsedUsfm,
-        block_id: &str,
-    ) -> Result<Vec<Token>, JsError> {
-        let baseline = native_parse(&self.source);
-        let current = native_parse(&current.source);
-        let baseline = baseline
-            .tokens
-            .iter()
-            .map(format_token_with_identity)
-            .collect::<Vec<_>>();
-        let current = current
-            .tokens
-            .iter()
-            .map(format_token_with_identity)
-            .collect::<Vec<_>>();
-        let reverted = native_revert_diff_block(block_id, &baseline, &current).map_err(js_error)?;
-        Ok(reverted.iter().map(map_format_token).collect())
-    }
-
-    pub fn format(&self, options: Option<FormatOptions>) -> String {
-        format_usfm(&self.source, format_options_into_native(options))
-    }
-
-    #[wasm_bindgen(js_name = toUsfm)]
-    pub fn to_usfm(&self) -> String {
-        let parsed = native_parse(&self.source);
-        tokens_to_usfm(&parsed.tokens)
-    }
-
-    #[wasm_bindgen(js_name = toUsj)]
-    pub fn to_usj(&self) -> Result<JsValue, JsError> {
-        let document = usfm_to_usj(&self.source).map_err(js_error)?;
-        to_js_value(&document)
-    }
-
-    #[wasm_bindgen(js_name = toUsx)]
-    pub fn to_usx(&self) -> Result<String, JsError> {
-        usfm_to_usx(&self.source).map_err(js_error)
-    }
-
-    #[wasm_bindgen(js_name = toHtml)]
-    pub fn to_html(&self, options: Option<HtmlOptions>) -> String {
-        usfm_to_html(&self.source, html_options_into_native(options))
-    }
-
-    #[wasm_bindgen(js_name = toVref)]
-    pub fn to_vref(&self, options: Option<VrefOptions>) -> VrefMap {
-        let options = vref_options_into_native(options);
-        VrefMap(vref_to_object(usfm_to_vref_map_with_options(
-            &self.source,
-            options,
-        )))
-    }
-
-    #[wasm_bindgen(js_name = vrefIndex)]
-    pub fn vref_index(&self) -> VrefIndex {
-        map_vref_index(usfm_to_vref_index(&self.source))
-    }
-
-    pub fn diff(&self, other: &ParsedUsfm, options: Option<DiffOptions>) -> DiffSkeleton {
-        map_native_skeleton(
-            &native_diff_usfm(&self.source, &other.source),
-            map_token,
-            diff_options_into_native(options),
-        )
-    }
-
-    #[wasm_bindgen(js_name = diffByChapter)]
-    pub fn diff_by_chapter(
-        &self,
-        other: &ParsedUsfm,
-        options: Option<DiffOptions>,
-    ) -> DiffsByChapterMap {
-        DiffsByChapterMap(map_diffs_by_chapter(
-            &native_diff_skeleton_by_chapter(&self.source, &other.source),
-            map_token,
-            diff_options_into_native(options),
-        ))
-    }
-}
-
-#[wasm_bindgen]
-impl UsfmMarkerCatalog {
-    fn new() -> Self {
-        Self
-    }
-
-    pub fn all(&self) -> Vec<MarkerInfo> {
-        marker_catalog()
-            .all()
-            .iter()
-            .cloned()
-            .map(map_marker_info)
-            .collect()
-    }
-
-    pub fn get(&self, marker: &str) -> Option<MarkerInfo> {
-        marker_catalog().get(marker).cloned().map(map_marker_info)
-    }
-
-    pub fn contains(&self, marker: &str) -> bool {
-        marker_catalog().contains(marker)
-    }
-}
-
-#[wasm_bindgen(js_name = parse)]
-pub fn wasm_parse(source: &str) -> ParsedUsfm {
-    ParsedUsfm::new(source.to_string())
-}
-
-#[wasm_bindgen(js_name = lintUsfm)]
-pub fn wasm_lint_usfm(source: &str, options: LintOptions) -> LintResult {
-    map_lint_result(lint_usfm(source, lint_options_into_native(options)))
-}
-
-#[wasm_bindgen(js_name = vrefIndexUsfm)]
-pub fn wasm_vref_index_usfm(source: &str) -> VrefIndex {
-    map_vref_index(usfm_to_vref_index(source))
-}
-
-/// Build the vref index from an existing token stream (the editor's live
-/// path) — same rehydration as `lintTokens`, no reparse. Segment ids match
-/// the tokens passed in, so they line up with the editor's DOM `data-id`s.
-#[wasm_bindgen(js_name = vrefIndexTokens)]
-pub fn wasm_vref_index_tokens(tokens: Vec<Token>) -> VrefIndex {
-    let tokens = parse_walk_tokens_from_values(tokens);
-    map_vref_index(tokens_to_vref_index(&tokens))
-}
-
-#[wasm_bindgen(js_name = lintTokens)]
-pub fn wasm_lint_tokens(tokens: Vec<Token>, options: LintOptions) -> LintResult {
-    let tokens = parse_walk_tokens_from_values(tokens);
-    map_lint_result(lint_tokens(&tokens, lint_options_into_native(options)))
-}
-
-#[wasm_bindgen(js_name = applyTokenFix)]
-pub fn wasm_apply_token_fix(tokens: Vec<Token>, fix: TokenFix) -> Vec<Token> {
-    let native_tokens = tokens
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let result = apply_token_fix(&native_tokens, &token_fix_into_native(fix));
-    result.iter().map(map_format_token).collect()
-}
-
-#[wasm_bindgen(js_name = formatUsfm)]
-pub fn wasm_format_usfm(source: &str, options: Option<FormatOptions>) -> String {
-    format_usfm(source, format_options_into_native(options))
-}
-
-#[wasm_bindgen(js_name = formatTokens)]
-pub fn wasm_format_tokens(tokens: Vec<Token>, options: Option<FormatOptions>) -> FormatResult {
-    let mut native_tokens = tokens
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    native_format_tokens(&mut native_tokens, format_options_into_native(options));
-    FormatResult {
-        tokens: native_tokens.iter().map(map_format_token).collect(),
-        usfm: format_tokens_to_usfm(&native_tokens),
-    }
-}
-
-#[wasm_bindgen(js_name = formatTokensMut)]
-pub fn wasm_format_tokens_mut(tokens: Vec<Token>, options: Option<FormatOptions>) -> Vec<Token> {
-    let mut native_tokens = tokens
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    native_format_tokens(&mut native_tokens, format_options_into_native(options));
-    native_tokens.iter().map(map_format_token).collect()
-}
-
-#[wasm_bindgen(js_name = tokensToUsfm)]
-pub fn wasm_tokens_to_usfm(tokens: Vec<Token>) -> String {
-    tokens_to_usfm_reconstruct(&tokens)
-}
-
-#[wasm_bindgen(js_name = tokensToHtml)]
-pub fn wasm_tokens_to_html(tokens: Vec<Token>, options: Option<HtmlOptions>) -> String {
-    let usfm = tokens_to_usfm_reconstruct(&tokens);
-    usfm_to_html(&usfm, html_options_into_native(options))
-}
-
-fn native_diff_usfm<'a>(
-    baseline_usfm: &'a str,
-    current_usfm: &'a str,
-) -> NativeDiffSkeleton<NativeToken<'a>> {
-    let baseline = native_parse(baseline_usfm);
-    let current = native_parse(current_usfm);
-    let baseline_book = baseline.analysis.book_code.unwrap_or("unknown");
-    let current_book = current.analysis.book_code.unwrap_or("unknown");
-    native_diff_skeleton_canonical(
-        &baseline.tokens,
-        baseline_book,
-        &current.tokens,
-        current_book,
-    )
-}
-
-#[wasm_bindgen(js_name = diffUsfm)]
-pub fn wasm_diff_usfm(left: &str, right: &str, options: Option<DiffOptions>) -> DiffSkeleton {
-    map_native_skeleton(
-        &native_diff_usfm(left, right),
-        map_token,
-        diff_options_into_native(options),
-    )
-}
-
-#[wasm_bindgen(js_name = diffUsfmByChapter)]
-pub fn wasm_diff_usfm_by_chapter(
-    left: &str,
-    right: &str,
-    options: Option<DiffOptions>,
-) -> DiffsByChapterMap {
-    DiffsByChapterMap(map_diffs_by_chapter(
-        &native_diff_skeleton_by_chapter(left, right),
-        map_token,
-        diff_options_into_native(options),
-    ))
-}
-
-#[wasm_bindgen(js_name = diffTokens)]
-pub fn wasm_diff_tokens(
-    left: Vec<Token>,
-    right: Vec<Token>,
-    options: Option<DiffOptions>,
-) -> DiffSkeleton {
-    let left = parse_walk_tokens_from_values(left);
-    let right = parse_walk_tokens_from_values(right);
-    map_native_skeleton(
-        &native_diff_skeleton(&left, &right),
-        map_walk_token,
-        diff_options_into_native(options),
-    )
-}
-
-#[wasm_bindgen(js_name = mergeDiffBlocks)]
-pub fn wasm_merge_diff_blocks(
-    baseline: Vec<Token>,
-    current: Vec<Token>,
-    request: MergeRequest,
-) -> Result<Vec<Token>, JsError> {
-    let baseline = baseline
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let current = current
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let decisions = request
-        .decisions
-        .into_iter()
-        .map(|(id, side)| (NativeUnitId::new(id), side.into()))
-        .collect();
-    let merged =
-        native_merge_diff_blocks(&baseline, &current, &decisions, request.default_side.into())
-            .map_err(js_error)?;
-    Ok(merged.iter().map(map_format_token).collect())
-}
-
-#[wasm_bindgen(js_name = revertDiffBlock)]
-pub fn wasm_revert_diff_block(
-    baseline: Vec<Token>,
-    current: Vec<Token>,
-    block_id: &str,
-) -> Result<Vec<Token>, JsError> {
-    let baseline = baseline
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let current = current
-        .into_iter()
-        .map(token_value_to_format_token)
-        .collect::<Vec<_>>();
-    let reverted = native_revert_diff_block(block_id, &baseline, &current).map_err(js_error)?;
-    Ok(reverted.iter().map(map_format_token).collect())
-}
-
-#[wasm_bindgen(js_name = normalizeTokenSids)]
-pub fn wasm_normalize_token_sids(tokens: Vec<Token>, book_code: &str) -> Vec<Token> {
-    let native_tokens: Vec<NativeFormatToken> = tokens
-        .iter()
-        .cloned()
-        .map(token_value_to_format_token)
-        .collect();
-    let canonical = native_derive_canonical_sids(&native_tokens, book_code);
-    tokens
-        .into_iter()
-        .zip(canonical)
-        .map(|(mut token, sid)| {
-            token.sid = Some(sid);
-            token
-        })
-        .collect()
-}
-
-#[wasm_bindgen(js_name = markerCatalog)]
-pub fn wasm_marker_catalog() -> UsfmMarkerCatalog {
-    UsfmMarkerCatalog::new()
-}
-
-#[wasm_bindgen(js_name = markerInfo)]
-pub fn wasm_marker_info(marker: &str) -> MarkerInfo {
-    map_marker_info(marker_info(marker))
-}
-
-#[wasm_bindgen(js_name = isKnownMarker)]
-pub fn wasm_is_known_marker(marker: &str) -> bool {
-    is_known_marker(marker)
-}
-
-#[wasm_bindgen(js_name = lintCodes)]
-pub fn wasm_lint_codes() -> Vec<LintCode> {
-    lint_code_variants()
-        .into_iter()
-        .map(LintCode::from)
-        .collect()
-}
-
-#[wasm_bindgen(js_name = lintCodeMeta)]
-pub fn wasm_lint_code_meta() -> Vec<LintCodeMeta> {
-    lint_code_variants()
-        .into_iter()
-        .map(|code| LintCodeMeta {
-            code: code.into(),
-            category: code.category().into(),
-            severity: code.severity().into(),
-            issue_type: code.issue_type().into(),
-        })
-        .collect()
-}
-
-#[wasm_bindgen(js_name = formatRules)]
-pub fn wasm_format_rules() -> Vec<String> {
-    NativeFormatRule::ALL
-        .iter()
-        .map(|rule| rule.code().to_string())
-        .collect()
-}
-
-#[wasm_bindgen(js_name = formatRuleMeta)]
-pub fn wasm_format_rule_meta() -> Vec<FormatRuleMeta> {
-    NativeFormatRule::ALL
-        .iter()
-        .map(|rule| FormatRuleMeta {
-            code: rule.code().to_string(),
-            label_key: rule.label_key().to_string(),
-        })
-        .collect()
-}
-
-fn lint_scope_into_native(value: LintScope) -> NativeLintScope {
-    match value {
-        LintScope::Front => NativeLintScope::Front,
-        LintScope::Chapter(n) => NativeLintScope::Chapter(n),
-        LintScope::Book => NativeLintScope::Book,
-    }
-}
-
-fn lint_options_into_native(value: LintOptions) -> NativeLintOptions {
-    NativeLintOptions {
-        scope: lint_scope_into_native(value.scope),
-        enabled_codes: value
-            .enabled_codes
-            .map(|codes| codes.into_iter().map(NativeLintCode::from).collect()),
-        disabled_codes: value
-            .disabled_codes
-            .into_iter()
-            .map(NativeLintCode::from)
-            .collect(),
-        suppressed: value
-            .suppressed
-            .into_iter()
-            .map(|suppression| NativeLintSuppression {
-                code: suppression.code.into(),
-                sid: suppression.sid,
-            })
-            .collect(),
-        allow_implicit_chapter_content_verse: value.allow_implicit_chapter_content_verse,
-    }
-}
-
-fn format_options_into_native(value: Option<FormatOptions>) -> NativeFormatOptions {
-    let value = value.unwrap_or_default();
-    let mut options = NativeFormatOptions::default();
-    apply_opt(
-        &mut options.recover_malformed_markers,
-        value.recover_malformed_markers,
-    );
-    apply_opt(
-        &mut options.collapse_whitespace_in_text,
-        value.collapse_whitespace_in_text,
-    );
-    apply_opt(
-        &mut options.ensure_inline_separators,
-        value.ensure_inline_separators,
-    );
-    apply_opt(
-        &mut options.remove_duplicate_verse_numbers,
-        value.remove_duplicate_verse_numbers,
-    );
-    apply_opt(
-        &mut options.normalize_spacing_after_paragraph_markers,
-        value.normalize_spacing_after_paragraph_markers,
-    );
-    apply_opt(
-        &mut options.remove_unwanted_linebreaks,
-        value.remove_unwanted_linebreaks,
-    );
-    apply_opt(
-        &mut options.bridge_consecutive_verse_markers,
-        value.bridge_consecutive_verse_markers,
-    );
-    apply_opt(
-        &mut options.remove_orphan_empty_verse_before_contentful_verse,
-        value.remove_orphan_empty_verse_before_contentful_verse,
-    );
-    apply_opt(
-        &mut options.remove_bridge_verse_enumerators,
-        value.remove_bridge_verse_enumerators,
-    );
-    apply_opt(
-        &mut options.move_chapter_label_after_chapter_marker,
-        value.move_chapter_label_after_chapter_marker,
-    );
-    apply_opt(
-        &mut options.insert_default_paragraph_after_chapter_intro,
-        value.insert_default_paragraph_after_chapter_intro,
-    );
-    apply_opt(
-        &mut options.remove_empty_paragraphs,
-        value.remove_empty_paragraphs,
-    );
-    apply_opt(
-        &mut options.insert_structural_linebreaks,
-        value.insert_structural_linebreaks,
-    );
-    apply_opt(
-        &mut options.collapse_consecutive_linebreaks,
-        value.collapse_consecutive_linebreaks,
-    );
-    apply_opt(
-        &mut options.normalize_marker_whitespace_at_line_start,
-        value.normalize_marker_whitespace_at_line_start,
-    );
-    options
-}
-
-fn html_options_into_native(value: Option<HtmlOptions>) -> NativeHtmlOptions {
-    let value = value.unwrap_or_default();
-    NativeHtmlOptions {
-        wrap_root: value.wrap_root,
-        prefer_native_elements: value.prefer_native_elements.unwrap_or(true),
-        note_mode: value
-            .note_mode
-            .map(Into::into)
-            .unwrap_or(NativeHtmlNoteMode::Extracted),
-        caller_style: value
-            .caller_style
-            .map(Into::into)
-            .unwrap_or(NativeHtmlCallerStyle::Numeric),
-        caller_scope: value
-            .caller_scope
-            .map(Into::into)
-            .unwrap_or(NativeHtmlCallerScope::VerseSequential),
-    }
-}
-
-/// Omitting `options` (or omitting `textDiff` on a supplied `DiffOptions`)
-/// resolves to `TextDiffMode::None` — today's behavior, computing nothing.
-fn diff_options_into_native(value: Option<DiffOptions>) -> NativeTextDiffMode {
-    value.unwrap_or_default().into()
-}
-
-fn parse_walk_tokens_from_values(values: Vec<Token>) -> Vec<WalkToken> {
-    values.into_iter().map(token_to_walk_token).collect()
-}
-
-fn token_to_walk_token(value: Token) -> WalkToken {
-    WalkToken {
-        id: value.id,
-        kind: value.kind.into(),
-        text: value.source,
-        span: value.span.map(native_span),
-        sid: value.sid,
-        marker: value.marker,
-        structural: value.structural.map(parse_structural_info),
-        number_info: value.number_info.map(parse_number_info),
-    }
-}
-
-fn token_value_to_format_token(value: Token) -> NativeFormatToken {
-    NativeFormatToken {
-        kind: value.kind.into(),
-        text: value.source,
-        marker: value.marker,
-        sid: value.sid,
-        id: Some(value.id),
-        span: value.span.map(native_span),
-        structural: value.structural.map(parse_structural_info),
-        number_info: value.number_info.map(parse_number_info),
-        marker_profile: None,
-    }
-}
-
-fn format_token_with_identity(token: &NativeToken<'_>) -> NativeFormatToken {
-    let mut owned = NativeFormatToken::from(token);
-    owned.sid = token.sid.map(format_sid);
-    owned.id = Some(format!("{}-{}", token.id.book_code, token.id.index));
-    owned
-}
-
-fn token_fix_into_native(value: TokenFix) -> NativeTokenFix {
-    match value {
-        TokenFix::ReplaceToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            replacements,
-        } => NativeTokenFix::ReplaceToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            replacements: replacements.into_iter().map(parse_token_template).collect(),
-        },
-        TokenFix::DeleteToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-        } => NativeTokenFix::DeleteToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-        },
-        TokenFix::InsertAfter {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            insert,
-        } => NativeTokenFix::InsertAfter {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            insert: insert.into_iter().map(parse_token_template).collect(),
-        },
-    }
-}
-
-fn parse_token_template(value: TokenTemplate) -> usfm_onion::TokenTemplate {
-    usfm_onion::TokenTemplate {
-        kind: value.kind.into(),
-        text: value.text,
-        marker: value.marker,
-        sid: value.sid,
-    }
-}
-
-fn parse_structural_info(value: StructuralMarkerInfo) -> NativeStructuralMarkerInfo {
-    NativeStructuralMarkerInfo {
-        scope_kind: value.scope_kind.into(),
-        inline_context: value.inline_context.map(Into::into),
-        note_context: value.note_context.map(Into::into),
-    }
-}
-
-fn parse_number_info(value: NumberInfo) -> (u32, Option<u32>, NativeNumberRangeKind) {
-    (value.start, value.end, value.kind.into())
-}
-
-fn map_tokens(tokens: &[NativeToken<'_>]) -> Vec<Token> {
-    tokens.iter().map(map_token).collect()
-}
-
-// Native token → wire DTO. The conversion body lives in `usfm_onion_dto`
-// (`From<&Token> for Token`) so the wasm and native-Tauri consumers share one
-// definition; this wrapper stays for the fn-pointer call sites (`map_token`
-// passed into `map_native_skeleton` / `map_diffs_by_chapter`).
-fn map_token(token: &NativeToken<'_>) -> Token {
-    token.into()
-}
-
-fn map_format_token(token: &NativeFormatToken) -> Token {
-    Token {
-        id: token.id.clone().unwrap_or_default(),
-        kind: token.kind.into(),
-        source: token.text.clone(),
-        span: token.span.map(map_span),
-        sid: token.sid.clone(),
-        marker: token.marker.clone(),
-        nested: None,
-        marker_metadata: None,
-        structural: token.structural.map(map_structural_info),
-        number_info: token.number_info.map(|(start, end, kind)| NumberInfo {
-            start,
-            end,
-            kind: kind.into(),
-        }),
-        book_code: None,
-        book_code_valid: None,
-        attributes: Vec::new(),
-        attribute_source: None,
-    }
-}
-
-fn map_structural_info(info: NativeStructuralMarkerInfo) -> StructuralMarkerInfo {
-    info.into()
-}
-
-fn map_span(span: NativeSpan) -> Span {
-    span.into()
-}
-
-fn native_span(span: Span) -> NativeSpan {
-    span.into()
-}
-
-fn map_cst_document(document: &NativeCstDocument<'_>) -> CstDocument {
-    CstDocument {
-        tokens: map_tokens(&document.tokens),
-        roots: document.roots.iter().map(map_cst_node).collect(),
-    }
-}
-
-fn map_cst_node(node: &NativeCstNode) -> CstNode {
-    CstNode {
-        token_index: node.token_index,
-        children: node.children.iter().map(map_cst_node).collect(),
-    }
-}
-
-fn map_lint_result(result: NativeLintResult) -> LintResult {
-    LintResult {
-        issues: result.issues.into_iter().map(map_lint_issue).collect(),
-        summary: map_lint_summary(result.summary),
-    }
-}
-
-fn map_lint_summary(summary: usfm_onion::LintSummary) -> LintSummary {
-    LintSummary {
-        by_category: summary
-            .by_category
-            .into_iter()
-            .map(|(category, count)| (category.into(), count))
-            .collect(),
-        by_severity: summary
-            .by_severity
-            .into_iter()
-            .map(|(severity, count)| (severity.into(), count))
-            .collect(),
-        by_issue_type: summary
-            .by_issue_type
-            .into_iter()
-            .map(|(issue_type, count)| (issue_type.into(), count))
-            .collect(),
-        total_count: summary.total_count,
-        suppressed_count: summary.suppressed_count,
-    }
-}
-
-fn map_token_fix(fix: NativeTokenFix) -> TokenFix {
-    match fix {
-        NativeTokenFix::ReplaceToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            replacements,
-        } => TokenFix::ReplaceToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            replacements: replacements.into_iter().map(map_token_template).collect(),
-        },
-        NativeTokenFix::DeleteToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-        } => TokenFix::DeleteToken {
-            code,
-            label,
-            label_params,
-            target_token_id,
-        },
-        NativeTokenFix::InsertAfter {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            insert,
-        } => TokenFix::InsertAfter {
-            code,
-            label,
-            label_params,
-            target_token_id,
-            insert: insert.into_iter().map(map_token_template).collect(),
-        },
-    }
-}
-
-fn map_token_template(template: usfm_onion::TokenTemplate) -> TokenTemplate {
-    TokenTemplate {
-        kind: template.kind.into(),
-        text: template.text,
-        marker: template.marker,
-        sid: template.sid,
-    }
-}
-
-fn map_lint_issue(issue: usfm_onion::LintIssue) -> LintIssue {
-    LintIssue {
-        code: issue.code.into(),
-        category: issue.category.into(),
-        severity: issue.severity.into(),
-        issue_type: issue.issue_type.into(),
-        template: issue.template.to_string(),
-        message: issue.message,
-        message_params: issue.message_params,
-        span: issue.span.map(map_span),
-        related_span: issue.related_span.map(map_span),
-        token_id: issue.token_id,
-        related_token_id: issue.related_token_id,
-        sid: issue.sid,
-        marker: issue.marker,
-        fix: issue.fix.map(map_token_fix),
-    }
-}
-
-fn map_native_skeleton<T: DiffableToken>(
-    skeleton: &NativeDiffSkeleton<T>,
-    map_token: impl Fn(&T) -> Token,
-    text_diff_mode: NativeTextDiffMode,
-) -> DiffSkeleton {
-    DiffSkeleton {
-        slots: skeleton.slots.iter().map(map_native_slot).collect(),
-        units: skeleton
-            .units
-            .iter()
-            .map(|unit| map_native_decision_unit(unit, &map_token, text_diff_mode))
-            .collect(),
-    }
-}
-
-fn map_native_slot(slot: &NativeSlot) -> Slot {
-    Slot {
-        unit_id: slot.unit_id.to_string(),
-        role: slot.role.into(),
-        after: slot.after.as_ref().map(map_native_anchor),
-    }
-}
-
-fn map_native_anchor(anchor: &NativeAnchor) -> Anchor {
-    Anchor {
-        unit_id: anchor.unit_id.to_string(),
-        sid: anchor.sid.clone(),
-    }
-}
-
-fn map_native_decision_unit<T: DiffableToken>(
-    unit: &NativeDecisionUnit<T>,
-    map_token: &impl Fn(&T) -> Token,
-    text_diff_mode: NativeTextDiffMode,
-) -> DecisionUnit {
-    DecisionUnit {
-        id: unit.id.to_string(),
-        kind: unit.kind.into(),
-        status: unit.status.into(),
-        baseline_sid: unit.baseline_sid.clone(),
-        current_sid: unit.current_sid.clone(),
-        baseline_tokens: unit.baseline_tokens.iter().map(map_token).collect(),
-        current_tokens: unit.current_tokens.iter().map(map_token).collect(),
-        displaced: unit.displaced,
-        relabeled: unit.relabeled,
-        dup_context: DupContext {
-            baseline_count: unit.dup_context.baseline_count,
-            current_count: unit.dup_context.current_count,
-        },
-        covered_by: unit.covered_by.as_ref().map(map_native_covered_by),
-        is_whitespace_change: unit.is_whitespace_change,
-        is_usfm_structure_change: unit.is_usfm_structure_change,
-        text_diff: native_unit_text_diff(unit, text_diff_mode).map(Into::into),
-    }
-}
-
-fn map_native_covered_by(covered_by: &NativeCoveredBy) -> CoveredBy {
-    CoveredBy {
-        unit_id: covered_by.unit_id.to_string(),
-        sid: covered_by.sid.clone(),
-        side: covered_by.side.into(),
-    }
-}
-
-fn map_walk_token(token: &WalkToken) -> Token {
-    Token {
-        id: token.id.clone(),
-        kind: token.kind.into(),
-        source: token.text.clone(),
-        span: token.span.map(map_span),
-        sid: token.sid.clone(),
-        marker: token.marker.clone(),
-        nested: None,
-        marker_metadata: None,
-        structural: token.structural.map(map_structural_info),
-        number_info: token.number_info.map(|(start, end, kind)| NumberInfo {
-            start,
-            end,
-            kind: kind.into(),
-        }),
-        book_code: None,
-        book_code_valid: None,
-        attributes: Vec::new(),
-        attribute_source: None,
-    }
-}
-
-fn map_diffs_by_chapter<T: DiffableToken>(
-    by_chapter: &std::collections::BTreeMap<
-        String,
-        std::collections::BTreeMap<u32, NativeDiffSkeleton<T>>,
-    >,
-    map_token: impl Fn(&T) -> Token,
-    text_diff_mode: NativeTextDiffMode,
-) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>> {
-    by_chapter
-        .iter()
-        .map(|(book, chapters)| {
-            (
-                book.clone(),
-                chapters
-                    .iter()
-                    .map(|(chapter, skeleton)| {
-                        (*chapter, map_native_skeleton(skeleton, &map_token, text_diff_mode))
-                    })
-                    .collect(),
-            )
-        })
-        .collect()
-}
-
-fn vref_to_object(map: NativeVrefMap) -> std::collections::BTreeMap<String, String> {
-    map.into_iter().collect()
-}
-
-fn vref_options_into_native(options: Option<VrefOptions>) -> NativeVrefOptions {
-    let defaults = NativeVrefOptions::default();
-    let Some(options) = options else {
-        return defaults;
-    };
-    NativeVrefOptions {
-        trim: options.trim.unwrap_or(defaults.trim),
-    }
-}
-
-fn map_vref_index(index: NativeVrefIndex) -> VrefIndex {
-    VrefIndex(
-        index
-            .into_iter()
-            .map(|(sid, projection)| (sid, map_verse_projection(projection)))
-            .collect(),
-    )
-}
-
-fn map_verse_projection(projection: NativeVerseProjection) -> VerseProjection {
-    VerseProjection {
-        text: projection.text,
-        segments: projection.segments.into_iter().map(map_segment).collect(),
-    }
-}
-
-fn map_segment(segment: NativeSegment) -> Segment {
-    Segment {
-        token_id: segment.token_id,
-        source_span: map_span(segment.source_span),
-        text_span: map_utf16_span(segment.text_span),
-    }
-}
-
-fn map_utf16_span(span: NativeUtf16Span) -> Utf16Span {
-    Utf16Span {
-        start: span.start,
-        end: span.end,
-    }
-}
-
-fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsError> {
-    swb_to_js_value(value).map_err(js_serde_error)
-}
-
-fn apply_opt(target: &mut bool, value: Option<bool>) {
-    if let Some(value) = value {
-        *target = value;
-    }
-}
-
-fn js_error(error: impl std::fmt::Display) -> JsError {
-    JsError::new(&error.to_string())
-}
-
-fn js_serde_error(error: serde_wasm_bindgen::Error) -> JsError {
-    js_error(error)
-}
-
-fn lint_code_variants() -> Vec<NativeLintCode> {
-    vec![
-        NativeLintCode::MissingIdMarker,
-        NativeLintCode::DuplicateIdMarker,
-        NativeLintCode::IdMarkerNotAtFileStart,
-        NativeLintCode::EmptyParagraph,
-        NativeLintCode::MissingChapterNumber,
-        NativeLintCode::MissingVerseNumber,
-        NativeLintCode::VerseIsEmpty,
-        NativeLintCode::UnknownToken,
-        NativeLintCode::UnknownMarker,
-        NativeLintCode::UnknownCloseMarker,
-        NativeLintCode::ContentBeforeFirstChapter,
-        NativeLintCode::VerseOutsideExplicitParagraph,
-        NativeLintCode::NoteSubmarkerOutsideNote,
-        NativeLintCode::MetadataOutsideTarget,
-        NativeLintCode::MarkerNotValidInContext,
-        NativeLintCode::MissingMilestoneSelfClose,
-        NativeLintCode::StrayCloseMarker,
-        NativeLintCode::MisnestedCloseMarker,
-        NativeLintCode::ImplicitlyClosedMarker,
-        NativeLintCode::UnclosedMarker,
-        NativeLintCode::DuplicateChapterNumber,
-        NativeLintCode::DuplicateVerseNumber,
-        NativeLintCode::InvalidNumberRange,
-        NativeLintCode::NumberRangeNotPrecededByMarkerExpectingNumber,
-        NativeLintCode::MissingWhitespaceBeforeMarker,
-        NativeLintCode::MissingHorizontalWhitespaceAfterMarkerName,
-        NativeLintCode::MissingTagEndDelimiterAfterMarker,
-        NativeLintCode::MissingContentSpaceAfterCloseMarker,
-        NativeLintCode::VerseInSectionOrOtherParagraph,
-        NativeLintCode::ContentAfterBlankMarker,
-        NativeLintCode::InvalidBookCode,
-        NativeLintCode::BookCodeNotUppercase,
-    ]
-}
-
-// Stable wire-format key for a native TokenKind. DiffableToken's kind_key
-// returns a borrowed `&str`, so this stays as a small lookup rather than
-// going through a serde round-trip on each token.
-fn token_kind_wire_key(kind: NativeTokenKind) -> &'static str {
-    match kind {
-        NativeTokenKind::Newline => "newline",
-        NativeTokenKind::OptBreak => "optBreak",
-        NativeTokenKind::Marker => "marker",
-        NativeTokenKind::EndMarker => "endMarker",
-        NativeTokenKind::Milestone => "milestone",
-        NativeTokenKind::MilestoneEnd => "milestoneEnd",
-        NativeTokenKind::BookCode => "bookCode",
-        NativeTokenKind::Number => "number",
-        NativeTokenKind::Text => "text",
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1697,6 +242,7 @@ mod tests {
                 book_code_valid: None,
                 attributes: Vec::new(),
                 attribute_source: None,
+                attribute_offset: None,
             },
         );
         // Attribute slice still lands right before \w*, independent of
@@ -1724,6 +270,63 @@ mod tests {
         assert_eq!(attr_token.attributes[0].value, "a\"b");
         attr_token.attribute_source = None;
         assert_eq!(tokens_to_usfm_reconstruct(&tokens), source);
+    }
+
+    #[test]
+    fn format_tokens_preserves_a_structurally_edited_attribute() {
+        // An editor that edits an attribute's structured value clears
+        // `attributeSource` (the whole-list attr-edit contract), so the
+        // structured edit is what must survive. Before this fix,
+        // `token_value_to_format_token` only ever copied `attributeSource`
+        // (never the structured list) and `map_format_token` unconditionally
+        // returned an empty `attributes` vec, so `formatTokens` silently
+        // reverted the edit.
+        let source = "\\w word|note=\"a\"\\w*";
+        let mut tokens = map_tokens(&native_parse(source).tokens);
+        let attr_token = tokens
+            .iter_mut()
+            .find(|t| !t.attributes.is_empty())
+            .expect("expected attribute-bearing token");
+        let marker_span = attr_token.span.as_ref().map(|span| (span.start, span.end));
+        let original_attribute_span = attr_token.attributes[0]
+            .span
+            .as_ref()
+            .map(|span| (span.start, span.end))
+            .expect("a parsed attribute must carry its own real span");
+        assert_ne!(
+            Some(original_attribute_span),
+            marker_span,
+            "fixture must actually put the attribute list at a different byte \
+             range than the marker, or this test cannot catch span fabrication"
+        );
+        attr_token.attributes[0].value = "b".to_string();
+        attr_token.attribute_source = None;
+
+        let result = wasm_format_tokens(tokens, None);
+        assert!(
+            result.usfm.contains("note=\"b\""),
+            "edited attribute must survive formatTokens: {:?}",
+            result.usfm
+        );
+        let returned = result
+            .tokens
+            .iter()
+            .find(|t| !t.attributes.is_empty())
+            .expect("formatTokens must return the attribute-bearing token with its structured list intact");
+        assert_eq!(returned.attributes[0].value, "b");
+        assert!(returned.attribute_source.is_none());
+        // The regression this guards: the attribute's own parsed span must
+        // survive verbatim, never substituted with the owning marker's span.
+        let returned_attribute_span = returned.attributes[0]
+            .span
+            .as_ref()
+            .map(|span| (span.start, span.end));
+        assert_eq!(
+            returned_attribute_span,
+            Some(original_attribute_span),
+            "the attribute's own span must survive formatTokens, not be \
+             replaced with the owning marker's span"
+        );
     }
 
     #[test]
@@ -1832,6 +435,8 @@ mod tests {
             sid: None,
             marker: Some("v".to_string()),
             fix: None,
+            position: usfm_onion::lint::NO_TOKEN_POSITION,
+            related_position: usfm_onion::lint::NO_TOKEN_POSITION,
         };
 
         let mapped = map_lint_issue(issue);
@@ -1841,6 +446,63 @@ mod tests {
             Some(&"2".to_string())
         );
         assert_eq!(mapped.message_params.get("found"), Some(&"3".to_string()));
+    }
+
+    /// The packed verify surface's findings now carry their fix, which is the
+    /// wasm-facing half of the Phase C finding-and-patch gate: the whole chain
+    /// (core lint -> wire patch table -> checked decode -> DTO mapping) has to
+    /// hold for a consumer's fix button to have anything to press.
+    #[test]
+    fn verify_packed_book_returns_findings_with_their_fix() {
+        // One `\p` jammed onto the text: `missing-whitespace-before-marker`
+        // with a concrete remedy.
+        let source = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n";
+        let parsed = native_parse(source);
+        let issues = usfm_onion::lint::lint_tokens(
+            &parsed.tokens,
+            usfm_onion::lint::LintOptions::scoped(usfm_onion::lint::LintScope::Book),
+        )
+        .issues;
+        let packed = usfm_onion_wire::finding_codec::encode_book(
+            usfm_onion::token::BookId::from_str("GEN").unwrap(),
+            source,
+            &parsed.tokens,
+            &issues,
+        )
+        .expect("encodes");
+
+        let outcome = wasm_verify_packed_book(&packed, source.as_bytes());
+        let PackedBookOutcome::Verified { findings, .. } = outcome else {
+            panic!("a container this crate just encoded must verify");
+        };
+        let fixed = findings
+            .iter()
+            .filter_map(|finding| finding.fix.as_ref())
+            .collect::<Vec<_>>();
+        assert_eq!(fixed.len(), 1, "one finding carries a fix");
+        let TokenFix::ReplaceToken {
+            code,
+            target_token_id,
+            replacements,
+            label_params,
+            ..
+        } = fixed[0]
+        else {
+            panic!("core's whitespace remedy is a ReplaceToken: {:?}", fixed[0]);
+        };
+        assert_eq!(code, "insert-whitespace-before-marker");
+        assert!(label_params.is_empty());
+        assert_eq!(replacements.len(), 1);
+        assert_eq!(replacements[0].text, "\n\\p");
+        assert_eq!(replacements[0].marker.as_deref(), Some("p"));
+        // The target is addressed by the same token id the DTO tokens carry, so
+        // a consumer can find it in the array it already holds.
+        assert!(
+            map_tokens(&parsed.tokens)
+                .iter()
+                .any(|token| token.id.as_str() == target_token_id),
+            "the fix's target names one of this book's tokens"
+        );
     }
 
     // --- DiffOptions / textDiff wire threading (Gate 4) ---
@@ -1891,7 +553,10 @@ mod tests {
             .iter()
             .find(|u| matches!(u.status, DecisionStatus::Modified))
             .expect("expected one Modified unit (v1 heaven -> heavens)");
-        assert!(modified.text_diff.is_some(), "Modified must carry a text_diff");
+        assert!(
+            modified.text_diff.is_some(),
+            "Modified must carry a text_diff"
+        );
 
         let added = skeleton
             .units
@@ -1905,7 +570,10 @@ mod tests {
             .iter()
             .find(|u| matches!(u.status, DecisionStatus::Deleted))
             .expect("expected one Deleted unit (v2)");
-        assert!(deleted.text_diff.is_some(), "Deleted must carry a text_diff");
+        assert!(
+            deleted.text_diff.is_some(),
+            "Deleted must carry a text_diff"
+        );
 
         let unchanged = skeleton
             .units
@@ -1995,6 +663,100 @@ mod tests {
         );
     }
 
+    /// The boundary's own statement of order, checked after serialization —
+    /// which is the only place a sorted container's betrayal is visible. The
+    /// fixture is out of order in both dimensions a sort would "fix": verse 19
+    /// before verse 2, and chapter 10 before chapter 2.
+    #[test]
+    fn vref_index_states_the_documents_own_verse_order_across_the_boundary() {
+        let source = "\\id GEN\n\\c 29\n\\p\n\\v 19 nineteen\n\\v 2 two\n\\c 10\n\\p\n\\v 1 ten one\n\\c 2\n\\p\n\\v 1 two one\n";
+        let expected = ["GEN 29:19", "GEN 29:2", "GEN 10:1", "GEN 2:1"];
+
+        for index in [
+            crate::stateless::wasm_vref_index_usfm(source),
+            // The token lane is the editor's: same projection, no reparse, and it
+            // must state the same order.
+            crate::stateless::wasm_vref_index_tokens(crate::dto::map_tokens(
+                &native_parse(source).tokens,
+            )),
+        ] {
+            let json = serde_json::to_value(&index).expect("serializes");
+            let entries = json.as_array().expect("ordered pairs, not an object");
+            let order: Vec<&str> = entries
+                .iter()
+                .map(|entry| entry[0].as_str().expect("sid"))
+                .collect();
+            assert_eq!(order, expected, "the boundary must report document order");
+            // Sorting is what a keyed object would have done to it, and what a
+            // consumer must never do to recover sequence.
+            let mut sorted = order.clone();
+            sorted.sort_unstable();
+            assert_ne!(order, sorted, "the fixture must distinguish the two");
+            // Each pair carries its whole projection, so the sequence is the only
+            // view a consumer needs.
+            assert!(
+                entries
+                    .iter()
+                    .all(|entry| entry[1]["text"].is_string() && entry[1]["segments"].is_array())
+            );
+        }
+    }
+
+    /// The resident handle projects the same verse index the stateless export does,
+    /// including after an edit — the property that lets a consumer swap one for the
+    /// other on a keystroke path without changing what it reads.
+    #[test]
+    fn the_resident_vref_index_matches_the_stateless_projection() {
+        let source = "\\id PSA\n\\c 51\n\\q1\n\\v 8 Make me hear joy and gladness\n\\q2 so that the bones may rejoice.\n\\c 52\n\\p\n\\v 1 Why do you boast?\n";
+        // Driven through braid's surface plus this crate's own conversions: a
+        // `js_sys::Function` cannot be constructed on a non-wasm target, so the
+        // handle's JS-facing constructor is exercised by the JS-side gates instead.
+        let mut resident = braid::Braid::new(
+            braid::BraidConfig::new(usfm_onion::lint::LintOptions::scoped(
+                usfm_onion::lint::LintScope::Book,
+            )),
+            || "minted".to_string(),
+        );
+        resident
+            .replace_corpus(braid::CorpusInput::new(vec![braid::BookInput::Usfm {
+                source_key: braid::SourceKey::new("PSA.usfm").unwrap(),
+                book: usfm_onion::token::BookId::from_str("PSA").unwrap(),
+                source: source.to_string(),
+            }]))
+            .expect("one book");
+
+        let resident_entries = match resident
+            .vref_index(braid::CorpusScope::Book(
+                usfm_onion::token::BookId::from_str("PSA").unwrap(),
+            ))
+            .expect("resident index")
+        {
+            braid::ScopedOutput::Single(entries) => entries,
+            other => panic!("a book scope returns one value, got {other:?}"),
+        };
+        let stateless = crate::stateless::wasm_vref_index_usfm(source);
+        let projected: Vec<(String, String)> = resident_entries
+            .iter()
+            .map(|entry| (entry.sid.clone(), entry.projection.text.clone()))
+            .collect();
+        let expected: Vec<(String, String)> = serde_json::to_value(&stateless)
+            .expect("serializes")
+            .as_array()
+            .expect("ordered pairs")
+            .iter()
+            .map(|pair| {
+                (
+                    pair[0].as_str().expect("sid").to_string(),
+                    pair[1]["text"].as_str().expect("text").to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(projected, expected, "resident must equal stateless");
+        // And the seam byte the projection preserves is actually in there, so this
+        // is comparing real content and not two empty lists.
+        assert!(projected[0].1.contains("gladness\nso that"));
+    }
+
     // --- native <-> wasm parity fixture (Gate 5) ---
     //
     // The Gate 4 tests above prove the DTO path *populates* text_diff and pin
@@ -2022,7 +784,11 @@ mod tests {
             .into_iter()
             .filter(|u| matches!(u.status, DecisionStatus::Modified))
             .collect::<Vec<_>>();
-        assert_eq!(modified.len(), 1, "fixture must have exactly one Modified unit");
+        assert_eq!(
+            modified.len(),
+            1,
+            "fixture must have exactly one Modified unit"
+        );
         modified.into_iter().next().unwrap().text_diff
     }
 
@@ -2041,7 +807,11 @@ mod tests {
             .iter()
             .filter(|u| matches!(u.status, NativeDecisionStatus::Modified))
             .collect::<Vec<_>>();
-        assert_eq!(modified.len(), 1, "fixture must have exactly one Modified unit");
+        assert_eq!(
+            modified.len(),
+            1,
+            "fixture must have exactly one Modified unit"
+        );
         native_unit_text_diff(modified[0], native_mode).map(Into::into)
     }
 

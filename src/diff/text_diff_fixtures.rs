@@ -78,7 +78,14 @@ mod tests {
         let matches: Vec<&DecisionUnit<T>> = skeleton
             .units
             .iter()
-            .filter(|u| pred(u.status, u.kind, u.baseline_sid.as_deref(), u.current_sid.as_deref()))
+            .filter(|u| {
+                pred(
+                    u.status,
+                    u.kind,
+                    u.baseline_sid.as_deref(),
+                    u.current_sid.as_deref(),
+                )
+            })
             .collect();
         assert_eq!(matches.len(), 1, "predicate must select exactly one unit");
         unit_text_diff(matches[0], mode)
@@ -124,15 +131,21 @@ mod tests {
             "\\id GEN\n\\c 1\n\\v 1 In the beginning God created the heaven and the earth.\n";
         let current =
             "\\id GEN\n\\c 1\n\\v 1 In the beginning God created the heavens and the earth.\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(
             diff.baseline,
             vec![
-                run("In the beginning God created the ", TextDiffRunKind::Unchanged),
+                run(
+                    "In the beginning God created the ",
+                    TextDiffRunKind::Unchanged
+                ),
                 run("heaven", TextDiffRunKind::Removed),
                 run(" and the earth.\n", TextDiffRunKind::Unchanged),
             ]
@@ -140,7 +153,10 @@ mod tests {
         assert_eq!(
             diff.current,
             vec![
-                run("In the beginning God created the ", TextDiffRunKind::Unchanged),
+                run(
+                    "In the beginning God created the ",
+                    TextDiffRunKind::Unchanged
+                ),
                 run("heavens", TextDiffRunKind::Added),
                 run(" and the earth.\n", TextDiffRunKind::Unchanged),
             ]
@@ -152,9 +168,12 @@ mod tests {
         // skeleton_fixtures.rs case 7: trailing whitespace added, no word change.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 one\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 one  \n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         // Only whitespace may appear in the Added/Removed runs — no run
@@ -190,8 +209,16 @@ mod tests {
         )
         .expect("chapter-open unit is Modified (bytes differ) and yields Some");
 
-        assert!(diff.baseline.iter().all(|r| r.kind == TextDiffRunKind::Unchanged));
-        assert!(diff.current.iter().all(|r| r.kind == TextDiffRunKind::Unchanged));
+        assert!(
+            diff.baseline
+                .iter()
+                .all(|r| r.kind == TextDiffRunKind::Unchanged)
+        );
+        assert!(
+            diff.current
+                .iter()
+                .all(|r| r.kind == TextDiffRunKind::Unchanged)
+        );
         let baseline_text: String = diff.baseline.iter().map(|r| r.text.as_str()).collect();
         let current_text: String = diff.current.iter().map(|r| r.text.as_str()).collect();
         assert_eq!(
@@ -205,9 +232,12 @@ mod tests {
         // skeleton_fixtures.rs case 10: two verses swap position, byte-equal.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 First verse.\n\\v 2 Second verse.\n";
         let current = "\\id GEN\n\\c 1\n\\v 2 Second verse.\n\\v 1 First verse.\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Moved
-        });
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Moved,
+        );
         assert_eq!(diff, None);
     }
 
@@ -217,9 +247,12 @@ mod tests {
         // sid only; text is byte-equal (status stays Unchanged, not Moved).
         let baseline = "\\id GEN\n\\c 1\n\\v 1 a\n\\v 2 b\n\\v 1 c\n";
         let current = "\\id GEN\n\\c 1\n\\v 2 b\n\\v 1 c\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |_, kind, _, _| {
-            kind == DecisionUnitKind::Coalesced
-        });
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |_, kind, _, _| kind == DecisionUnitKind::Coalesced,
+        );
         assert_eq!(diff, None);
     }
 
@@ -228,9 +261,12 @@ mod tests {
         // skeleton_fixtures.rs case 4: verse 3 added.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 one\n\\v 2 two\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Added
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Added,
+        )
         .expect("Added unit yields Some");
 
         assert_eq!(diff.baseline, vec![]);
@@ -242,9 +278,12 @@ mod tests {
         // skeleton_fixtures.rs case 5: verse 2 ("two") deleted.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 one\n\\v 2 two\n\\v 3 three\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 one\n\\v 3 three\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Deleted
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Deleted,
+        )
         .expect("Deleted unit yields Some");
 
         assert_eq!(diff.baseline, vec![run("two\n", TextDiffRunKind::Removed)]);
@@ -270,9 +309,12 @@ mod tests {
         // not assumed.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 Text\\f + \\ft a note\\f* more.\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 Text\\f + \\ft an edited note\\f* more.\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(
@@ -305,9 +347,12 @@ mod tests {
     fn repeated_words_ambiguous_alignment_has_one_deterministic_layout() {
         let baseline = "\\id GEN\n\\c 1\n\\v 1 the the the\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 the the\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         // Myers picks the earliest/leftmost matching subsequence: the first
@@ -323,13 +368,19 @@ mod tests {
                 run("\n", TextDiffRunKind::Unchanged),
             ]
         );
-        assert_eq!(diff.current, vec![run("the the\n", TextDiffRunKind::Unchanged)]);
+        assert_eq!(
+            diff.current,
+            vec![run("the the\n", TextDiffRunKind::Unchanged)]
+        );
 
         // Determinism: re-running the whole pipeline produces the exact
         // same layout, not merely an equally-valid alternative alignment.
-        let again = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        });
+        let again = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        );
         assert_eq!(Some(diff), again);
     }
 
@@ -348,9 +399,12 @@ mod tests {
         // linguistically wrong for a contraction.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 They don't know.\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 They don\u{2019}t know.\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(
@@ -383,9 +437,12 @@ mod tests {
         // text).
         let baseline = "\\id GEN\n\\c 1\n\\v 1 \u{05D0}\u{05D5}\u{05E8}\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 \u{05D0}\u{05D5}\u{05BC}\u{05E8}\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Chars, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Chars,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(
@@ -417,9 +474,12 @@ mod tests {
         // segmentation one.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 \u{0641}\u{064A} \u{0627}\u{0644}\u{0628}\u{062F}\u{0621} \u{062E}\u{0644}\u{0642} \u{0627}\u{0644}\u{0644}\u{0647}\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 \u{0641}\u{064A} \u{0627}\u{0644}\u{0628}\u{062F}\u{0621} \u{062E}\u{0644}\u{0642} \u{0627}\u{0644}\u{0631}\u{0628}\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(
@@ -460,15 +520,21 @@ mod tests {
         // prefix, not a scatter of single-character runs.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}\u{0E42}\u{0E25}\u{0E01}\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 \u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}\u{0E1B}\u{0E23}\u{0E30}\u{0E40}\u{0E17}\u{0E28}\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(
             diff.baseline,
             vec![
-                run("\u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}", TextDiffRunKind::Unchanged),
+                run(
+                    "\u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}",
+                    TextDiffRunKind::Unchanged
+                ),
                 run("\u{0E42}\u{0E25}\u{0E01}", TextDiffRunKind::Removed),
                 run("\n", TextDiffRunKind::Unchanged),
             ]
@@ -476,7 +542,10 @@ mod tests {
         assert_eq!(
             diff.current,
             vec![
-                run("\u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}", TextDiffRunKind::Unchanged),
+                run(
+                    "\u{0E2A}\u{0E27}\u{0E31}\u{0E2A}\u{0E14}\u{0E35}",
+                    TextDiffRunKind::Unchanged
+                ),
                 run(
                     "\u{0E1B}\u{0E23}\u{0E30}\u{0E40}\u{0E17}\u{0E28}",
                     TextDiffRunKind::Added
@@ -494,9 +563,12 @@ mod tests {
         // run.
         let baseline = "\\id GEN\n\\c 1\n\\v 1 Hello, world!\n";
         let current = "\\id GEN\n\\c 1\n\\v 1 Hello, there!\n";
-        let diff = text_diff_agreeing_across_shapes(baseline, current, TextDiffMode::Words, |status, _, _, _| {
-            status == DecisionStatus::Modified
-        })
+        let diff = text_diff_agreeing_across_shapes(
+            baseline,
+            current,
+            TextDiffMode::Words,
+            |status, _, _, _| status == DecisionStatus::Modified,
+        )
         .expect("Modified unit yields Some");
 
         assert_eq!(

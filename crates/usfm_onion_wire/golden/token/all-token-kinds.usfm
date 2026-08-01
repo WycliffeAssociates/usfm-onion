@@ -1,0 +1,6 @@
+\id GEN Some Book
+\c 1
+\p text // more
+\w word|strong="H1"\w* and \add \+nd Lord\+nd*\add*
+\qt-s |x="y"\*inside\qt-e\*
+\v 1-2 bridge

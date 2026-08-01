@@ -1,6 +1,6 @@
 {
   "name": "usfm-onion-web",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "description": "WebAssembly bindings for usfm_onion",
   "license": "MIT",
   "type": "module",
@@ -9,7 +9,8 @@
     "./pkg-web/usfm_onion_web.js"
   ],
   "files": [
-    "js",
+    "js/*.js",
+    "js/*.d.ts",
     "pkg-bundler",
     "pkg-web",
     "README.md",
@@ -27,6 +28,14 @@
     "./token-sids": {
       "types": "./js/token-sids.d.ts",
       "default": "./js/token-sids.js"
+    },
+    "./packed": {
+      "types": "./js/packed.d.ts",
+      "default": "./js/packed.js"
+    },
+    "./wire-schema": {
+      "types": "./js/wire-schema.d.ts",
+      "default": "./js/wire-schema.js"
     }
   },
   "types": "./pkg-bundler/usfm_onion_web.d.ts",
@@ -39,14 +48,25 @@
     "build:wasm:web:dev": "node scripts/build-wasm.mjs web --dev",
     "check:wasm:web": "cargo check --manifest-path crates/usfm_onion_wasm/Cargo.toml --target wasm32-unknown-unknown",
     "test:token-sids:import": "node --input-type=module --eval \"import { normalizeTokenSids } from 'usfm-onion-web/token-sids'; if (typeof normalizeTokenSids !== 'function') process.exit(1)\"",
+    "test:wire-schema:import": "node scripts/test-wire-schema-import.mjs",
+    "build:equivalence-emitter": "cargo build --release --example emit_token_equivalence -p usfm_onion_wire",
+    "test:packed:types": "tsc --noEmit -p tsconfig.packed-fixture.json",
+    "test:packed": "npm run test:packed:types && npm run build:wasm:bundler:dev && npm run build:equivalence-emitter && node --experimental-wasm-modules scripts/test-packed-equivalence.mjs bundler",
+    "test:packed:web": "npm run build:wasm:web:dev && npm run build:equivalence-emitter && node scripts/test-packed-equivalence.mjs web",
     "test:wasm:bundler": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-web-package.mjs bundler && node --experimental-wasm-modules scripts/test-token-sids.mjs bundler",
     "test:wasm:web": "npm run build:wasm:web:dev && node scripts/test-web-package.mjs web && node scripts/test-token-sids.mjs web",
     "test:wasm": "npm run test:wasm:bundler && npm run test:wasm:web",
+    "generate:parity-transcript": "cargo test -p usfm_onion_wasm --lib -- --ignored generate_parity_transcript",
+    "test:parity": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-parity.mjs bundler",
+    "test:parity:web": "npm run build:wasm:web:dev && node scripts/test-parity.mjs web",
     "golden:wasm": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
     "golden:wasm:update": "npm run build:wasm:bundler:dev && UPDATE_GOLDEN=1 node --experimental-wasm-modules scripts/wasm-golden.mjs bundler",
     "golden:wasm:web": "npm run build:wasm:web:dev && node scripts/wasm-golden.mjs web",
     "bench:wasm": "npm run build:wasm:bundler && node --experimental-wasm-modules benches/wasm/run.mjs bundler",
     "bench:wasm:web": "npm run build:wasm:web && node benches/wasm/run.mjs web",
     "bench:wasm:report": "npm run build:wasm:bundler && BENCH_OUT=BENCH_RESULTS_WASM.md node --experimental-wasm-modules benches/wasm/run.mjs bundler"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

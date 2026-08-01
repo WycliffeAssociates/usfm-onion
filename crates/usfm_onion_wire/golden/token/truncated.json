@@ -1,0 +1,7 @@
+{
+  "name": "truncated",
+  "kind": "malformed",
+  "base": "all-token-kinds",
+  "expectedError": "Truncated",
+  "proves": "a buffer chopped mid-container rejects rather than reading past its end"
+}

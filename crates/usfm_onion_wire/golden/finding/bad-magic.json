@@ -1,0 +1,7 @@
+{
+  "name": "bad-magic",
+  "kind": "malformed",
+  "base": "several-codes",
+  "expectedError": "BadMagic",
+  "proves": "a buffer not starting with the container magic rejects immediately"
+}

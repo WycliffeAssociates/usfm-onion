@@ -1,0 +1,7 @@
+{
+  "name": "patch-row-position-out-of-range",
+  "kind": "malformed",
+  "base": "whitespace-fix-patch",
+  "expectedError": "InvalidSection",
+  "proves": "a patch row naming a token position the paired token section does not have rejects rather than resolving a target id out of bounds"
+}

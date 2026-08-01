@@ -22,9 +22,7 @@ impl SidKey<'_> {
     /// old per-token `DiffableToken::sid_string().unwrap_or_default()`.
     fn to_sid_string(&self) -> String {
         match self {
-            SidKey::Compact(sid) => {
-                format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator())
-            }
+            SidKey::Compact(sid) => sid.to_string(),
             SidKey::Text(text) => (*text).to_owned(),
             SidKey::Empty => String::new(),
         }
@@ -96,8 +94,7 @@ pub trait DiffableToken: Clone {
 
 impl<'a> DiffableToken for Token<'a> {
     fn sid_string(&self) -> Option<String> {
-        self.sid
-            .map(|sid| format!("{} {}:{}", sid.book, sid.chapter, sid.verse_locator()))
+        self.sid.map(|sid| sid.to_string())
     }
 
     fn sid_key(&self) -> SidKey<'_> {
@@ -180,11 +177,22 @@ impl DiffableToken for FormatToken {
 /// Duplicate verses get a per-chapter `_dup_N` positional suffix; the key
 /// includes the range end, so `GEN 1:1` and `GEN 1:1-2` never share a
 /// counter. Chapter-open and intro blocks are `BOOK CHAPTER:0` / `BOOK 0:0`.
+///
+/// A repeated `\c` label (the same chapter number opened more than once in
+/// one stream) gets a per-book positional `_cdup_N` suffix on every sid it
+/// produces, riding in the verse segment rather than the chapter segment so
+/// the chapter number stays a bare, always-parseable integer for existing
+/// consumers (e.g. `diff::skeleton::pairing_key`, which parses the chapter
+/// segment strictly and only tolerates trailing `_`-delimited content after
+/// the verse digits). Verse-duplicate counting resets for every chapter
+/// occurrence, matching how it already resets on every `\c`.
 pub fn derive_canonical_sids<T: DiffableToken>(tokens: &[T], book_code: &str) -> Vec<String> {
     let mut out = Vec::with_capacity(tokens.len());
     let mut chapter: u32 = 0;
+    let mut chapter_suffix = String::new();
     let mut current = format!("{book_code} 0:0");
     let mut seen_this_chapter = FxHashMap::<String, u32>::default();
+    let mut seen_chapters = FxHashMap::<u32, u32>::default();
 
     for (index, token) in tokens.iter().enumerate() {
         if token.kind_key() == Some("marker") {
@@ -192,7 +200,14 @@ pub fn derive_canonical_sids<T: DiffableToken>(tokens: &[T], book_code: &str) ->
                 Some("c") => {
                     if let Some((start, _)) = tokens.get(index + 1).and_then(T::number_range) {
                         chapter = start;
-                        current = format!("{book_code} {chapter}:0");
+                        let occurrence = seen_chapters.entry(chapter).or_insert(0);
+                        chapter_suffix = if *occurrence > 0 {
+                            format!("_cdup_{occurrence}")
+                        } else {
+                            String::new()
+                        };
+                        *occurrence += 1;
+                        current = format!("{book_code} {chapter}:0{chapter_suffix}");
                         seen_this_chapter.clear();
                     }
                 }
@@ -200,9 +215,9 @@ pub fn derive_canonical_sids<T: DiffableToken>(tokens: &[T], book_code: &str) ->
                     if let Some((start, end)) = tokens.get(index + 1).and_then(T::number_range) {
                         let verse_end = end.unwrap_or(start);
                         let range_base = if verse_end != start {
-                            format!("{book_code} {chapter}:{start}-{verse_end}")
+                            format!("{book_code} {chapter}:{start}-{verse_end}{chapter_suffix}")
                         } else {
-                            format!("{book_code} {chapter}:{start}")
+                            format!("{book_code} {chapter}:{start}{chapter_suffix}")
                         };
                         let occurrence = seen_this_chapter.entry(range_base.clone()).or_insert(0);
                         current = if *occurrence > 0 {
@@ -518,6 +533,75 @@ mod canonical_sid_tests {
         assert_eq!(sids[a_index], "GEN 1:1");
         assert_eq!(sids[b_index], "GEN 1:1-2");
         assert_eq!(sids[c_index], "GEN 1:1-2_dup_1");
+    }
+
+    #[test]
+    fn repeated_chapter_label_gets_a_positional_cdup_suffix() {
+        let parsed = parse("\\id GEN\n\\c 1\n\\v 1 first\n\\c 1\n\\v 1 second\n");
+        let sids = derive_canonical_sids(&parsed.tokens, "GEN");
+        let first_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "first")
+            .unwrap();
+        let second_index = parsed
+            .tokens
+            .iter()
+            .position(|t| t.source.trim() == "second")
+            .unwrap();
+        assert_eq!(sids[first_index], "GEN 1:1");
+        assert_eq!(sids[second_index], "GEN 1:1_cdup_1");
+    }
+
+    #[test]
+    fn repeated_chapter_resets_verse_duplicate_counting() {
+        // Both chapter occurrences repeat \v 1; the second occurrence's own
+        // internal repeat must get `_dup_1` scoped to that occurrence, not a
+        // running count carried over from the first chapter.
+        let parsed = parse("\\id GEN\n\\c 1\n\\v 1 a\n\\v 1 b\n\\c 1\n\\v 1 c\n\\v 1 d\n");
+        let sids = derive_canonical_sids(&parsed.tokens, "GEN");
+        let index_of = |text: &str| {
+            parsed
+                .tokens
+                .iter()
+                .position(|t| t.source.trim() == text)
+                .unwrap()
+        };
+        assert_eq!(sids[index_of("a")], "GEN 1:1");
+        assert_eq!(sids[index_of("b")], "GEN 1:1_dup_1");
+        assert_eq!(sids[index_of("c")], "GEN 1:1_cdup_1");
+        assert_eq!(sids[index_of("d")], "GEN 1:1_cdup_1_dup_1");
+    }
+
+    #[test]
+    fn a_third_chapter_occurrence_gets_its_own_positional_suffix() {
+        let parsed = parse("\\id GEN\n\\c 1\n\\v 1 a\n\\c 1\n\\v 1 b\n\\c 1\n\\v 1 c\n");
+        let sids = derive_canonical_sids(&parsed.tokens, "GEN");
+        let index_of = |text: &str| {
+            parsed
+                .tokens
+                .iter()
+                .position(|t| t.source.trim() == text)
+                .unwrap()
+        };
+        assert_eq!(sids[index_of("a")], "GEN 1:1");
+        assert_eq!(sids[index_of("b")], "GEN 1:1_cdup_1");
+        assert_eq!(sids[index_of("c")], "GEN 1:1_cdup_2");
+    }
+
+    #[test]
+    fn chapter_open_pseudo_sid_also_carries_the_cdup_suffix() {
+        let parsed = parse("\\id GEN\n\\c 1\n\\p\n\\v 1 a\n\\c 1\n\\p\n\\v 1 b\n");
+        let sids = derive_canonical_sids(&parsed.tokens, "GEN");
+        let p_indices: Vec<_> = parsed
+            .tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| matches!(t.data, crate::token::TokenData::Marker { name: "p", .. }))
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(sids[p_indices[0]], "GEN 1:0");
+        assert_eq!(sids[p_indices[1]], "GEN 1:0_cdup_1");
     }
 }
 
