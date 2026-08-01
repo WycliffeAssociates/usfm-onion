@@ -4762,3 +4762,90 @@ before/after: empty for both `pkg-bundler`/`pkg-web` (this round changed
 behavior, not any public shape) — only the `.wasm` binaries moved; both
 regenerated (release profile, matching the existing 0.1.0 packages) and
 committed. Fresh-clone build+test verified after commit.
+
+## 2026-08-01 — Clean-room re-review: closing round, two narrow P1s
+
+Re-review of the previous round confirmed four of six fixed and accepted
+the restore parity lane; two narrow P1s remained.
+
+**P1-A — `reconcileFindings`'s shortcut was count-based, not slot-based
+(`js/packed.js`).** Root cause: one-to-one consumption (landed in the prior
+round) made the *count* of reused candidates a sound proxy for "nothing was
+added or dropped", but not for "nothing changed" -- a genuine reorder
+(previous `[A, B]`; next asking for `[B, A]`) consumes every candidate
+one-to-one exactly like the unchanged case, so the count-only check
+returned `previous` itself, in its stale order. Fixed by requiring every
+output slot to be object-identical to `previous` at the same position
+(`out.every((finding, i) => finding === previous[i])`) before taking the
+shortcut -- the only check that is actually true if and only if nothing
+observably changed. Regression: the reviewer's exact reorder repro, plus
+the unchanged-order case kept as a positive control that the shortcut still
+fires when it should (`scripts/test-packed-equivalence.mjs`).
+
+**P1-B — warm restore hardcoded `suppressedCount: 0`
+(`crates/usfm_onion_wasm/src/resident.rs`).** Root cause: `summarize_findings`
+(the prior round's P1.2 fix) recomputes every summary field it *can* derive
+from the packed `Vec<LintIssue>`, but a suppressed finding is dropped
+before packing -- the packed format carries no `suppressed_count` at all --
+so the recomputed summary silently claimed `0` regardless of how many
+findings the original publish actually suppressed. Took the owner's
+directed DECLINE arm rather than a wire-format change: restore adoption
+already requires the batch's stamps to match this resident's own live
+config (`LintConfigFingerprint`/`LintEngineStamp`), so the restoring side's
+current `LintOptions` are exactly the config a summary would need to be
+judged against. When that live config has any suppression configured
+(`!self.inner.config().lint.suppressed.is_empty()`), the count is
+unknowable from bytes alone, so `restore_corpus` now declines to build a
+`BookLintPrime` for any book in that batch at all -- the book still seeds
+(residency and lint-priming are independent facts, as they already were for
+a `SourceHashMismatch`-style prime rejection) with no cached lint result,
+and the next `lint()` call recomputes the whole thing -- findings and
+summary, including the true suppressed count -- honestly from source. When
+the config carries no suppression, `suppressed_count` is provably `0` and
+priming is unchanged. Persisting summary counts in the packed format itself
+was the considered alternative; deferred as a schema change, a candidate
+for after this release.
+
+Hardening required alongside P1-B, because the reviewer showed the gates
+were structurally blind to this exact shape of bug:
+- The P1.2 regression's summary comparison now goes through
+  `assert_summaries_match`, which destructures both `dto::LintSummary`
+  values exhaustively (no `..`) field-by-field before comparing -- the same
+  discipline `hash_wire_identity` uses, so a summary field silently
+  dropping from the comparison (exactly how `suppressed_count` escaped
+  before) is a compile error here, not a silent gap.
+- New regression
+  (`restore_corpus_declines_to_prime_a_summary_a_suppressing_config_cannot_recompute_from_bytes`):
+  a config that suppresses one real finding publishes, encodes, and
+  restores into a fresh instance with the same suppressing config; asserts
+  the book still seeds with nothing in `rejected` (priming was never
+  attempted, so there is nothing to reject), that findings are still
+  returned by the post-restore `lint()`, and that the recomputed summary
+  -- suppressed count included -- matches the original publish exactly.
+- The parity transcript's restore lane gained a suppressed-config case
+  (`run_restore_suppressed` in `crates/usfm_onion_wasm/src/parity.rs`,
+  steps `restore_corpus_suppressed`/`restore_corpus_suppressed_then_lint`):
+  the existing restore fixture used `suppressed: []`, which is exactly why
+  it could not see this defect. Since every other step in the transcript
+  shares one top-level `suppressed`-free config, this step carries its own
+  config in `args.config`; `scripts/test-parity.mjs`'s fresh-instance
+  construction now prefers a step's own `args.config` over the shared
+  `transcript.config` when present.
+
+Gates (this round): `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 11+19+12+28+7+7+10+7 = 101 across
+its integration suites, usfm_onion 291, usfm_onion_wasm 38, usfm_onion_wire
+196+2); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green, both re-registered
+wire corpus tests (`corpus_tokens_round_trip_through_the_boundary_dto`,
+`corpus_owned_token_sections_round_trip`) confirmed running, plus the
+parity generator itself; `npm run test:packed`/`test:packed:web` green (410
+cases / 5,717,153 tokens, including the P1-A reorder regression); `npm run
+test:parity`/`test:parity:web` green (62 steps -- up from 58, the new
+suppressed-config case x2 lanes -- 0 divergences, both targets); `npm run
+golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt --all --
+--check` clean (one indentation fix folded in). `.d.ts`/`.js` diff:
+unchanged for both `pkg-bundler`/`pkg-web` -- only `.wasm` binaries moved,
+regenerated via `npm run build` and committed. Fresh-clone build+test
+verified green after commit.

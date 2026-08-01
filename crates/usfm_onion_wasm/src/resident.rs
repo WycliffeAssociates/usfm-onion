@@ -262,6 +262,18 @@ impl Braid {
         // that carry stamps must all carry the same stamps" — itself: nothing
         // else here ever compares one record's stamps against another's.
         let mut agreed_stamps: Option<usfm_onion_wire::corpus_codec::LintStamps> = None;
+        // Restore adoption already requires stamp equality with this resident's
+        // OWN config, so the restoring side's live `LintOptions` -- not anything
+        // in the packed bytes -- is the config a primed summary would be judged
+        // against. Packed bytes carry the post-suppression `Vec<LintIssue>` (each
+        // one individually correct) but never a `suppressed_count`: with any
+        // suppression configured that count is unknowable from the bytes alone,
+        // so it must not be primed into the cache as if it were known. Findings
+        // themselves are still valid and still seed; only the summary is
+        // withheld, and the next `lint()` recomputes it honestly. A schema change
+        // to persist summary counts in the packed format was considered and
+        // deferred (see the ledger) as a candidate for after this release.
+        let summary_unknowable = !self.inner.config().lint.suppressed.is_empty();
         for record in &records {
             let source = match std::str::from_utf8(&record.source) {
                 Ok(source) => source,
@@ -330,16 +342,20 @@ impl Braid {
                 // The findings the container carried are adoptable only if its own
                 // stamps say what produced them; braid re-checks them against the
                 // resident configuration before it trusts any of it.
-                lint: verified.lint_stamps.map(|_| braid::BookLintPrime {
-                    book,
-                    source_hash: braid::SourceHash(
-                        u64::from_str_radix(&verified.receipt.source_hash, 16).unwrap_or_default(),
-                    ),
-                    result: usfm_onion::lint::LintResult {
-                        summary: summarize_findings(&verified.findings),
-                        issues: verified.findings,
-                    },
-                }),
+                lint: (!summary_unknowable)
+                    .then_some(())
+                    .and(verified.lint_stamps)
+                    .map(|_| braid::BookLintPrime {
+                        book,
+                        source_hash: braid::SourceHash(
+                            u64::from_str_radix(&verified.receipt.source_hash, 16)
+                                .unwrap_or_default(),
+                        ),
+                        result: usfm_onion::lint::LintResult {
+                            summary: summarize_findings(&verified.findings),
+                            issues: verified.findings,
+                        },
+                    }),
             });
         }
 
@@ -1808,6 +1824,52 @@ mod restore_tests {
         }
     }
 
+    /// Field-by-field, via exhaustive destructuring (no `..`) of both sides:
+    /// `dto::LintSummary` derives no `PartialEq` (a boundary DTO, not a value
+    /// type production code compares), but a plain per-field `assert_eq!`
+    /// list is exactly the shape that let `suppressed_count` silently drop
+    /// out of a prior version of this comparison. Destructuring means a new
+    /// summary field fails to *compile* here until this helper accounts for
+    /// it -- the same drift-proof discipline `hash_wire_identity` uses.
+    fn assert_summaries_match(actual: crate::dto::LintSummary, expected: crate::dto::LintSummary) {
+        let crate::dto::LintSummary {
+            by_category: actual_by_category,
+            by_severity: actual_by_severity,
+            by_issue_type: actual_by_issue_type,
+            total_count: actual_total_count,
+            suppressed_count: actual_suppressed_count,
+        } = actual;
+        let crate::dto::LintSummary {
+            by_category: expected_by_category,
+            by_severity: expected_by_severity,
+            by_issue_type: expected_by_issue_type,
+            total_count: expected_total_count,
+            suppressed_count: expected_suppressed_count,
+        } = expected;
+        assert_eq!(
+            actual_total_count, expected_total_count,
+            "total_count must match"
+        );
+        assert_eq!(
+            actual_by_category, expected_by_category,
+            "by_category must match"
+        );
+        assert_eq!(
+            actual_by_severity, expected_by_severity,
+            "by_severity must match"
+        );
+        assert_eq!(
+            actual_by_issue_type, expected_by_issue_type,
+            "by_issue_type must match"
+        );
+        assert_eq!(
+            actual_suppressed_count, expected_suppressed_count,
+            "suppressed_count must match -- packed bytes cannot carry it, so a \
+             restore must either recompute it honestly or decline to prime a \
+             summary at all, never claim a stale 0"
+        );
+    }
+
     /// P1.2: a warm reopen must report the same summary a live publish-then-
     /// lint of the same content would — never a zeroed placeholder with
     /// findings plainly present beside it.
@@ -1842,18 +1904,7 @@ mod restore_tests {
         assert!(report.rejected.is_empty(), "{:?}", report.rejected);
 
         let snapshot = reopened.lint();
-        let actual_summary = snapshot.summary;
-        // dto::LintSummary derives no PartialEq (it is a boundary DTO, not a
-        // value type production code compares), so this compares the same
-        // fields a real regression would diverge on, field by field.
-        assert_eq!(
-            actual_summary.total_count, expected_summary.total_count,
-            "a warm reopen's summary must match a live lint of the same content, \
-             not report zero findings while findings are present"
-        );
-        assert_eq!(actual_summary.by_category, expected_summary.by_category);
-        assert_eq!(actual_summary.by_severity, expected_summary.by_severity);
-        assert_eq!(actual_summary.by_issue_type, expected_summary.by_issue_type);
+        assert_summaries_match(snapshot.summary, expected_summary);
     }
 
     /// P1.3: two records individually verify fine but carry different
@@ -1927,5 +1978,75 @@ mod restore_tests {
             "a refused restore must leave resident state exactly as it was"
         );
         assert!(before_books.is_empty(), "the fresh handle started empty");
+    }
+
+    fn suppressing_resident() -> Braid {
+        let mut next = 0u32;
+        let mut options = LintOptions::scoped(LintScope::Book);
+        options.suppressed = vec![usfm_onion::lint::LintSuppression {
+            code: usfm_onion::lint::LintCode::DuplicateVerseNumber,
+            sid: "GEN 1:1".to_string(),
+        }];
+        Braid {
+            inner: braid::Braid::new(BraidConfig::new(options), move || {
+                next += 1;
+                format!("minted-{next}")
+            }),
+        }
+    }
+
+    /// P1-B: packed bytes carry the post-suppression `Vec<LintIssue>` but no
+    /// `suppressed_count` at all, so a config with any suppression configured
+    /// makes that count unknowable from the bytes alone. A restore must not
+    /// prime a cached summary that quietly claims `0` for it -- it must
+    /// decline to prime the cache for the affected book, let the book seed
+    /// with no lint result, and let the next `lint()` recompute the whole
+    /// thing (findings and summary alike) honestly.
+    #[test]
+    fn restore_corpus_declines_to_prime_a_summary_a_suppressing_config_cannot_recompute_from_bytes()
+    {
+        let mut original = suppressing_resident();
+        original
+            .inner
+            .replace_corpus(NativeCorpusInput::new(vec![NativeBookInput::Usfm {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: book_id("GEN"),
+                source: "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n".to_string(),
+            }]))
+            .expect("one book");
+        let expected_summary = original.lint().summary;
+        assert!(
+            expected_summary.suppressed_count >= 1,
+            "the fixture must actually suppress a finding"
+        );
+
+        let stamps = current_stamps(&original.inner);
+        let (packed, source) = encode_one_book(&mut original.inner, book_id("GEN"), stamps);
+
+        let mut reopened = suppressing_resident();
+        let outcome = reopened.restore_corpus(vec![record("GEN.usfm", packed, &source)]);
+        let ApiResult::Ok { value: report } = outcome.0 else {
+            panic!("a fresh, matching-stamp restore must still seed the book: {outcome:?}");
+        };
+        // The book still seeds -- residency and lint-priming are independent
+        // facts -- and this is not a *rejection* either: priming was never
+        // attempted for it, so there is nothing to report as refused.
+        assert_eq!(report.seeded, vec!["GEN".to_string()]);
+        assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+
+        // The post-restore recompute must still return findings, and the
+        // summary it recomputes -- including the suppressed count a cached
+        // summary could never have supplied -- must match the original.
+        let snapshot = reopened.lint();
+        let restored_book = snapshot
+            .books
+            .iter()
+            .find(|entry| entry.book == "GEN")
+            .expect("GEN is resident");
+        assert!(
+            !restored_book.findings.is_empty(),
+            "findings must still be returned after the honest recompute"
+        );
+        assert_summaries_match(snapshot.summary, expected_summary);
     }
 }

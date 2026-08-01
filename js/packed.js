@@ -772,23 +772,23 @@ export function reconcileFindings(previous, next) {
     pool.push(finding);
   }
 
-  let reused = 0;
   const out = (next ?? []).map((finding) => {
     const pool = pools.get(findingIdentity(finding));
     const index = pool?.findIndex((candidate) => sameFindingValue(candidate, finding)) ?? -1;
     if (index === -1) return finding;
     const [candidate] = pool.splice(index, 1);
-    reused += 1;
     return candidate;
   });
   // The shortcut — return `previous` itself so a caller can skip a re-render
-  // on identity alone — is only sound when every slot matched one-to-one:
-  // `reused === out.length` alone does not prove that (two `next` findings
-  // could both have matched the same still-in-the-pool candidate before it
-  // was consumed), so this also requires every `previous` finding to have
-  // been drained from its pool, which one-to-one consumption above already
-  // guarantees whenever the counts agree.
-  if (reused === out.length && out.length === (previous?.length ?? 0)) return previous;
+  // on identity alone — is only sound when the array is unchanged in BOTH
+  // membership and order: a reorder (e.g. previous [A, B], next asking for
+  // [B, A]) consumes every candidate one-to-one just like the unchanged
+  // case, so a count-only check can't tell them apart and would return
+  // `previous` with the wrong order. Require every slot to be the same
+  // object at the same position.
+  if (out.length === (previous?.length ?? 0) && out.every((finding, i) => finding === previous[i])) {
+    return previous;
+  }
   return out;
 }
 

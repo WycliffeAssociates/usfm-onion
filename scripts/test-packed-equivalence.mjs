@@ -602,6 +602,30 @@ for (const file of corpusPaths) {
   assert.notEqual(moreNext[2], findingA2, "no third pooled candidate exists to reuse");
 }
 
+// The "return previous itself" shortcut must be slot-based, not count-based:
+// a genuine reorder consumes every candidate one-to-one just like the
+// unchanged case, so a count-only check can't distinguish them and would
+// wrongly hand back `previous` in its stale order.
+{
+  const base = { code: "test-code", severity: "warning", marker: null, span: null, relatedSpan: null };
+  const findingA = { ...base, tokenId: "t-1", message: "message A" };
+  const findingB = { ...base, tokenId: "t-2", message: "message B" };
+
+  const reordered = reconcileFindings(
+    [findingA, findingB],
+    [{ ...findingB }, { ...findingA }],
+  );
+  assert.equal(reordered.length, 2, "two requested findings, two results");
+  assert.equal(reordered[0], findingB, "slot 0 must reuse B, not fall through to previous's slot 0 (A)");
+  assert.equal(reordered[1], findingA, "slot 1 must reuse A, not fall through to previous's slot 1 (B)");
+
+  // The unchanged (same order) case still takes the shortcut and returns
+  // `previous` itself, object-identical.
+  const previous = [findingA, findingB];
+  const unchanged = reconcileFindings(previous, [{ ...findingA }, { ...findingB }]);
+  assert.equal(unchanged, previous, "an unchanged order still returns previous itself");
+}
+
 await rm(workRoot, { recursive: true, force: true });
 
 console.log(

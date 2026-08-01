@@ -126,6 +126,13 @@ const METHODS = {
   // Continues on the same just-restored instance (see FRESH_INSTANCE_STEPS)
   // rather than replaying restore_corpus's own args.
   restore_corpus_then_lint: { js: "lint", wrapped: false, args: () => [] },
+  // The suppressed-config case: a restoring config with any suppression
+  // configured must decline to prime a cached summary rather than claim a
+  // stale suppressedCount of 0. This step's own `args.config` (not the
+  // shared `transcript.config`) is what the fresh instance below is built
+  // from, since it deliberately differs from every other step's config.
+  restore_corpus_suppressed: { js: "restoreCorpus", wrapped: true, args: (a) => [a.records] },
+  restore_corpus_suppressed_then_lint: { js: "lint", wrapped: false, args: () => [] },
 };
 
 /** Steps that build their own fresh `Braid` rather than continuing the
@@ -140,6 +147,7 @@ const FRESH_INSTANCE_STEPS = new Set([
   "replace_corpus_malformed",
   "replace_corpus_duplicate_token_id",
   "restore_corpus",
+  "restore_corpus_suppressed",
 ]);
 
 function makeMinter() {
@@ -172,7 +180,10 @@ function runLane(lane, steps) {
     const method = METHODS[entry.step];
     assert.ok(method, `${target}/${lane}/${entry.step}: no method mapping registered`);
     if (FRESH_INSTANCE_STEPS.has(entry.step)) {
-      braid = new wasm.Braid(transcript.config, makeMinter());
+      // A step can carry its own config (see `restore_corpus_suppressed`)
+      // when it deliberately needs one different from every other step's
+      // shared `transcript.config`; otherwise fall back to that shared one.
+      braid = new wasm.Braid(entry.args.config ?? transcript.config, makeMinter());
     }
     let actual;
     try {

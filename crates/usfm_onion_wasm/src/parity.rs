@@ -809,6 +809,129 @@ fn run_restore(lane: &str, steps: &mut Vec<Step>) {
     });
 }
 
+fn suppressed_lint_options() -> DtoLintOptions {
+    DtoLintOptions {
+        scope: DtoLintScope::Book,
+        enabled_codes: None,
+        disabled_codes: Vec::new(),
+        suppressed: vec![dto::LintSuppression {
+            code: dto::LintCode::DuplicateVerseNumber,
+            sid: "GEN 1:1".to_string(),
+        }],
+        allow_implicit_chapter_content_verse: false,
+    }
+}
+
+fn suppressed_braid_config() -> braid::BraidConfig {
+    braid::BraidConfig::new(dto::lint_options_into_native(suppressed_lint_options()))
+}
+
+/// The suppressed-config case the plain `run_restore` fixture (`suppressed:
+/// []`) could not see: packed bytes carry no `suppressed_count` at all, so a
+/// restoring config with any suppression configured must decline to prime a
+/// cached summary rather than claim a stale `0` — this is the transcript-level
+/// regression for that fix. Builds with `suppressed_braid_config()` on both
+/// the publishing and the restoring side, since restore adoption always
+/// judges packed findings against the *restoring* side's own live config, not
+/// anything carried in the bytes.
+///
+/// Both `Braid`s here need a config the node side can't get from
+/// `transcript.config` (that top-level config is what every other step in the
+/// transcript shares, and must stay suppression-free for them) — so this
+/// step's own `args.config` carries it, and the harness constructs the fresh
+/// restoring instance from that instead of the shared default.
+fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
+    use usfm_onion_wire::corpus_codec::{
+        CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
+        encode_corpus,
+    };
+
+    const SOURCE: &str = "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n";
+
+    let mut publisher = NativeBraid::new(suppressed_braid_config(), minter());
+    let native_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", SOURCE),
+        "tokens" => native_book_tokens("01-GEN.usfm", "GEN", owned(SOURCE), braid::LineEnding::Lf),
+        _ => unreachable!(),
+    };
+    publisher
+        .replace_corpus(braid::CorpusInput::new(vec![native_book]))
+        .expect("one book");
+    let stamps = LintStamps {
+        config_fingerprint: braid::LintConfigFingerprint::of(&publisher.config().lint).0,
+        engine_stamp: braid::LintEngineStamp::current().0,
+    };
+    let snapshot = publisher.lint();
+    let found = snapshot
+        .books
+        .iter()
+        .find(|book| book.book == book_id("GEN"))
+        .expect("GEN is resident");
+    assert!(
+        found.result.summary.suppressed_count >= 1,
+        "{lane}: the fixture must actually suppress a finding for this case to mean anything"
+    );
+    let EncodedCorpus { bytes, sources, .. } = encode_corpus(
+        snapshot.id.0,
+        Some(stamps),
+        &[CorpusSection::Fresh(CorpusSectionInput {
+            book: book_id("GEN"),
+            tokens: CorpusSectionTokens::Owned {
+                tokens: found.tokens,
+            },
+            findings: Some(found.result),
+        })],
+    )
+    .expect("one book encodes");
+    let source = sources
+        .into_iter()
+        .find(|(candidate, _)| *candidate == book_id("GEN"))
+        .expect("GEN has a source")
+        .1;
+    drop(snapshot);
+
+    let args = json!({
+        "config": { "lint": suppressed_lint_options() },
+        "records": [{
+            "path": "01-GEN.usfm",
+            "packed": bytes,
+            "source": source.as_bytes(),
+        }],
+    });
+
+    let mut reopened = resident::Braid {
+        inner: NativeBraid::new(suppressed_braid_config(), minter()),
+    };
+    let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
+        path: "01-GEN.usfm".to_string(),
+        packed: bytes,
+        source: source.as_bytes().to_vec(),
+    }]);
+    let resident::ApiResult::Ok { value: report } = outcome.0 else {
+        panic!("{lane}: a fresh, matching-stamp restore must still seed the book: {outcome:?}");
+    };
+    // The book seeds -- residency and lint-priming are independent -- and
+    // this is not a rejection either: priming was never attempted, so there
+    // is nothing to report as refused.
+    steps.push(Step {
+        step: "restore_corpus_suppressed".to_string(),
+        lane: lane.to_string(),
+        args: args.clone(),
+        output: json!(report),
+    });
+
+    // The gate: the honest recompute must still return findings, and the
+    // summary it recomputes -- including the suppressed count a cached
+    // summary could never have supplied -- must match the original publish.
+    let restored_snapshot = reopened.lint();
+    steps.push(Step {
+        step: "restore_corpus_suppressed_then_lint".to_string(),
+        lane: lane.to_string(),
+        args,
+        output: json!(restored_snapshot),
+    });
+}
+
 /// Regenerates `tests/fixtures/parity-transcript.json`. Run explicitly; not
 /// part of the normal `cargo test` battery, the same convention every other
 /// fixture generator in this workspace follows.
@@ -819,6 +942,7 @@ fn generate_parity_transcript() {
     for lane in ["usfm", "tokens"] {
         run_lane(lane, &mut steps);
         run_restore(lane, &mut steps);
+        run_restore_suppressed(lane, &mut steps);
     }
     // The config and minter shape travel with the transcript rather than
     // being re-derived by the node script by hand: both sides must
