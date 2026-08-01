@@ -613,4 +613,90 @@ mod corpus_scale {
             stateless_entries.len(),
         );
     }
+
+    /// Same shape as [`psalms_informal_timing`], at corpus scale: the whole
+    /// 66-book en_ulb corpus is resident (not Psalms alone), so the cache
+    /// lookup and per-book bookkeeping reflect a real cold-opened editor
+    /// session rather than a single-book handle. Also reports the
+    /// chapter-scoped read (`vref_index(Chapter)`), the narrower scope an
+    /// editor keystroke would actually request, alongside the whole-book
+    /// read the existing single-book test measures.
+    #[test]
+    #[ignore = "corpus-scale"]
+    fn whole_corpus_resident_keystroke_timing() {
+        let fixtures = fixtures();
+        let psa = fixtures
+            .iter()
+            .find(|f| f.book == BookId::from_str("PSA").unwrap())
+            .expect("en_ulb carries Psalms");
+
+        let mut resident = braid();
+        resident.replace_corpus(parsed_corpus(&fixtures)).unwrap();
+        // Warm every book's cache once, matching steady-state editor usage.
+        for fixture in &fixtures {
+            resident
+                .vref_index(CorpusScope::Book(fixture.book))
+                .unwrap();
+        }
+
+        // A whole-book reparse with an in-place word substitution inside
+        // chapter 1's opening verse, sliced back down to just that run --
+        // so the edited tokens carry real sids (an `\id`-less fragment
+        // parsed in isolation derives none; see `chapter_replacement`'s doc
+        // comment above). An in-place substitution rather than an appended
+        // verse: appending shifts every later token's positional id, which
+        // collides with the still-resident, untouched later chapters'
+        // original ids (`DuplicateTokenId`) -- exactly the pitfall
+        // `an_earlier_chapters_trailing_block_change_invalidates_a_later_untouched_chapters_cache`
+        // above works around for the same reason. A same-token-count word
+        // swap edits real content without moving anything after it.
+        let edited_whole = psa
+            .source
+            .replacen("Blessed is the man", "Happy is the man", 1);
+        assert_ne!(
+            edited_whole, psa.source,
+            "Psalms 1:1 must open with \"Blessed is the man\""
+        );
+        let edited_tokens = owned(&edited_whole);
+        let chapter_1_range = super::braid_chapter_runs_for_test(&edited_tokens)
+            .into_iter()
+            .find(|(label, _)| label == "1")
+            .map(|(_, range)| range)
+            .expect("chapter 1 is in the re-parsed edit");
+        let target = ChapterTarget::new(psa.book, ChapterLabel::Number("1".into()));
+        resident
+            .update_chapter(
+                target.clone(),
+                braid::ChapterInput::Tokens(edited_tokens[chapter_1_range].to_vec()),
+            )
+            .unwrap();
+
+        let start = std::time::Instant::now();
+        let whole_book_entries = match resident.vref_index(CorpusScope::Book(psa.book)).unwrap() {
+            ScopedOutput::Single(entries) => entries,
+            ScopedOutput::All(_) => unreachable!(),
+        };
+        let whole_book_elapsed = start.elapsed();
+
+        let start = std::time::Instant::now();
+        let chapter_entries = match resident.vref_index(CorpusScope::Chapter(target)).unwrap() {
+            ScopedOutput::Single(entries) => entries,
+            ScopedOutput::All(_) => unreachable!(),
+        };
+        let chapter_elapsed = start.elapsed();
+
+        let start = std::time::Instant::now();
+        let stateless_entries = tokens_to_vref_index(&edited_tokens).entries().to_vec();
+        let stateless_elapsed = start.elapsed();
+
+        eprintln!(
+            "66-book corpus resident, Psalms one-chapter-edit: \
+             vref_index(Book) {whole_book_elapsed:?} ({} entries); \
+             vref_index(Chapter) {chapter_elapsed:?} ({} entries); \
+             stateless whole-book recompute {stateless_elapsed:?} ({} entries)",
+            whole_book_entries.len(),
+            chapter_entries.len(),
+            stateless_entries.len(),
+        );
+    }
 }

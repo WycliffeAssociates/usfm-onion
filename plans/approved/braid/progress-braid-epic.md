@@ -4849,3 +4849,135 @@ golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt --all --
 unchanged for both `pkg-bundler`/`pkg-web` -- only `.wasm` binaries moved,
 regenerated via `npm run build` and committed. Fresh-clone build+test
 verified green after commit.
+
+## 2026-08-01 — Pre-tag perf measurement: vref map/index (measurement only)
+
+Owner-directed measurement pass at `cce50cd`, the last gate before the
+v0.1.0 tag. No production code changed. Local Mac, not the quiet bench
+box -- every number below is a ballpark for tag purposes, not a
+noise-floor-controlled figure.
+
+**Native release wall-clock** (scratch `examples/vref_probe.rs`, deleted
+after use -- not committed; tokens pre-parsed and excluded from every
+timed region; median of 25 iterations):
+- Whole en_ulb corpus (66 books, 254,559 tokens), `tokens_to_vref_map`:
+  ~12.7ms. `tokens_to_vref_index`: ~39.7ms -- about 3-4x `_map`'s cost for
+  the same tokens, the richer per-verse `Segment`/`Utf16Span` bookkeeping
+  the index carries that the plain string map does not.
+- Psalms alone (30,857 tokens, the corpus's largest book):
+  `tokens_to_vref_map` ~0.92ms; `tokens_to_vref_index` ~4.15ms;
+  `usfm_to_vref_index` (source string in, parse included) ~4.93ms -- parse
+  itself is cheap (~0.8ms) next to the projection.
+
+**Resident braid path**, extended to whole-corpus scale
+(`crates/braid/tests/vref.rs::corpus_scale::whole_corpus_resident_keystroke_timing`,
+new, committed alongside the pre-existing single-book
+`psalms_informal_timing`; release, `--ignored`, single-shot `Instant`
+timing matching that test's existing convention -- both are "print
+numbers for the ledger," not pass/fail gates):
+- Single Psalms-only residency (`psalms_informal_timing`, re-confirmed at
+  this SHA): one chapter-edit keystroke, `vref_index(Book)` 3.30ms vs a
+  stateless whole-book recompute at 12.93ms -- consistent with the ~3.38ms
+  / ~13.30ms figures quoted earlier in the epic.
+- Whole 66-book corpus resident (new test), same one-chapter-edit
+  keystroke on Psalms: `vref_index(Book)` 3.24ms (matches the single-book
+  number -- corpus size does not inflate one book's own read);
+  `vref_index(Chapter)` (the scope an editor keystroke should actually
+  request) 15µs -- three orders of magnitude cheaper than the book-scoped
+  read, because only the touched run needs recomputing and the rest of the
+  book's cache serves untouched. Stateless whole-book recompute at this
+  corpus scale: ~3.3ms (this specific in-process run shows it close to the
+  resident number, almost certainly JIT/cache warmth from running
+  back-to-back in the same process right after the single-book test above
+  -- treat the single-book test's 12.93ms as the more trustworthy
+  stateless baseline; both numbers are single-shot, not medians).
+
+**Wasm/node wall-clock**, through the actual committed release pkg
+(`build:wasm:bundler` without `--dev`; pkg-bundler/pkg-web at HEAD were
+already the release build from the prior fix round, confirmed via `git
+status` before and after -- no dev rebuild touched them; scratch node
+script, not committed, median of 15 iterations):
+- Stateless `vrefIndexTokens`, Psalms, tokens obtained first and excluded
+  from the timed region: **~59.5ms** median -- roughly 14x the native
+  `tokens_to_vref_index` figure for the same book (~4.15ms), which is the
+  wasm boundary (serde-wasm-bindgen argument/return marshalling), not the
+  projection itself -- consistent with this project's own prior finding
+  that the boundary, not parse or the projection, is the dominant wasm
+  cost (see the binary-token-transport work).
+- Resident `braid.vrefIndex(Book)`, 66-book corpus, after one chapter
+  update, boundary included: **~16.9ms** median.
+- Resident `braid.vrefIndex(Chapter)`, same corpus/edit, scoped to just
+  the touched chapter: **~0.05ms** median.
+- Both resident numbers are comfortably under the editor's old
+  520-630ms/edit baseline (30-500x); the Chapter-scoped call the editor
+  should actually be making is effectively free.
+
+**samply attribution** (native, macOS, `profile.profiling`; whole-corpus
+`tokens_to_vref_index` looped for a fixed 5s window, 154 passes;
+symbolicated two independent ways -- `dsymutil` + `atos`, and `nm -n` +
+address-containment -- which agreed closely, so the categorization below
+is not a symbolication artifact of either method alone). Per this
+project's own standing rule, the profiling build's wall-clock is not
+quotable; only the *self-time proportions* below are:
+- ~24.8% of all self-time samples land in `std::backtrace_rs`/`gimli`/
+  `addr2line`/`panicking` frames. Confirmed this is **not** real panics:
+  running the same binary standalone (with and without
+  `RUST_BACKTRACE=1`) produces zero "panicked at" output, and nothing in
+  this crate calls `catch_unwind`/`set_hook`/`Backtrace::capture`. Most
+  likely samply's own in-process symbolication/unwind-assist machinery on
+  macOS, or link-time identical-code-folding aliasing a monomorphized std
+  frame onto an unrelated address (one `core::slice::sort::stable`
+  leaf was confirmed via stack-chain inspection to actually be called from
+  `IndexedVrefVisitor::push_token`'s `String::push_str` call site, which
+  cannot itself invoke a sort -- a folded-identical-function false
+  attribution, not real sorting work). Excluded from the category rollup
+  below as attribution noise, not workload.
+- Of the remaining ~75.2% (net self-time): **~46.6% is this crate's own
+  code** (`walker::walk` alone is 11.94% of the *total*, the single
+  largest non-noise frame; `vref::utf16_len` 9.16% of total;
+  `IndexedVrefVisitor::flush_current_verse`/`push_token`/
+  `can_collect_text`; `marker_defs::lookup_spec_marker_indexed`/
+  `lookup_marker_def`), and **~35.4% is alloc/fmt machinery**
+  (`String`/`Vec`/`BTreeMap` growth and `core::fmt` formatting: `Vec` drop
+  4.29% of total, `BTreeMap::insert` 3.02%, `String as fmt::Write::
+  write_str` 3.68%, `core::fmt::write` 2.82%, `alloc::fmt::format::
+  format_inner` 2.72%, plus smaller `RawVecInner::reserve`/`finish_grow`
+  and `BTreeMap` iterator/node-insert frames).
+- The `write_str`/`fmt::write`/`format_inner` trio is the signature of a
+  `format!()` call building a `String` and writing it through `Display` --
+  almost certainly `verse_ref_str` constructing each entry's `"BOOK C:V"`
+  sid text, one allocation-and-format per verse, plus the `BTreeMap`
+  insert that follows immediately needing that String as its key.
+
+**Conclusions:**
+- The keystroke path is comfortably under editor budget both natively and
+  through wasm, *provided the editor asks for `vref_index`/`vrefIndex` at
+  Chapter scope, not Book scope* -- Chapter-scoped reads are ~15µs native /
+  ~0.05ms wasm after a warm cache, vs. ~3.2ms / ~16.9ms for the wider
+  Book-scoped read on the same edit. Both are still far under the old
+  520-630ms baseline even at Book scope, but Chapter scope is the number
+  that actually matches what one keystroke touches.
+- Whole-corpus cold-open generation (~40ms native / dominated by wasm
+  boundary marshalling, not measured whole-corpus through wasm this round)
+  is acceptable for a one-time cold-open cost.
+- Allocation is a real, substantial fraction of the projection's own
+  self-time (roughly a third of non-noise samples), not the dominant
+  majority -- so this is a candidate for a post-0.1.0 spike, not a
+  release blocker. Named hypotheses, in priority order, for that spike
+  charter (not implemented here):
+  1. **Sid-string formatting per verse** (`verse_ref_str`-style
+     `format!("{book} {chapter}:{verse}")`) -- the `fmt::write`/
+     `format_inner`/`String::write_str` cluster (~9% of total self-time
+     combined) is consistent with one allocate-and-format call per verse
+     entry.
+  2. **`BTreeMap<String, ...>` keying** (`VrefMap`'s own type, and
+     `VrefIndex`'s internal lookup) -- `BTreeMap::insert` (3.02%) needing
+     an owned `String` key per entry compounds directly with hypothesis 1;
+     a `Sid`-typed (non-String) key, already used elsewhere in this
+     codebase, would remove both the format and the map's need for that
+     allocation.
+  3. **Per-token `Segment`/text `Vec`/`String` growth** inside
+     `IndexedVrefVisitor::push_token`/`flush_current_verse` -- `Vec` drop
+     (4.29%) and `RawVecInner::reserve`/`finish_grow` suggest repeated
+     reallocation building each verse's collected text and segment list
+     rather than a single pre-sized allocation per verse.
