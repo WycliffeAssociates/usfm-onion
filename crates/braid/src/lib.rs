@@ -992,11 +992,20 @@ impl Braid {
         let mut old_cache = std::mem::take(&mut self.books[book_index].vref_cache);
         let mut fresh_cache = Vec::with_capacity(run_count);
         let mut entries = Vec::new();
+        // The one visitor state a whole-book walk carries across a `\c` and
+        // never clears (see `crate::vref`) — threaded run to run in corpus
+        // order, which is what makes each run's own incoming state actually
+        // known rather than guessed.
+        let mut carried_block_state = None;
         for run_index in 0..run_count {
             let range = self.books[book_index].runs[run_index].range.clone();
-            let cached =
-                vref::take_or_compute(&mut old_cache, &self.books[book_index].tokens[range]);
+            let cached = vref::take_or_compute(
+                &mut old_cache,
+                &self.books[book_index].tokens[range],
+                carried_block_state,
+            );
             entries.extend(cached.entries.iter().cloned());
+            carried_block_state = cached.outgoing_block_state;
             fresh_cache.push(cached);
         }
         self.books[book_index].vref_cache = fresh_cache;
@@ -1008,23 +1017,45 @@ impl Braid {
         vref::merge_by_sid(entries)
     }
 
-    /// One run's own vref entries, without touching any other run's cache
-    /// entry — see `vref::run_entries`.
+    /// A single run's own entries — but correctness for *that* run still
+    /// depends on the block-support state every earlier run in the book
+    /// carries into it (see `crate::vref`), so this resolves runs `0..=
+    /// run_index` in corpus order, threading each one's outgoing state into
+    /// the next. Earlier runs' own entries are discarded once their
+    /// outgoing state is read; only `run_index`'s are returned. Every run
+    /// visited (including the earlier ones) still folds into the cache —
+    /// without evicting a sibling entry, the same policy a lone
+    /// chapter-scoped read already followed before this fix.
     fn run_vref_entries(&mut self, book_index: usize, run_index: usize) -> Vec<VrefEntry> {
-        let range = self.books[book_index].runs[run_index].range.clone();
-        let cached = vref::run_entries(
-            &self.books[book_index].vref_cache,
-            &self.books[book_index].tokens[range],
-        );
-        let entries = cached.entries.clone();
-        if !self.books[book_index]
-            .vref_cache
-            .iter()
-            .any(|run| run.identity == cached.identity)
-        {
-            self.books[book_index].vref_cache.push(cached);
+        let mut carried_block_state = None;
+        for earlier in 0..=run_index {
+            let range = self.books[book_index].runs[earlier].range.clone();
+            let cached = vref::run_entries(
+                &self.books[book_index].vref_cache,
+                &self.books[book_index].tokens[range],
+                carried_block_state,
+            );
+            carried_block_state = cached.outgoing_block_state;
+            if earlier == run_index {
+                let entries = cached.entries.clone();
+                if !self.books[book_index]
+                    .vref_cache
+                    .iter()
+                    .any(|run| run.matches(cached.identity, cached.incoming_block_state))
+                {
+                    self.books[book_index].vref_cache.push(cached);
+                }
+                return entries;
+            }
+            if !self.books[book_index]
+                .vref_cache
+                .iter()
+                .any(|run| run.matches(cached.identity, cached.incoming_block_state))
+            {
+                self.books[book_index].vref_cache.push(cached);
+            }
         }
-        entries
+        unreachable!("the loop always returns at earlier == run_index")
     }
 
     /// Whether a scope's exact serialized bytes differ from its baseline.

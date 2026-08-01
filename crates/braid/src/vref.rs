@@ -37,30 +37,69 @@
 //! fresh from the current token stream (`crate::corpus::chapter_runs`), and
 //! this module hashes whatever slice a run's *current* range names, never a
 //! remembered offset.
+//!
+//! One run's own tokens are *not* the whole of what the projection reads,
+//! though: a whole-book walk carries one more piece of state across a `\c`
+//! boundary and never clears it — whether the most recently opened
+//! paragraph-like block supports verse content (`usfm_onion::vref`'s
+//! `IndexedVrefVisitor::current_block_supports_verse`, the same fact the
+//! pre-existing chapter-parallel `vref_map_partitioned` path already has to
+//! reconcile across segments). A book whose chapter 1 ends in a heading with
+//! no verse-supporting paragraph, followed by a chapter 2 that opens
+//! straight into a `\v` with no block of its own, projects **no** entry for
+//! that verse in a whole-book walk — the incoming flag is `false` — but a
+//! naive per-run cache walking chapter 2's own tokens in isolation would
+//! seed the visitor at its own default (`None`, read as supporting verses)
+//! and wrongly produce one. So a run's cache key is `(TokenIdentity,
+//! incoming block state)`, not identity alone, and every read threads each
+//! run's own *outgoing* state into the next run's *incoming* one — exactly
+//! what `tokens_to_vref_index_seeded` exists to make possible without a
+//! second walk of the whole book. Runs are always visited in corpus order
+//! specifically so this state is genuinely known before a run is computed,
+//! never guessed and reconciled after the fact the way the parallel path
+//! has to.
 
 use usfm_onion::token::OwnedToken;
-use usfm_onion::vref::{VrefEntry, tokens_to_vref_index};
+use usfm_onion::vref::{VrefEntry, tokens_to_vref_index_seeded};
 
 use crate::state::TokenIdentity;
 
 /// One chapter run's cached vref entries, keyed by that run's own
-/// `TokenIdentity` at the moment they were computed.
+/// `TokenIdentity` *and* the block-support state carried in from whatever
+/// came before it — the same run's tokens can honestly project two
+/// different results under two different incoming states, so either half
+/// alone would be an unsound key.
 #[derive(Debug, Clone)]
 pub(crate) struct CachedRun {
     pub(crate) identity: TokenIdentity,
+    pub(crate) incoming_block_state: Option<bool>,
+    pub(crate) outgoing_block_state: Option<bool>,
     pub(crate) entries: Vec<VrefEntry>,
 }
 
 impl CachedRun {
-    /// Computes fresh entries for `tokens` — the projection itself, nothing
-    /// braid adds on top.
-    fn fresh(tokens: &[OwnedToken]) -> Self {
+    /// Computes fresh entries for `tokens`, seeded with the incoming
+    /// block-support state — the projection itself, nothing braid adds on
+    /// top beyond carrying that one fact in and back out.
+    fn fresh(tokens: &[OwnedToken], incoming_block_state: Option<bool>) -> Self {
         #[cfg(test)]
         recompute_count::record();
+        let (index, outgoing_block_state) =
+            tokens_to_vref_index_seeded(tokens, incoming_block_state);
         Self {
             identity: TokenIdentity::of(tokens),
-            entries: tokens_to_vref_index(tokens).entries().to_vec(),
+            incoming_block_state,
+            outgoing_block_state,
+            entries: index.entries().to_vec(),
         }
+    }
+
+    pub(crate) fn matches(
+        &self,
+        identity: TokenIdentity,
+        incoming_block_state: Option<bool>,
+    ) -> bool {
+        self.identity == identity && self.incoming_block_state == incoming_block_state
     }
 }
 
@@ -218,25 +257,43 @@ mod tests {
 /// which only ever visits the one run it was asked for and so cannot claim
 /// anything about whether its siblings are still current. The caller decides
 /// whether/how to fold the returned `CachedRun` back into its cache.
-pub(crate) fn run_entries(cache: &[CachedRun], tokens: &[OwnedToken]) -> CachedRun {
+///
+/// `incoming_block_state` must be the true state carried in from every
+/// earlier run in corpus order — never `None` as a stand-in for "unknown",
+/// which is a real, distinct seed (no block has opened yet anywhere).
+pub(crate) fn run_entries(
+    cache: &[CachedRun],
+    tokens: &[OwnedToken],
+    incoming_block_state: Option<bool>,
+) -> CachedRun {
     let identity = TokenIdentity::of(tokens);
-    match cache.iter().find(|run| run.identity == identity) {
+    match cache
+        .iter()
+        .find(|run| run.matches(identity, incoming_block_state))
+    {
         Some(hit) => hit.clone(),
-        None => CachedRun::fresh(tokens),
+        None => CachedRun::fresh(tokens, incoming_block_state),
     }
 }
 
 /// Looks up or moves one run's entries out of an old whole-book cache being
 /// rebuilt — the whole-book read path. `old_cache` is drained via
 /// `swap_remove` rather than searched non-destructively, because a
-/// whole-book read visits every run exactly once and the caller collects
-/// every returned `CachedRun` into a brand new cache, so a matched entry
-/// only ever needs to be found once.
-pub(crate) fn take_or_compute(old_cache: &mut Vec<CachedRun>, tokens: &[OwnedToken]) -> CachedRun {
+/// whole-book read visits every run exactly once, in corpus order, and the
+/// caller collects every returned `CachedRun` into a brand new cache, so a
+/// matched entry only ever needs to be found once.
+pub(crate) fn take_or_compute(
+    old_cache: &mut Vec<CachedRun>,
+    tokens: &[OwnedToken],
+    incoming_block_state: Option<bool>,
+) -> CachedRun {
     let identity = TokenIdentity::of(tokens);
-    match old_cache.iter().position(|run| run.identity == identity) {
+    match old_cache
+        .iter()
+        .position(|run| run.matches(identity, incoming_block_state))
+    {
         Some(position) => old_cache.swap_remove(position),
-        None => CachedRun::fresh(tokens),
+        None => CachedRun::fresh(tokens, incoming_block_state),
     }
 }
 

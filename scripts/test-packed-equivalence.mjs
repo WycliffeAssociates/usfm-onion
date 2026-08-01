@@ -561,6 +561,47 @@ for (const file of corpusPaths) {
   stats.reconciled = findings.length;
 }
 
+// reconcileFindings must not resurrect a finding that is genuinely gone when
+// two previous findings share one identity (same code/tokenId/relatedTokenId)
+// but differ in content — one-to-one consumption, never a single reusable
+// slot per identity.
+{
+  const base = { code: "test-code", tokenId: "t-1", severity: "warning", marker: null, span: null, relatedSpan: null };
+  const findingA = { ...base, message: "message A" };
+  const findingB = { ...base, message: "message B" };
+
+  // Clean-room review's exact repro: previous [A, B] (same identity,
+  // different messages); next asks for A twice. The second "A" must not
+  // resurrect B by matching the wrong pooled candidate.
+  const cloneA = () => ({ ...findingA });
+  const reconciledAA = reconcileFindings([findingA, findingB], [cloneA(), cloneA()]);
+  assert.equal(reconciledAA.length, 2, "two requested findings, two results");
+  assert.equal(reconciledAA[0], findingA, "the first A reuses the original A's identity");
+  assert.notEqual(
+    reconciledAA[1],
+    findingB,
+    "the second A must never resurrect B -- one-to-one consumption, not a reusable single slot",
+  );
+  assert.notEqual(reconciledAA[1], findingA, "A was already consumed by the first slot");
+  assert.equal(reconciledAA[1].message, "message A");
+
+  // Counts differ in both directions, same identity, same content each time:
+  // fewer next findings than previous leaves the extras un-reused (not
+  // resurrected into the output); more next findings than previous leaves the
+  // extras as fresh objects (nothing left in the pool to reuse).
+  const findingA2 = { ...findingA };
+  const fewerNext = reconcileFindings([findingA, findingA2, { ...findingA }], [cloneA()]);
+  assert.equal(fewerNext.length, 1);
+  assert.equal(fewerNext[0], findingA, "the one requested slot reuses the first pooled candidate");
+
+  const moreNext = reconcileFindings([findingA, findingA2], [cloneA(), cloneA(), cloneA()]);
+  assert.equal(moreNext.length, 3);
+  assert.equal(moreNext[0], findingA);
+  assert.equal(moreNext[1], findingA2);
+  assert.notEqual(moreNext[2], findingA, "no third pooled candidate exists to reuse");
+  assert.notEqual(moreNext[2], findingA2, "no third pooled candidate exists to reuse");
+}
+
 await rm(workRoot, { recursive: true, force: true });
 
 console.log(

@@ -1019,10 +1019,6 @@ fn corpus_token_sections_round_trip() {
 /// the fixture that broke instead of just failing a count.
 const EMITTER_DIVERGENCES: [&str; 0] = [];
 
-/// The owned-path gate: the same corpus through spanless owned tokens, where the
-/// source and every span come from the reconstruct emitter rather than off a parse.
-#[test]
-#[ignore = "walks the full corpus"]
 /// Every token of every corpus book, out through the boundary DTO and back, must
 /// come home semantically identical — the inbound conversion's corpus gate.
 ///
@@ -1079,6 +1075,10 @@ fn corpus_tokens_round_trip_through_the_boundary_dto() {
     );
 }
 
+/// The owned-path gate: the same corpus through spanless owned tokens, where the
+/// source and every span come from the reconstruct emitter rather than off a parse.
+#[test]
+#[ignore = "walks the full corpus"]
 fn corpus_owned_token_sections_round_trip() {
     let mut books = 0usize;
     let mut tokens = 0usize;

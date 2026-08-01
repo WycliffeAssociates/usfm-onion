@@ -4581,3 +4581,184 @@ separately above.)
 
 Gates: none re-run beyond item 1's battery above, since no code changed for
 this item.
+
+## 2026-08-01 — Clean-room review: five P1s and one P2, release-blocking round for 0.1.0
+
+Five P1 findings and one P2, all reviewer-evidenced with repros; all fixed
+in this round, verbatim regressions added per finding.
+
+**P1.1 — resident `vref_index` diverged from stateless across a chapter
+boundary (`crates/braid/src/vref.rs`).** Root cause: the per-run cache
+walked each chapter run through a *fresh* visitor, but a whole-book walk
+carries one piece of state across a `\c` boundary and never clears it —
+whether the most recently opened paragraph-like block supports verse
+content (`usfm_onion::vref::IndexedVrefVisitor::current_block_supports_verse`,
+the same fact the pre-existing chapter-parallel `vref_map_partitioned` path
+already has to reconcile across segments). Reviewer's exact repro
+(`\id GEN \c 1 \s1 Heading \c 2 \v 1 text`) confirmed: stateless projects no
+entry for GEN 2:1 (the heading does not support verses, and that carries
+across the boundary); resident wrongly projected one.
+
+Fix: core gained `usfm_onion::vref::tokens_to_vref_index_seeded(tokens,
+incoming_block_state) -> (VrefIndex, outgoing_block_state)` (`src/vref.rs`)
+— the same projection, seeded with and reporting the one carried fact, so
+`tokens_to_vref_index` is now just `tokens_to_vref_index_seeded(tokens,
+None).0`. Braid's cache key became `(TokenIdentity, incoming_block_state)`
+instead of identity alone (`CachedRun` gained `incoming_block_state` and
+`outgoing_block_state`; `run_entries`/`take_or_compute` both take and match
+on the incoming state); `book_vref_entries` threads each run's outgoing
+state into the next run's incoming one, in corpus order, so the true value
+is always known before a run computes (unlike the parallel path, which has
+to assume and speculatively re-walk). `run_vref_entries` (the chapter-scoped
+read) now resolves runs `0..=run_index` to establish the same chain before
+answering for just the requested one.
+
+One more correctness gap found and fixed during this work, via the
+project's own equivalence gate (not the reviewer's repro): a book with
+duplicate/reopened `\c` runs can put the *same* sid in two different runs.
+The whole-stream stateless projection folds that through one shared
+`VrefIndex` (first-seen position, last-write-wins); this crate's per-run
+walk uses a separate index per run, so `vref::merge_by_sid` (new) redoes
+that fold once over the concatenated result — without it, a duplicate-\c
+book reported two entries under one sid instead of the stateless answer's
+one.
+
+Regressions (`crates/braid/tests/vref.rs`): the reviewer's exact fixture
+(`resident_matches_stateless_across_a_chapter_boundary_that_flips_verse_support`);
+a mutation battery where editing only chapter 1's trailing block (via
+`update_chapter`, so chapter 2's own tokens and `TokenIdentity` are
+byte-for-byte untouched) flips chapter 2's own projection, proving the
+cache key genuinely includes incoming state and not just the changed run's
+identity (`an_earlier_chapters_trailing_block_change_invalidates_a_later_untouched_chapters_cache`).
+
+**P1.2 — packed restore installed a zeroed lint summary
+(`crates/usfm_onion_wasm/src/resident.rs`).** Root cause:
+`restoreCorpus`'s per-book `BookLintPrime.result.summary` was
+`Default::default()` — braid trusts a primed result outright, so a warm
+reopen reported `total_count: 0` with findings plainly present beside it.
+Fix: `summarize_findings` (new, mirrors core's own private `summarize`
+exactly for the fields the packed format actually carries) rebuilds
+`by_category`/`by_severity`/`by_issue_type`/`total_count` from the restored
+findings; `suppressed_count` stays `0` as the honest limit of what packed
+bytes alone can answer (a suppressed issue is dropped before packing, and
+that fact is not in the wire format at all — recorded as a real, not
+silently-claimed, limitation).
+
+**P1.3 — a mixed-stamp restore batch adopted the first record's stamps for
+all of it (`crates/usfm_onion_wasm/src/resident.rs`).** Root cause: each
+record is verified individually via `verify_book`, but the batch-level
+`config_fingerprint`/`engine_stamp` handed to `braid::CorpusRestoreInput`
+came from re-verifying `records.first()` alone — bypassing `verify_corpus`'s
+own invariant ("findings that carry stamps must all carry the same
+stamps") entirely, so a second record produced under different stamps had
+its findings admitted under the first's. Fix: the per-record loop now
+tracks `agreed_stamps`, refusing the whole restore
+(`RestoreError::Decode(PackedDecodeError::InvalidSection)`, the same
+variant `verify_corpus` itself returns for this exact case) the moment two
+records disagree — before anything touches `self.inner`, so the rejection
+is atomic. Also removed the wasteful, buggy second re-verification of
+`records.first()` in favor of the value the main loop already established.
+
+Regressions (`crates/usfm_onion_wasm/src/resident.rs`, new
+`restore_tests` module):
+`restore_corpus_recomputes_the_summary_from_the_restored_findings` (P1.2)
+and `restore_corpus_refuses_the_whole_batch_when_records_disagree_on_stamps`
+(P1.3, two individually-valid records with different stamps → whole
+restore refused, resident state provably untouched before/after).
+
+**P1.4 — `reconcileFindings` could resurrect a stale finding on identity
+collisions (`js/packed.js`).** Root cause: the identity map kept only the
+*first* prior finding per key and never consumed it, so two `next` findings
+sharing one identity key could both match that single slot — the
+return-the-previous-array shortcut then fired on a count match alone
+(`reused === out.length === previous.length`) without checking the match
+was one-to-one, letting a genuinely-gone finding (never re-matched, never
+consumed) come back as part of the unchanged `previous` array. Fix: `pools`
+is now a `Map<key, candidate[]>`; each `next` finding consumes (splices out)
+at most one still-available candidate via `sameFindingValue`, so the same
+previous finding can never satisfy two different `next` slots, and the
+shortcut's count-based check is now sound (one-to-one consumption is what
+makes "every count matched" equivalent to "every previous element was
+matched exactly once").
+
+Regressions (`scripts/test-packed-equivalence.mjs`): the reviewer's exact
+repro (previous `[A(msgA), B(msgB)]` same identity; next asks for A twice —
+the second A must not resurrect B); counts differing both directions with
+the same identity and content (fewer `next` than `previous` leaves extras
+un-reused; more `next` than `previous` leaves extras as fresh objects).
+
+**P1.5 — an owned-token corpus gate was accidentally disabled
+(`crates/usfm_onion_wire/src/token_codec_tests.rs`).** Root cause: a doc
+comment plus `#[test] #[ignore = "walks the full corpus"]` pair intended for
+`corpus_owned_token_sections_round_trip` landed, duplicated, on
+`corpus_tokens_round_trip_through_the_boundary_dto` instead, leaving
+`corpus_owned_token_sections_round_trip` with no test attribute at all —
+dead code (and `EMITTER_DIVERGENCES`, only referenced inside it, dead
+alongside it) that `rustc` warned about and the warnings were missed. Fixed
+by moving the orphaned doc/attribute pair back to
+`corpus_owned_token_sections_round_trip`. Both re-registered ignored tests
+run green in release mode (`cargo test --release -p usfm_onion_wire --lib
+-- --ignored corpus_tokens_round_trip_through_the_boundary_dto
+corpus_owned_token_sections_round_trip`). Added `RUSTFLAGS="-D warnings"`
+to the standing gate battery (workspace build+test, `--all-features`,
+`--tests`) so a warning is a hard failure from here on — confirmed zero
+warnings across the whole workspace with this fixed, plus one pre-existing
+unrelated unused-import warning in `crates/usfm_onion_wasm/src/lib.rs`
+(`use crate::resident::*;`, genuinely dead) removed so the deny-warnings
+gate is actually green, not merely newly enforced against a pre-existing
+failure.
+
+**P2 — an inbound boundary silently dropped a contradictory
+`attribute_offset` (`src/token.rs`).** `OwnedToken::from_parts` accepted an
+attribute-bearing marker with `attribute_offset: Some(_)` but no structured
+attributes and no `attribute_source` — the offset (which names where a
+*carried* list sits, and is not itself a list) was silently discarded, and
+an attribute-bearing token spelling no attributes at all was admitted.
+Fixed by rejecting the contradiction as `TokenBuildError::UnexpectedPayload
+{ fact: "attribute offset with no attribute list", .. }` — refuse, never
+guess, the same rule every other fact-on-the-wrong-shape check in this
+constructor already follows. Regression:
+`an_attribute_offset_with_no_attribute_list_is_refused` (`src/token.rs`).
+Full workspace suite re-run green after this core change, confirming no
+existing caller relied on the silently-dropped behavior.
+
+**Parity transcript extended to cover `restoreCorpus`
+(`crates/usfm_onion_wasm/src/parity.rs`, `scripts/test-parity.mjs`).** Both
+P1.2 and P1.3 escaped specifically because the parity gate never reopened
+from packed bytes — it started after a fresh `replace_corpus`, never
+`restoreCorpus`. Added `run_restore`: publishes one book with a real
+finding, encodes it as a single-book packed container
+(`usfm_onion_wire::corpus_codec::encode_corpus`), restores it into a fresh
+`resident::Braid` (constructed via a struct literal — `resident.rs`'s
+`Braid.inner` field widened to `pub(crate)` for exactly this, the same
+justification `restore_tests` already established: `Braid::new`'s public
+constructor takes a `js_sys::Function`, meaningless outside a real JS
+engine, but every other method needs no JS runtime at all), and records two
+new steps per lane: `restore_corpus` (the `RestoreReport`) and
+`restore_corpus_then_lint` (a `lint()` call on the *restored* corpus,
+proving findings **and** summary match — the exact two facts P1.2/P1.3
+broke). `RestoreRecord`'s `packed`/`source` cross the wasm boundary as
+`number[]` (confirmed against the generated `.d.ts`, not assumed) since
+`RestoreRecord` is a plain, non-tagged struct going through the generic
+serde-wasm-bindgen path — the transcript's own JSON number arrays need no
+conversion. `npm run test:parity`/`test:parity:web`: 58 steps (52 lifecycle
++ 6 error cases + 4 restore, ×2 lanes÷2... — 26 lifecycle/error steps + 2
+restore steps, ×2 lanes = 56... actual count 58, both targets, 0
+divergences.
+
+Gates (full battery, this round): `RUSTFLAGS="-D warnings" cargo build
+--workspace --all-features --tests` clean, zero warnings; `RUSTFLAGS="-D
+warnings" cargo test --workspace --all-features` green (core 291, wire
+196+2, wasm 37, braid 99); `cargo test --release --test lint_oracle --
+--ignored` byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p
+braid -p usfm_onion_wire -p usfm_onion_wasm -- --ignored` green, including
+both re-registered wire corpus tests; `npm run test:packed` /
+`test:packed:web` green (410 cases / 5,717,153 tokens, including the new
+`reconcileFindings` regressions); `npm run test:wasm` (bundler+web) green;
+`npm run golden:wasm` / `golden:wasm:web` green (7 fixtures); `npm run
+test:parity` / `test:parity:web` green (58 steps, 0 divergences, now
+including restoreCorpus); `cargo fmt --all -- --check` clean. `.d.ts` diff
+before/after: empty for both `pkg-bundler`/`pkg-web` (this round changed
+behavior, not any public shape) — only the `.wasm` binaries moved; both
+regenerated (release profile, matching the existing 0.1.0 packages) and
+committed. Fresh-clone build+test verified after commit.

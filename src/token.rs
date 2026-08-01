@@ -932,6 +932,19 @@ impl OwnedToken {
         {
             return Err(unexpected("attribute list"));
         }
+        // `attribute_offset` records where a *carried* attribute list — verbatim
+        // text or structured attributes — sits relative to this token's own end;
+        // it is not itself a list. Supplying an offset with neither is a
+        // contradiction (an offset for a list that, by the caller's own other
+        // fields, does not exist), and refused rather than silently dropped —
+        // the boundary this constructor exists to police.
+        if attribute_bearing
+            && attribute_offset.is_some()
+            && attributes.is_empty()
+            && attribute_source.is_none()
+        {
+            return Err(unexpected("attribute offset with no attribute list"));
+        }
         // Nesting is a marker-pair fact: `\+add` opens and `\+add*` closes. A
         // milestone has no nesting concept, so accepting `true` would drop it.
         if nested && !matches!(kind, TokenKind::Marker | TokenKind::EndMarker) {
@@ -2908,6 +2921,27 @@ mod from_parts_tests {
             })
             .collect();
         assert_eq!(identities.len(), 4);
+    }
+
+    /// An `attribute_offset` names where a *carried* attribute list sits; it is
+    /// not itself a list. A caller supplying an offset while asserting neither a
+    /// structured list nor a verbatim one is a contradiction the boundary must
+    /// refuse rather than silently drop the offset and admit an attribute-bearing
+    /// token that spells no attributes at all.
+    #[test]
+    fn an_attribute_offset_with_no_attribute_list_is_refused() {
+        let base = parts("editor-1", TokenKind::Marker, "\\w ");
+        let result = OwnedToken::from_parts(OwnedTokenParts {
+            marker: Some("w"),
+            attribute_offset: Some(3),
+            ..base
+        });
+        match result {
+            Err(TokenBuildError::UnexpectedPayload { fact, .. }) => {
+                assert_eq!(fact, "attribute offset with no attribute list");
+            }
+            other => panic!("expected a refused contradictory offset, got {other:?}"),
+        }
     }
 
     /// A fact on a kind that cannot hold it is refused, not dropped: a caller that

@@ -706,6 +706,109 @@ fn run_lane(lane: &str, steps: &mut Vec<Step>) {
     );
 }
 
+/// Publish → restore → compare, both findings and summary — the packed
+/// cold-open path `run_lane` never touches. Clean-room review found two
+/// real defects (a zeroed restored summary; a mixed-stamp batch silently
+/// adopting the first record's stamps) that escaped exactly because this
+/// path was outside the parity gate; this is that gap closed.
+///
+/// Builds the `resident::Braid` wasm wrapper directly via a struct literal
+/// (`Braid { inner }`), the same way `resident.rs`'s own test module does —
+/// legitimate here for the identical reason the rest of this generator
+/// drives the native crate directly: `Braid::new`'s public constructor takes
+/// a `js_sys::Function`, which has no meaningful native behavior. Everything
+/// past construction (`restore_corpus`, `lint`) is the real wasm-bound
+/// method, not a mirror of it.
+fn run_restore(lane: &str, steps: &mut Vec<Step>) {
+    use usfm_onion_wire::corpus_codec::{
+        CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
+        encode_corpus,
+    };
+
+    const SOURCE: &str = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n\\v 2 And the earth.\\q1\n\\v 3 Light.\n";
+
+    let mut publisher = NativeBraid::new(braid_config(), minter());
+    let native_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", SOURCE),
+        "tokens" => native_book_tokens("01-GEN.usfm", "GEN", owned(SOURCE), braid::LineEnding::Lf),
+        _ => unreachable!(),
+    };
+    publisher
+        .replace_corpus(braid::CorpusInput::new(vec![native_book]))
+        .expect("one book");
+    let stamps = LintStamps {
+        config_fingerprint: braid::LintConfigFingerprint::of(&publisher.config().lint).0,
+        engine_stamp: braid::LintEngineStamp::current().0,
+    };
+    let snapshot = publisher.lint();
+    let found = snapshot
+        .books
+        .iter()
+        .find(|book| book.book == book_id("GEN"))
+        .expect("GEN is resident");
+    assert!(
+        !found.result.issues.is_empty(),
+        "{lane}: the fixture must carry a real finding for the restore gate to mean anything"
+    );
+    let EncodedCorpus { bytes, sources, .. } = encode_corpus(
+        snapshot.id.0,
+        Some(stamps),
+        &[CorpusSection::Fresh(CorpusSectionInput {
+            book: book_id("GEN"),
+            tokens: CorpusSectionTokens::Owned {
+                tokens: found.tokens,
+            },
+            findings: Some(found.result),
+        })],
+    )
+    .expect("one book encodes");
+    let source = sources
+        .into_iter()
+        .find(|(candidate, _)| *candidate == book_id("GEN"))
+        .expect("GEN has a source")
+        .1;
+    drop(snapshot);
+
+    // `Vec<u8>` args travel as plain JSON number arrays; the node side turns
+    // them into a `Uint8Array` before constructing the real `RestoreRecord`,
+    // exactly what a host reading bytes off disk would hand over.
+    let args = json!({
+        "records": [{
+            "path": "01-GEN.usfm",
+            "packed": bytes,
+            "source": source.as_bytes(),
+        }],
+    });
+
+    let mut reopened = resident::Braid {
+        inner: NativeBraid::new(braid_config(), minter()),
+    };
+    let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
+        path: "01-GEN.usfm".to_string(),
+        packed: bytes,
+        source: source.as_bytes().to_vec(),
+    }]);
+    let resident::ApiResult::Ok { value: report } = outcome.0 else {
+        panic!("{lane}: a fresh, matching-stamp restore must succeed: {outcome:?}");
+    };
+    steps.push(Step {
+        step: "restore_corpus".to_string(),
+        lane: lane.to_string(),
+        args: args.clone(),
+        output: json!(report),
+    });
+
+    // The gate itself: a lint pass over the *restored* corpus must equal the
+    // publisher's own — findings and summary both, not just one.
+    let restored_snapshot = reopened.lint();
+    steps.push(Step {
+        step: "restore_corpus_then_lint".to_string(),
+        lane: lane.to_string(),
+        args,
+        output: json!(restored_snapshot),
+    });
+}
+
 /// Regenerates `tests/fixtures/parity-transcript.json`. Run explicitly; not
 /// part of the normal `cargo test` battery, the same convention every other
 /// fixture generator in this workspace follows.
@@ -715,6 +818,7 @@ fn generate_parity_transcript() {
     let mut steps = Vec::new();
     for lane in ["usfm", "tokens"] {
         run_lane(lane, &mut steps);
+        run_restore(lane, &mut steps);
     }
     // The config and minter shape travel with the transcript rather than
     // being re-derived by the node script by hand: both sides must

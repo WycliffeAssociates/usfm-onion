@@ -182,7 +182,13 @@ impl BraidConfig {
 /// The resident corpus handle.
 #[wasm_bindgen]
 pub struct Braid {
-    inner: NativeBraid,
+    // `pub(crate)` rather than private: the parity transcript generator
+    // (`crate::parity`, a sibling test-only module) constructs this struct
+    // directly via a literal, bypassing the public `new` constructor whose
+    // `js_sys::Function` minter parameter has no meaningful native behavior
+    // outside a real JS engine. No production code outside `resident.rs`
+    // reaches into this field.
+    pub(crate) inner: NativeBraid,
 }
 
 #[wasm_bindgen]
@@ -249,6 +255,13 @@ impl Braid {
     #[wasm_bindgen(js_name = restoreCorpus)]
     pub fn restore_corpus(&mut self, records: Vec<RestoreRecord>) -> RestoreOutcome {
         let mut books = Vec::with_capacity(records.len());
+        // Every record is verified individually (`verify_book`, right below),
+        // but the batch's stamps are what braid's own per-book adoption check
+        // compares *every* book's cached lint against, so this loop also has
+        // to enforce `verify_corpus`'s own invariant across records — "findings
+        // that carry stamps must all carry the same stamps" — itself: nothing
+        // else here ever compares one record's stamps against another's.
+        let mut agreed_stamps: Option<usfm_onion_wire::corpus_codec::LintStamps> = None;
         for record in &records {
             let source = match std::str::from_utf8(&record.source) {
                 Ok(source) => source,
@@ -266,6 +279,21 @@ impl Braid {
                     });
                 }
             };
+            if let Some(found) = verified.lint_stamps {
+                match agreed_stamps {
+                    None => agreed_stamps = Some(found),
+                    Some(existing) if existing == found => {}
+                    Some(_) => {
+                        // Atomic: nothing has been installed into `self.inner`
+                        // yet, so refusing here leaves resident state exactly
+                        // as it was, the same guarantee every other rejected
+                        // mutation gives.
+                        return RestoreOutcome::refused(RestoreError::Decode {
+                            error: crate::PackedDecodeError::InvalidSection,
+                        });
+                    }
+                }
+            }
             let tokens =
                 match usfm_onion_wire::verify::materialize_owned_tokens(&record.packed, source) {
                     Ok(tokens) => tokens,
@@ -308,27 +336,23 @@ impl Braid {
                         u64::from_str_radix(&verified.receipt.source_hash, 16).unwrap_or_default(),
                     ),
                     result: usfm_onion::lint::LintResult {
-                        issues: verified.findings.clone(),
-                        summary: Default::default(),
+                        summary: summarize_findings(&verified.findings),
+                        issues: verified.findings,
                     },
                 }),
             });
         }
 
-        let stamps = records
-            .first()
-            .and_then(|record| {
-                usfm_onion_wire::verify::verify_book(
-                    &record.packed,
-                    std::str::from_utf8(&record.source).unwrap_or_default(),
-                )
-                .ok()
-                .and_then(|verified| verified.lint_stamps)
-            })
-            .unwrap_or(usfm_onion_wire::corpus_codec::LintStamps {
-                config_fingerprint: 0,
-                engine_stamp: 0,
-            });
+        // Whatever the batch agreed on above (or the all-zero placeholder
+        // when no record carried any stamps at all, which never matches a
+        // real config/engine fingerprint and so admits nothing) — never a
+        // second, independent re-verification of one arbitrarily chosen
+        // record, which is what let a batch's real, already-checked
+        // agreement go unused while re-deriving the exact same fact worse.
+        let stamps = agreed_stamps.unwrap_or(usfm_onion_wire::corpus_codec::LintStamps {
+            config_fingerprint: 0,
+            engine_stamp: 0,
+        });
 
         RestoreOutcome::from(
             self.inner
@@ -790,6 +814,36 @@ impl Braid {
     #[wasm_bindgen(js_name = expectedSnapshotId)]
     pub fn expected_snapshot_id(&self) -> String {
         format!("{:016x}", self.inner.expected_snapshot_id().0)
+    }
+}
+
+/// Rebuilds a lint summary from a restored container's own findings — the
+/// packed wire format carries only the final `Vec<LintIssue>` (§ container
+/// schema; no separate summary section, and no `suppressed_count` at all,
+/// since a suppressed issue is dropped before packing and that fact is not
+/// recoverable from the bytes alone), so a primed cache built with
+/// `summary: Default::default()` reported a warm reopen's `total_count` as
+/// zero with findings plainly present. Every other field (`by_category`,
+/// `by_severity`, `by_issue_type`, `total_count`) *is* fully recoverable —
+/// they are just counts over the findings this call already has — so this
+/// mirrors core's own (private) `summarize` exactly for those, and leaves
+/// `suppressed_count` at `0` as the honest limit of what packed bytes alone
+/// can answer, not a second zeroed field masquerading as a fix.
+fn summarize_findings(findings: &[usfm_onion::lint::LintIssue]) -> usfm_onion::lint::LintSummary {
+    let mut by_category = std::collections::BTreeMap::new();
+    let mut by_severity = std::collections::BTreeMap::new();
+    let mut by_issue_type = std::collections::BTreeMap::new();
+    for issue in findings {
+        *by_category.entry(issue.category).or_insert(0) += 1;
+        *by_severity.entry(issue.severity).or_insert(0) += 1;
+        *by_issue_type.entry(issue.issue_type).or_insert(0) += 1;
+    }
+    usfm_onion::lint::LintSummary {
+        by_category,
+        by_severity,
+        by_issue_type,
+        total_count: findings.len(),
+        suppressed_count: 0,
     }
 }
 
@@ -1670,5 +1724,208 @@ impl From<braid::PatchPreparation> for PatchPreparation {
             braid::PatchPreparation::Unchanged => Self::Unchanged,
             braid::PatchPreparation::Ready(id) => Self::Ready { id: id.into() },
         }
+    }
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+    use braid::{
+        BookInput as NativeBookInput, BraidConfig, CorpusInput as NativeCorpusInput, SourceKey,
+    };
+    use usfm_onion::lint::{LintOptions, LintScope};
+    use usfm_onion_wire::corpus_codec::{
+        CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
+        encode_corpus,
+    };
+
+    fn empty_resident() -> Braid {
+        let mut next = 0u32;
+        Braid {
+            inner: braid::Braid::new(
+                BraidConfig::new(LintOptions::scoped(LintScope::Book)),
+                move || {
+                    next += 1;
+                    format!("minted-{next}")
+                },
+            ),
+        }
+    }
+
+    fn book_id(code: &str) -> usfm_onion::token::BookId {
+        usfm_onion::token::BookId::from_str(code).expect("three-character code")
+    }
+
+    /// One book's own packed bytes and the exact source they are bound to,
+    /// stamped with `stamps` — a container carrying exactly one token
+    /// section and one finding section, which is exactly what
+    /// `verify_book`/`restoreCorpus`'s per-record shape expects (never a
+    /// whole multi-book publication like `PublicationCache::publish`
+    /// produces).
+    fn encode_one_book(
+        resident: &mut braid::Braid,
+        book: usfm_onion::token::BookId,
+        stamps: LintStamps,
+    ) -> (Vec<u8>, String) {
+        let snapshot = resident.lint();
+        let found = snapshot
+            .books
+            .iter()
+            .find(|entry| entry.book == book)
+            .expect("book is resident");
+        let EncodedCorpus { bytes, sources, .. } = encode_corpus(
+            snapshot.id.0,
+            Some(stamps),
+            &[CorpusSection::Fresh(CorpusSectionInput {
+                book,
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: found.tokens,
+                },
+                findings: Some(found.result),
+            })],
+        )
+        .expect("one book encodes");
+        let source = sources
+            .into_iter()
+            .find(|(candidate, _)| *candidate == book)
+            .expect("the book we just encoded has a source")
+            .1;
+        (bytes, source)
+    }
+
+    fn current_stamps(resident: &braid::Braid) -> LintStamps {
+        LintStamps {
+            config_fingerprint: braid::LintConfigFingerprint::of(&resident.config().lint).0,
+            engine_stamp: braid::LintEngineStamp::current().0,
+        }
+    }
+
+    fn record(path: &str, packed: Vec<u8>, source: &str) -> RestoreRecord {
+        RestoreRecord {
+            path: path.to_string(),
+            packed,
+            source: source.as_bytes().to_vec(),
+        }
+    }
+
+    /// P1.2: a warm reopen must report the same summary a live publish-then-
+    /// lint of the same content would — never a zeroed placeholder with
+    /// findings plainly present beside it.
+    #[test]
+    fn restore_corpus_recomputes_the_summary_from_the_restored_findings() {
+        let mut original = empty_resident();
+        original
+            .inner
+            .replace_corpus(NativeCorpusInput::new(vec![NativeBookInput::Usfm {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: book_id("GEN"),
+                source: "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n".to_string(),
+            }]))
+            .expect("one book");
+        // The wasm-facing summary a live publish would show, for a like-for-
+        // like comparison against the restored one below (both dto::LintSummary).
+        let expected_summary = original.lint().summary;
+        assert!(
+            expected_summary.total_count > 0,
+            "the fixture must actually carry a warning"
+        );
+
+        let stamps = current_stamps(&original.inner);
+        let (packed, source) = encode_one_book(&mut original.inner, book_id("GEN"), stamps);
+
+        let mut reopened = empty_resident();
+        let outcome = reopened.restore_corpus(vec![record("GEN.usfm", packed, &source)]);
+        let ApiResult::Ok { value: report } = outcome.0 else {
+            panic!("a fresh, matching-stamp restore must succeed: {outcome:?}");
+        };
+        assert_eq!(report.seeded, vec!["GEN".to_string()]);
+        assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+
+        let snapshot = reopened.lint();
+        let actual_summary = snapshot.summary;
+        // dto::LintSummary derives no PartialEq (it is a boundary DTO, not a
+        // value type production code compares), so this compares the same
+        // fields a real regression would diverge on, field by field.
+        assert_eq!(
+            actual_summary.total_count, expected_summary.total_count,
+            "a warm reopen's summary must match a live lint of the same content, \
+             not report zero findings while findings are present"
+        );
+        assert_eq!(actual_summary.by_category, expected_summary.by_category);
+        assert_eq!(actual_summary.by_severity, expected_summary.by_severity);
+        assert_eq!(actual_summary.by_issue_type, expected_summary.by_issue_type);
+    }
+
+    /// P1.3: two records individually verify fine but carry different
+    /// stamps (as if produced by two different rule-engine builds). The
+    /// whole restore must refuse atomically — never adopt the first
+    /// record's stamps for the second's findings — and leave the resident
+    /// corpus exactly as it was before the call.
+    #[test]
+    fn restore_corpus_refuses_the_whole_batch_when_records_disagree_on_stamps() {
+        let mut source_a = empty_resident();
+        source_a
+            .inner
+            .replace_corpus(NativeCorpusInput::new(vec![NativeBookInput::Usfm {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: book_id("GEN"),
+                source: "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n".to_string(),
+            }]))
+            .expect("one book");
+        let stamps_a = current_stamps(&source_a.inner);
+        let (packed_gen, source_gen) =
+            encode_one_book(&mut source_a.inner, book_id("GEN"), stamps_a);
+
+        let mut source_b = empty_resident();
+        source_b
+            .inner
+            .replace_corpus(NativeCorpusInput::new(vec![NativeBookInput::Usfm {
+                source_key: SourceKey::new("EXO.usfm").unwrap(),
+                book: book_id("EXO"),
+                source: "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\n".to_string(),
+            }]))
+            .expect("one book");
+        // A stamp that cannot possibly match `stamps_a`: the real engine
+        // stamp perturbed by one bit is still "some other build produced
+        // this", which is all the test needs — two individually-valid
+        // records that disagree with each other.
+        let stamps_b = LintStamps {
+            config_fingerprint: stamps_a.config_fingerprint,
+            engine_stamp: stamps_a.engine_stamp ^ 1,
+        };
+        let (packed_exo, source_exo) =
+            encode_one_book(&mut source_b.inner, book_id("EXO"), stamps_b);
+
+        let mut reopened = empty_resident();
+        let before_books: Vec<String> = reopened
+            .books()
+            .into_iter()
+            .map(|entry| entry.book)
+            .collect();
+        let outcome = reopened.restore_corpus(vec![
+            record("GEN.usfm", packed_gen, &source_gen),
+            record("EXO.usfm", packed_exo, &source_exo),
+        ]);
+        assert!(
+            matches!(
+                outcome.0,
+                ApiResult::Error {
+                    error: RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidSection
+                    }
+                }
+            ),
+            "disagreeing stamps must refuse the whole batch typed, got {outcome:?}"
+        );
+        let after_books: Vec<String> = reopened
+            .books()
+            .into_iter()
+            .map(|entry| entry.book)
+            .collect();
+        assert_eq!(
+            after_books, before_books,
+            "a refused restore must leave resident state exactly as it was"
+        );
+        assert!(before_books.is_empty(), "the fresh handle started empty");
     }
 }

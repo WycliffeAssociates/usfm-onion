@@ -256,9 +256,37 @@ pub fn usfm_to_vref_index(source: &str) -> VrefIndex {
 /// each token's own id. Driven by the generic [`walk`], which resolves
 /// chapter/verse opens from the slice exactly as `walk_tokens` does.
 pub fn tokens_to_vref_index<T: LintableToken>(tokens: &[T]) -> VrefIndex {
-    let mut visitor = IndexedVrefVisitor::default();
+    tokens_to_vref_index_seeded(tokens, None).0
+}
+
+/// [`tokens_to_vref_index`], seeded with the one visitor state a whole-book
+/// walk carries across a `\c` boundary and never clears: whether the most
+/// recently opened paragraph-like block supports verse content
+/// (`None` until the first block anywhere opens). Also returns that same
+/// fact as it stands after this slice, so a caller walking a book one
+/// chapter run at a time — the resident vref cache, not a whole-book call —
+/// can seed the next run from this run's own outgoing state instead of
+/// starting every run assuming `None`, which is what a bare per-run
+/// `tokens_to_vref_index` call over a slice would silently do and is
+/// wrong exactly when an earlier chapter's trailing block does not support
+/// verses (`\s1` heading and no `\p` before the next `\c`) and a later
+/// chapter opens straight into a `\v` with no block of its own.
+///
+/// A whole-book walk over the same tokens agrees with calling this once per
+/// chapter run and chaining outgoing into the next incoming: the flag is
+/// carried, never reset, so there is nothing else a per-run caller has to
+/// reconstruct.
+pub fn tokens_to_vref_index_seeded<T: LintableToken>(
+    tokens: &[T],
+    incoming_block_state: Option<bool>,
+) -> (VrefIndex, Option<bool>) {
+    let mut visitor = IndexedVrefVisitor {
+        current_block_supports_verse: incoming_block_state,
+        ..IndexedVrefVisitor::default()
+    };
     walk(tokens, &mut visitor);
-    visitor.finish()
+    let outgoing_block_state = visitor.current_block_supports_verse;
+    (visitor.finish(), outgoing_block_state)
 }
 
 #[derive(Debug, Default)]

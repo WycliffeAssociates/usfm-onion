@@ -268,6 +268,85 @@ fn braid_chapter_runs_for_test(tokens: &[OwnedToken]) -> Vec<(String, std::ops::
         .collect()
 }
 
+/// A chapter-replacement input whose tokens carry real sids: parses the
+/// *whole* edited book (so `\id` is in scope for sid derivation) and slices
+/// out just the target chapter's own run, using `braid_chapter_runs_for_test`
+/// above.
+fn chapter_replacement(whole_edited_source: &str, label: &str) -> Vec<OwnedToken> {
+    let tokens = owned(whole_edited_source);
+    let (_, range) = braid_chapter_runs_for_test(&tokens)
+        .into_iter()
+        .find(|(found, _)| found == label)
+        .unwrap_or_else(|| panic!("no chapter {label} in the edited source"));
+    tokens[range].to_vec()
+}
+
+/// Clean-room review P1.1's exact repro: a chapter ending in a heading with
+/// no verse-supporting paragraph, followed by a chapter opening straight
+/// into a verse with no block of its own. The stateless whole-book
+/// projection carries the "does not support verse" state across the `\c`
+/// boundary and drops the second chapter's verse entirely; the resident
+/// per-run cache must reproduce exactly that, not silently include it by
+/// seeding every run as if nothing came before it.
+#[test]
+fn resident_matches_stateless_across_a_chapter_boundary_that_flips_verse_support() {
+    const HEADING_THEN_BARE_VERSE: &str = "\\id GEN\n\\c 1\n\\s1 Heading\n\\c 2\n\\v 1 text\n";
+    for lane in LANES {
+        let mut resident = seeded(lane, vec![("GEN", HEADING_THEN_BARE_VERSE)]);
+        let entries = single(resident.vref_index(CorpusScope::Book(id("GEN"))).unwrap());
+        assert_eq!(
+            entries,
+            Vec::<VrefEntry>::new(),
+            "{lane:?}: the heading in chapter 1 does not support verse content, and that \
+             carries across the \\c boundary into chapter 2's bare \\v — no entry, not \
+             GEN 2:1"
+        );
+        assert_matches_stateless(&mut resident, id("GEN"));
+    }
+}
+
+/// The mutation-battery half of P1.1: an *earlier* chapter's trailing block
+/// changes from verse-supporting to not (or back), which flips a *later*,
+/// completely untouched chapter's own projection — proving the cache key
+/// genuinely includes the incoming state rather than only the changed
+/// run's own token identity (which would incorrectly keep serving the
+/// later chapter's stale cached entry).
+#[test]
+fn an_earlier_chapters_trailing_block_change_invalidates_a_later_untouched_chapters_cache() {
+    const HEADING_THEN_BARE_VERSE: &str = "\\id GEN\n\\c 1\n\\s1 Heading\n\\c 2\n\\v 1 text\n";
+    const PARAGRAPH_THEN_BARE_VERSE: &str = "\\id GEN\n\\c 1\n\\p\n\\c 2\n\\v 1 text\n";
+    for lane in LANES {
+        let mut resident = seeded(lane, vec![("GEN", HEADING_THEN_BARE_VERSE)]);
+        // Warm the cache: chapter 2 has no entry.
+        let before = single(resident.vref_index(CorpusScope::Book(id("GEN"))).unwrap());
+        assert!(before.is_empty(), "{lane:?}");
+
+        // Replace *only* chapter 1 with a verse-supporting paragraph instead
+        // of a heading, via `update_chapter` — chapter 2's own tokens are
+        // untouched by construction (same objects, same ids, same
+        // `TokenIdentity`), so this isolates the incoming-state half of the
+        // cache key: if a stale entry were served by identity alone,
+        // chapter 2 would still wrongly report no entry.
+        let chapter_1 = chapter_replacement(PARAGRAPH_THEN_BARE_VERSE, "1");
+        resident
+            .update_chapter(
+                ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into())),
+                ChapterInput::Tokens(chapter_1),
+            )
+            .unwrap();
+
+        let after = single(resident.vref_index(CorpusScope::Book(id("GEN"))).unwrap());
+        assert_eq!(
+            after.iter().map(|e| e.sid.as_str()).collect::<Vec<_>>(),
+            ["GEN 2:1"],
+            "{lane:?}: chapter 1 now supports verse content, so chapter 2's bare \\v is \
+             in scope — a stale cache keyed on chapter 2's own identity alone would still \
+             report no entry"
+        );
+        assert_matches_stateless(&mut resident, id("GEN"));
+    }
+}
+
 // ---- corpus-scale gates (`cargo test -p braid --test vref -- --ignored`) -
 
 mod corpus_scale {

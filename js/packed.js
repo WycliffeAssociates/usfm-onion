@@ -752,25 +752,42 @@ export function decodeTokens(verified, path) {
  * boundary.
  */
 export function reconcileFindings(previous, next) {
-  const byIdentity = new Map();
+  // A pool of *not-yet-consumed* candidates per identity key, not a single
+  // "first wins" slot: two same-identity findings in `previous` (a real,
+  // supported case — duplicate logical identity is deterministic occurrence,
+  // not a collision) are two distinct objects, and each may be reused by at
+  // most one `next` finding. A single-slot map here previously let a later
+  // `next` finding matching the SAME key re-match that one slot a second
+  // time, which could report the shortcut "nothing changed, return `previous`
+  // itself" even though a real prior finding (never re-matched, never
+  // consumed) had actually disappeared from `next`.
+  const pools = new Map();
   for (const finding of previous ?? []) {
     const key = findingIdentity(finding);
-    // Same-identity duplicates are possible in principle; first wins, and the rest
-    // fall through to fresh objects rather than being silently merged.
-    if (!byIdentity.has(key)) byIdentity.set(key, finding);
+    let pool = pools.get(key);
+    if (pool === undefined) {
+      pool = [];
+      pools.set(key, pool);
+    }
+    pool.push(finding);
   }
 
   let reused = 0;
   const out = (next ?? []).map((finding) => {
-    const candidate = byIdentity.get(findingIdentity(finding));
-    if (candidate !== undefined && sameFindingValue(candidate, finding)) {
-      reused += 1;
-      return candidate;
-    }
-    return finding;
+    const pool = pools.get(findingIdentity(finding));
+    const index = pool?.findIndex((candidate) => sameFindingValue(candidate, finding)) ?? -1;
+    if (index === -1) return finding;
+    const [candidate] = pool.splice(index, 1);
+    reused += 1;
+    return candidate;
   });
-  // Returning the previous array itself when nothing moved lets a caller skip a
-  // re-render on identity alone.
+  // The shortcut — return `previous` itself so a caller can skip a re-render
+  // on identity alone — is only sound when every slot matched one-to-one:
+  // `reused === out.length` alone does not prove that (two `next` findings
+  // could both have matched the same still-in-the-pool candidate before it
+  // was consumed), so this also requires every `previous` finding to have
+  // been drained from its pool, which one-to-one consumption above already
+  // guarantees whenever the counts agree.
   if (reused === out.length && out.length === (previous?.length ?? 0)) return previous;
   return out;
 }

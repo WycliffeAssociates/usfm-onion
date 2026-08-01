@@ -707,8 +707,6 @@ mod tests {
     /// other on a keystroke path without changing what it reads.
     #[test]
     fn the_resident_vref_index_matches_the_stateless_projection() {
-        use crate::resident::*;
-
         let source = "\\id PSA\n\\c 51\n\\q1\n\\v 8 Make me hear joy and gladness\n\\q2 so that the bones may rejoice.\n\\c 52\n\\p\n\\v 1 Why do you boast?\n";
         // Driven through braid's surface plus this crate's own conversions: a
         // `js_sys::Function` cannot be constructed on a non-wasm target, so the

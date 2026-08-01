@@ -116,16 +116,30 @@ const METHODS = {
     wrapped: true,
     args: (a) => [a.corpus],
   },
+  // The reopen-from-packed gate. `RestoreRecord` is a plain (non-tagged)
+  // struct that crosses the wasm boundary through the generic
+  // serde-wasm-bindgen path, which represents `Vec<u8>` as `number[]`
+  // (confirmed against the generated `.d.ts`: `packed: number[]`), not a
+  // `Uint8Array` — so the transcript's own plain JSON number arrays are
+  // already the right shape and need no conversion here.
+  restore_corpus: { js: "restoreCorpus", wrapped: true, args: (a) => [a.records] },
+  // Continues on the same just-restored instance (see FRESH_INSTANCE_STEPS)
+  // rather than replaying restore_corpus's own args.
+  restore_corpus_then_lint: { js: "lint", wrapped: false, args: () => [] },
 };
 
 /** Steps that build their own fresh `Braid` rather than continuing the
- * lane's ongoing one — exactly the three the Rust generator also gives a
- * dedicated instance to, because they exist only to prove one refusal and
- * must not perturb the lane's main sequence. */
+ * lane's ongoing one. `update_chapter_ambiguous_seed` and the two
+ * `replace_corpus_*` failure cases exist only to prove one refusal and must
+ * not perturb the lane's main sequence; `restore_corpus` is a genuine cold
+ * reopen and must start from an empty handle, exactly as the Rust generator's
+ * `reopened` does. `restore_corpus_then_lint` deliberately continues on that
+ * same restored instance, so it is not in this set. */
 const FRESH_INSTANCE_STEPS = new Set([
   "update_chapter_ambiguous_seed",
   "replace_corpus_malformed",
   "replace_corpus_duplicate_token_id",
+  "restore_corpus",
 ]);
 
 function makeMinter() {
