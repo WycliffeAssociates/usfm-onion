@@ -4981,3 +4981,247 @@ quotable; only the *self-time proportions* below are:
      (4.29%) and `RawVecInner::reserve`/`finish_grow` suggest repeated
      reallocation building each verse's collected text and segment list
      rather than a single pre-sized allocation per verse.
+
+## 2026-08-02 — v0.1.1: expose packed publication on the wasm Braid
+
+Post-release gap, found by the editor implementer and confirmed real: the
+v0.1.0 wasm surface shipped `restoreCorpus` and the `/packed` read layer
+(`verifyPackedBook`), but no public verb that *produces* packed bytes --
+`PublicationCache::publish` and the whole Phase D adapter
+(`crates/usfm_onion_wasm/src/publication.rs`) were `pub(crate)` only. The
+restore lane was production-unreachable: nothing a consumer could call ever
+created `corpus.bin`. Root cause of the escape: the epic's Phase F item 3
+never explicitly listed the write verb as a deliverable, and every review
+round verified what was built against what the plan named, not against
+whether the round trip the format exists for was reachable at all --
+contract closure was never itself a checked item.
+
+Branch `v0.1.1-publish` off `master`, thin projection of the existing
+adapter only -- no redesign.
+
+**New verbs (`crates/usfm_onion_wasm/src/resident.rs`):**
+- `Braid::publish() -> PublishOutcome` -- wraps this handle's own
+  `PublicationCache` (added as a field on `Braid`, so a repeat publish gets
+  the adapter's splice-reuse automatically, its whole point). Dirty books
+  lint first via the adapter's own internal `lint()` call (braid's
+  existing rule; no separate pre-lint step was ever required). Returns the
+  packed bytes, the hex snapshot id, and per-book bookkeeping
+  (`PublishedBookInfo`: book, source hash, whether freshly encoded this
+  call, and -- when freshly encoded -- the exact bound source text a
+  caller needs to restore or re-publish later) -- never the reuse-cache's
+  own sections/bytes. A pathological encode refusal (index-ceiling
+  overflow, an unbound span on a synthetic token, a layout the writer's
+  own reader would reject) surfaces as a typed `PublishError`, never a
+  panic -- required a new `PackedEncodeError` wasm-facing DTO
+  (`crates/usfm_onion_wire/src/dto.rs`, mirroring `PackedDecodeError`'s
+  existing pattern) projecting `EncodeError`/`LayoutRefusal`/`SectionKind`.
+- `Braid::restorePublishedCorpus(packed, records) -> RestoreOutcome` --
+  the corpus-grain counterpart `restoreCorpus` could never be, because
+  `restoreCorpus` is built on `verify_book`, which explicitly refuses a
+  container naming more than one book (`a_two_book_container_is_refused`)
+  and `publish()` produces exactly one combined multi-book container by
+  design. Wraps `usfm_onion_wire::corpus_codec::verify_corpus` (already
+  existed, unused by any wasm verb) plus a new
+  `materialize_owned_tokens_corpus` (`crates/usfm_onion_wire/src/corpus_codec.rs`)
+  -- the corpus-grain twin of the existing `materialize_owned_tokens`,
+  needed for the same reason that function exists beside `verify_book`:
+  `verify_corpus` hands back receipts and findings but never tokens.
+  `verify_corpus` already enforces the all-or-none same-stamp invariant
+  corpus-wide, so this verb needed none of `restoreCorpus`'s own
+  hand-rolled batch-stamp-agreement loop. Reuses the P1-B suppressed-config
+  decline-to-prime rule verbatim (same `summary_unknowable` check against
+  this resident's own live config).
+- `verifyPublishedCorpus(packed, sources) -> PublishedCorpusOutcome`
+  (`crates/usfm_onion_wasm/src/stateless.rs`) -- the read-only inspection
+  counterpart, thin-wrapping `verify_corpus` the same way `verifyPackedBook`
+  wraps `verify_book`. Named `verifyPublishedCorpus`, not `verifyPackedCorpus`:
+  `js/packed.js` already exports an unrelated `verifyPackedCorpus` (a
+  JS-level helper looping `verifyPackedBook` over N independent per-book
+  records) -- reusing that name for a materially different Rust-side,
+  single-combined-container verb would have collided two different
+  concepts under one exported name across the public surface.
+
+**Round-trip closure, public API only** (the loop the release shipped half
+of): `braid.publish()` -> `verifyPublishedCorpus()` (independent, touches
+no resident state) -> `new Braid().restorePublishedCorpus()` -> identical
+resident state and materialized USFM. Two gates:
+- Rust: `resident::restore_tests::publish_then_restore_published_corpus_reproduces_the_resident_state`
+  (two books, one with a real finding).
+- JS, through the actual built package, both targets:
+  `scripts/test-publish-round-trip.mjs` (new; `npm run test:publish` /
+  `test:publish:web`) -- a plain-config case and a suppressing-config case
+  (P1-B's decline-to-prime rule exercised at corpus grain, not just
+  per-book). Findings are compared on the fields a consumer reads
+  (code/tokenId/sid/message/messageParams/fix), not the whole object:
+  `span`/`relatedSpan` are byte offsets into whichever bytes were last
+  decoded, and a materialized-from-packed token legitimately carries one
+  where a freshly-parsed-then-resident token does not -- the same subset
+  `publication.rs`'s own existing equivalence test already established,
+  not a new decision made here.
+
+**Parity transcript** (`crates/usfm_onion_wasm/src/parity.rs`,
+`scripts/test-parity.mjs`): `run_publish` builds the identical corpus on
+both the *native* `PublicationCache::publish` call and the *wasm*
+`Braid::publish()` verb and asserts the two containers are byte-identical
+in the Rust generator itself, before the fixture is ever written -- pinning
+the projection at the source, not just via a recorded value a node
+comparator might interpret loosely. Two new steps per lane
+(`publish_seed`, `publish`); 66 steps total (was 62), 0 divergences, both
+targets.
+
+**Version**: 0.1.1 in all four manifests (root `Cargo.toml`
+`workspace.package.version`, root `package.json`, and `pkg-bundler`/
+`pkg-web`'s `package.json`, the latter two regenerated by the release
+build, not hand-edited).
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace --all-features`
+clean and green (braid 101 across its integration suites, usfm_onion 291,
+usfm_onion_wasm 39, usfm_onion_wire 197+2); `cargo test --release --test
+lint_oracle -- --ignored` byte-identical; `RUSTFLAGS="-D warnings" cargo
+test --release -p braid -p usfm_onion_wire -p usfm_onion_wasm --
+--ignored` green, both re-registered wire corpus tests and the parity
+generator (whose own byte-identity assertion is part of this run); `npm
+run test:packed`/`test:packed:web` green (410 cases); `npm run
+test:parity`/`test:parity:web` green (66 steps, 0 divergences, both
+targets); `npm run test:publish`/`test:publish:web` green (11 checks
+each, both targets); `npm run golden:wasm`/`golden:wasm:web` green (7
+fixtures); `cargo fmt --all -- --check` clean. pkg regen (release build):
+`.d.ts`/`.js` moved this round (expected -- new public verbs/types), `.wasm`
+binaries regenerated, `pkg-bundler`/`pkg-web` `package.json` both show
+0.1.1. Fresh-clone build+test verified after commit.
+
+## 2026-08-02 — v0.1.1 clean-room fix: materialize_owned_tokens_corpus's trust gap
+
+Clean-room review of `5a751e2`: one P1, no P2s, everything else accepted
+(composition, cache ownership, the suppression rule, naming, both round
+trips).
+
+**P1 — `materialize_owned_tokens_corpus`
+(`crates/usfm_onion_wire/src/corpus_codec.rs`) violated its own documented
+trust contract.** The doc claimed it repeated `verify_corpus`'s structural
+checks without requiring prior verification, but the body only ever opened
+TOKEN sections -- finding sections were never opened, so whatever
+validation they carry (their own integrity checksum, the book/source-hash
+pairing `decode_finding_section` checks) never ran. Reviewer's exact repro:
+a container whose finding section is corrupted (a content byte flipped,
+neither checksum restamped) but whose *outer container* checksum is then
+fixed up separately -- `verify_corpus` still rejects it (its per-book walk
+opens the finding section and hits the section-level checksum mismatch),
+but `materialize_owned_tokens_corpus` returned `Ok`, having never looked at
+that section at all. Both public corpus-grain decode paths must reject the
+identical corrupt container; the wasm `restorePublishedCorpus` verb was
+only safe because it happens to call `verify_corpus` before ever calling
+this function -- the standalone wire function was an unsafe seam for any
+future caller that didn't.
+
+Fixed narrowly, exactly as directed: `materialize_owned_tokens_corpus` now
+calls `verify_corpus` itself, first, propagating its error untouched on
+failure, rather than re-deriving a hand-copied subset of the same checks --
+a second copy of a validation walk is precisely the drift bug class this
+was. `restorePublishedCorpus` (which already calls `verify_corpus`
+separately before calling the materializer) now pays that validation
+twice on a warm restore; accepted as the cost of a cold-open path rather
+than threading a pre-verified witness type through, which would be more
+machinery than the one caller needs.
+
+Regression (`crates/usfm_onion_wire/src/corpus_codec.rs`):
+`a_corrupt_finding_section_is_refused_by_both_public_corpus_decode_paths`
+-- reproduces the reviewer's exact corruption shape (flip a byte inside the
+finding section's payload without restamping either checksum, then restamp
+only the container-wide checksum) and asserts both `verify_corpus` and
+`materialize_owned_tokens_corpus` reject with the identical
+`DecodeError::ChecksumMismatch`; the existing good-path materialize test
+(`materialize_owned_tokens_corpus_matches_the_resident_tokens_book_by_book`)
+stays green.
+
+Gates (this round): `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101 across its integration suites,
+usfm_onion 291, usfm_onion_wasm 39, usfm_onion_wire 198 -- up one for the
+new regression); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green, including both
+re-registered wire corpus tests and the parity generator's own byte-
+identity assertion; `npm run test:packed`/`test:packed:web` green (410
+cases); `npm run test:parity`/`test:parity:web` green (66 steps, 0
+divergences, unchanged from the prior round -- no behavior for a valid
+container moved, so the fixture did not need regenerating); `npm run
+test:publish`/`test:publish:web` green (11 checks each, both targets);
+`npm run golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt
+--all -- --check` clean. pkg regen: `.d.ts`/`.js` unchanged (no signature
+moved, as expected for an internal validation fix) -- only `.wasm`
+binaries regenerated and committed. Fresh-clone build+test verified after
+commit.
+
+## 2026-08-02 — v0.1.1: witness path for restorePublishedCorpus (avoid double validation)
+
+Owner-agreed follow-up, before re-review: `8224fd4`'s fix made
+`restorePublishedCorpus` pay `verify_corpus`'s full per-book decode walk
+twice per restore (once explicitly, once inside
+`materialize_owned_tokens_corpus`). Measured cost of that double pass:
+en_ulb-class corpus (66 books, 4.1MB container) -- `verify_corpus` ~10ms,
+the second pass negligible. en_ult-class alignment-heavy corpus (67 books,
+194MB container) -- `verify_corpus` ~734ms per pass, so the doubled walk
+cost ~0.7s native (more, through the wasm boundary) on exactly the corpora
+this format has to handle well.
+
+**Owner ruling on the witness shape**: a bare boolean flag ("trust me, this
+was verified") was floated and rejected -- a flag is the identical
+trust-the-claim shape clean-room review already flagged once this round; a
+witness that doesn't bind to specific bytes is the same lie whether it's
+spelled `bool` or a richer type. Took the checksum arm instead: `VerifiedCorpus`
+now records `container_checksum: u64` -- the value already sitting in the
+container's own header (`ContainerHeader.checksum`), read once by
+`verify_corpus`'s own `read_container` call, not a separately-computed
+hash. A new `VerifiedCorpus::materialize_owned_tokens(&self, packed,
+sources)` re-reads that field from the *candidate* `packed` buffer (via
+`read_container`, which itself recomputes and validates the whole-buffer
+checksum against what the header claims -- a header parse plus one hash
+pass, never a token/finding decode) and refuses with
+`DecodeError::ChecksumMismatch` unless it matches `self.container_checksum`
+exactly. This is the cheapest binding the container format offers: no
+lifetime/borrow plumbing over the original buffer, no second independent
+hash computed by this crate -- reusing the checksum the format already
+carries and already re-verifies on every read.
+
+Refactored the shared per-book token-materialization walk into a private
+`materialize_tokens_from_container` so the self-verifying
+`materialize_owned_tokens_corpus` (which still calls `verify_corpus` first,
+unchanged contract, for arbitrary callers) and the new witnessed method
+can never drift into two different answers for the same bytes -- the same
+sharing principle `8224fd4` established, extended to the fast path instead
+of duplicating it.
+
+`restorePublishedCorpus` (`crates/usfm_onion_wasm/src/resident.rs`) now
+calls `verified.materialize_owned_tokens(&packed, &owned_sources)` instead
+of the standalone function -- one full verification per restore, not two.
+Public wasm shape unchanged (`restorePublishedCorpus`'s signature, args,
+and return type are identical); no `.d.ts`/`.js` moved.
+
+Regressions (`crates/usfm_onion_wire/src/corpus_codec.rs`):
+- `the_witness_path_materializes_the_same_tokens_as_the_self_verifying_one`
+  -- the fast path isn't merely "skip validation," it must produce
+  identical tokens to the self-verifying function over the same bytes.
+- `the_witness_path_refuses_a_buffer_it_was_not_verified_from` -- mints a
+  witness from one valid corpus, hands its `materialize_owned_tokens` a
+  *different*, independently well-formed corpus's bytes (confirmed
+  well-formed on its own via `read_container`, so this proves the
+  checksum binding specifically, not merely that corrupt bytes fail some
+  other check), and asserts `ChecksumMismatch`.
+- `a_corrupt_finding_section_is_refused_by_both_public_corpus_decode_paths`
+  (from the prior round) stays green, still covering the self-verifying
+  path.
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101 across its integration suites,
+usfm_onion 291, usfm_onion_wasm 39, usfm_onion_wire 200 -- up two for the
+new witness tests); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `npm run
+test:packed`/`test:packed:web` green (410 cases); `npm run
+test:parity`/`test:parity:web` green (66 steps, 0 divergences --
+unchanged, confirming the internal validation-path swap moved no
+observable behavior); `npm run test:publish`/`test:publish:web` green (11
+checks each, both targets); `npm run golden:wasm`/`golden:wasm:web` green
+(7 fixtures); `cargo fmt --all -- --check` clean. pkg regen: `.d.ts`/`.js`
+unchanged (no public signature moved, as expected), only `.wasm` binaries
+regenerated and committed. Fresh-clone build+test verified after commit.

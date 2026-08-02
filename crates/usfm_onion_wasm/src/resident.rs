@@ -153,6 +153,12 @@ outcome!(
     RestoreError
 );
 outcome!(
+    /// A packed corpus, or the reason it could not be produced.
+    PublishOutcome,
+    PublishedCorpus,
+    PublishError
+);
+outcome!(
     /// A scope's verse index, or the reason the scope does not resolve.
     VrefIndexOutcome,
     ScopedOutput<crate::VrefIndex>,
@@ -189,6 +195,11 @@ pub struct Braid {
     // outside a real JS engine. No production code outside `resident.rs`
     // reaches into this field.
     pub(crate) inner: NativeBraid,
+    /// This handle's own publication cache -- one per resident corpus, not a
+    /// free function, so a repeat `publish()` gets the adapter's whole point
+    /// (splice-reuse of whatever did not change) automatically rather than a
+    /// caller having to thread a cache through by hand.
+    pub(crate) publication: crate::publication::PublicationCache,
 }
 
 #[wasm_bindgen]
@@ -215,6 +226,7 @@ impl Braid {
         };
         Braid {
             inner: NativeBraid::new(config.into_native(), mint),
+            publication: crate::publication::PublicationCache::default(),
         }
     }
 
@@ -369,6 +381,216 @@ impl Braid {
             config_fingerprint: 0,
             engine_stamp: 0,
         });
+
+        RestoreOutcome::from(
+            self.inner
+                .restore_corpus(braid::CorpusRestoreInput::new(
+                    braid::LintConfigFingerprint(stamps.config_fingerprint),
+                    braid::LintEngineStamp(stamps.engine_stamp),
+                    books,
+                ))
+                .map(RestoreReport::from)
+                .map_err(|error| RestoreError::Ingest {
+                    error: error.into(),
+                }),
+        )
+    }
+
+    /// Publishes the resident corpus as one packed `corpus.bin` container.
+    ///
+    /// A thin projection of `PublicationCache::publish` (this handle's own
+    /// cache, so a repeat publish gets the adapter's whole point -- splice-
+    /// reuse of whatever did not change -- automatically): dirty books are
+    /// linted first (the adapter's own rule, via the `lint()` it runs
+    /// internally), every book's bytes and stamps decide reuse vs. re-encode,
+    /// and the reuse-cache's own sections/bytes never cross this boundary --
+    /// only the per-book bookkeeping in [`PublishedBookInfo`] does.
+    #[wasm_bindgen(js_name = publish)]
+    pub fn publish(&mut self) -> PublishOutcome {
+        let publication = match self.publication.publish(&mut self.inner) {
+            Ok(publication) => publication,
+            Err(error) => {
+                return PublishOutcome::refused(PublishError::Encode {
+                    error: error.into(),
+                });
+            }
+        };
+
+        // A second `lint()` read, not a second lint *pass*: every book was
+        // just made clean by the publish above, so this is a read of already-
+        // resident state, needed only for the per-book source hash the
+        // bookkeeping DTO reports (`Publication` itself does not restate it).
+        let snapshot = self.inner.lint();
+        let books = snapshot
+            .books
+            .iter()
+            .map(|book| {
+                let encoded = publication.encoded.contains(&book.book);
+                let source = publication
+                    .sources
+                    .iter()
+                    .find(|(candidate, _)| *candidate == book.book)
+                    .map(|(_, source)| source.clone());
+                PublishedBookInfo {
+                    book: book.book.as_str().to_string(),
+                    source_hash: format!("{:016x}", book.source_hash.0),
+                    encoded,
+                    source,
+                }
+            })
+            .collect();
+
+        PublishOutcome::from(Ok(PublishedCorpus {
+            bytes: publication.bytes,
+            snapshot_id: format!("{:016x}", snapshot.id.0),
+            books,
+        }))
+    }
+
+    /// Restores the whole resident corpus from one packed `corpus.bin`
+    /// container -- the corpus-grain counterpart to [`Self::publish`], as
+    /// [`Self::restore_corpus`] is to a per-book publication.
+    ///
+    /// `records` supplies each book's own source key and exact bound source
+    /// (a packed container names the book but never the key a corpus was
+    /// addressed by, and a freshly-encoded book's bound source is wire's own
+    /// serialization, not necessarily any file on disk -- see
+    /// [`PublishedBookInfo::source`]). Verification is corpus-wide
+    /// (`verify_corpus`): every book must have exactly one source supplied,
+    /// and findings that carry stamps must all carry the *same* stamps,
+    /// checked atomically before anything installs.
+    #[wasm_bindgen(js_name = restorePublishedCorpus)]
+    pub fn restore_published_corpus(
+        &mut self,
+        packed: Vec<u8>,
+        records: Vec<PublishedCorpusSource>,
+    ) -> RestoreOutcome {
+        let mut owned_sources = Vec::with_capacity(records.len());
+        for record in &records {
+            let source = match std::str::from_utf8(&record.source) {
+                Ok(source) => source,
+                Err(_) => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidUtf8,
+                    });
+                }
+            };
+            let book = match usfm_onion::token::BookId::from_str(&record.book) {
+                Some(book) => book,
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidSection,
+                    });
+                }
+            };
+            owned_sources.push((book, source));
+        }
+
+        let verified = match usfm_onion_wire::corpus_codec::verify_corpus(&packed, &owned_sources) {
+            Ok(verified) => verified,
+            Err(error) => {
+                return RestoreOutcome::refused(RestoreError::Decode {
+                    error: error.into(),
+                });
+            }
+        };
+        // The witness path: `verified` above already ran the complete
+        // corpus-wide validation over these exact bytes (structure, both
+        // integrity checksums, the finding/token pairing, the all-or-none
+        // stamp invariant), so this materializes against it directly rather
+        // than paying for that same walk a second time -- the difference
+        // between single-digit milliseconds and the better part of a second
+        // on an alignment-heavy, tens-of-books corpus. Still binds to
+        // `packed` itself (a cheap container-checksum recheck, not a
+        // token/finding decode), so a mismatched buffer is refused, never
+        // silently trusted onto `verified`'s claims.
+        let materialized = match verified.materialize_owned_tokens(&packed, &owned_sources) {
+            Ok(materialized) => materialized,
+            Err(error) => {
+                return RestoreOutcome::refused(RestoreError::Decode {
+                    error: error.into(),
+                });
+            }
+        };
+
+        // See `restore_corpus`'s own comment: any suppression configured on
+        // this resident's live config makes `suppressed_count` unknowable
+        // from packed bytes alone, so priming is declined wholesale rather
+        // than claiming a stale `0`.
+        let summary_unknowable = !self.inner.config().lint.suppressed.is_empty();
+
+        let mut books = Vec::with_capacity(verified.books.len());
+        for verified_book in verified.books {
+            let book = match usfm_onion::token::BookId::from_str(&verified_book.receipt.book) {
+                Some(book) => book,
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidSection,
+                    });
+                }
+            };
+            let record = match records
+                .iter()
+                .find(|record| record.book == verified_book.receipt.book)
+            {
+                Some(record) => record,
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidSection,
+                    });
+                }
+            };
+            let source = std::str::from_utf8(&record.source).unwrap_or_default();
+            let source_key = match braid::SourceKey::new(record.source_key.clone()) {
+                Some(key) => key,
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Ingest {
+                        error: IngestError::DuplicateSourceKey {
+                            source: record.source_key.clone(),
+                        },
+                    });
+                }
+            };
+            let tokens = match materialized
+                .iter()
+                .find(|(candidate, _)| *candidate == book)
+            {
+                Some((_, tokens)) => tokens.clone(),
+                None => {
+                    return RestoreOutcome::refused(RestoreError::Decode {
+                        error: crate::PackedDecodeError::InvalidSection,
+                    });
+                }
+            };
+            books.push(braid::BookRestoreInput {
+                source_key,
+                book,
+                source: source.to_string(),
+                tokens,
+                line_ending: usfm_onion::token::LineEnding::detect(source),
+                lint: (!summary_unknowable)
+                    .then_some(())
+                    .and(verified_book.lint_stamps)
+                    .map(|_| braid::BookLintPrime {
+                        book,
+                        source_hash: braid::SourceHash(
+                            u64::from_str_radix(&verified_book.receipt.source_hash, 16)
+                                .unwrap_or_default(),
+                        ),
+                        result: usfm_onion::lint::LintResult {
+                            summary: summarize_findings(&verified_book.findings),
+                            issues: verified_book.findings,
+                        },
+                    }),
+            });
+        }
+
+        let stamps = verified
+            .lint_stamps
+            .unwrap_or(usfm_onion_wire::corpus_codec::LintStamps {
+                config_fingerprint: 0,
+                engine_stamp: 0,
+            });
 
         RestoreOutcome::from(
             self.inner
@@ -1545,6 +1767,68 @@ impl From<braid::RestoreReport> for RestoreReport {
     }
 }
 
+/// One book's own bookkeeping from a publish -- never the reuse-cache's
+/// internal sections/bytes, which stay behind `PublicationCache`.
+///
+/// `source` is present exactly when `encoded` is `true`: a reused (spliced)
+/// book's source did not change and wire never saw it this round, so the
+/// caller is expected to already hold it from whichever earlier publish
+/// first reported `encoded: true` for that book -- the same asymmetry
+/// `EncodedCorpus::sources` documents natively.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedBookInfo {
+    pub book: String,
+    pub source_hash: String,
+    /// `true` when this book was freshly re-encoded this call; `false` when
+    /// its previous publication's sections were spliced in unchanged.
+    pub encoded: bool,
+    pub source: Option<String>,
+}
+
+/// A packed corpus, ready to persist as `corpus.bin`, plus what the caller
+/// needs to restore or re-publish it later.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedCorpus {
+    pub bytes: Vec<u8>,
+    pub snapshot_id: String,
+    /// One entry per resident book, in corpus order -- not only the freshly
+    /// encoded ones, so a caller always has the complete bookkeeping set for
+    /// what this publication now contains.
+    pub books: Vec<PublishedBookInfo>,
+}
+
+/// Why a publish could not produce packed bytes.
+///
+/// Every variant is a pathological-input safety net (see
+/// [`crate::dto::PackedEncodeError`]'s own doc comment) rather than something
+/// a normal publish hits; surfaced as a typed refusal regardless, never a
+/// panic.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PublishError {
+    Encode {
+        error: crate::dto::PackedEncodeError,
+    },
+}
+
+/// One book's exact source, keyed the same way a corpus-grain restore or
+/// re-publish needs to address it: by its resident book code *and* its own
+/// source key (a packed container names the book but not the key a corpus
+/// was originally addressed by).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedCorpusSource {
+    pub book: String,
+    pub source_key: String,
+    pub source: Vec<u8>,
+}
+
 /// A baseline that could not be recorded.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -1765,6 +2049,7 @@ mod restore_tests {
                     format!("minted-{next}")
                 },
             ),
+            publication: crate::publication::PublicationCache::default(),
         }
     }
 
@@ -1992,6 +2277,7 @@ mod restore_tests {
                 next += 1;
                 format!("minted-{next}")
             }),
+            publication: crate::publication::PublicationCache::default(),
         }
     }
 
@@ -2048,5 +2334,92 @@ mod restore_tests {
             "findings must still be returned after the honest recompute"
         );
         assert_summaries_match(snapshot.summary, expected_summary);
+    }
+
+    /// The public-API round trip `publish()` exists to close: publish, then
+    /// restore *from that exact publication* into a fresh handle, and the
+    /// restored corpus must be indistinguishable from the one that published
+    /// it -- books, findings, summary, and snapshot id alike. Two books, one
+    /// of which carries a real finding, so an empty-vs-nonempty findings
+    /// section is exercised in the same call.
+    #[test]
+    fn publish_then_restore_published_corpus_reproduces_the_resident_state() {
+        let mut original = empty_resident();
+        original
+            .inner
+            .replace_corpus(NativeCorpusInput::new(vec![
+                NativeBookInput::Usfm {
+                    source_key: SourceKey::new("GEN.usfm").unwrap(),
+                    book: book_id("GEN"),
+                    source: "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n".to_string(),
+                },
+                NativeBookInput::Usfm {
+                    source_key: SourceKey::new("EXO.usfm").unwrap(),
+                    book: book_id("EXO"),
+                    source: "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\n".to_string(),
+                },
+            ]))
+            .expect("two books");
+        let expected_snapshot = original.lint();
+        assert!(
+            expected_snapshot
+                .books
+                .iter()
+                .any(|book| !book.findings.is_empty()),
+            "the fixture must carry a real finding"
+        );
+
+        let PublishOutcome(ApiResult::Ok { value: published }) = original.publish() else {
+            panic!("a clean corpus must publish");
+        };
+        assert_eq!(published.books.len(), 2);
+        assert!(
+            published.books.iter().all(|book| book.encoded),
+            "a first publish encodes every book"
+        );
+
+        let records: Vec<PublishedCorpusSource> = published
+            .books
+            .iter()
+            .map(|book| PublishedCorpusSource {
+                book: book.book.clone(),
+                source_key: format!("{}.usfm", book.book),
+                source: book
+                    .source
+                    .clone()
+                    .expect("a freshly encoded book carries its bound source")
+                    .into_bytes(),
+            })
+            .collect();
+
+        let mut reopened = empty_resident();
+        let outcome = reopened.restore_published_corpus(published.bytes.clone(), records);
+        let ApiResult::Ok { value: report } = outcome.0 else {
+            panic!("a fresh, matching-stamp restore must succeed: {outcome:?}");
+        };
+        assert_eq!(
+            report.seeded.len(),
+            2,
+            "both books seed: {:?}",
+            report.rejected
+        );
+        assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+
+        let restored_snapshot = reopened.lint();
+        assert_eq!(restored_snapshot.snapshot_id, expected_snapshot.snapshot_id);
+        assert_eq!(restored_snapshot.books.len(), expected_snapshot.books.len());
+        for (restored, expected) in restored_snapshot
+            .books
+            .iter()
+            .zip(expected_snapshot.books.iter())
+        {
+            assert_eq!(restored.book, expected.book);
+            assert_eq!(restored.findings.len(), expected.findings.len());
+            for (restored, expected) in restored.findings.iter().zip(&expected.findings) {
+                assert_eq!(restored.code, expected.code);
+                assert_eq!(restored.sid, expected.sid);
+                assert_eq!(restored.message, expected.message);
+            }
+        }
     }
 }

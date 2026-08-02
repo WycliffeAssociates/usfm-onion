@@ -133,6 +133,12 @@ const METHODS = {
   // from, since it deliberately differs from every other step's config.
   restore_corpus_suppressed: { js: "restoreCorpus", wrapped: true, args: (a) => [a.records] },
   restore_corpus_suppressed_then_lint: { js: "lint", wrapped: false, args: () => [] },
+  // The publish gate: pins the wasm `publish()` verb's projection against the
+  // native adapter it wraps (asserted byte-identical in the Rust generator
+  // itself before this step is ever recorded). `publish_seed` builds the
+  // fresh instance `publish` then continues on.
+  publish_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  publish: { js: "publish", wrapped: true, args: () => [] },
 };
 
 /** Steps that build their own fresh `Braid` rather than continuing the
@@ -148,6 +154,7 @@ const FRESH_INSTANCE_STEPS = new Set([
   "replace_corpus_duplicate_token_id",
   "restore_corpus",
   "restore_corpus_suppressed",
+  "publish_seed",
 ]);
 
 function makeMinter() {

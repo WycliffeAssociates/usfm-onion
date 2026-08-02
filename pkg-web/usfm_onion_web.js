@@ -226,6 +226,22 @@ export class Braid {
         return takeObject(ret);
     }
     /**
+     * Publishes the resident corpus as one packed `corpus.bin` container.
+     *
+     * A thin projection of `PublicationCache::publish` (this handle's own
+     * cache, so a repeat publish gets the adapter's whole point -- splice-
+     * reuse of whatever did not change -- automatically): dirty books are
+     * linted first (the adapter's own rule, via the `lint()` it runs
+     * internally), every book's bytes and stamps decide reuse vs. re-encode,
+     * and the reuse-cache's own sections/bytes never cross this boundary --
+     * only the per-book bookkeeping in [`PublishedBookInfo`] does.
+     * @returns {PublishOutcome}
+     */
+    publish() {
+        const ret = wasm.braid_publish(this.__wbg_ptr);
+        return takeObject(ret);
+    }
+    /**
      * Removes a book. Removing an absent book is a no-op, not an error: the
      * requested end state already holds.
      * @param {string} book
@@ -281,6 +297,31 @@ export class Braid {
         const ptr0 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Restores the whole resident corpus from one packed `corpus.bin`
+     * container -- the corpus-grain counterpart to [`Self::publish`], as
+     * [`Self::restore_corpus`] is to a per-book publication.
+     *
+     * `records` supplies each book's own source key and exact bound source
+     * (a packed container names the book but never the key a corpus was
+     * addressed by, and a freshly-encoded book's bound source is wire's own
+     * serialization, not necessarily any file on disk -- see
+     * [`PublishedBookInfo::source`]). Verification is corpus-wide
+     * (`verify_corpus`): every book must have exactly one source supplied,
+     * and findings that carry stamps must all carry the *same* stamps,
+     * checked atomically before anything installs.
+     * @param {Uint8Array} packed
+     * @param {PublishedCorpusSource[]} records
+     * @returns {RestoreOutcome}
+     */
+    restorePublishedCorpus(packed, records) {
+        const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1);
         return takeObject(ret);
     }
     /**
@@ -1084,6 +1125,31 @@ export function verifyPackedBook(packed, source) {
     const ptr1 = passArray8ToWasm0(source, wasm.__wbindgen_export);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.verifyPackedBook(ptr0, len0, ptr1, len1);
+    return takeObject(ret);
+}
+
+/**
+ * Verifies a whole packed corpus container against the exact sources every
+ * book was bound to -- the read-only inspection counterpart to
+ * [`crate::resident::Braid::restore_published_corpus`], useful to a host
+ * that wants to validate a `corpus.bin` before deciding whether to restore
+ * it into a resident handle at all.
+ *
+ * Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
+ * (container/section structure, both integrity checksums, exact source
+ * length and content hash, the marker-catalog stamp, the all-or-none lint
+ * stamp invariant), and nothing more: no resident state is read or
+ * mutated, and no token crosses this boundary.
+ * @param {Uint8Array} packed
+ * @param {PublishedCorpusSourceInput[]} sources
+ * @returns {PublishedCorpusOutcome}
+ */
+export function verifyPublishedCorpus(packed, sources) {
+    const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(sources, wasm.__wbindgen_export);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.verifyPublishedCorpus(ptr0, len0, ptr1, len1);
     return takeObject(ret);
 }
 

@@ -49,9 +49,10 @@ pub use usfm_onion_wire::dto::{
     LintCode, LintIssueType, LintSeverity, MarkerCategory, MarkerDefKind, MarkerFamily,
     MarkerFamilyRole, MarkerInfo, MarkerKind, MarkerMetadata, MarkerPayload, MergeSide, NoteFamily,
     NoteSubkind, NumberInfo, NumberRangeKind, PackedBookReceipt, PackedDecodeError,
-    PackedMarkerDescriptor, ParagraphCategory, SlotRole, Span, SpecContext, StructuralMarkerInfo,
-    StructuralScopeKind, TextDiffMode, TextDiffRun, TextDiffRunKind, Token, TokenKind,
-    UnitTextDiff, format_sid, map_marker_info,
+    PackedEncodeError, PackedLayoutRefusal, PackedMarkerDescriptor, PackedSectionKind,
+    ParagraphCategory, SlotRole, Span, SpecContext, StructuralMarkerInfo, StructuralScopeKind,
+    TextDiffMode, TextDiffRun, TextDiffRunKind, Token, TokenKind, UnitTextDiff, format_sid,
+    map_marker_info,
 };
 
 // ---------------------------------------------------------------------------

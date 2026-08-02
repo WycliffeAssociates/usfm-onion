@@ -1834,6 +1834,146 @@ impl From<crate::error::DecodeError> for PackedDecodeError {
     }
 }
 
+/// A wasm-facing projection of [`crate::schema::SectionKind`] — only ever seen
+/// nested inside [`PackedLayoutRefusal::DuplicateSection`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub enum PackedSectionKind {
+    Token,
+    Finding,
+}
+
+impl From<crate::schema::SectionKind> for PackedSectionKind {
+    fn from(value: crate::schema::SectionKind) -> Self {
+        match value {
+            crate::schema::SectionKind::Token => Self::Token,
+            crate::schema::SectionKind::Finding => Self::Finding,
+        }
+    }
+}
+
+/// The frozen [`crate::error::LayoutRefusal`] set as a tagged boundary value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PackedLayoutRefusal {
+    DuplicateSection { section_kind: PackedSectionKind },
+    OrphanFindingSection,
+    DuplicateField { field_id: u16 },
+    FieldExtentMismatch { field_id: u16 },
+    MissingRequiredField { field_id: u16 },
+    CachedSectionUnreadable,
+    CachedSectionMismatch,
+    CachedSectionStampMismatch,
+    PositionalIdConflict { field_id: u16 },
+    SectionTooLarge,
+    TooManyFields,
+    TooManySections,
+}
+
+impl From<crate::error::LayoutRefusal> for PackedLayoutRefusal {
+    fn from(value: crate::error::LayoutRefusal) -> Self {
+        use crate::error::LayoutRefusal as R;
+        match value {
+            R::DuplicateSection { kind } => Self::DuplicateSection {
+                section_kind: kind.into(),
+            },
+            R::OrphanFindingSection => Self::OrphanFindingSection,
+            R::DuplicateField { field_id } => Self::DuplicateField { field_id },
+            R::FieldExtentMismatch { field_id } => Self::FieldExtentMismatch { field_id },
+            R::MissingRequiredField { field_id } => Self::MissingRequiredField { field_id },
+            R::CachedSectionUnreadable => Self::CachedSectionUnreadable,
+            R::CachedSectionMismatch => Self::CachedSectionMismatch,
+            R::CachedSectionStampMismatch => Self::CachedSectionStampMismatch,
+            R::PositionalIdConflict { field_id } => Self::PositionalIdConflict { field_id },
+            R::SectionTooLarge => Self::SectionTooLarge,
+            R::TooManyFields => Self::TooManyFields,
+            R::TooManySections => Self::TooManySections,
+        }
+    }
+}
+
+/// The frozen [`crate::error::EncodeError`] set as a tagged boundary value.
+///
+/// Every variant here is a pathological-input safety net (a book past an
+/// index ceiling, a synthetically-built token whose span does not bind, a
+/// layout the writer's own reader would reject) rather than something a
+/// normal publish hits — but the packed boundary's rule is refuse-typed-never-
+/// panic regardless of how rare the refusal is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PackedEncodeError {
+    TooManySids {
+        book: String,
+        found: u32,
+    },
+    UnrepresentablePayload {
+        book: String,
+        code: u8,
+    },
+    TooManyDescriptors {
+        book: String,
+        found: u32,
+    },
+    UnboundSpan {
+        book: String,
+        token_idx: u32,
+    },
+    InvalidSectionLayout {
+        book: String,
+        reason: PackedLayoutRefusal,
+    },
+    EmptyFix {
+        book: String,
+        code: u8,
+    },
+}
+
+impl From<crate::error::EncodeError> for PackedEncodeError {
+    fn from(value: crate::error::EncodeError) -> Self {
+        use crate::error::EncodeError as E;
+        match value {
+            E::TooManySids { book, found } => Self::TooManySids {
+                book: book.as_str().to_string(),
+                found,
+            },
+            E::UnrepresentablePayload { book, code } => Self::UnrepresentablePayload {
+                book: book.as_str().to_string(),
+                code,
+            },
+            E::TooManyDescriptors { book, found } => Self::TooManyDescriptors {
+                book: book.as_str().to_string(),
+                found,
+            },
+            E::UnboundSpan { book, token_idx } => Self::UnboundSpan {
+                book: book.as_str().to_string(),
+                token_idx,
+            },
+            E::InvalidSectionLayout { book, reason } => Self::InvalidSectionLayout {
+                book: book.as_str().to_string(),
+                reason: reason.into(),
+            },
+            E::EmptyFix { book, code } => Self::EmptyFix {
+                book: book.as_str().to_string(),
+                code,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
