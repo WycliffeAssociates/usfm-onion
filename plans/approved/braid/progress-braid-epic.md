@@ -5089,3 +5089,65 @@ fixtures); `cargo fmt --all -- --check` clean. pkg regen (release build):
 `.d.ts`/`.js` moved this round (expected -- new public verbs/types), `.wasm`
 binaries regenerated, `pkg-bundler`/`pkg-web` `package.json` both show
 0.1.1. Fresh-clone build+test verified after commit.
+
+## 2026-08-02 — v0.1.1 clean-room fix: materialize_owned_tokens_corpus's trust gap
+
+Clean-room review of `5a751e2`: one P1, no P2s, everything else accepted
+(composition, cache ownership, the suppression rule, naming, both round
+trips).
+
+**P1 — `materialize_owned_tokens_corpus`
+(`crates/usfm_onion_wire/src/corpus_codec.rs`) violated its own documented
+trust contract.** The doc claimed it repeated `verify_corpus`'s structural
+checks without requiring prior verification, but the body only ever opened
+TOKEN sections -- finding sections were never opened, so whatever
+validation they carry (their own integrity checksum, the book/source-hash
+pairing `decode_finding_section` checks) never ran. Reviewer's exact repro:
+a container whose finding section is corrupted (a content byte flipped,
+neither checksum restamped) but whose *outer container* checksum is then
+fixed up separately -- `verify_corpus` still rejects it (its per-book walk
+opens the finding section and hits the section-level checksum mismatch),
+but `materialize_owned_tokens_corpus` returned `Ok`, having never looked at
+that section at all. Both public corpus-grain decode paths must reject the
+identical corrupt container; the wasm `restorePublishedCorpus` verb was
+only safe because it happens to call `verify_corpus` before ever calling
+this function -- the standalone wire function was an unsafe seam for any
+future caller that didn't.
+
+Fixed narrowly, exactly as directed: `materialize_owned_tokens_corpus` now
+calls `verify_corpus` itself, first, propagating its error untouched on
+failure, rather than re-deriving a hand-copied subset of the same checks --
+a second copy of a validation walk is precisely the drift bug class this
+was. `restorePublishedCorpus` (which already calls `verify_corpus`
+separately before calling the materializer) now pays that validation
+twice on a warm restore; accepted as the cost of a cold-open path rather
+than threading a pre-verified witness type through, which would be more
+machinery than the one caller needs.
+
+Regression (`crates/usfm_onion_wire/src/corpus_codec.rs`):
+`a_corrupt_finding_section_is_refused_by_both_public_corpus_decode_paths`
+-- reproduces the reviewer's exact corruption shape (flip a byte inside the
+finding section's payload without restamping either checksum, then restamp
+only the container-wide checksum) and asserts both `verify_corpus` and
+`materialize_owned_tokens_corpus` reject with the identical
+`DecodeError::ChecksumMismatch`; the existing good-path materialize test
+(`materialize_owned_tokens_corpus_matches_the_resident_tokens_book_by_book`)
+stays green.
+
+Gates (this round): `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101 across its integration suites,
+usfm_onion 291, usfm_onion_wasm 39, usfm_onion_wire 198 -- up one for the
+new regression); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green, including both
+re-registered wire corpus tests and the parity generator's own byte-
+identity assertion; `npm run test:packed`/`test:packed:web` green (410
+cases); `npm run test:parity`/`test:parity:web` green (66 steps, 0
+divergences, unchanged from the prior round -- no behavior for a valid
+container moved, so the fixture did not need regenerating); `npm run
+test:publish`/`test:publish:web` green (11 checks each, both targets);
+`npm run golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt
+--all -- --check` clean. pkg regen: `.d.ts`/`.js` unchanged (no signature
+moved, as expected for an internal validation fix) -- only `.wasm`
+binaries regenerated and committed. Fresh-clone build+test verified after
+commit.

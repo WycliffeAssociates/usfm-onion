@@ -516,15 +516,31 @@ pub fn verify_corpus(
 /// needed for exactly the same reason that function exists beside
 /// [`crate::verify::verify_book`]: [`verify_corpus`] hands back receipts and
 /// findings but never tokens, because materializing a token is a cost only a
-/// caller that actually wants one should pay. Repeats the same structural
-/// checks `verify_corpus` does over the token/finding table of contents
-/// (exactly one token section per book, sources supplied 1:1) rather than
-/// trusting a caller to have verified first.
+/// caller that actually wants one should pay.
+///
+/// Calls [`verify_corpus`] itself, first, and returns its error untouched on
+/// failure -- the *complete* corpus validation (structure, both integrity
+/// checksums, exact source length and content hash, the catalog stamp, the
+/// finding/token pairing, the all-or-none lint-stamp invariant), not a
+/// second, hand-copied subset of it. An earlier version of this function
+/// re-derived only the token-section half of that walk itself, which meant a
+/// container whose *finding* section was corrupt (checksum mismatch, wrong
+/// pairing) was never checked at all here: a caller of this function alone,
+/// bypassing `verify_corpus`, could materialize tokens out of a container no
+/// public decode path should have accepted. Sharing the one validation
+/// function is what makes that impossible to drift out of sync again --
+/// duplicating the checks by hand is exactly the bug class this replaces.
+/// A caller that already holds a [`VerifiedCorpus`] (as
+/// `restorePublishedCorpus` does) pays this validation twice; accepted here
+/// as a cold-open cost rather than threading a pre-verified witness type
+/// through, which would be more machinery than a restore verb needs.
 pub fn materialize_owned_tokens_corpus(
     packed: &[u8],
     sources: &[(BookId, &str)],
 ) -> Result<Vec<(BookId, Vec<OwnedToken>)>, crate::error::DecodeError> {
     use crate::error::DecodeError;
+
+    verify_corpus(packed, sources)?;
 
     let container = crate::container::read_container(packed)?;
     let toc = container.toc();
@@ -730,6 +746,62 @@ mod tests {
                 assert_eq!(materialized.source(), original.source());
             }
         }
+    }
+
+    /// Clean-room review: `materialize_owned_tokens_corpus` used to open only
+    /// token sections, so a container whose *finding* section was corrupt --
+    /// but whose outer container checksum still checked out -- decoded fine
+    /// here while `verify_corpus` correctly refused it. Both public corpus
+    /// decode paths must reject the identical corrupt container with the
+    /// same refusal, because a caller of the materializer alone never went
+    /// through `verify_corpus` at all.
+    ///
+    /// Reproduces the reviewer's exact shape: flip a content byte inside the
+    /// finding section's payload without restamping either checksum (the
+    /// same corruption the `finding/checksum-mismatch` golden vector
+    /// exercises at the single-book grain), then restamp *only* the
+    /// container-wide checksum -- so the outer integrity check `verify_corpus`
+    /// runs first still passes, and the only remaining defect is the finding
+    /// section's own internal checksum, which is caught only by a function
+    /// that actually opens that section.
+    #[test]
+    fn a_corrupt_finding_section_is_refused_by_both_public_corpus_decode_paths() {
+        let gen_tokens = owned_tokens(GEN);
+        let gen_lint = lint_of(GEN);
+        let sections = vec![CorpusSection::Fresh(CorpusSectionInput {
+            book: book("GEN"),
+            tokens: CorpusSectionTokens::Owned {
+                tokens: &gen_tokens,
+            },
+            findings: Some(&gen_lint),
+        })];
+        let published = encode_corpus(1, Some(stamps()), &sections).expect("publishes");
+        let sources = [(book("GEN"), GEN)];
+
+        // Sanity: the uncorrupted container is good on both paths.
+        assert!(verify_corpus(&published.bytes, &sources).is_ok());
+        assert!(materialize_owned_tokens_corpus(&published.bytes, &sources).is_ok());
+
+        let mut corrupted = published.bytes.clone();
+        let finding_section_offset = crate::finding_goldens::section_bounds(&corrupted)[1].0;
+        // Past the finding section's own 64-byte header, into its payload --
+        // the same offset `finding_goldens`'s own `checksum_mismatch` vector
+        // flips.
+        corrupted[finding_section_offset + 64] ^= 0xff;
+        crate::finding_goldens::restamp_container(&mut corrupted);
+
+        assert_eq!(
+            verify_corpus(&corrupted, &sources).err(),
+            Some(crate::error::DecodeError::ChecksumMismatch),
+            "verify_corpus must catch the corrupt finding section"
+        );
+        assert_eq!(
+            materialize_owned_tokens_corpus(&corrupted, &sources).err(),
+            Some(crate::error::DecodeError::ChecksumMismatch),
+            "materialize_owned_tokens_corpus must refuse the identical corrupt \
+             container with the same error -- it shares verify_corpus's own \
+             validation now, not a hand-copied subset of it"
+        );
     }
 
     /// The parsed lane, which a cold-parse publisher uses, and the token-only
