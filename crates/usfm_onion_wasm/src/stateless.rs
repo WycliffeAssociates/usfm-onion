@@ -31,6 +31,7 @@ use usfm_onion::token::{Token as NativeToken, tokens_to_usfm, tokens_to_usfm_rec
 use usfm_onion::usj::usfm_to_usj;
 use usfm_onion::usx::usfm_to_usx;
 use usfm_onion::vref::{tokens_to_vref_index, usfm_to_vref_index, usfm_to_vref_map_with_options};
+use usfm_onion_wire::corpus_codec::verify_corpus as verify_published_corpus;
 pub use usfm_onion_wire::dto::{
     AttributeItem, BlockBehavior, ClosingBehavior, CoveredSide, DecisionStatus, DecisionUnitKind,
     DiffOptions, HtmlCallerScope, HtmlCallerStyle, HtmlNoteMode, InlineContext, LintCategory,
@@ -244,6 +245,101 @@ pub fn wasm_verify_packed_book(packed: &[u8], source: &[u8]) -> PackedBookOutcom
             findings: verified.findings.into_iter().map(map_lint_issue).collect(),
         },
         Err(error) => PackedBookOutcome::Rejected {
+            error: error.into(),
+        },
+    }
+}
+
+/// One book's own source, for [`wasm_verify_published_corpus`] -- addressed by
+/// book code alone, since verifying a corpus-wide container needs no source
+/// key (that is a resident-corpus concept; the container itself never names
+/// one).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedCorpusSourceInput {
+    pub book: String,
+    pub source: Vec<u8>,
+}
+
+/// One book's receipt and findings out of a verified corpus container, in
+/// the container's own (corpus) order.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedCorpusBook {
+    pub receipt: PackedBookReceipt,
+    pub findings: Vec<LintIssue>,
+}
+
+/// What [`wasm_verify_published_corpus`] reports.
+///
+/// The corpus-grain twin of [`PackedBookOutcome`], for exactly the same
+/// reason [`usfm_onion_wire::corpus_codec::verify_corpus`] exists beside
+/// [`usfm_onion_wire::verify::verify_book`]: a whole `corpus.bin` container
+/// is verified as one unit -- every book must have exactly one source
+/// supplied, and findings that carry stamps must all carry the *same*
+/// stamps -- rather than book by book.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PublishedCorpusOutcome {
+    Verified {
+        snapshot_id: String,
+        books: Vec<PublishedCorpusBook>,
+    },
+    Rejected {
+        error: PackedDecodeError,
+    },
+}
+
+/// Verifies a whole packed corpus container against the exact sources every
+/// book was bound to -- the read-only inspection counterpart to
+/// [`crate::resident::Braid::restore_published_corpus`], useful to a host
+/// that wants to validate a `corpus.bin` before deciding whether to restore
+/// it into a resident handle at all.
+///
+/// Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
+/// (container/section structure, both integrity checksums, exact source
+/// length and content hash, the marker-catalog stamp, the all-or-none lint
+/// stamp invariant), and nothing more: no resident state is read or
+/// mutated, and no token crosses this boundary.
+#[wasm_bindgen(js_name = verifyPublishedCorpus)]
+pub fn wasm_verify_published_corpus(
+    packed: &[u8],
+    sources: Vec<PublishedCorpusSourceInput>,
+) -> PublishedCorpusOutcome {
+    let mut decoded_sources = Vec::with_capacity(sources.len());
+    for source in &sources {
+        let Ok(text) = std::str::from_utf8(&source.source) else {
+            return PublishedCorpusOutcome::Rejected {
+                error: PackedDecodeError::InvalidUtf8,
+            };
+        };
+        let Some(book) = usfm_onion::token::BookId::from_str(&source.book) else {
+            return PublishedCorpusOutcome::Rejected {
+                error: PackedDecodeError::InvalidSection,
+            };
+        };
+        decoded_sources.push((book, text));
+    }
+    match verify_published_corpus(packed, &decoded_sources) {
+        Ok(verified) => PublishedCorpusOutcome::Verified {
+            snapshot_id: format!("{:016x}", verified.snapshot_id),
+            books: verified
+                .books
+                .into_iter()
+                .map(|book| PublishedCorpusBook {
+                    receipt: book.receipt,
+                    findings: book.findings.into_iter().map(map_lint_issue).collect(),
+                })
+                .collect(),
+        },
+        Err(error) => PublishedCorpusOutcome::Rejected {
             error: error.into(),
         },
     }

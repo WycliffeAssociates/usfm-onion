@@ -4981,3 +4981,111 @@ quotable; only the *self-time proportions* below are:
      (4.29%) and `RawVecInner::reserve`/`finish_grow` suggest repeated
      reallocation building each verse's collected text and segment list
      rather than a single pre-sized allocation per verse.
+
+## 2026-08-02 — v0.1.1: expose packed publication on the wasm Braid
+
+Post-release gap, found by the editor implementer and confirmed real: the
+v0.1.0 wasm surface shipped `restoreCorpus` and the `/packed` read layer
+(`verifyPackedBook`), but no public verb that *produces* packed bytes --
+`PublicationCache::publish` and the whole Phase D adapter
+(`crates/usfm_onion_wasm/src/publication.rs`) were `pub(crate)` only. The
+restore lane was production-unreachable: nothing a consumer could call ever
+created `corpus.bin`. Root cause of the escape: the epic's Phase F item 3
+never explicitly listed the write verb as a deliverable, and every review
+round verified what was built against what the plan named, not against
+whether the round trip the format exists for was reachable at all --
+contract closure was never itself a checked item.
+
+Branch `v0.1.1-publish` off `master`, thin projection of the existing
+adapter only -- no redesign.
+
+**New verbs (`crates/usfm_onion_wasm/src/resident.rs`):**
+- `Braid::publish() -> PublishOutcome` -- wraps this handle's own
+  `PublicationCache` (added as a field on `Braid`, so a repeat publish gets
+  the adapter's splice-reuse automatically, its whole point). Dirty books
+  lint first via the adapter's own internal `lint()` call (braid's
+  existing rule; no separate pre-lint step was ever required). Returns the
+  packed bytes, the hex snapshot id, and per-book bookkeeping
+  (`PublishedBookInfo`: book, source hash, whether freshly encoded this
+  call, and -- when freshly encoded -- the exact bound source text a
+  caller needs to restore or re-publish later) -- never the reuse-cache's
+  own sections/bytes. A pathological encode refusal (index-ceiling
+  overflow, an unbound span on a synthetic token, a layout the writer's
+  own reader would reject) surfaces as a typed `PublishError`, never a
+  panic -- required a new `PackedEncodeError` wasm-facing DTO
+  (`crates/usfm_onion_wire/src/dto.rs`, mirroring `PackedDecodeError`'s
+  existing pattern) projecting `EncodeError`/`LayoutRefusal`/`SectionKind`.
+- `Braid::restorePublishedCorpus(packed, records) -> RestoreOutcome` --
+  the corpus-grain counterpart `restoreCorpus` could never be, because
+  `restoreCorpus` is built on `verify_book`, which explicitly refuses a
+  container naming more than one book (`a_two_book_container_is_refused`)
+  and `publish()` produces exactly one combined multi-book container by
+  design. Wraps `usfm_onion_wire::corpus_codec::verify_corpus` (already
+  existed, unused by any wasm verb) plus a new
+  `materialize_owned_tokens_corpus` (`crates/usfm_onion_wire/src/corpus_codec.rs`)
+  -- the corpus-grain twin of the existing `materialize_owned_tokens`,
+  needed for the same reason that function exists beside `verify_book`:
+  `verify_corpus` hands back receipts and findings but never tokens.
+  `verify_corpus` already enforces the all-or-none same-stamp invariant
+  corpus-wide, so this verb needed none of `restoreCorpus`'s own
+  hand-rolled batch-stamp-agreement loop. Reuses the P1-B suppressed-config
+  decline-to-prime rule verbatim (same `summary_unknowable` check against
+  this resident's own live config).
+- `verifyPublishedCorpus(packed, sources) -> PublishedCorpusOutcome`
+  (`crates/usfm_onion_wasm/src/stateless.rs`) -- the read-only inspection
+  counterpart, thin-wrapping `verify_corpus` the same way `verifyPackedBook`
+  wraps `verify_book`. Named `verifyPublishedCorpus`, not `verifyPackedCorpus`:
+  `js/packed.js` already exports an unrelated `verifyPackedCorpus` (a
+  JS-level helper looping `verifyPackedBook` over N independent per-book
+  records) -- reusing that name for a materially different Rust-side,
+  single-combined-container verb would have collided two different
+  concepts under one exported name across the public surface.
+
+**Round-trip closure, public API only** (the loop the release shipped half
+of): `braid.publish()` -> `verifyPublishedCorpus()` (independent, touches
+no resident state) -> `new Braid().restorePublishedCorpus()` -> identical
+resident state and materialized USFM. Two gates:
+- Rust: `resident::restore_tests::publish_then_restore_published_corpus_reproduces_the_resident_state`
+  (two books, one with a real finding).
+- JS, through the actual built package, both targets:
+  `scripts/test-publish-round-trip.mjs` (new; `npm run test:publish` /
+  `test:publish:web`) -- a plain-config case and a suppressing-config case
+  (P1-B's decline-to-prime rule exercised at corpus grain, not just
+  per-book). Findings are compared on the fields a consumer reads
+  (code/tokenId/sid/message/messageParams/fix), not the whole object:
+  `span`/`relatedSpan` are byte offsets into whichever bytes were last
+  decoded, and a materialized-from-packed token legitimately carries one
+  where a freshly-parsed-then-resident token does not -- the same subset
+  `publication.rs`'s own existing equivalence test already established,
+  not a new decision made here.
+
+**Parity transcript** (`crates/usfm_onion_wasm/src/parity.rs`,
+`scripts/test-parity.mjs`): `run_publish` builds the identical corpus on
+both the *native* `PublicationCache::publish` call and the *wasm*
+`Braid::publish()` verb and asserts the two containers are byte-identical
+in the Rust generator itself, before the fixture is ever written -- pinning
+the projection at the source, not just via a recorded value a node
+comparator might interpret loosely. Two new steps per lane
+(`publish_seed`, `publish`); 66 steps total (was 62), 0 divergences, both
+targets.
+
+**Version**: 0.1.1 in all four manifests (root `Cargo.toml`
+`workspace.package.version`, root `package.json`, and `pkg-bundler`/
+`pkg-web`'s `package.json`, the latter two regenerated by the release
+build, not hand-edited).
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace --all-features`
+clean and green (braid 101 across its integration suites, usfm_onion 291,
+usfm_onion_wasm 39, usfm_onion_wire 197+2); `cargo test --release --test
+lint_oracle -- --ignored` byte-identical; `RUSTFLAGS="-D warnings" cargo
+test --release -p braid -p usfm_onion_wire -p usfm_onion_wasm --
+--ignored` green, both re-registered wire corpus tests and the parity
+generator (whose own byte-identity assertion is part of this run); `npm
+run test:packed`/`test:packed:web` green (410 cases); `npm run
+test:parity`/`test:parity:web` green (66 steps, 0 divergences, both
+targets); `npm run test:publish`/`test:publish:web` green (11 checks
+each, both targets); `npm run golden:wasm`/`golden:wasm:web` green (7
+fixtures); `cargo fmt --all -- --check` clean. pkg regen (release build):
+`.d.ts`/`.js` moved this round (expected -- new public verbs/types), `.wasm`
+binaries regenerated, `pkg-bundler`/`pkg-web` `package.json` both show
+0.1.1. Fresh-clone build+test verified after commit.

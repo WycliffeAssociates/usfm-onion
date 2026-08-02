@@ -509,6 +509,78 @@ pub fn verify_corpus(
     })
 }
 
+/// Materializes every book's tokens as *resident* tokens, in the container's
+/// own (corpus) order.
+///
+/// The corpus-grain twin of [`crate::verify::materialize_owned_tokens`],
+/// needed for exactly the same reason that function exists beside
+/// [`crate::verify::verify_book`]: [`verify_corpus`] hands back receipts and
+/// findings but never tokens, because materializing a token is a cost only a
+/// caller that actually wants one should pay. Repeats the same structural
+/// checks `verify_corpus` does over the token/finding table of contents
+/// (exactly one token section per book, sources supplied 1:1) rather than
+/// trusting a caller to have verified first.
+pub fn materialize_owned_tokens_corpus(
+    packed: &[u8],
+    sources: &[(BookId, &str)],
+) -> Result<Vec<(BookId, Vec<OwnedToken>)>, crate::error::DecodeError> {
+    use crate::error::DecodeError;
+
+    let container = crate::container::read_container(packed)?;
+    let toc = container.toc();
+    let mut order: Vec<BookId> = Vec::new();
+    for entry in toc {
+        if entry.kind == SectionKind::Token {
+            if order.contains(&entry.book) {
+                return Err(DecodeError::InvalidToc);
+            }
+            order.push(entry.book);
+        }
+    }
+    if order.len() != sources.len() {
+        return Err(DecodeError::InvalidToc);
+    }
+
+    let mut books = Vec::with_capacity(order.len());
+    for book in order {
+        let source = sources
+            .iter()
+            .find(|(candidate, _)| *candidate == book)
+            .map(|(_, source)| *source)
+            .ok_or(DecodeError::InvalidToc)?;
+        let token_index = toc
+            .iter()
+            .position(|entry| entry.kind == SectionKind::Token && entry.book == book)
+            .ok_or(DecodeError::InvalidToc)?;
+        let token_section = container
+            .section(token_index)
+            .ok_or(DecodeError::InvalidToc)??;
+        let decoded = decode_token_section(&token_section, source)?;
+        let tokens = decoded
+            .tokens
+            .iter()
+            .enumerate()
+            .map(|(index, token)| {
+                let mut dto_token = crate::dto::Token::from(token);
+                // The section's own opaque ids win when it carried them;
+                // otherwise the positional label the decoder already
+                // stamped is the id -- same rule
+                // `materialize_owned_tokens` applies for one book.
+                if let Some(ids) = decoded.stable_ids.as_ref() {
+                    dto_token.id = ids
+                        .get(index)
+                        .map(|id| id.to_string())
+                        .ok_or(DecodeError::InvalidSection)?;
+                }
+                crate::dto::owned_token_from_dto(&dto_token, index as u32)
+                    .map_err(|_| DecodeError::InvalidSection)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        books.push((book, tokens));
+    }
+    Ok(books)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -605,6 +677,59 @@ mod tests {
                 .bytes,
             published.bytes
         );
+    }
+
+    /// The corpus-grain token materializer matches what a per-book
+    /// `materialize_owned_tokens` call on the *same bytes, sliced one book at
+    /// a time* would produce -- same ids (positional or opaque, per the same
+    /// rule), same token count, same corpus order.
+    #[test]
+    fn materialize_owned_tokens_corpus_matches_the_resident_tokens_book_by_book() {
+        let gen_tokens = owned_tokens(GEN);
+        let exo_tokens = owned_tokens(EXO);
+        let sections = vec![
+            CorpusSection::Fresh(CorpusSectionInput {
+                book: book("GEN"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &gen_tokens,
+                },
+                findings: None,
+            }),
+            CorpusSection::Fresh(CorpusSectionInput {
+                book: book("EXO"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &exo_tokens,
+                },
+                findings: None,
+            }),
+        ];
+        let published = encode_corpus(0xfeed, None, &sections).expect("publishes");
+        let sources: Vec<(BookId, &str)> = published
+            .sources
+            .iter()
+            .map(|(book, source)| (*book, source.as_str()))
+            .collect();
+
+        let materialized =
+            materialize_owned_tokens_corpus(&published.bytes, &sources).expect("materializes");
+        assert_eq!(
+            materialized
+                .iter()
+                .map(|(book, _)| *book)
+                .collect::<Vec<_>>(),
+            [book("GEN"), book("EXO")],
+            "corpus order, not book-code order"
+        );
+
+        for ((corpus_book, corpus_tokens), original_tokens) in
+            materialized.iter().zip([&gen_tokens, &exo_tokens])
+        {
+            assert_eq!(corpus_tokens.len(), original_tokens.len(), "{corpus_book}");
+            for (materialized, original) in corpus_tokens.iter().zip(original_tokens) {
+                assert_eq!(materialized.id(), original.id());
+                assert_eq!(materialized.source(), original.source());
+            }
+        }
     }
 
     /// The parsed lane, which a cold-parse publisher uses, and the token-only

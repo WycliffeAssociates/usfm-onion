@@ -782,6 +782,7 @@ fn run_restore(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
+        publication: crate::publication::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -901,6 +902,7 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(suppressed_braid_config(), minter()),
+        publication: crate::publication::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -932,6 +934,83 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
     });
 }
 
+/// Pins `Braid::publish`'s wasm projection against the native adapter it
+/// wraps: both sides run `PublicationCache::publish` over the identical
+/// corpus and must produce byte-identical `corpus.bin` bytes, since the wasm
+/// verb is meant to be a thin pass-through and nothing else. That equality
+/// is asserted directly here, in Rust, before the fixture is ever written --
+/// the recorded step below then pins the wasm-shaped *value* the node
+/// comparator re-checks against the real, built package.
+fn run_publish(lane: &str, steps: &mut Vec<Step>) {
+    let native_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let mut native_publisher = NativeBraid::new(braid_config(), minter());
+    native_publisher
+        .replace_corpus(braid::CorpusInput::new(vec![native_book]))
+        .expect("one book");
+    let mut native_cache = crate::publication::PublicationCache::default();
+    let native_publication = native_cache
+        .publish(&mut native_publisher)
+        .expect("native adapter publishes");
+
+    let wasm_book = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let mut wasm_braid = resident::Braid {
+        inner: NativeBraid::new(braid_config(), minter()),
+        publication: crate::publication::PublicationCache::default(),
+    };
+    let corpus_args = json!({ "corpus": { "books": [wasm_book.clone()] } });
+    let outcome = wasm_braid.replace_corpus(resident::CorpusInput {
+        books: vec![wasm_book],
+    });
+    let resident::ApiResult::Ok { value: seeded } = outcome.0 else {
+        panic!("{lane}: publish_seed's replaceCorpus must succeed: {outcome:?}");
+    };
+    // A fresh instance needs seeding before `publish` means anything; recorded
+    // as its own step (`publish_seed`, the `FRESH_INSTANCE_STEPS` member) so
+    // `publish` itself can continue on that same instance rather than racing
+    // a second, un-seeded fresh handle.
+    steps.push(Step {
+        step: "publish_seed".to_string(),
+        lane: lane.to_string(),
+        args: corpus_args,
+        output: json!(seeded),
+    });
+
+    let resident::ApiResult::Ok { value: published } = wasm_braid.publish().0 else {
+        panic!("{lane}: publish must succeed over a clean, freshly ingested corpus");
+    };
+
+    assert_eq!(
+        published.bytes, native_publication.bytes,
+        "{lane}: the wasm verb's bytes must be byte-identical to the native adapter's -- \
+         it is meant to be a thin projection, nothing else"
+    );
+
+    steps.push(Step {
+        step: "publish".to_string(),
+        lane: lane.to_string(),
+        args: json!({}),
+        output: json!(published),
+    });
+}
+
 /// Regenerates `tests/fixtures/parity-transcript.json`. Run explicitly; not
 /// part of the normal `cargo test` battery, the same convention every other
 /// fixture generator in this workspace follows.
@@ -943,6 +1022,7 @@ fn generate_parity_transcript() {
         run_lane(lane, &mut steps);
         run_restore(lane, &mut steps);
         run_restore_suppressed(lane, &mut steps);
+        run_publish(lane, &mut steps);
     }
     // The config and minter shape travel with the transcript rather than
     // being re-derived by the node script by hand: both sides must

@@ -72,6 +72,21 @@ export interface CorpusInput {
 export type IngestError = { kind: "duplicateBook"; book: string; sources: string[] } | { kind: "duplicateSourceKey"; source: string } | { kind: "duplicateTokenId"; book: string; id: string } | { kind: "chapterNotFound"; target: ChapterTarget } | { kind: "ambiguousChapter"; target: ChapterTarget; matches: number } | { kind: "replacementLabelMismatch"; target: ChapterTarget; found: ChapterLabel } | { kind: "invalidToken"; message: string };
 
 /**
+ * A packed corpus, ready to persist as `corpus.bin`, plus what the caller
+ * needs to restore or re-publish it later.
+ */
+export interface PublishedCorpus {
+    bytes: number[];
+    snapshotId: string;
+    /**
+     * One entry per resident book, in corpus order -- not only the freshly
+     * encoded ones, so a caller always has the complete bookkeeping set for
+     * what this publication now contains.
+     */
+    books: PublishedBookInfo[];
+}
+
+/**
  * A patch that could not be looked up or applied.
  */
 export type PatchError = { kind: "staleSnapshot"; expected: string; found: string } | { kind: "unknownPatch"; id: PatchId } | { kind: "invalidResult"; error: IngestError };
@@ -132,6 +147,12 @@ export type FormatError = { kind: "scope"; error: ScopeError };
  * it rather than asserted by hand.
  */
 export type ApiResult<T, E> = { status: "ok"; value: T } | { status: "error"; error: E };
+
+/**
+ * A wasm-facing projection of [`crate::schema::SectionKind`] — only ever seen
+ * nested inside [`PackedLayoutRefusal::DuplicateSection`].
+ */
+export type PackedSectionKind = "token" | "finding";
 
 /**
  * Argument payload a marker\'s opening form consumes right after its name:
@@ -211,6 +232,18 @@ export interface PackedBookReceipt {
 }
 
 /**
+ * One book\'s exact source, keyed the same way a corpus-grain restore or
+ * re-publish needs to address it: by its resident book code *and* its own
+ * source key (a packed container names the book but not the key a corpus
+ * was originally addressed by).
+ */
+export interface PublishedCorpusSource {
+    book: string;
+    sourceKey: string;
+    source: number[];
+}
+
+/**
  * One book\'s lint contribution.
  */
 export interface BookLintSnapshot {
@@ -220,6 +253,38 @@ export interface BookLintSnapshot {
     tokenIdentity: string;
     findings: LintIssue[];
     summary: LintSummary;
+}
+
+/**
+ * One book\'s own bookkeeping from a publish -- never the reuse-cache\'s
+ * internal sections/bytes, which stay behind `PublicationCache`.
+ *
+ * `source` is present exactly when `encoded` is `true`: a reused (spliced)
+ * book\'s source did not change and wire never saw it this round, so the
+ * caller is expected to already hold it from whichever earlier publish
+ * first reported `encoded: true` for that book -- the same asymmetry
+ * `EncodedCorpus::sources` documents natively.
+ */
+export interface PublishedBookInfo {
+    book: string;
+    sourceHash: string;
+    /**
+     * `true` when this book was freshly re-encoded this call; `false` when
+     * its previous publication\'s sections were spliced in unchanged.
+     */
+    encoded: boolean;
+    source: string | null;
+}
+
+/**
+ * One book\'s own source, for [`wasm_verify_published_corpus`] -- addressed by
+ * book code alone, since verifying a corpus-wide container needs no source
+ * key (that is a resident-corpus concept; the container itself never names
+ * one).
+ */
+export interface PublishedCorpusSourceInput {
+    book: string;
+    source: number[];
 }
 
 /**
@@ -236,6 +301,15 @@ export interface RestoreRecord {
      * host can hand over what it read from disk without a UTF-16 round trip.
      */
     source: number[];
+}
+
+/**
+ * One book\'s receipt and findings out of a verified corpus container, in
+ * the container\'s own (corpus) order.
+ */
+export interface PublishedCorpusBook {
+    receipt: PackedBookReceipt;
+    findings: LintIssue[];
 }
 
 /**
@@ -377,6 +451,22 @@ export interface LintSnapshot {
 export type PackedDecodeError = { kind: "truncated" } | { kind: "badMagic" } | { kind: "unsupportedVersion"; found: number } | { kind: "unsupportedFlags"; found: number } | { kind: "invalidToc" } | { kind: "invalidSection" } | { kind: "invalidUtf8" } | { kind: "invalidDiscriminant" } | { kind: "offsetOverflow" } | { kind: "tooManySids"; found: number } | { kind: "checksumMismatch" } | { kind: "catalogMismatch" } | { kind: "sourceLengthMismatch" } | { kind: "sourceHashMismatch" };
 
 /**
+ * The frozen [`crate::error::EncodeError`] set as a tagged boundary value.
+ *
+ * Every variant here is a pathological-input safety net (a book past an
+ * index ceiling, a synthetically-built token whose span does not bind, a
+ * layout the writer\'s own reader would reject) rather than something a
+ * normal publish hits — but the packed boundary\'s rule is refuse-typed-never-
+ * panic regardless of how rare the refusal is.
+ */
+export type PackedEncodeError = { kind: "tooManySids"; book: string; found: number } | { kind: "unrepresentablePayload"; book: string; code: number } | { kind: "tooManyDescriptors"; book: string; found: number } | { kind: "unboundSpan"; book: string; tokenIdx: number } | { kind: "invalidSectionLayout"; book: string; reason: PackedLayoutRefusal } | { kind: "emptyFix"; book: string; code: number };
+
+/**
+ * The frozen [`crate::error::LayoutRefusal`] set as a tagged boundary value.
+ */
+export type PackedLayoutRefusal = { kind: "duplicateSection"; sectionKind: PackedSectionKind } | { kind: "orphanFindingSection" } | { kind: "duplicateField"; fieldId: number } | { kind: "fieldExtentMismatch"; fieldId: number } | { kind: "missingRequiredField"; fieldId: number } | { kind: "cachedSectionUnreadable" } | { kind: "cachedSectionMismatch" } | { kind: "cachedSectionStampMismatch" } | { kind: "positionalIdConflict"; fieldId: number } | { kind: "sectionTooLarge" } | { kind: "tooManyFields" } | { kind: "tooManySections" };
+
+/**
  * The resident configuration.
  */
 export interface BraidConfig {
@@ -430,6 +520,18 @@ export type VrefMap = Record<string, string>;
 export type PackedBookOutcome = { status: "verified"; receipt: PackedBookReceipt; findings: LintIssue[] } | { status: "rejected"; error: PackedDecodeError };
 
 /**
+ * What [`wasm_verify_published_corpus`] reports.
+ *
+ * The corpus-grain twin of [`PackedBookOutcome`], for exactly the same
+ * reason [`usfm_onion_wire::corpus_codec::verify_corpus`] exists beside
+ * [`usfm_onion_wire::verify::verify_book`]: a whole `corpus.bin` container
+ * is verified as one unit -- every book must have exactly one source
+ * supplied, and findings that carry stamps must all carry the *same*
+ * stamps -- rather than book by book.
+ */
+export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; books: PublishedCorpusBook[] } | { status: "rejected"; error: PackedDecodeError };
+
+/**
  * What one mutation rewrote. `chapter` absent means the whole book.
  */
 export interface Scope {
@@ -467,6 +569,16 @@ export type LintScope = "front" | { chapter: number } | "book";
 export type PatchPreparation = { kind: "unchanged" } | { kind: "ready"; id: FormatPatchId };
 
 /**
+ * Why a publish could not produce packed bytes.
+ *
+ * Every variant is a pathological-input safety net (see
+ * [`crate::dto::PackedEncodeError`]\'s own doc comment) rather than something
+ * a normal publish hits; surfaced as a typed refusal regardless, never a
+ * panic.
+ */
+export type PublishError = { kind: "encode"; error: PackedEncodeError };
+
+/**
  * Why a warm restore was refused outright.
  *
  * A refusal here is about the *call*: bytes that do not verify, or a corpus that
@@ -494,6 +606,11 @@ export type ScopedMutationOutcome = ApiResult<MutationEffect, ScopeError>;
  *r" A mutation, or the reason the input was refused.
  */
 export type MutationOutcome = ApiResult<MutationEffect, IngestError>;
+
+/**
+ *r" A packed corpus, or the reason it could not be produced.
+ */
+export type PublishOutcome = ApiResult<PublishedCorpus, PublishError>;
 
 /**
  *r" A patch's projected tokens, or the reason it is not addressable.
@@ -988,6 +1105,18 @@ export class Braid {
      */
     previewPatch(id: PatchId): PatchPreviewOutcome;
     /**
+     * Publishes the resident corpus as one packed `corpus.bin` container.
+     *
+     * A thin projection of `PublicationCache::publish` (this handle's own
+     * cache, so a repeat publish gets the adapter's whole point -- splice-
+     * reuse of whatever did not change -- automatically): dirty books are
+     * linted first (the adapter's own rule, via the `lint()` it runs
+     * internally), every book's bytes and stamps decide reuse vs. re-encode,
+     * and the reuse-cache's own sections/bytes never cross this boundary --
+     * only the per-book bookkeeping in [`PublishedBookInfo`] does.
+     */
+    publish(): PublishOutcome;
+    /**
      * Removes a book. Removing an absent book is a no-op, not an error: the
      * requested end state already holds.
      */
@@ -1021,6 +1150,21 @@ export class Braid {
      * and is simply awaiting recompute.
      */
     restoreCorpus(records: RestoreRecord[]): RestoreOutcome;
+    /**
+     * Restores the whole resident corpus from one packed `corpus.bin`
+     * container -- the corpus-grain counterpart to [`Self::publish`], as
+     * [`Self::restore_corpus`] is to a per-book publication.
+     *
+     * `records` supplies each book's own source key and exact bound source
+     * (a packed container names the book but never the key a corpus was
+     * addressed by, and a freshly-encoded book's bound source is wire's own
+     * serialization, not necessarily any file on disk -- see
+     * [`PublishedBookInfo::source`]). Verification is corpus-wide
+     * (`verify_corpus`): every book must have exactly one source supplied,
+     * and findings that carry stamps must all carry the *same* stamps,
+     * checked atomically before anything installs.
+     */
+    restorePublishedCorpus(packed: Uint8Array, records: PublishedCorpusSource[]): RestoreOutcome;
     /**
      * Records one book's baseline — the state later comparisons are against.
      *
@@ -1173,6 +1317,21 @@ export function tokensToUsfm(tokens: Token[]): string;
 export function verifyPackedBook(packed: Uint8Array, source: Uint8Array): PackedBookOutcome;
 
 /**
+ * Verifies a whole packed corpus container against the exact sources every
+ * book was bound to -- the read-only inspection counterpart to
+ * [`crate::resident::Braid::restore_published_corpus`], useful to a host
+ * that wants to validate a `corpus.bin` before deciding whether to restore
+ * it into a resident handle at all.
+ *
+ * Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
+ * (container/section structure, both integrity checksums, exact source
+ * length and content hash, the marker-catalog stamp, the all-or-none lint
+ * stamp invariant), and nothing more: no resident state is read or
+ * mutated, and no token crosses this boundary.
+ */
+export function verifyPublishedCorpus(packed: Uint8Array, sources: PublishedCorpusSourceInput[]): PublishedCorpusOutcome;
+
+/**
  * Build the vref index from an existing token stream (the editor's live
  * path) — same rehydration as `lintTokens`, no reparse. Segment ids match
  * the tokens passed in, so they line up with the editor's DOM `data-id`s.
@@ -1205,10 +1364,12 @@ export interface InitOutput {
     readonly braid_patches: (a: number, b: number) => void;
     readonly braid_prepareFormatPatch: (a: number, b: number, c: number) => number;
     readonly braid_previewPatch: (a: number, b: number) => number;
+    readonly braid_publish: (a: number) => number;
     readonly braid_removeBook: (a: number, b: number, c: number) => number;
     readonly braid_removeChapter: (a: number, b: number) => number;
     readonly braid_replaceCorpus: (a: number, b: number) => number;
     readonly braid_restoreCorpus: (a: number, b: number, c: number) => number;
+    readonly braid_restorePublishedCorpus: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly braid_setBaseline: (a: number, b: number) => number;
     readonly braid_toTokens: (a: number, b: number, c: number) => number;
     readonly braid_toUsfm: (a: number, b: number) => number;
@@ -1254,6 +1415,7 @@ export interface InitOutput {
     readonly usfmmarkercatalog_contains: (a: number, b: number, c: number) => number;
     readonly usfmmarkercatalog_get: (a: number, b: number, c: number) => number;
     readonly verifyPackedBook: (a: number, b: number, c: number, d: number) => number;
+    readonly verifyPublishedCorpus: (a: number, b: number, c: number, d: number) => number;
     readonly vrefIndexTokens: (a: number, b: number) => number;
     readonly vrefIndexUsfm: (a: number, b: number) => number;
     readonly markerCatalog: () => number;
