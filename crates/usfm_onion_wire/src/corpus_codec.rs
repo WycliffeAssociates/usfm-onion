@@ -393,6 +393,47 @@ pub struct VerifiedCorpus {
     pub lint_stamps: Option<LintStamps>,
     /// One entry per book, in the container's own (corpus) order.
     pub books: Vec<VerifiedBook>,
+    /// The container-wide integrity checksum of the exact bytes this value
+    /// was verified from -- what [`Self::materialize_owned_tokens`] checks a
+    /// candidate buffer against before trusting this value as proof it need
+    /// not re-verify. Not part of the public contract of what a caller reads
+    /// off a verified corpus (there is nothing meaningful to read a checksum
+    /// *as*); it exists purely to bind this witness to its bytes.
+    container_checksum: u64,
+}
+
+impl VerifiedCorpus {
+    /// Materializes every book's tokens as *resident* tokens, using `self` as
+    /// proof that `packed` need not be re-verified -- skipping
+    /// [`verify_corpus`]'s own per-book decode walk (the expensive half: on
+    /// an alignment-heavy, tens-of-books corpus that walk is the difference
+    /// between single-digit milliseconds and the better part of a second,
+    /// paid twice by a caller -- like a warm restore -- that already ran it
+    /// once to get this value).
+    ///
+    /// Binding: `self.container_checksum` is the container-wide integrity
+    /// checksum recorded from the *exact* buffer [`verify_corpus`] verified
+    /// to produce this value. This still calls [`crate::container::read_container`]
+    /// on `packed` -- the cheap half of verification, a header parse plus one
+    /// whole-buffer checksum pass, never a token/finding decode -- and
+    /// refuses with [`crate::error::DecodeError::ChecksumMismatch`] outright
+    /// if `packed` does not recompute to that same checksum. A witness for
+    /// *different* bytes (even a validly-formed different container) is
+    /// refused, never silently trusted onto the wrong buffer: an unbound
+    /// witness -- one that would materialize whatever `packed` a caller
+    /// happens to pass, regardless of what it actually proves -- is the same
+    /// trust-the-claim shape a bare boolean flag would be.
+    pub fn materialize_owned_tokens(
+        &self,
+        packed: &[u8],
+        sources: &[(BookId, &str)],
+    ) -> Result<Vec<(BookId, Vec<OwnedToken>)>, crate::error::DecodeError> {
+        let container = crate::container::read_container(packed)?;
+        if container.header().checksum != self.container_checksum {
+            return Err(crate::error::DecodeError::ChecksumMismatch);
+        }
+        materialize_tokens_from_container(&container, sources)
+    }
 }
 
 /// Verifies a whole publication against the exact sources it was bound to.
@@ -505,6 +546,7 @@ pub fn verify_corpus(
     Ok(VerifiedCorpus {
         snapshot_id: container.header().snapshot_id,
         lint_stamps: stamps,
+        container_checksum: container.header().checksum,
         books,
     })
 }
@@ -530,19 +572,35 @@ pub fn verify_corpus(
 /// public decode path should have accepted. Sharing the one validation
 /// function is what makes that impossible to drift out of sync again --
 /// duplicating the checks by hand is exactly the bug class this replaces.
-/// A caller that already holds a [`VerifiedCorpus`] (as
-/// `restorePublishedCorpus` does) pays this validation twice; accepted here
-/// as a cold-open cost rather than threading a pre-verified witness type
-/// through, which would be more machinery than a restore verb needs.
+///
+/// This pays for that verification every call. A caller that already holds
+/// a [`VerifiedCorpus`] for these exact bytes (as `restorePublishedCorpus`
+/// does) should call [`VerifiedCorpus::materialize_owned_tokens`] instead,
+/// which skips the redundant walk -- on an alignment-heavy corpus of tens of
+/// books that walk is the difference between single-digit milliseconds and
+/// the better part of a second, not a cost worth paying twice on a single
+/// restore.
 pub fn materialize_owned_tokens_corpus(
     packed: &[u8],
     sources: &[(BookId, &str)],
 ) -> Result<Vec<(BookId, Vec<OwnedToken>)>, crate::error::DecodeError> {
+    verify_corpus(packed, sources)?;
+    let container = crate::container::read_container(packed)?;
+    materialize_tokens_from_container(&container, sources)
+}
+
+/// The shared per-book token-materialization walk both
+/// [`materialize_owned_tokens_corpus`] and
+/// [`VerifiedCorpus::materialize_owned_tokens`] run once their respective
+/// callers have established `container`'s bytes may be trusted -- kept as
+/// one function so the two public entry points can never drift into two
+/// different answers for the same bytes.
+fn materialize_tokens_from_container(
+    container: &crate::container::Container<'_>,
+    sources: &[(BookId, &str)],
+) -> Result<Vec<(BookId, Vec<OwnedToken>)>, crate::error::DecodeError> {
     use crate::error::DecodeError;
 
-    verify_corpus(packed, sources)?;
-
-    let container = crate::container::read_container(packed)?;
     let toc = container.toc();
     let mut order: Vec<BookId> = Vec::new();
     for entry in toc {
@@ -801,6 +859,106 @@ mod tests {
             "materialize_owned_tokens_corpus must refuse the identical corrupt \
              container with the same error -- it shares verify_corpus's own \
              validation now, not a hand-copied subset of it"
+        );
+    }
+
+    /// The witness path (`VerifiedCorpus::materialize_owned_tokens`) still
+    /// materializes correctly for the exact bytes it was verified from --
+    /// the fast path is not merely "skip validation," it must still produce
+    /// the same tokens the self-verifying function does.
+    #[test]
+    fn the_witness_path_materializes_the_same_tokens_as_the_self_verifying_one() {
+        let gen_tokens = owned_tokens(GEN);
+        let exo_tokens = owned_tokens(EXO);
+        let sections = vec![
+            CorpusSection::Fresh(CorpusSectionInput {
+                book: book("GEN"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &gen_tokens,
+                },
+                findings: None,
+            }),
+            CorpusSection::Fresh(CorpusSectionInput {
+                book: book("EXO"),
+                tokens: CorpusSectionTokens::Owned {
+                    tokens: &exo_tokens,
+                },
+                findings: None,
+            }),
+        ];
+        let published = encode_corpus(0xfeed, None, &sections).expect("publishes");
+        let sources = [(book("GEN"), GEN), (book("EXO"), EXO)];
+
+        let verified = verify_corpus(&published.bytes, &sources).expect("verifies");
+        let witnessed = verified
+            .materialize_owned_tokens(&published.bytes, &sources)
+            .expect("the witness path materializes over its own bytes");
+        let self_verified =
+            materialize_owned_tokens_corpus(&published.bytes, &sources).expect("materializes");
+        assert_eq!(
+            witnessed.len(),
+            self_verified.len(),
+            "same number of books on both paths"
+        );
+        for ((witness_book, witness_tokens), (plain_book, plain_tokens)) in
+            witnessed.iter().zip(&self_verified)
+        {
+            assert_eq!(witness_book, plain_book);
+            assert_eq!(witness_tokens.len(), plain_tokens.len(), "{witness_book}");
+            for (witness, plain) in witness_tokens.iter().zip(plain_tokens) {
+                assert_eq!(witness.id(), plain.id());
+                assert_eq!(witness.source(), plain.source());
+            }
+        }
+    }
+
+    /// The binding gate: a witness proves facts about the *exact bytes*
+    /// `verify_corpus` ran over, not about "some container with the same
+    /// shape." A witness minted from one valid corpus, handed a different
+    /// (also individually valid) corpus's bytes, must refuse rather than
+    /// materialize the wrong buffer's tokens under the first corpus's
+    /// unearned trust -- proving the checksum binding actually does
+    /// something, not just that it compiles.
+    #[test]
+    fn the_witness_path_refuses_a_buffer_it_was_not_verified_from() {
+        let gen_tokens = owned_tokens(GEN);
+        let gen_sections = vec![CorpusSection::Fresh(CorpusSectionInput {
+            book: book("GEN"),
+            tokens: CorpusSectionTokens::Owned {
+                tokens: &gen_tokens,
+            },
+            findings: None,
+        })];
+        let gen_published = encode_corpus(1, None, &gen_sections).expect("publishes");
+        let gen_sources = [(book("GEN"), GEN)];
+        let gen_verified = verify_corpus(&gen_published.bytes, &gen_sources).expect("GEN verifies");
+
+        // A second, independently valid corpus -- different content, so a
+        // different container checksum, but still a well-formed container
+        // `read_container` alone would accept.
+        let exo_tokens = owned_tokens(EXO);
+        let exo_sections = vec![CorpusSection::Fresh(CorpusSectionInput {
+            book: book("EXO"),
+            tokens: CorpusSectionTokens::Owned {
+                tokens: &exo_tokens,
+            },
+            findings: None,
+        })];
+        let exo_published = encode_corpus(1, None, &exo_sections).expect("publishes");
+        assert!(
+            crate::container::read_container(&exo_published.bytes).is_ok(),
+            "the substituted buffer must be a validly-formed container on its own, \
+             not merely corrupt -- otherwise this would only prove read_container's \
+             own checksum check works, not that the witness binds to specific bytes"
+        );
+
+        assert_eq!(
+            gen_verified
+                .materialize_owned_tokens(&exo_published.bytes, &gen_sources)
+                .err(),
+            Some(crate::error::DecodeError::ChecksumMismatch),
+            "a witness for GEN's bytes must refuse EXO's bytes, even though EXO's \
+             container is independently well-formed"
         );
     }
 

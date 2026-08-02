@@ -494,10 +494,17 @@ impl Braid {
                 });
             }
         };
-        let materialized = match usfm_onion_wire::corpus_codec::materialize_owned_tokens_corpus(
-            &packed,
-            &owned_sources,
-        ) {
+        // The witness path: `verified` above already ran the complete
+        // corpus-wide validation over these exact bytes (structure, both
+        // integrity checksums, the finding/token pairing, the all-or-none
+        // stamp invariant), so this materializes against it directly rather
+        // than paying for that same walk a second time -- the difference
+        // between single-digit milliseconds and the better part of a second
+        // on an alignment-heavy, tens-of-books corpus. Still binds to
+        // `packed` itself (a cheap container-checksum recheck, not a
+        // token/finding decode), so a mismatched buffer is refused, never
+        // silently trusted onto `verified`'s claims.
+        let materialized = match verified.materialize_owned_tokens(&packed, &owned_sources) {
             Ok(materialized) => materialized,
             Err(error) => {
                 return RestoreOutcome::refused(RestoreError::Decode {

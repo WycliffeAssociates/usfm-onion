@@ -5151,3 +5151,77 @@ test:publish`/`test:publish:web` green (11 checks each, both targets);
 moved, as expected for an internal validation fix) -- only `.wasm`
 binaries regenerated and committed. Fresh-clone build+test verified after
 commit.
+
+## 2026-08-02 — v0.1.1: witness path for restorePublishedCorpus (avoid double validation)
+
+Owner-agreed follow-up, before re-review: `8224fd4`'s fix made
+`restorePublishedCorpus` pay `verify_corpus`'s full per-book decode walk
+twice per restore (once explicitly, once inside
+`materialize_owned_tokens_corpus`). Measured cost of that double pass:
+en_ulb-class corpus (66 books, 4.1MB container) -- `verify_corpus` ~10ms,
+the second pass negligible. en_ult-class alignment-heavy corpus (67 books,
+194MB container) -- `verify_corpus` ~734ms per pass, so the doubled walk
+cost ~0.7s native (more, through the wasm boundary) on exactly the corpora
+this format has to handle well.
+
+**Owner ruling on the witness shape**: a bare boolean flag ("trust me, this
+was verified") was floated and rejected -- a flag is the identical
+trust-the-claim shape clean-room review already flagged once this round; a
+witness that doesn't bind to specific bytes is the same lie whether it's
+spelled `bool` or a richer type. Took the checksum arm instead: `VerifiedCorpus`
+now records `container_checksum: u64` -- the value already sitting in the
+container's own header (`ContainerHeader.checksum`), read once by
+`verify_corpus`'s own `read_container` call, not a separately-computed
+hash. A new `VerifiedCorpus::materialize_owned_tokens(&self, packed,
+sources)` re-reads that field from the *candidate* `packed` buffer (via
+`read_container`, which itself recomputes and validates the whole-buffer
+checksum against what the header claims -- a header parse plus one hash
+pass, never a token/finding decode) and refuses with
+`DecodeError::ChecksumMismatch` unless it matches `self.container_checksum`
+exactly. This is the cheapest binding the container format offers: no
+lifetime/borrow plumbing over the original buffer, no second independent
+hash computed by this crate -- reusing the checksum the format already
+carries and already re-verifies on every read.
+
+Refactored the shared per-book token-materialization walk into a private
+`materialize_tokens_from_container` so the self-verifying
+`materialize_owned_tokens_corpus` (which still calls `verify_corpus` first,
+unchanged contract, for arbitrary callers) and the new witnessed method
+can never drift into two different answers for the same bytes -- the same
+sharing principle `8224fd4` established, extended to the fast path instead
+of duplicating it.
+
+`restorePublishedCorpus` (`crates/usfm_onion_wasm/src/resident.rs`) now
+calls `verified.materialize_owned_tokens(&packed, &owned_sources)` instead
+of the standalone function -- one full verification per restore, not two.
+Public wasm shape unchanged (`restorePublishedCorpus`'s signature, args,
+and return type are identical); no `.d.ts`/`.js` moved.
+
+Regressions (`crates/usfm_onion_wire/src/corpus_codec.rs`):
+- `the_witness_path_materializes_the_same_tokens_as_the_self_verifying_one`
+  -- the fast path isn't merely "skip validation," it must produce
+  identical tokens to the self-verifying function over the same bytes.
+- `the_witness_path_refuses_a_buffer_it_was_not_verified_from` -- mints a
+  witness from one valid corpus, hands its `materialize_owned_tokens` a
+  *different*, independently well-formed corpus's bytes (confirmed
+  well-formed on its own via `read_container`, so this proves the
+  checksum binding specifically, not merely that corrupt bytes fail some
+  other check), and asserts `ChecksumMismatch`.
+- `a_corrupt_finding_section_is_refused_by_both_public_corpus_decode_paths`
+  (from the prior round) stays green, still covering the self-verifying
+  path.
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101 across its integration suites,
+usfm_onion 291, usfm_onion_wasm 39, usfm_onion_wire 200 -- up two for the
+new witness tests); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -- --ignored` green; `npm run
+test:packed`/`test:packed:web` green (410 cases); `npm run
+test:parity`/`test:parity:web` green (66 steps, 0 divergences --
+unchanged, confirming the internal validation-path swap moved no
+observable behavior); `npm run test:publish`/`test:publish:web` green (11
+checks each, both targets); `npm run golden:wasm`/`golden:wasm:web` green
+(7 fixtures); `cargo fmt --all -- --check` clean. pkg regen: `.d.ts`/`.js`
+unchanged (no public signature moved, as expected), only `.wasm` binaries
+regenerated and committed. Fresh-clone build+test verified after commit.
