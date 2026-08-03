@@ -154,7 +154,7 @@ pub fn diff_skeleton<T: DiffableToken>(baseline: &[T], current: &[T]) -> DiffSke
 }
 
 /// Native calling convention for parsed `Token` streams: sids come from
-/// [`derive_canonical_sids`], which never trusts a carried sid.
+/// [`super::derive_canonical_sids`], which never trusts a carried sid.
 pub fn diff_skeleton_canonical<T: DiffableToken>(
     baseline: &[T],
     baseline_book: &str,

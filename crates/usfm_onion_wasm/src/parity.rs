@@ -782,7 +782,7 @@ fn run_restore(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: crate::publication::PublicationCache::default(),
+        publication: usfm_onion_host::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -902,7 +902,7 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(suppressed_braid_config(), minter()),
-        publication: crate::publication::PublicationCache::default(),
+        publication: usfm_onion_host::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -956,10 +956,10 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     native_publisher
         .replace_corpus(braid::CorpusInput::new(vec![native_book]))
         .expect("one book");
-    let mut native_cache = crate::publication::PublicationCache::default();
-    let native_publication = native_cache
-        .publish(&mut native_publisher)
-        .expect("native adapter publishes");
+    let mut native_cache = usfm_onion_host::PublicationCache::default();
+    let native_publication =
+        usfm_onion_host::publish_corpus(&mut native_publisher, &mut native_cache)
+            .expect("native adapter publishes");
 
     let wasm_book = match lane {
         "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
@@ -973,7 +973,7 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     };
     let mut wasm_braid = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: crate::publication::PublicationCache::default(),
+        publication: usfm_onion_host::PublicationCache::default(),
     };
     let corpus_args = json!({ "corpus": { "books": [wasm_book.clone()] } });
     let outcome = wasm_braid.replace_corpus(resident::CorpusInput {
@@ -1008,6 +1008,45 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
         lane: lane.to_string(),
         args: json!({}),
         output: json!(published),
+    });
+
+    // Clean-room re-review P1: an empty `sourceKey` on a `restorePublishedCorpus`
+    // record must classify as `{kind: "ingest", error: {kind:
+    // "duplicateSourceKey", source: ""}}` -- the pre-extraction wasm
+    // classification, reproduced through `usfm_onion_host::RestoreError::
+    // EmptySourceKey` -- not silently reclassified as a decode defect. Pinned
+    // here so a future change to that mapping shows up as a parity
+    // divergence, not a silent drift.
+    let empty_source_key_records = vec![resident::PublishedCorpusSource {
+        book: "GEN".to_string(),
+        source_key: String::new(),
+        source: published
+            .books
+            .iter()
+            .find(|book| book.book == "GEN")
+            .and_then(|book| book.source.clone())
+            .expect("GEN's freshly-encoded source")
+            .into_bytes(),
+    }];
+    let empty_source_key_args = json!({
+        "packed": published.bytes,
+        "records": empty_source_key_records,
+    });
+    let mut restore_target = resident::Braid {
+        inner: NativeBraid::new(braid_config(), minter()),
+        publication: usfm_onion_host::PublicationCache::default(),
+    };
+    let error = restore_target
+        .restore_published_corpus(published.bytes.clone(), empty_source_key_records)
+        .0;
+    let resident::ApiResult::Error { error } = error else {
+        panic!("{lane}: an empty source key must refuse: {error:?}");
+    };
+    steps.push(Step {
+        step: "restore_published_corpus_empty_source_key".to_string(),
+        lane: lane.to_string(),
+        args: empty_source_key_args,
+        output: json!(error),
     });
 }
 

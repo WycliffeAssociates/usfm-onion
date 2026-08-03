@@ -751,10 +751,10 @@ pub fn format_usfm(source: &str, options: FormatOptions) -> String {
     format_tokens_to_usfm(&tokens)
 }
 
-/// [`format`], but every token the formatter synthesizes (inserted structural
+/// [`format()`], but every token the formatter synthesizes (inserted structural
 /// linebreaks, a default `\p` after a bare chapter intro, a marker token
 /// recovered from malformed text) is minted a fresh id via `minter`. See
-/// [`mint_synthetic_id`] for the seam's contract; `format`/`format_tokens`
+/// `mint_synthetic_id` for the seam's contract; `format`/`format_tokens`
 /// are unchanged and still pass no minter.
 pub fn format_with_minter<T: FormattableToken + Clone>(
     tokens: &[T],

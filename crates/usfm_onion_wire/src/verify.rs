@@ -136,7 +136,7 @@ pub(crate) fn verified_book(
 /// when the section carried them.
 ///
 /// `stable_ids` is separate from the tokens for the same reason
-/// [`crate::token_codec::DecodedTokens`] separates them: core's `TokenId` is a
+/// `crate::token_codec::DecodedTokens` separates them: core's `TokenId` is a
 /// structured positional label and cannot hold an opaque caller id, so
 /// `Token::id` carries the positional label in both modes and the opaque ids
 /// travel alongside.

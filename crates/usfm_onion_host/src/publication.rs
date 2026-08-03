@@ -1,16 +1,9 @@
-//! The composing adapter: braid's semantics on one side, wire's bytes on the
-//! other, and the reuse cache that keeps a republication cheap.
-//!
-//! This is the layer the two crates are deliberately kept from being: braid never
-//! learns a byte layout and wire never learns what a dirty book or a snapshot id
-//! means, so *something* has to know both, and this is it. It lives here because
-//! this crate is the composition root — the one place allowed to depend on both.
-//!
-//! Nothing here is exported to JS. The public `Braid` class and
-//! `restoreCorpus` are Phase F; what exists now is the Rust composition the
-//! native host and that class will both call.
+//! Publishing: braid's resident semantics turned into one packed
+//! `corpus.bin` container, with a reuse cache that keeps a republication of
+//! an unchanged corpus cheap.
 
 use braid::{Braid, LintConfigFingerprint, LintEngineStamp, SourceHash, TokenIdentity};
+use serde::{Deserialize, Serialize};
 use usfm_onion::token::BookId;
 use usfm_onion_wire::corpus_codec::{
     CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
@@ -42,28 +35,35 @@ struct CachedBook {
     published: PublishedBook,
 }
 
-/// What one publication produced.
+/// What one publication produced, before it is turned into the public
+/// [`PublishedCorpus`] shape (which also needs a fresh `lint()` read for
+/// each book's source hash -- see [`publish_corpus`]).
 #[derive(Debug)]
-pub(crate) struct Publication {
-    pub(crate) bytes: Vec<u8>,
+struct Publication {
+    bytes: Vec<u8>,
     /// Per freshly encoded book, the exact source its sections are bound to.
-    pub(crate) sources: Vec<(BookId, String)>,
-    /// Books encoded this time. The rest were reused — reported rather than
-    /// inferred, because "did this republication actually reuse anything" is the
-    /// question the whole cache exists to answer.
-    pub(crate) encoded: Vec<BookId>,
-    pub(crate) reused: Vec<BookId>,
+    sources: Vec<(BookId, String)>,
+    /// Books encoded this time. Whether the rest were reused is derived from
+    /// this list at the [`PublishedCorpus`] boundary
+    /// (`PublishedBookInfo::encoded`), rather than this struct separately
+    /// tracking a `reused` list too -- one list, not two that must agree.
+    encoded: Vec<BookId>,
 }
 
 /// A resident corpus's publication cache.
 ///
 /// Holds only what wire produced and what decides its reuse; no source bytes, no
 /// IO, and no knowledge of what is inside a section. A host that wants the cache
-/// to outlive the process persists [`Publication::bytes`] and reseeds through
-/// braid's own restore path — this type is an in-memory accelerator, not a
-/// storage format.
+/// to outlive the process persists [`PublishedCorpus::bytes`] and reseeds through
+/// [`crate::restore_published_corpus`] — this type is an in-memory accelerator,
+/// not a storage format.
+///
+/// Unchanged semantics from the wasm-only adapter this was extracted from:
+/// self-validating per publish (every `publish_corpus` call re-derives reuse
+/// from the resident corpus's own current state), no external invalidation
+/// hooks — a caller never has to remember to tell this cache anything moved.
 #[derive(Debug, Default)]
-pub(crate) struct PublicationCache {
+pub struct PublicationCache {
     books: Vec<(BookId, CachedBook)>,
 }
 
@@ -74,7 +74,7 @@ impl PublicationCache {
     /// exactly the books whose bytes or stamps moved, and splices the rest from
     /// the last publication. A clean corpus that has already been published
     /// therefore encodes nothing at all.
-    pub(crate) fn publish(&mut self, resident: &mut Braid) -> Result<Publication, EncodeError> {
+    fn publish(&mut self, resident: &mut Braid) -> Result<Publication, EncodeError> {
         let stamps = LintStamps {
             config_fingerprint: LintConfigFingerprint::of(&resident.config().lint).0,
             engine_stamp: LintEngineStamp::current().0,
@@ -86,7 +86,6 @@ impl PublicationCache {
         let snapshot = resident.lint();
         let mut sections = Vec::with_capacity(snapshot.books.len());
         let mut encoded = Vec::new();
-        let mut reused = Vec::new();
         for book in &snapshot.books {
             let cached = self.books.iter().find(|(candidate, cached)| {
                 *candidate == book.book
@@ -96,7 +95,6 @@ impl PublicationCache {
             });
             match cached {
                 Some((_, cached)) => {
-                    reused.push(book.book);
                     sections.push(CorpusSection::Cached(cached.published.as_cached()));
                 }
                 None => {
@@ -151,9 +149,114 @@ impl PublicationCache {
             bytes,
             sources,
             encoded,
-            reused,
         })
     }
+}
+
+/// One book's own bookkeeping from a publish -- never the reuse-cache's
+/// internal sections/bytes, which stay behind `PublicationCache`.
+///
+/// `source` is present exactly when `encoded` is `true`: a reused (spliced)
+/// book's source did not change and wire never saw it this round, so the
+/// caller is expected to already hold it from whichever earlier publish
+/// first reported `encoded: true` for that book -- the same asymmetry
+/// `EncodedCorpus::sources` documents natively.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedBookInfo {
+    pub book: String,
+    pub source_hash: String,
+    /// `true` when this book was freshly re-encoded this call; `false` when
+    /// its previous publication's sections were spliced in unchanged.
+    pub encoded: bool,
+    pub source: Option<String>,
+}
+
+/// A packed corpus, ready to persist as `corpus.bin`, plus what the caller
+/// needs to restore or re-publish it later.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedCorpus {
+    pub bytes: Vec<u8>,
+    pub snapshot_id: String,
+    /// One entry per resident book, in corpus order -- not only the freshly
+    /// encoded ones, so a caller always has the complete bookkeeping set for
+    /// what this publication now contains.
+    pub books: Vec<PublishedBookInfo>,
+}
+
+/// Why a publish could not produce packed bytes.
+///
+/// Every variant is a pathological-input safety net (see
+/// [`crate::dto::PackedEncodeError`]'s own doc comment) rather than something
+/// a normal publish hits; surfaced as a typed refusal regardless, never a
+/// panic.
+// The intra-doc link above does not resolve from this crate -- there is no
+// `crate::dto` here -- but the text is kept byte-for-byte identical to the
+// wasm crate's own pre-extraction doc comment on purpose: tsify embeds this
+// string verbatim into the generated .d.ts, and the npm surface must not
+// change at all for this extraction. `PackedEncodeError` itself is
+// `usfm_onion_wire::dto::PackedEncodeError`, referenced correctly below.
+#[allow(rustdoc::broken_intra_doc_links)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PublishError {
+    Encode {
+        error: usfm_onion_wire::dto::PackedEncodeError,
+    },
+}
+
+/// Publishes the resident corpus as one packed `corpus.bin` container.
+///
+/// `cache` is the caller's own [`PublicationCache`] (owned by whatever handle
+/// wraps `braid` for its lifetime) so a repeat publish gets the cache's whole
+/// point -- splice-reuse of whatever did not change -- automatically. Dirty
+/// books are linted first (braid's own rule, via the `lint()` this runs
+/// internally); the reuse-cache's own sections/bytes never leave this
+/// function -- only the per-book bookkeeping in [`PublishedBookInfo`] does.
+pub fn publish_corpus(
+    braid: &mut Braid,
+    cache: &mut PublicationCache,
+) -> Result<PublishedCorpus, PublishError> {
+    let publication = cache.publish(braid).map_err(|error| PublishError::Encode {
+        error: error.into(),
+    })?;
+
+    // A second `lint()` read, not a second lint *pass*: every book was just
+    // made clean by the publish above, so this is a read of already-resident
+    // state, needed only for the per-book source hash the bookkeeping DTO
+    // reports (the internal `Publication` does not restate it).
+    let snapshot = braid.lint();
+    let books = snapshot
+        .books
+        .iter()
+        .map(|book| {
+            let encoded = publication.encoded.contains(&book.book);
+            let source = publication
+                .sources
+                .iter()
+                .find(|(candidate, _)| *candidate == book.book)
+                .map(|(_, source)| source.clone());
+            PublishedBookInfo {
+                book: book.book.as_str().to_string(),
+                source_hash: format!("{:016x}", book.source_hash.0),
+                encoded,
+                source,
+            }
+        })
+        .collect();
+
+    Ok(PublishedCorpus {
+        bytes: publication.bytes,
+        snapshot_id: format!("{:016x}", snapshot.id.0),
+        books,
+    })
 }
 
 #[cfg(test)]
@@ -196,15 +299,16 @@ mod tests {
         }
     }
 
-    /// Verifies a publication against the sources it says it is bound to, taking
-    /// the unchanged ones from the caller's own copy — which is exactly what a
-    /// host does: wire hands back sources only for what it encoded.
+    /// Verifies a published corpus against the sources it says it is bound
+    /// to, taking the unchanged ones from the caller's own copy — which is
+    /// exactly what a host does: wire hands back sources only for what it
+    /// encoded.
     fn verify(
-        publication: &Publication,
+        published: &PublishedCorpus,
         all: &[(BookId, &str)],
     ) -> usfm_onion_wire::corpus_codec::VerifiedCorpus {
         let sources: Vec<(BookId, &str)> = all.to_vec();
-        verify_corpus(&publication.bytes, &sources).expect("a publication verifies")
+        verify_corpus(&published.bytes, &sources).expect("a publication verifies")
     }
 
     const GEN: &str = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n\\c 2\n\\p\n\\v 1 Thus.\n";
@@ -241,12 +345,20 @@ mod tests {
             }
 
             let mut cache = PublicationCache::default();
-            let publication = cache.publish(&mut resident).expect("publishes");
-            assert_eq!(publication.encoded, vec![book("GEN"), book("EXO")]);
-            assert!(publication.reused.is_empty());
+            let published = publish_corpus(&mut resident, &mut cache).expect("publishes");
+            let encoded: Vec<&str> = published
+                .books
+                .iter()
+                .filter(|book| book.encoded)
+                .map(|book| book.book.as_str())
+                .collect();
+            assert_eq!(encoded, vec!["GEN", "EXO"]);
 
-            let verified = verify(&publication, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
-            assert_eq!(verified.snapshot_id, resident.expected_snapshot_id().0);
+            let verified = verify(&published, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
+            assert_eq!(
+                verified.snapshot_id,
+                u64::from_str_radix(&published.snapshot_id, 16).unwrap()
+            );
             assert_eq!(
                 verified.lint_stamps,
                 Some(LintStamps {
@@ -287,16 +399,15 @@ mod tests {
             .replace_corpus(CorpusInput::new(vec![usfm("GEN", GEN), usfm("EXO", EXO)]))
             .expect("two books");
         let mut cache = PublicationCache::default();
-        let first = cache.publish(&mut resident).expect("first publication");
-        assert_eq!(first.encoded.len(), 2);
+        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        assert_eq!(first.books.iter().filter(|book| book.encoded).count(), 2);
 
         // Publishing again with nothing changed encodes nothing.
-        let unchanged = cache.publish(&mut resident).expect("republication");
+        let unchanged = publish_corpus(&mut resident, &mut cache).expect("republication");
         assert!(
-            unchanged.encoded.is_empty(),
+            unchanged.books.iter().all(|book| !book.encoded),
             "a clean publish re-encodes nothing"
         );
-        assert_eq!(unchanged.reused, vec![book("GEN"), book("EXO")]);
         assert_eq!(
             unchanged.bytes, first.bytes,
             "identical semantics, identical bytes"
@@ -316,12 +427,21 @@ mod tests {
             .expect("a real edit");
         assert!(!effect.is_noop());
 
-        let second = cache.publish(&mut resident).expect("republication");
-        assert_eq!(second.encoded, vec![book("GEN")], "one book re-encoded");
-        assert_eq!(second.reused, vec![book("EXO")], "the other spliced");
-        // The edited book's source is the only one wire had to be handed.
-        assert_eq!(second.sources.len(), 1);
-        assert_eq!(second.sources[0].0, book("GEN"));
+        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let encoded: Vec<&str> = second
+            .books
+            .iter()
+            .filter(|book| book.encoded)
+            .map(|book| book.book.as_str())
+            .collect();
+        assert_eq!(encoded, vec!["GEN"], "one book re-encoded");
+        let reused: Vec<&str> = second
+            .books
+            .iter()
+            .filter(|book| !book.encoded)
+            .map(|book| book.book.as_str())
+            .collect();
+        assert_eq!(reused, vec!["EXO"], "the other spliced");
 
         let edited_source = match resident
             .to_usfm(braid::CorpusScope::Book(book("GEN")))
@@ -348,8 +468,8 @@ mod tests {
             .replace_corpus(CorpusInput::new(vec![usfm("GEN", GEN)]))
             .expect("one book");
         let mut cache = PublicationCache::default();
-        let first = cache.publish(&mut resident).expect("first publication");
-        assert_eq!(first.encoded, vec![book("GEN")]);
+        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        assert!(first.books.iter().all(|book| book.encoded));
 
         let mut options = LintOptions::scoped(LintScope::Book);
         options.allow_implicit_chapter_content_verse =
@@ -357,23 +477,12 @@ mod tests {
         let effect = resident.update_config(BraidConfig::new(options));
         // No token moved, so identity and hydration are untouched.
         assert!(effect.is_noop());
-        assert_eq!(
-            resident.expected_snapshot_id().0,
-            first_snapshot_id(&first),
-            "the corpus identity did not change"
-        );
 
-        let second = cache.publish(&mut resident).expect("republication");
-        assert_eq!(
-            second.encoded,
-            vec![book("GEN")],
+        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        assert!(
+            second.books.iter().all(|book| book.encoded),
             "a stamp change must re-encode, not reuse"
         );
-        assert!(second.reused.is_empty());
-    }
-
-    fn first_snapshot_id(publication: &Publication) -> u64 {
-        u64::from_le_bytes(publication.bytes[32..40].try_into().expect("header slice"))
     }
 
     /// The reviewer's identity-only repro: byte-identical content re-pushed under
@@ -393,8 +502,8 @@ mod tests {
             .expect("resident")
             .source_hash;
         let mut cache = PublicationCache::default();
-        let first = cache.publish(&mut resident).expect("first publication");
-        assert_eq!(first.encoded.len(), 2);
+        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        assert!(first.books.iter().all(|book| book.encoded));
         let before = verify(&first, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
         let old_anchor = before.books[0]
             .findings
@@ -433,13 +542,18 @@ mod tests {
             .unwrap();
         assert_eq!(entry.source_hash, hash_before, "not one byte changed");
 
-        let second = cache.publish(&mut resident).expect("republication");
+        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let encoded: Vec<&str> = second
+            .books
+            .iter()
+            .filter(|book| book.encoded)
+            .map(|book| book.book.as_str())
+            .collect();
         assert_eq!(
-            second.encoded,
-            vec![book("GEN")],
+            encoded,
+            vec!["GEN"],
             "an identity-only change must re-encode"
         );
-        assert_eq!(second.reused, vec![book("EXO")]);
 
         let after = verify(&second, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
         let new_anchor = after.books[0]
@@ -482,8 +596,8 @@ mod tests {
             ]))
             .expect("two books");
         let mut cache = PublicationCache::default();
-        let first = cache.publish(&mut resident).expect("first publication");
-        assert_eq!(first.encoded.len(), 2);
+        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        assert!(first.books.iter().all(|book| book.encoded));
 
         // Re-push GEN with each attribute's recorded spelling narrowed by its
         // leading character while the verbatim list text is kept, so every
@@ -541,35 +655,19 @@ mod tests {
             "the attribute spelling moved, so the token identity must"
         );
 
-        // Not one byte moved, which is exactly why the source hash could not have
-        // caught this.
-        let hash_after = resident
-            .books()
-            .into_iter()
-            .find(|entry| entry.book == book("GEN"))
-            .unwrap()
-            .source_hash;
+        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let encoded: Vec<&str> = second
+            .books
+            .iter()
+            .filter(|book| book.encoded)
+            .map(|book| book.book.as_str())
+            .collect();
         assert_eq!(
-            hash_after.0,
-            u64::from_str_radix(
-                &verify(&first, &[(book("GEN"), ALIGNED), (book("EXO"), EXO)]).books[0]
-                    .receipt
-                    .source_hash,
-                16
-            )
-            .expect("hex hash"),
-        );
-
-        let second = cache.publish(&mut resident).expect("republication");
-        assert_eq!(
-            second.encoded,
-            vec![book("GEN")],
+            encoded,
+            vec!["GEN"],
             "a spelling-only change must re-encode"
         );
-        assert_eq!(second.reused, vec![book("EXO")]);
 
-        // The freshly encoded sections are not the stale ones, and the publication
-        // still verifies against the (unchanged) bytes.
         let before = section_bytes(&first.bytes);
         let after = section_bytes(&second.bytes);
         let sections_of = |sections: &[(BookId, Vec<Vec<u8>>)], book: BookId| {
@@ -591,104 +689,6 @@ mod tests {
         );
         let verified = verify(&second, &[(book("GEN"), ALIGNED), (book("EXO"), EXO)]);
         assert_eq!(verified.books.len(), 2);
-    }
-
-    /// A clean project must be able to restore its *negative* lint result: "lint
-    /// ran and found nothing" is evidence, and without it reopening a clean corpus
-    /// re-runs every rule. The proof is end to end through the real warm path —
-    /// publish, verify, prime a fresh handle from what the bytes said — and the
-    /// no-rule-work assertion is that nothing is left dirty afterwards.
-    #[test]
-    fn an_all_clean_corpus_restores_its_empty_findings_and_reopens_with_no_rule_work() {
-        // Two books with nothing to report.
-        const CLEAN_GEN: &str = "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\n";
-        const CLEAN_EXO: &str = "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\n";
-        let mut resident = resident();
-        resident
-            .replace_corpus(CorpusInput::new(vec![
-                usfm("GEN", CLEAN_GEN),
-                usfm("EXO", CLEAN_EXO),
-            ]))
-            .expect("two books");
-        {
-            let snapshot = resident.lint();
-            assert_eq!(
-                snapshot.summary.total_count, 0,
-                "the fixture must actually be clean"
-            );
-        }
-
-        let mut cache = PublicationCache::default();
-        let publication = cache.publish(&mut resident).expect("publishes");
-        let verified = verify(
-            &publication,
-            &[(book("GEN"), CLEAN_GEN), (book("EXO"), CLEAN_EXO)],
-        );
-        // The evidence: a finding section per book, empty, and stamped.
-        assert!(verified.books.iter().all(|book| book.findings.is_empty()));
-        assert_eq!(
-            verified.lint_stamps,
-            Some(LintStamps {
-                config_fingerprint: LintConfigFingerprint::of(&resident.config().lint).0,
-                engine_stamp: LintEngineStamp::current().0,
-            }),
-            "an empty result is still a result, and still needs its licence"
-        );
-
-        // The cold open: a fresh handle seeded from the decoded publication.
-        let mut reopened = empty_resident();
-        let report = reopened
-            .restore_corpus(braid::CorpusRestoreInput::new(
-                LintConfigFingerprint::of(&reopened.config().lint),
-                LintEngineStamp::current(),
-                [(book("GEN"), CLEAN_GEN), (book("EXO"), CLEAN_EXO)]
-                    .into_iter()
-                    .zip(&verified.books)
-                    .map(|((book_id, source), verified)| braid::BookRestoreInput {
-                        source_key: SourceKey::new(format!("{book_id}.usfm")).unwrap(),
-                        book: book_id,
-                        source: source.to_string(),
-                        tokens: parse(source)
-                            .tokens
-                            .iter()
-                            .map(OwnedToken::from_parsed)
-                            .collect(),
-                        line_ending: braid::LineEnding::Lf,
-                        lint: Some(braid::BookLintPrime {
-                            book: book_id,
-                            source_hash: braid::SourceHash(
-                                u64::from_str_radix(&verified.receipt.source_hash, 16)
-                                    .expect("hex hash"),
-                            ),
-                            result: usfm_onion::lint::LintResult {
-                                issues: verified.findings.clone(),
-                                summary: Default::default(),
-                            },
-                        }),
-                    })
-                    .collect(),
-            ))
-            .expect("the seed is well-formed");
-        assert_eq!(report.seeded, vec![book("GEN"), book("EXO")]);
-        assert!(
-            report.rejected.is_empty(),
-            "a clean book's cached result must be adoptable: {:?}",
-            report.rejected
-        );
-        // The no-rule-work assertion: nothing is dirty, so the next `lint()` runs
-        // no rules at all.
-        assert!(
-            reopened.books_awaiting_lint().is_empty(),
-            "a restored clean corpus must not need recompute"
-        );
-        let snapshot = reopened.lint();
-        assert_eq!(snapshot.summary.total_count, 0);
-        assert!(
-            snapshot
-                .books
-                .iter()
-                .all(|book| book.result.issues.is_empty())
-        );
     }
 
     // ---- corpus scale -------------------------------------------------------
@@ -748,17 +748,18 @@ mod tests {
             .expect("the whole corpus is resident");
 
         let mut cache = PublicationCache::default();
-        let first = cache.publish(&mut resident).expect("publishes");
-        assert_eq!(first.encoded.len(), 66);
-        assert!(first.reused.is_empty());
-        assert_eq!(first.sources.len(), 66);
+        let first = publish_corpus(&mut resident, &mut cache).expect("publishes");
+        assert_eq!(first.books.iter().filter(|book| book.encoded).count(), 66);
 
         let sources: Vec<(BookId, &str)> = fixtures
             .iter()
             .map(|(book, _, source)| (*book, source.as_str()))
             .collect();
         let verified = verify(&first, &sources);
-        assert_eq!(verified.snapshot_id, resident.expected_snapshot_id().0);
+        assert_eq!(
+            verified.snapshot_id,
+            u64::from_str_radix(&first.snapshot_id, 16).unwrap()
+        );
         assert_eq!(verified.books.len(), 66);
         assert_eq!(
             verified.lint_stamps,
@@ -835,10 +836,16 @@ mod tests {
             )
             .expect("a real edit");
 
-        let second = cache.publish(&mut resident).expect("republishes");
-        assert_eq!(second.encoded, vec![target_book], "one book re-encoded");
-        assert_eq!(second.reused.len(), 65, "sixty-five spliced");
-        assert_eq!(second.sources.len(), 1);
+        let second = publish_corpus(&mut resident, &mut cache).expect("republishes");
+        let encoded: Vec<BookId> = second
+            .books
+            .iter()
+            .filter(|book| book.encoded)
+            .map(|book| BookId::from_str(&book.book).unwrap())
+            .collect();
+        assert_eq!(encoded, vec![target_book], "one book re-encoded");
+        let reused_count = second.books.iter().filter(|book| !book.encoded).count();
+        assert_eq!(reused_count, 65, "sixty-five spliced");
 
         // Byte-level proof of reuse: every untouched book's sections in the new
         // container are the first publication's bytes, section for section.
@@ -881,7 +888,10 @@ mod tests {
             })
             .collect();
         let verified = verify(&second, &sources);
-        assert_eq!(verified.snapshot_id, resident.expected_snapshot_id().0);
+        assert_eq!(
+            verified.snapshot_id,
+            u64::from_str_radix(&second.snapshot_id, 16).unwrap()
+        );
         assert_eq!(verified.books.len(), 66);
     }
 

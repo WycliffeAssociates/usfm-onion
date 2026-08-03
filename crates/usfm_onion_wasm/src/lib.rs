@@ -1,11 +1,13 @@
 //! WebAssembly bindings for `usfm_onion`.
 //!
 //! One module per responsibility: the boundary value types and their conversions
-//! ([`dto`]), the stateless one-shot exports ([`stateless`]), the resident corpus
-//! handle ([`resident`]), and the publication adapter it composes
-//! ([`publication`]). This root holds only what belongs to the crate as a whole —
-//! the hand-written TypeScript section, and the re-exports that keep every public
-//! item reachable at the crate root whichever module declares it.
+//! ([`dto`]), the stateless one-shot exports ([`stateless`]), and the resident
+//! corpus handle ([`resident`]). Publish/restorePublishedCorpus's own
+//! composition (the publication adapter) lives in `usfm_onion_host` now, not
+//! here -- this crate only projects it across the wasm-bindgen boundary. This
+//! root holds only what belongs to the crate as a whole — the hand-written
+//! TypeScript section, and the re-exports that keep every public item
+//! reachable at the crate root whichever module declares it.
 
 use wasm_bindgen::prelude::*;
 
@@ -37,10 +39,6 @@ pub use usfm_onion_wire::dto::{
 };
 
 pub mod dto;
-// The composing adapter is reached through the resident handle; nothing else in
-// this crate constructs one, and the handle itself lands next.
-#[allow(dead_code)]
-pub mod publication;
 pub mod resident;
 pub mod stateless;
 

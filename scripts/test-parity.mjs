@@ -139,6 +139,18 @@ const METHODS = {
   // fresh instance `publish` then continues on.
   publish_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
   publish: { js: "publish", wrapped: true, args: () => [] },
+  // Clean-room re-review P1: pins the empty-sourceKey classification
+  // (`{kind: "ingest", error: {kind: "duplicateSourceKey", source: ""}}`),
+  // the pre-extraction wasm behavior `usfm_onion_host::RestoreError::
+  // EmptySourceKey` now reproduces. `packed` is a direct `Vec<u8>` function
+  // parameter (not a struct field), which crosses as `Uint8Array` -- unlike
+  // `records[].source`, a plain struct field that is already the right
+  // shape (`number[]`) with no conversion needed.
+  restore_published_corpus_empty_source_key: {
+    js: "restorePublishedCorpus",
+    wrapped: true,
+    args: (a) => [new Uint8Array(a.packed), a.records],
+  },
 };
 
 /** Steps that build their own fresh `Braid` rather than continuing the
@@ -155,6 +167,7 @@ const FRESH_INSTANCE_STEPS = new Set([
   "restore_corpus",
   "restore_corpus_suppressed",
   "publish_seed",
+  "restore_published_corpus_empty_source_key",
 ]);
 
 function makeMinter() {
@@ -222,7 +235,8 @@ function isErrorStep(entry) {
     || entry.step.endsWith("_not_resident")
     || entry.step.endsWith("_ambiguous")
     || entry.step.endsWith("_malformed")
-    || entry.step.endsWith("_duplicate_token_id");
+    || entry.step.endsWith("_duplicate_token_id")
+    || entry.step.endsWith("_empty_source_key");
 }
 
 const byLane = new Map();

@@ -203,4 +203,35 @@ const suppressingConfig = {
   );
 }
 
+// Clean-room re-review P1: an empty sourceKey must classify as
+// {kind: "ingest", error: {kind: "duplicateSourceKey", source: ""}} through
+// the actual built package -- the pre-extraction wasm behavior, reproduced
+// via usfm_onion_host::RestoreError::EmptySourceKey rather than silently
+// reclassified as a decode defect. This is also pinned in the parity
+// transcript (restore_published_corpus_empty_source_key); this check
+// exercises the same case through the real npm package end to end.
+{
+  const original = new wasm.Braid(config, makeMinter());
+  unwrap(
+    original.replaceCorpus({ books: [{ kind: "usfm", sourceKey: "GEN.usfm", book: "GEN", source: GEN }] }),
+    "empty source key: replaceCorpus",
+  );
+  const published = unwrap(original.publish(), "empty source key: publish");
+  const records = [
+    {
+      book: "GEN",
+      sourceKey: "",
+      source: Array.from(new TextEncoder().encode(published.books[0].source)),
+    },
+  ];
+  const reopened = new wasm.Braid(config, makeMinter());
+  const outcome = reopened.restorePublishedCorpus(new Uint8Array(published.bytes), records);
+  assert.equal(outcome.status, "error", `empty source key: expected a refusal, got ${JSON.stringify(outcome)}`);
+  check(
+    outcome.error,
+    { kind: "ingest", error: { kind: "duplicateSourceKey", source: "" } },
+    "empty source key: classified as the pre-extraction ingest/duplicateSourceKey shape",
+  );
+}
+
 console.log(`${target} publish round trip passed: ${checks} checks`);

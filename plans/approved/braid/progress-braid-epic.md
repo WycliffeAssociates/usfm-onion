@@ -5225,3 +5225,230 @@ checks each, both targets); `npm run golden:wasm`/`golden:wasm:web` green
 (7 fixtures); `cargo fmt --all -- --check` clean. pkg regen: `.d.ts`/`.js`
 unchanged (no public signature moved, as expected), only `.wasm` binaries
 regenerated and committed. Fresh-clone build+test verified after commit.
+
+## 2026-08-03 — v0.1.2: extract publish/restore composition into usfm_onion_host
+
+Owner-approved packet: extract the publish/restore composition out of
+`usfm_onion_wasm` into a new native-capable crate, `usfm_onion_host`, and
+make the wasm crate a thin projection of it. Driving principle (owner's
+words): Rust-first, always -- the native API is primary; wasm exists only
+as borrowed/owned/serde glue over it. Context: the editor's Tauri host
+duplicated ~359 lines of braid+wire composition (`src/tauri/rust/src/mirror.rs`)
+because v0.1.1's composition existed only inside the wasm crate; this
+extraction deletes that duplication downstream.
+
+**New crate `crates/usfm_onion_host`** (depends on `braid` +
+`usfm_onion_wire` + core; `usfm_onion_wasm` now depends on it). The frozen
+boundary stands: braid stays byte-free, wire stays layout-only, host is the
+composition layer.
+
+**Final native API** (free functions + explicit cache, not inherent `Braid`
+methods -- braid must not grow a wire dep, the deviation from the
+downstream RFC sketch the owner had already accepted):
+```rust
+pub struct PublicationCache { .. }                    // Default, unchanged semantics
+pub fn publish_corpus(braid: &mut braid::Braid, cache: &mut PublicationCache)
+    -> Result<PublishedCorpus, PublishError>;
+pub fn restore_published_corpus(braid: &mut braid::Braid, packed: &[u8],
+    records: &[PublishedCorpusSource]) -> Result<braid::RestoreReport, RestoreError>;
+```
+- `PublishedCorpus { bytes: Vec<u8>, snapshot_id: String, books: Vec<PublishedBookInfo> }`,
+  `PublishedBookInfo { book, source_hash, encoded, source }`,
+  `PublishedCorpusSource { book, source_key, source }`, `PublishError` --
+  plain Rust types with the *same shapes* the wasm DTOs already projected,
+  `#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]`-gated (mirroring
+  `usfm_onion_wire::dto`'s own established native/wasm-dual-derive
+  pattern) rather than tsify being a hard dependency.
+- `RestoreError { Decode(usfm_onion_wire::error::DecodeError),
+  Ingest(braid::IngestError) }` is deliberately **not** tsify-gated and
+  **not** a String-projected mirror: it carries `braid::IngestError`
+  verbatim. braid must not grow a wasm-bindgen dependency to make that
+  projectable, and the wasm crate already owns a String-projected
+  `IngestError` it converts *from* `braid::IngestError` for every other
+  verb -- reusing that existing conversion, not a second hand-copy of it,
+  is the "one definition, not a mirror" call here. Recorded in
+  `usfm_onion_host::restore`'s own doc comment as the one place a
+  genuinely separate wasm-only type remains, per the drift-proofing rule.
+- `RestoreReport` is `braid::RestoreReport` itself -- no host redefinition,
+  since a native caller (the primary client) wants braid's own `BookId`-
+  carrying type directly, not a string projection of it.
+- Omitted: the RFC's `fresh_sources` field -- no consumer needs it; the
+  publish-side `PublishedBookInfo::source` already carries the equivalent
+  fact per book.
+
+**What moved to host, unchanged semantics:** `PublicationCache`
+(self-validating per publish, no invalidation hooks), the whole publish
+composition (`publish_corpus`, its own dirty-book lint,
+splice-reuse decision), and the whole restore composition
+(`restore_published_corpus`: `verify_corpus` → the witness-path
+materialize (`4e97a89`'s fix, kept) → prime-unless-suppressing → seed).
+
+**What stayed in wasm:** `#[wasm_bindgen]` bindings, tsify DTO derives
+where a genuinely wasm-only shape remains (`RestoreReport`/`RestoreError`/
+`PrimeRejection`/`PrimeRejectReason`/`IngestError`, all pre-existing,
+shared with the unmoved per-book `restoreCorpus`/`verifyPackedBook`
+composition), the `ApiResult` envelope, `String`/`Vec<u8>`-taking
+signatures. `Braid.publish`/`restorePublishedCorpus` are now one-line
+delegations to the host functions; the handle still owns its own
+`PublicationCache` (now `usfm_onion_host::PublicationCache`) for the JS
+ergonomic of automatic splice-reuse across repeat publishes.
+`PublishedCorpus`/`PublishedBookInfo`/`PublishError`/`PublishedCorpusSource`
+are re-exported from host verbatim (`pub use usfm_onion_host::{..}`), not
+redefined -- there was nothing left to convert.
+
+**NPM surface: byte-identical, verified, not merely asserted.** A first
+diff after the extraction showed textual differences in the generated
+`.d.ts` -- entirely from doc-comment wording moved/reworded during the
+extraction (tsify embeds a type's Rust doc comment verbatim into the
+`.d.ts`). Fixed by matching the pre-extraction doc text byte-for-byte on
+`PublishedBookInfo`, `PublishError` (host), and the `publish`/
+`restorePublishedCorpus` wasm methods, moving the *new* explanatory
+context into non-doc (`//`) comments instead. Also hit, and ruled out as
+unrelated to this extraction: a `--dev`-only, `web`-target-only diff in
+the low-level `InitOutput`/raw-wasm-export typing style (`number` vs
+`any`/tuple returns) -- confirmed via a clean `git worktree` rebuild of
+the *unmodified* 0.1.1 code in the same environment, which reproduced the
+identical diff. Toolchain artifact of the dev build path, not present in
+the release build, not caused by this extraction. The actual gate --
+release build, both targets -- diffs clean against the pre-extraction
+committed `.d.ts`/`.js`.
+
+**Tests, full accounting (nothing lost):** the 6 non-ignored +1 ignored
+tests in the wasm crate's former `publication.rs` all moved to
+`usfm_onion_host` unchanged (now split `publication.rs`/`restore.rs`
+modules, ported to call `publish_corpus`/`restore_published_corpus`
+instead of the old `PublicationCache::publish` method directly, including
+`an_all_clean_corpus_restores_its_empty_findings_and_reopens_with_no_rule_work`,
+re-pointed from a hand-built `BookRestoreInput` seed to the real
+`restore_published_corpus` composition it now exercises end to end). Two
+new tests added to `usfm_onion_host::restore`:
+`publish_then_restore_reproduces_the_resident_state_natively` (the
+required native-only round trip: publish -> verify -> fresh-`Braid`
+restore -> identical resident state, never touching the wasm crate) and
+`restore_declines_to_prime_a_summary_a_suppressing_config_cannot_recompute`
+(the suppressing-config case ported to the new composition path too).
+Before: wasm crate 39 passed + 2 ignored = 41. After: host 8 passed + 1
+ignored = 9, wasm 33 passed + 1 ignored = 34, total 43 = 41 + 2 new.
+Known, accepted minor duplication out of scope this round:
+`summarize_findings` (rebuilding a `LintSummary` from restored findings)
+now exists privately in both `usfm_onion_host::restore` and
+`usfm_onion_wasm::resident` (the latter still needed by the unmoved,
+per-book `restore_corpus` verb) -- a small helper function, not a DTO
+shape, so it did not trip the same-types discipline, but noted here as a
+future-cleanup candidate rather than silently left unmentioned.
+
+**Parity generator**: `run_publish`'s native-vs-wasm byte-identity
+assertion (added in the v0.1.1 round) now calls
+`usfm_onion_host::publish_corpus`/`PublicationCache` directly for the
+"native adapter" side instead of the old wasm-crate-local
+`PublicationCache::publish` method -- confirmed still compiles and still
+asserts (byte-identical native/wasm `corpus.bin` output). Regenerating
+the fixture after the version bump changed ~240 lines of packed-byte
+content in the transcript -- expected, not a bug: `catalog_stamp`/
+`engine_stamp` incorporate `usfm_onion::lint_impl::CRATE_VERSION`
+(`env!("CARGO_PKG_VERSION")`), by design, so a version bump legitimately
+changes packed checksums; verified deterministic (byte-identical) across
+repeated dev/dev and dev/release regenerations at a fixed version before
+concluding this.
+
+**Version**: 0.1.2 in all four manifests (root `Cargo.toml`
+`workspace.package.version`, root `package.json`, `pkg-bundler`/`pkg-web`
+`package.json`, the latter two regenerated by the release build).
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101, usfm_onion 291,
+usfm_onion_host 8+1 ignored, usfm_onion_wasm 33+1 ignored, usfm_onion_wire
+200+5 ignored); `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -p usfm_onion_host -- --ignored` green,
+including the parity generator and host's own corpus-scale publish test;
+`npm run test:packed`/`test:packed:web` green (410 cases); `npm run
+test:parity`/`test:parity:web` green (66 steps, 0 divergences); `npm run
+test:publish`/`test:publish:web` green (11 checks each, both targets);
+`npm run golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt
+--all -- --check` clean. pkg regen (release, both targets): `.d.ts`/`.js`
+byte-identical to the pre-extraction committed files (verified via direct
+diff, not assumed); only `.wasm` binaries and `package.json` version
+fields moved. Fresh-clone build+test to follow after commit.
+
+## 2026-08-03 — v0.1.2 closeout: empty-sourceKey classification + rustdoc gate
+
+Clean-room re-review of `86a4b73`: one P1, one P2, everything else clean
+(crate ownership, delegation, the type exceptions, the parity fixture
+delta confirmed stamp/checksum-shaped, `.d.ts` byte-identical).
+
+**P1 — empty `sourceKey` changed error classification.** Pre-extraction
+wasm behavior (master's `resident.rs`): an empty source key on a
+`restorePublishedCorpus` record → `{kind: "ingest", error: {kind:
+"duplicateSourceKey", source: ""}}`. The extracted `restore.rs` instead
+fell through to `RestoreError::Decode(DecodeError::InvalidSection)`,
+observable through the built package as `{kind: "decode", error: {kind:
+"invalidSection"}}` — a real classification change in a packet specified
+as behavior-preserving; typed errors are observable API. Root cause: an
+empty `source_key` cannot be expressed as
+`RestoreError::Ingest(braid::IngestError::DuplicateSourceKey)` at all,
+because `braid::SourceKey::new` only ever rejects emptiness — there is no
+valid `SourceKey` to construct the variant from, so the prior fix in this
+round quietly reused `Decode(InvalidSection)` for a case that isn't a
+decode defect.
+
+Fixed by adding `RestoreError::EmptySourceKey` (no payload) as its own
+variant, constructed by the same pre-check site, and having the wasm
+crate's conversion map it to `IngestError::DuplicateSourceKey { source:
+String::new() }` — reproducing the pre-extraction classification exactly,
+native and wasm agreeing through the one host-side check. The reviewer
+noted the *replaced* classification (`Decode`) was arguably more honest,
+since the defect is in the caller's `records`, not in `packed` itself —
+recorded here as a candidate adjudication for a future breaking round,
+not adopted now. Regression:
+`an_empty_source_key_is_its_own_classification_not_a_decode_defect`
+(`usfm_onion_host::restore`), plus the case is now pinned in the parity
+transcript (`restore_published_corpus_empty_source_key`, the first parity
+step to exercise `restorePublishedCorpus` at all) and in
+`scripts/test-publish-round-trip.mjs` through the actual built package.
+
+**P2 — strict rustdoc failed on the new crate.** `usfm_onion_host`'s
+`PublishError` doc comment keeps an intra-doc link to nonexistent
+`crate::dto::PackedEncodeError` (there is no `dto` module in this crate)
+specifically to hold the npm `.d.ts` comment bytes stable across the
+extraction. Fixed with a targeted `#[allow(rustdoc::broken_intra_doc_links)]`
+on that item, with a comment stating why the text is frozen. Same
+treatment for one *other*, unrelated, pre-existing case found by the new
+gate: `usfm_onion_wasm::dto::MergeRequest`'s doc references
+`wasm_merge_diff_blocks` without the path qualifier its own module would
+need to resolve it — also npm-comment-frozen, so `#[allow]`ed rather than
+requalified (requalifying would change the visible `.d.ts` text).
+
+**New standing gate**: `RUSTDOCFLAGS="-D warnings" cargo doc --workspace
+--no-deps --all-features`. First run surfaced ~13 pre-existing broken/
+private intra-doc links across `usfm_onion` (core) and `usfm_onion_wire`,
+none related to this extraction — this is the first time this gate has
+ever run. All fixed as doc-only edits (de-linking a private-item
+reference to plain code-formatted text, or qualifying a path that was
+simply wrong relative to the referencing module's nesting, e.g.
+`layout::finding_field`'s doc needing `crate::schema::PatchOpTag` instead
+of a bare `PatchOpTag` two modules up). One self-inflicted case from this
+round's earlier witness-path work (`4e97a89`) was also caught and fixed
+the same way: `VerifiedCorpus::materialize_owned_tokens`'s doc linked
+private `crate::container::read_container`, de-linked to plain text (this
+one is native-only, no tsify derive, so no npm-comment-freeze concern).
+Workspace-wide result after fixes: clean, zero warnings, all five crates.
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101, usfm_onion 291,
+usfm_onion_host 9+1 ignored -- up one for the new empty-sourceKey
+regression, usfm_onion_wasm 33+1 ignored, usfm_onion_wire 200+5 ignored);
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`
+clean; `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -p usfm_onion_host -- --ignored`
+green; `npm run test:packed`/`test:packed:web` green (410 cases); `npm
+run test:parity`/`test:parity:web` green (68 steps -- up two for the new
+`restore_published_corpus_empty_source_key` step × 2 lanes -- 0
+divergences, both targets); `npm run test:publish`/`test:publish:web`
+green (12 checks each -- up one -- both targets); `npm run
+golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt --all --
+--check` clean. pkg regen (release, both targets): `.d.ts`/`.js`
+unchanged (no public signature moved -- the fix is entirely inside the
+host-to-wasm conversion match arm), only `.wasm` binaries moved. Fresh-clone
+build+test verified after commit.
