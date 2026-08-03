@@ -782,7 +782,7 @@ fn run_restore(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: crate::publication::PublicationCache::default(),
+        publication: usfm_onion_host::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -902,7 +902,7 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(suppressed_braid_config(), minter()),
-        publication: crate::publication::PublicationCache::default(),
+        publication: usfm_onion_host::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -956,10 +956,10 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     native_publisher
         .replace_corpus(braid::CorpusInput::new(vec![native_book]))
         .expect("one book");
-    let mut native_cache = crate::publication::PublicationCache::default();
-    let native_publication = native_cache
-        .publish(&mut native_publisher)
-        .expect("native adapter publishes");
+    let mut native_cache = usfm_onion_host::PublicationCache::default();
+    let native_publication =
+        usfm_onion_host::publish_corpus(&mut native_publisher, &mut native_cache)
+            .expect("native adapter publishes");
 
     let wasm_book = match lane {
         "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
@@ -973,7 +973,7 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     };
     let mut wasm_braid = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: crate::publication::PublicationCache::default(),
+        publication: usfm_onion_host::PublicationCache::default(),
     };
     let corpus_args = json!({ "corpus": { "books": [wasm_book.clone()] } });
     let outcome = wasm_braid.replace_corpus(resident::CorpusInput {

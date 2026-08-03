@@ -1,0 +1,26 @@
+[package]
+name = "usfm_onion_host"
+description = "Native composition layer for a resident braid corpus and packed publication/restore -- Rust-first; wasm is a thin projection over this"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+# Adds tsify derives to this crate's own DTOs and forwards to wire's own
+# "wasm" feature, so a wasm-bindgen consumer (usfm_onion_wasm) gets the exact
+# same types tsify can project across the boundary, not a second hand-mirror
+# of them.
+wasm = ["dep:tsify", "dep:wasm-bindgen", "usfm_onion_wire/wasm"]
+
+[dependencies]
+# The composition root: this crate is the one place allowed to depend on both
+# the resident corpus and the wire format, because composing them is its job.
+# braid stays byte-free and wire stays layout-only; this is what knows both.
+braid = { path = "../braid" }
+serde = { version = "1", features = ["derive"] }
+tsify = { version = "0.5.6", optional = true }
+usfm_onion = { path = "../.." }
+usfm_onion_wire = { path = "../usfm_onion_wire" }
+wasm-bindgen = { version = "0.2", optional = true }

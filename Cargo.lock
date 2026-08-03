@@ -52,7 +52,7 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
 name = "braid"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -785,7 +785,7 @@ checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
 name = "usfm_onion"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "logos",
@@ -801,8 +801,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "usfm_onion_host"
+version = "0.1.2"
+dependencies = [
+ "braid",
+ "serde",
+ "tsify",
+ "usfm_onion",
+ "usfm_onion_wire",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "usfm_onion_wasm"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "braid",
  "js-sys",
@@ -811,13 +823,14 @@ dependencies = [
  "serde_json",
  "tsify",
  "usfm_onion",
+ "usfm_onion_host",
  "usfm_onion_wire",
  "wasm-bindgen",
 ]
 
 [[package]]
 name = "usfm_onion_wire"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
