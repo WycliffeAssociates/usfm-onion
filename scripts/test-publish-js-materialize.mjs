@@ -55,8 +55,20 @@ const config = {
   },
 };
 
-const GEN = "\\id GEN\n\\c 1\n\\v 1 text\n\\v 1 text\n";
-const EXO = "\\id EXO\n\\c 1\n\\p\n\\v 1 These are the names.\\p\n\\v 2 And the earth.\\q1\n\\v 3 Light.\n";
+// Rich enough to exercise every field the comparators below have to carry
+// through, not just id/kind/source/sid/marker: a default-shorthand AND an
+// explicit-key attribute (`\w`'s default key is "lemma" -- marker_defs.rs),
+// a footnote (note-family metadata, nested = true), a duplicate verse number
+// (a real finding with `relatedTokenId` and varied severity/category from
+// the fixture's other findings), and a verse range (`\v 1-2`, a number
+// payload with `NumberRangeKind::Range`, not just a bare `Verse`).
+const GEN =
+  '\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning \\w gracious|grace\\w* \\w noble|lemma="honor"\\w* God created' +
+  ".\\f + \\ft A note about origins.\\f*\n\\v 1 A duplicate verse for a finding.\n\\c 2\n\\v 1-2 And the earth was without form.\n";
+// An invalid `\id` book code (bookCodeValid = false), independent of the
+// resident/declared book -- exercises the token-level bookCode payload's
+// other branch, which the GEN fixture above never hits.
+const EXO = "\\id ZZZ\n\\c 1\n\\p\n\\v 1 These are the names.\\p\n\\v 2 And the earth.\\q1\n\\v 3 Light.\n";
 
 let checks = 0;
 function check(actual, expected, label) {
@@ -64,30 +76,36 @@ function check(actual, expected, label) {
   checks += 1;
 }
 
-/** The fields a consumer actually reads off a token, matching the same
- * comparable subset `test-publish-round-trip.mjs` established for findings:
- * `span`/`relatedSpan` are byte offsets into whichever bytes were last
- * decoded, and are not expected to agree between a freshly-parsed-then-
- * resident token and one materialized from packed bytes. */
+/**
+ * Complete objects, minus only the explicitly non-comparable fields --
+ * destructured away by name, never an allowlist, so a field this file does
+ * not yet know about enters the comparison automatically instead of being
+ * silently dropped the way a five-field allowlist was.
+ *
+ * `span`/`attributeOffset` are the only drops: both are byte offsets (or,
+ * for `attributeOffset`, a byte *distance*) into whichever bytes were last
+ * decoded. braid's resident `OwnedToken` model is spanless regardless of
+ * ingestion lane (established when `publish`/`restorePublishedCorpus` were
+ * added — see the ledger), while a token materialized straight from packed
+ * bytes carries a real span computed from the container's own byte
+ * offsets. Neither is expected to agree between the braid-live/wasm-
+ * restored lanes and the pure-JS lane, and this is the one place that
+ * asymmetry is allowed to matter.
+ */
 function comparableTokens(tokens) {
-  return tokens.map((token) => ({
-    id: token.id,
-    kind: token.kind,
-    source: token.source,
-    sid: token.sid,
-    marker: token.marker,
-  }));
+  return tokens.map((token) => {
+    const { span, attributeOffset, ...comparable } = token;
+    return comparable;
+  });
 }
 
+/** Same rule as `comparableTokens`, for the same reason: `span`/`relatedSpan`
+ * are byte offsets that do not survive the spanless resident model. */
 function comparableFindings(findings) {
-  return findings.map((finding) => ({
-    code: finding.code,
-    tokenId: finding.tokenId,
-    sid: finding.sid,
-    message: finding.message,
-    messageParams: finding.messageParams,
-    fix: finding.fix,
-  }));
+  return findings.map((finding) => {
+    const { span, relatedSpan, ...comparable } = finding;
+    return comparable;
+  });
 }
 
 /**

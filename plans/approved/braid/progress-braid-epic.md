@@ -5555,3 +5555,46 @@ green (12 checks); `npm run test:publish:js`/`test:publish:js:web` green
 binaries + `package.json` version only, `.d.ts`/`.js` confirmed
 byte-identical via direct diff. Fresh-clone build+test to follow after
 commit.
+
+## 2026-08-03 — v0.1.3: cross-lane comparator deepened (clean-room P1 fix)
+
+Clean-room review of 11594c5 found one P1, test-only, on the new
+`test-publish-js-materialize.mjs` gate itself: `comparableTokens`/
+`comparableFindings` used an ALLOWLIST (five token fields, six finding
+fields) rather than exhaustive destructuring, so a combined-lane
+regression in any dropped field (attributes, attributeOffset, numberInfo,
+bookCode, bookCodeValid, nested, markerMetadata, structural for tokens;
+category, severity, issueType, template, relatedTokenId, marker for
+findings) would pass all checks silently even though the gate's own
+comment claims "token for token, finding for finding."
+
+Root cause: the helpers were written by listing the fields the author
+happened to think of, rather than by starting from the full object and
+subtracting only what's genuinely incomparable -- the same allowlist
+trap the house's Rust-side `assert_summaries_match` convention (full
+destructure, no `..`) exists to prevent, just not yet carried over to
+this JS gate.
+
+Fix: rewrote both helpers to destructure away only the byte-offset/byte-
+distance fields (`span`/`attributeOffset` for tokens, `span`/
+`relatedSpan` for findings) with an in-code comment stating why --
+braid's resident `OwnedToken` model is spanless regardless of ingestion
+lane, so these fields cannot agree between the braid-live/wasm-restored
+lanes and the pure-JS packed-materialized lane -- and keep everything
+else via `...rest` spread, so any future field enters the comparison
+automatically instead of being silently dropped. Also enriched the GEN/
+EXO fixtures fed through the gate to exercise: a default-shorthand
+attribute (`\w`'s default key is `lemma`) alongside an explicit non-
+default one, a footnote (note-family marker metadata, nested = true), a
+verse range (`\v 1-2`, exercising the range branch of the number
+payload), and an invalid `\id` book code (`bookCodeValid: false`) on the
+EXO fixture, independent of the corpus's own declared `book` field.
+
+Gates: `npm run test:publish:js`/`test:publish:js:web` green (25 checks,
+same count -- richer per-check comparisons rather than more check calls);
+`npm run test:packed`/`test:packed:web` green (410 cases, unchanged --
+this gate doesn't touch packed.js); `cargo fmt --all -- --check` clean.
+Test-only change (scripts/test-publish-js-materialize.mjs only); no
+production `.js`/`.rs` source touched, no version bump, no pkg regen
+needed for shipping (dev-build artifacts from local gate runs discarded
+via `git restore`). Not merged, awaiting review.
