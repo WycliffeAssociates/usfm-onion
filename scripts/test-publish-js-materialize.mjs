@@ -82,19 +82,18 @@ function check(actual, expected, label) {
  * not yet know about enters the comparison automatically instead of being
  * silently dropped the way a five-field allowlist was.
  *
- * `span`/`attributeOffset` are the only drops: both are byte offsets (or,
- * for `attributeOffset`, a byte *distance*) into whichever bytes were last
- * decoded. braid's resident `OwnedToken` model is spanless regardless of
- * ingestion lane (established when `publish`/`restorePublishedCorpus` were
- * added — see the ledger), while a token materialized straight from packed
- * bytes carries a real span computed from the container's own byte
- * offsets. Neither is expected to agree between the braid-live/wasm-
- * restored lanes and the pure-JS lane, and this is the one place that
- * asymmetry is allowed to matter.
+ * `span` is the only drop: braid's resident `OwnedToken` model is spanless
+ * regardless of ingestion lane (established when `publish`/
+ * `restorePublishedCorpus` were added — see the ledger), while a token
+ * materialized straight from packed bytes carries a real span computed from
+ * the container's own byte offsets. That is the one asymmetry allowed to
+ * matter here. `attributeOffset` is NOT dropped: it is a remembered
+ * placement distance carried by resident tokens and packed bytes alike
+ * (it is even part of wire identity), and all three lanes agree on it.
  */
 function comparableTokens(tokens) {
   return tokens.map((token) => {
-    const { span, attributeOffset, ...comparable } = token;
+    const { span, ...comparable } = token;
     return comparable;
   });
 }
