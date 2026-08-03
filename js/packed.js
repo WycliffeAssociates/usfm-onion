@@ -338,13 +338,17 @@ function decodeAttributeValue(raw) {
  * Everything needed to materialize any row of one book, built once per book and
  * reused by the full and chapter-selective passes so both produce byte-identical
  * tokens for the same row.
+ *
+ * Takes an already-resolved token `section` rather than deriving one from a
+ * whole `packed` buffer itself, so this same core serves two callers: the
+ * per-book layer (`tokenReader`, below — one book per buffer, so it locates
+ * the section by requiring there be exactly one) and the combined-corpus
+ * layer (`corpusTokenReader` — many books share one buffer and one TOC
+ * already read once at verify time, so it locates the section by book code
+ * instead). Neither is a second decoder; both hand the identical section
+ * shape to this one function.
  */
-function tokenReader(book) {
-  const { packed, source, receipt } = book;
-  const toc = readContainer(packed);
-  const tokenEntries = toc.filter((entry) => entry.kind === SECTION_KIND.Token);
-  if (tokenEntries.length !== 1) fail("invalidToc");
-  const section = readSection(packed, tokenEntries[0]);
+function buildTokenReader(section, source, receipt) {
   if (source.byteLength !== receipt.sourceLen) fail("sourceLengthMismatch");
 
   const rowCount = section.recordCount;
@@ -520,6 +524,31 @@ function tokenReader(book) {
   };
 }
 
+/** Per-book layer: one book per `packed` buffer, so its own TOC must name
+ * exactly one token section. */
+function tokenReader(book) {
+  const { packed, source, receipt } = book;
+  const toc = readContainer(packed);
+  const tokenEntries = toc.filter((entry) => entry.kind === SECTION_KIND.Token);
+  if (tokenEntries.length !== 1) fail("invalidToc");
+  const section = readSection(packed, tokenEntries[0]);
+  return buildTokenReader(section, source, receipt);
+}
+
+/** Combined-corpus layer: many books share one `packed` buffer and one TOC
+ * (read once, at verify time — see `verifyPublishedPacked`); this book's own
+ * token section is whichever TOC entry names its book code. Position-
+ * independent by design (§P.3), so locating it is a filter, not a search
+ * that depends on any other book's presence or order. */
+function corpusTokenReader(state, book) {
+  const entry = state.toc.find(
+    (candidate) => candidate.kind === SECTION_KIND.Token && candidate.book === book.book,
+  );
+  if (!entry) fail("invalidToc", book.book);
+  const section = readSection(state.packed, entry);
+  return buildTokenReader(section, book.source, book.receipt);
+}
+
 function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
   const view = attributes.rows.view;
   const at = rowIndex * ATTRIBUTE_ROW_LEN;
@@ -674,8 +703,11 @@ function resolveBook(books, selector) {
   return matches[0];
 }
 
-function materializeBook(book, chapter) {
-  const reader = tokenReader(book);
+/** Shared by both layers: given an already-built reader, slices and
+ * materializes exactly the rows a full or chapter-selective pass needs, so
+ * both produce byte-identical tokens for the same row (the reader is the
+ * one thing that differs between the per-book and combined-corpus layers). */
+function materializeFromReader(reader, chapter) {
   const range =
     chapter === undefined ? { start: 0, end: reader.rowCount - 1 } : reader.chapterRange(chapter);
   const length = reader.rowCount === 0 ? 0 : range.end - range.start + 1;
@@ -683,7 +715,7 @@ function materializeBook(book, chapter) {
   for (let offset = 0; offset < length; offset += 1) {
     tokens[offset] = reader.materializeRow(range.start + offset);
   }
-  const out = { path: book.path, book: reader.book, tokens };
+  const out = { book: reader.book, tokens };
   if (reader.stableIdAt) {
     const ids = new Array(length);
     for (let offset = 0; offset < length; offset += 1) {
@@ -692,6 +724,15 @@ function materializeBook(book, chapter) {
     out.stableIds = ids;
   }
   return out;
+}
+
+function materializeBook(book, chapter) {
+  const result = materializeFromReader(tokenReader(book), chapter);
+  return { path: book.path, ...result };
+}
+
+function materializeCorpusBook(state, book, chapter) {
+  return materializeFromReader(corpusTokenReader(state, book), chapter);
 }
 
 /**
@@ -730,6 +771,137 @@ export function decodeTokens(verified, path) {
   const book = books.get(path);
   if (!book) fail("unknownBook", path);
   return materializeBook(book, undefined);
+}
+
+// --- the combined-corpus layer -----------------------------------------------
+//
+// `publish()` produces one packed `corpus.bin` container carrying every
+// resident book's sections in one buffer -- the shape a worker transfers to
+// seed braid (`restorePublishedCorpus`, wasm). Main-thread rendering needs
+// the same certified bytes materialized in pure JS with no wasm call, the
+// same reason the per-book layer above exists; this is that layer's
+// corpus-shaped twin, not a second decoder — it locates each book's own
+// section in the shared TOC (§P.3: sections are position-independent) and
+// hands it to the exact same `buildTokenReader`/`materializeFromReader` core
+// the per-book layer uses.
+
+/** Handle identity → its corpus-wide state, private to this module. Separate
+ * from `STATE` (the per-book `WeakMap`) because the two handles are not
+ * interchangeable: `VerifiedPublished` addresses books by code (a combined
+ * container has no per-book caller-supplied path), `VerifiedPacked` by path. */
+const CORPUS_STATE = new WeakMap();
+
+function requireVerifiedCorpus(verified) {
+  const state = CORPUS_STATE.get(verified);
+  if (!state) {
+    fail("invalidSection", "materializePublished accepts only a VerifiedPublished handle");
+  }
+  return state;
+}
+
+/**
+ * Verifies a combined `publish()` container through the Rust trust boundary
+ * (`wasm.verifyPublishedCorpus`, the sole certifier -- no JS hashing or
+ * validation, ever) and mints the opaque `VerifiedPublished` handle.
+ *
+ * The caller's `packed`/`source` bytes are copied (`Uint8Array#slice`) into
+ * handle-private state before they are verified, the same copy-at-mint rule
+ * `verifyPackedCorpus` follows and for the same reason: a caller mutating
+ * its own buffers after minting must not silently invalidate what was
+ * already certified out from under a still-valid handle.
+ *
+ * @param {{ verifyPublishedCorpus: (packed: Uint8Array, sources: { book: string, source: number[] }[]) => any }} wasm
+ * @param {Uint8Array} packed
+ * @param {readonly { book: string, source: Uint8Array }[]} sources
+ */
+export function verifyPublishedPacked(wasm, packed, sources) {
+  const packedCopy = packed.slice();
+  const sourceCopies = sources.map((entry) => ({
+    book: entry.book,
+    source: entry.source.slice(),
+  }));
+  const outcome = wasm.verifyPublishedCorpus(
+    packedCopy,
+    sourceCopies.map((entry) => ({ book: entry.book, source: Array.from(entry.source) })),
+  );
+  if (outcome.status !== "verified") {
+    return { ok: false, error: outcome.error };
+  }
+  const toc = readContainer(packedCopy);
+  const sourceByBook = new Map(sourceCopies.map((entry) => [entry.book, entry.source]));
+  const books = new Map();
+  const findings = new Map();
+  for (const entry of outcome.books) {
+    const book = entry.receipt.book;
+    const source = sourceByBook.get(book);
+    // Unreachable given `wasm.verifyPublishedCorpus` already enforces exactly
+    // one source per book -- checked anyway, since this function's own
+    // contract (never index a book it cannot find a source for) should not
+    // depend on that invariant holding on trust.
+    if (source === undefined) fail("invalidToc", book);
+    // Same one-time freeze `verifyPackedCorpus` performs, same reason: every
+    // token that attaches these objects by reference shares one frozen tree.
+    deepFreeze(entry.receipt.descriptors);
+    books.set(book, { book, source, receipt: entry.receipt });
+    findings.set(book, entry.findings);
+  }
+  const verified = Object.freeze({});
+  CORPUS_STATE.set(verified, { packed: packedCopy, toc, books, snapshotId: outcome.snapshotId });
+  return { ok: true, verified, findings, snapshotId: outcome.snapshotId };
+}
+
+/**
+ * A detached snapshot of what verification certified for one book, by book
+ * code (a combined container has no caller-supplied path — see
+ * {@link receiptFor} for the per-book layer's path-keyed equivalent).
+ */
+export function receiptForPublished(verified, book) {
+  const state = requireVerifiedCorpus(verified);
+  const found = state.books.get(book);
+  if (!found) fail("unknownBook", book);
+  return structuredClone({ book: found.book, receipt: found.receipt });
+}
+
+/**
+ * Materializes tokens from a certified combined corpus, in the JS engine,
+ * with no wasm call -- the same guarantee `materialize` makes for per-book
+ * containers, over the container `publish()`/`restorePublishedCorpus`
+ * produce and consume.
+ *
+ * With no selector: every verified book, keyed by book code. With `{book}`:
+ * that one book; adding `{chapter}` materializes only that chapter's
+ * contiguous row range, guaranteed identical to the corresponding slice of
+ * the full pass.
+ *
+ * Findings are not here: they arrive already materialized on the verify
+ * result, keyed by book code the same way.
+ *
+ * @returns {Map<string, { book: string, tokens: object[], stableIds?: string[] }>}
+ */
+export function materializePublished(verified, selector) {
+  const state = requireVerifiedCorpus(verified);
+  const out = new Map();
+  if (selector === undefined || selector.book === undefined) {
+    if (selector !== undefined && selector.chapter !== undefined) {
+      fail("unknownBook", "a chapter selector must name a book");
+    }
+    for (const book of state.books.values()) {
+      out.set(book.book, materializeCorpusBook(state, book, undefined));
+    }
+    return out;
+  }
+  const book = state.books.get(selector.book);
+  if (!book) fail("unknownBook", selector.book);
+  out.set(book.book, materializeCorpusBook(state, book, selector.chapter));
+  return out;
+}
+
+/** Tokens-only entry for one book, by book code. */
+export function decodeTokensPublished(verified, book) {
+  const state = requireVerifiedCorpus(verified);
+  const found = state.books.get(book);
+  if (!found) fail("unknownBook", book);
+  return materializeCorpusBook(state, found, undefined);
 }
 
 /**

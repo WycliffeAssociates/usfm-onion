@@ -2,7 +2,7 @@
   "name": "usfm_onion_wasm",
   "type": "module",
   "description": "WASM bindings for usfm_onion",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "license": "MIT",
   "files": [
     "usfm_onion_web_bg.wasm",

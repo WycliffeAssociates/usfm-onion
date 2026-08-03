@@ -1,6 +1,6 @@
 {
   "name": "usfm-onion-web",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "WebAssembly bindings for usfm_onion",
   "license": "MIT",
   "type": "module",
@@ -64,6 +64,8 @@
     "golden:wasm:web": "npm run build:wasm:web:dev && node scripts/wasm-golden.mjs web",
     "test:publish": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-publish-round-trip.mjs bundler",
     "test:publish:web": "npm run build:wasm:web:dev && node scripts/test-publish-round-trip.mjs web",
+    "test:publish:js": "npm run build:wasm:bundler:dev && node --experimental-wasm-modules scripts/test-publish-js-materialize.mjs bundler",
+    "test:publish:js:web": "npm run build:wasm:web:dev && node scripts/test-publish-js-materialize.mjs web",
     "bench:wasm": "npm run build:wasm:bundler && node --experimental-wasm-modules benches/wasm/run.mjs bundler",
     "bench:wasm:web": "npm run build:wasm:web && node benches/wasm/run.mjs web",
     "bench:wasm:report": "npm run build:wasm:bundler && BENCH_OUT=BENCH_RESULTS_WASM.md node --experimental-wasm-modules benches/wasm/run.mjs bundler"
