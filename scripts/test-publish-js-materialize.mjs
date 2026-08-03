@@ -58,17 +58,23 @@ const config = {
 // Rich enough to exercise every field the comparators below have to carry
 // through, not just id/kind/source/sid/marker: a default-shorthand AND an
 // explicit-key attribute (`\w`'s default key is "lemma" -- marker_defs.rs),
-// a footnote (note-family metadata, nested = true), a duplicate verse number
-// (a real finding with `relatedTokenId` and varied severity/category from
-// the fixture's other findings), and a verse range (`\v 1-2`, a number
-// payload with `NumberRangeKind::Range`, not just a bare `Verse`).
+// a footnote with a GENUINELY nested `\+nd ... \+nd*` inside it (nested
+// markers require the `\+` spelling; a plain footnote alone leaves every
+// token `nested: false`), a duplicate verse number (a finding anchored on
+// the duplicate token), and a verse range (`\v 1-2`, a number payload with
+// `NumberRangeKind::Range`, not just a bare `Verse`).
 const GEN =
   '\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning \\w gracious|grace\\w* \\w noble|lemma="honor"\\w* God created' +
-  ".\\f + \\ft A note about origins.\\f*\n\\v 1 A duplicate verse for a finding.\n\\c 2\n\\v 1-2 And the earth was without form.\n";
+  ".\\f + \\ft A note about \\+nd Lord\\+nd* origins.\\f*\n\\v 1 A duplicate verse for a finding.\n\\c 2\n\\v 1-2 And the earth was without form.\n";
 // An invalid `\id` book code (bookCodeValid = false), independent of the
 // resident/declared book -- exercises the token-level bookCode payload's
-// other branch, which the GEN fixture above never hits.
-const EXO = "\\id ZZZ\n\\c 1\n\\p\n\\v 1 These are the names.\\p\n\\v 2 And the earth.\\q1\n\\v 3 Light.\n";
+// other branch, which the GEN fixture above never hits. The UNCLOSED `\f`
+// at the end is deliberate: the unclosed-marker rule emits a finding whose
+// `relatedTokenId` anchors the opening marker (the same shape the wire
+// golden `related-span-unclosed-marker` pins), which the duplicate-verse
+// finding alone never produces.
+const EXO =
+  "\\id ZZZ\n\\c 1\n\\p\n\\v 1 These are the names.\\p\n\\v 2 And the earth.\\q1\n\\v 3 Light.\\f + no closing marker\n";
 
 let checks = 0;
 function check(actual, expected, label) {
@@ -208,6 +214,36 @@ async function crossLaneEquivalence(books, label) {
       `${label}: ${book.book} JS materialization matches the wasm-restored tokens directly`,
     );
   }
+}
+
+// Fixture preconditions: prove the fixtures actually produce the branches
+// the comparators claim to cover, so a fixture edit (or rule change) that
+// silently loses a branch fails HERE, loudly, instead of leaving the
+// cross-lane checks green-but-vacuous. This is the trap the first two
+// rounds of this gate fell into.
+{
+  const probe = new wasm.Braid(config, makeMinter());
+  unwrap(
+    probe.replaceCorpus({
+      books: [
+        { kind: "usfm", sourceKey: "GEN.usfm", book: "GEN", source: GEN },
+        { kind: "usfm", sourceKey: "EXO.usfm", book: "EXO", source: EXO },
+      ],
+    }),
+    "precondition: replaceCorpus",
+  );
+  const lint = probe.lint();
+  const genTokens = unwrap(probe.toTokens([{ book: "GEN" }]), "precondition: GEN tokens")[0].tokens;
+  assert.ok(
+    genTokens.some((t) => t.nested === true),
+    "precondition: GEN must contain a genuinely nested (\\+) marker token",
+  );
+  const allFindings = lint.books.flatMap((b) => b.findings);
+  assert.ok(
+    allFindings.some((f) => f.relatedTokenId != null),
+    "precondition: the corpus must produce a finding carrying relatedTokenId",
+  );
+  checks += 2;
 }
 
 await crossLaneEquivalence(
