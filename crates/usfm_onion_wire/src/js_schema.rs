@@ -6,8 +6,9 @@
 //!
 //!   cargo run --example generate_js_schema -p usfm_onion_wire
 //!
-//! [`tests::wire_schema_matches_generator`] fails if the files on disk drift
-//! from what [`render`] currently produces.
+//! `tests::wire_schema_matches_generator` (test-only, so not linkable from a
+//! normal doc build) fails if the files on disk drift from what [`render`]
+//! currently produces.
 //!
 //! This is codegen rather than a `wasm-bindgen` export because these values
 //! are static schema data, not a decoder — reading them through wasm would

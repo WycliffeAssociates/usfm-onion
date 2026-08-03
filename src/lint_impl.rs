@@ -1145,7 +1145,7 @@ pub fn apply_token_fix<T: FormattableToken>(tokens: &[T], fix: &TokenFix) -> Vec
 /// minted a fresh id via `minter`. The replacement/insert token that reuses
 /// the target's own clone (index 0 of a `ReplaceToken`) already has that
 /// token's id and is never re-minted. See
-/// [`crate::format::mint_synthetic_id`] for the seam's contract;
+/// `crate::format::mint_synthetic_id` for the seam's contract;
 /// `apply_token_fix` is unchanged and still passes no minter.
 pub fn apply_token_fix_with_minter<T: FormattableToken>(
     tokens: &[T],

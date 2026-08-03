@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-/// A cheap, non-allocating partition key for [`partition_by_sid`]. Native
+/// A cheap, non-allocating partition key for `partition_by_sid`. Native
 /// tokens carry a `Copy` compact [`Sid`]; app/wire tokens carry an already
 /// allocated sid string we borrow. Both render to the *same* sid string a
 /// per-token `sid_string()` would have produced — but only once per block, so
@@ -60,7 +60,7 @@ pub trait DiffableToken: Clone {
     /// Cheap, non-allocating partition key. Default borrows the token's carried
     /// sid string; native [`Token`] overrides it to carry the `Copy` compact
     /// [`Sid`] instead of formatting one per call. Must render (via
-    /// [`SidKey::to_sid_string`]) to exactly what `sid_string()` returns.
+    /// `SidKey::to_sid_string`) to exactly what `sid_string()` returns.
     fn sid_key(&self) -> SidKey<'_> {
         match self.sid() {
             Some(text) => SidKey::Text(text),

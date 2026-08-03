@@ -400,6 +400,13 @@ pub struct DiffSkeleton {
 
 /// Staged decisions for [`wasm_merge_diff_blocks`]: `Record<string,
 /// MergeSide>` plus the default applied to any unit not present in the map.
+// The intra-doc link above does not resolve from this module (`dto`) --
+// `wasm_merge_diff_blocks` lives in `stateless` and isn't `use`-imported
+// here -- but tsify embeds this doc string verbatim into the generated
+// .d.ts, and the npm surface must stay byte-identical, so the text is left
+// exactly as a consumer already sees it rather than qualified to
+// `crate::stateless::wasm_merge_diff_blocks`, which would change it.
+#[allow(rustdoc::broken_intra_doc_links)]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]

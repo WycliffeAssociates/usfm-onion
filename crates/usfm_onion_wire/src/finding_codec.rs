@@ -1,7 +1,7 @@
 //! Semantic finding codec: `LintIssue` values in, packed finding-section bytes
 //! out, and back.
 //!
-//! This is the layer [`crate::finding_section`] deliberately stopped short of:
+//! This is the layer `crate::finding_section` deliberately stopped short of:
 //! that module proves the byte-level shape of a finding section (fixed rows,
 //! sidecars, dictionaries), but a checked row is not yet a `LintIssue` — it
 //! still needs the paired token section (to resolve `token_idx` back to a
@@ -167,7 +167,7 @@ fn resolve_token_ids(decoded: &DecodedTokens<'_>) -> Vec<String> {
 /// returns `None` for an absent id or one that names no token. This is the
 /// key the packed finding section's rows are physically stored in, so a
 /// caller comparing an unsorted `LintResult` against a decoded one needs the
-/// same key — [`encode_book`]/[`encode_findings`] always apply it before
+/// same key — [`encode_book`]/`encode_findings` always apply it before
 /// building rows.
 ///
 /// Same 3-key shape as core's own (private) `canonical_sort` — the two are

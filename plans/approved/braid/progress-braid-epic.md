@@ -5370,3 +5370,85 @@ test:publish`/`test:publish:web` green (11 checks each, both targets);
 byte-identical to the pre-extraction committed files (verified via direct
 diff, not assumed); only `.wasm` binaries and `package.json` version
 fields moved. Fresh-clone build+test to follow after commit.
+
+## 2026-08-03 — v0.1.2 closeout: empty-sourceKey classification + rustdoc gate
+
+Clean-room re-review of `86a4b73`: one P1, one P2, everything else clean
+(crate ownership, delegation, the type exceptions, the parity fixture
+delta confirmed stamp/checksum-shaped, `.d.ts` byte-identical).
+
+**P1 — empty `sourceKey` changed error classification.** Pre-extraction
+wasm behavior (master's `resident.rs`): an empty source key on a
+`restorePublishedCorpus` record → `{kind: "ingest", error: {kind:
+"duplicateSourceKey", source: ""}}`. The extracted `restore.rs` instead
+fell through to `RestoreError::Decode(DecodeError::InvalidSection)`,
+observable through the built package as `{kind: "decode", error: {kind:
+"invalidSection"}}` — a real classification change in a packet specified
+as behavior-preserving; typed errors are observable API. Root cause: an
+empty `source_key` cannot be expressed as
+`RestoreError::Ingest(braid::IngestError::DuplicateSourceKey)` at all,
+because `braid::SourceKey::new` only ever rejects emptiness — there is no
+valid `SourceKey` to construct the variant from, so the prior fix in this
+round quietly reused `Decode(InvalidSection)` for a case that isn't a
+decode defect.
+
+Fixed by adding `RestoreError::EmptySourceKey` (no payload) as its own
+variant, constructed by the same pre-check site, and having the wasm
+crate's conversion map it to `IngestError::DuplicateSourceKey { source:
+String::new() }` — reproducing the pre-extraction classification exactly,
+native and wasm agreeing through the one host-side check. The reviewer
+noted the *replaced* classification (`Decode`) was arguably more honest,
+since the defect is in the caller's `records`, not in `packed` itself —
+recorded here as a candidate adjudication for a future breaking round,
+not adopted now. Regression:
+`an_empty_source_key_is_its_own_classification_not_a_decode_defect`
+(`usfm_onion_host::restore`), plus the case is now pinned in the parity
+transcript (`restore_published_corpus_empty_source_key`, the first parity
+step to exercise `restorePublishedCorpus` at all) and in
+`scripts/test-publish-round-trip.mjs` through the actual built package.
+
+**P2 — strict rustdoc failed on the new crate.** `usfm_onion_host`'s
+`PublishError` doc comment keeps an intra-doc link to nonexistent
+`crate::dto::PackedEncodeError` (there is no `dto` module in this crate)
+specifically to hold the npm `.d.ts` comment bytes stable across the
+extraction. Fixed with a targeted `#[allow(rustdoc::broken_intra_doc_links)]`
+on that item, with a comment stating why the text is frozen. Same
+treatment for one *other*, unrelated, pre-existing case found by the new
+gate: `usfm_onion_wasm::dto::MergeRequest`'s doc references
+`wasm_merge_diff_blocks` without the path qualifier its own module would
+need to resolve it — also npm-comment-frozen, so `#[allow]`ed rather than
+requalified (requalifying would change the visible `.d.ts` text).
+
+**New standing gate**: `RUSTDOCFLAGS="-D warnings" cargo doc --workspace
+--no-deps --all-features`. First run surfaced ~13 pre-existing broken/
+private intra-doc links across `usfm_onion` (core) and `usfm_onion_wire`,
+none related to this extraction — this is the first time this gate has
+ever run. All fixed as doc-only edits (de-linking a private-item
+reference to plain code-formatted text, or qualifying a path that was
+simply wrong relative to the referencing module's nesting, e.g.
+`layout::finding_field`'s doc needing `crate::schema::PatchOpTag` instead
+of a bare `PatchOpTag` two modules up). One self-inflicted case from this
+round's earlier witness-path work (`4e97a89`) was also caught and fixed
+the same way: `VerifiedCorpus::materialize_owned_tokens`'s doc linked
+private `crate::container::read_container`, de-linked to plain text (this
+one is native-only, no tsify derive, so no npm-comment-freeze concern).
+Workspace-wide result after fixes: clean, zero warnings, all five crates.
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green (braid 101, usfm_onion 291,
+usfm_onion_host 9+1 ignored -- up one for the new empty-sourceKey
+regression, usfm_onion_wasm 33+1 ignored, usfm_onion_wire 200+5 ignored);
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`
+clean; `cargo test --release --test lint_oracle -- --ignored`
+byte-identical; `RUSTFLAGS="-D warnings" cargo test --release -p braid -p
+usfm_onion_wire -p usfm_onion_wasm -p usfm_onion_host -- --ignored`
+green; `npm run test:packed`/`test:packed:web` green (410 cases); `npm
+run test:parity`/`test:parity:web` green (68 steps -- up two for the new
+`restore_published_corpus_empty_source_key` step × 2 lanes -- 0
+divergences, both targets); `npm run test:publish`/`test:publish:web`
+green (12 checks each -- up one -- both targets); `npm run
+golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt --all --
+--check` clean. pkg regen (release, both targets): `.d.ts`/`.js`
+unchanged (no public signature moved -- the fix is entirely inside the
+host-to-wasm conversion match arm), only `.wasm` binaries moved. Fresh-clone
+build+test verified after commit.

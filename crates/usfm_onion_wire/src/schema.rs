@@ -66,7 +66,7 @@ pub const SECTION_ALIGN: u64 = 16;
 ///
 /// `tests::layout_offsets_name_the_fields_the_codec_writes` pins every constant
 /// below against a really-encoded container, so a cursor reorder in
-/// [`crate::container`] cannot leave these silently describing the old layout.
+/// `crate::container` cannot leave these silently describing the old layout.
 pub mod layout {
     /// Container header (48 bytes).
     pub mod container_header {
@@ -641,8 +641,8 @@ pub mod finding_field {
     /// row total.
     ///
     /// Patch row: `{op:u8, kind:u8, reserved:u16, position:u32, text:u32,
-    /// marker:u32, sid:u32}`. `op` is a [`PatchOpTag`]; `kind` is a
-    /// [`TokenKindTag`]; `text`/`marker`/`sid` index field 7, with `u32::MAX`
+    /// marker:u32, sid:u32}`. `op` is a [`crate::schema::PatchOpTag`]; `kind` is a
+    /// [`crate::schema::TokenKindTag`]; `text`/`marker`/`sid` index field 7, with `u32::MAX`
     /// meaning absent. A `Delete` row places nothing, so all three are absent and
     /// `kind` is zero; every other op must carry at least a text index. Both
     /// `reserved` fields MUST be zero on encode and rejected non-zero on decode.

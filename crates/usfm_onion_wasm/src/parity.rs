@@ -1009,6 +1009,45 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
         args: json!({}),
         output: json!(published),
     });
+
+    // Clean-room re-review P1: an empty `sourceKey` on a `restorePublishedCorpus`
+    // record must classify as `{kind: "ingest", error: {kind:
+    // "duplicateSourceKey", source: ""}}` -- the pre-extraction wasm
+    // classification, reproduced through `usfm_onion_host::RestoreError::
+    // EmptySourceKey` -- not silently reclassified as a decode defect. Pinned
+    // here so a future change to that mapping shows up as a parity
+    // divergence, not a silent drift.
+    let empty_source_key_records = vec![resident::PublishedCorpusSource {
+        book: "GEN".to_string(),
+        source_key: String::new(),
+        source: published
+            .books
+            .iter()
+            .find(|book| book.book == "GEN")
+            .and_then(|book| book.source.clone())
+            .expect("GEN's freshly-encoded source")
+            .into_bytes(),
+    }];
+    let empty_source_key_args = json!({
+        "packed": published.bytes,
+        "records": empty_source_key_records,
+    });
+    let mut restore_target = resident::Braid {
+        inner: NativeBraid::new(braid_config(), minter()),
+        publication: usfm_onion_host::PublicationCache::default(),
+    };
+    let error = restore_target
+        .restore_published_corpus(published.bytes.clone(), empty_source_key_records)
+        .0;
+    let resident::ApiResult::Error { error } = error else {
+        panic!("{lane}: an empty source key must refuse: {error:?}");
+    };
+    steps.push(Step {
+        step: "restore_published_corpus_empty_source_key".to_string(),
+        lane: lane.to_string(),
+        args: empty_source_key_args,
+        output: json!(error),
+    });
 }
 
 /// Regenerates `tests/fixtures/parity-transcript.json`. Run explicitly; not

@@ -464,6 +464,17 @@ impl Braid {
                     usfm_onion_host::RestoreError::Ingest(error) => RestoreError::Ingest {
                         error: error.into(),
                     },
+                    // Reproduces the pre-extraction classification exactly
+                    // (an empty source key was always reported the same way
+                    // a caller-declared duplicate one is): see
+                    // `usfm_onion_host::RestoreError::EmptySourceKey`'s own
+                    // doc comment for why the host side can't express this
+                    // as `braid::IngestError::DuplicateSourceKey` itself.
+                    usfm_onion_host::RestoreError::EmptySourceKey => RestoreError::Ingest {
+                        error: IngestError::DuplicateSourceKey {
+                            source: String::new(),
+                        },
+                    },
                 }),
         )
     }

@@ -1820,7 +1820,7 @@ fn emit_pending<T: SerializableToken>(output: &mut String, attrs: PendingAttrs<'
 /// pending attribute lists on encounter; before emitting each subsequent
 /// token we drain any pending entries that token closes (matching
 /// `EndMarker`, `MilestoneEnd`, or a paragraph boundary — see
-/// [`CloserShape`](enum@CloserShape)). Any pending lists remaining at
+/// `CloserShape`). Any pending lists remaining at
 /// end-of-stream are flushed in LIFO order. A pending entry emits its
 /// verbatim `attribute_list()` slice when present, else reconstructs from
 /// `attributes()`.

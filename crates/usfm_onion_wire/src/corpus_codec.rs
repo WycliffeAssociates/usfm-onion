@@ -413,7 +413,7 @@ impl VerifiedCorpus {
     ///
     /// Binding: `self.container_checksum` is the container-wide integrity
     /// checksum recorded from the *exact* buffer [`verify_corpus`] verified
-    /// to produce this value. This still calls [`crate::container::read_container`]
+    /// to produce this value. This still calls `crate::container::read_container`
     /// on `packed` -- the cheap half of verification, a header parse plus one
     /// whole-buffer checksum pass, never a token/finding decode -- and
     /// refuses with [`crate::error::DecodeError::ChecksumMismatch`] outright

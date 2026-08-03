@@ -195,12 +195,13 @@ pub struct PublishedCorpus {
 /// [`crate::dto::PackedEncodeError`]'s own doc comment) rather than something
 /// a normal publish hits; surfaced as a typed refusal regardless, never a
 /// panic.
-// (The intra-doc link above does not resolve from this crate -- there is no
+// The intra-doc link above does not resolve from this crate -- there is no
 // `crate::dto` here -- but the text is kept byte-for-byte identical to the
 // wasm crate's own pre-extraction doc comment on purpose: tsify embeds this
 // string verbatim into the generated .d.ts, and the npm surface must not
 // change at all for this extraction. `PackedEncodeError` itself is
-// `usfm_onion_wire::dto::PackedEncodeError`, referenced correctly below.)
+// `usfm_onion_wire::dto::PackedEncodeError`, referenced correctly below.
+#[allow(rustdoc::broken_intra_doc_links)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]

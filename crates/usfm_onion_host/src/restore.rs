@@ -39,6 +39,21 @@ pub struct PublishedCorpusSource {
 pub enum RestoreError {
     Decode(DecodeError),
     Ingest(braid::IngestError),
+    /// A record's own `source_key` is empty, so no `braid::SourceKey` can be
+    /// built from it at all (`SourceKey::new` only ever rejects emptiness) --
+    /// this cannot be expressed as `Ingest(braid::IngestError::DuplicateSourceKey)`,
+    /// which requires an actual valid key to name. A distinct variant rather
+    /// than force-fitting into `Decode`: the wasm crate's pre-extraction
+    /// behavior classified this case as `{kind: "ingest", error: {kind:
+    /// "duplicateSourceKey", source: ""}}`, and that classification is
+    /// observable API a consumer may already depend on, so the wasm
+    /// conversion reproduces it from this variant rather than this crate
+    /// silently reclassifying it as a decode defect (which is what
+    /// `RestoreError::Decode(DecodeError::InvalidSection)` would have been
+    /// here -- arguably a more honest classification since the defect is in
+    /// `records`, not `packed`, but not the one shipped, and changing it is
+    /// a decision for a future breaking round, not this one).
+    EmptySourceKey,
 }
 
 impl std::fmt::Display for RestoreError {
@@ -46,6 +61,7 @@ impl std::fmt::Display for RestoreError {
         match self {
             Self::Decode(error) => write!(f, "{error}"),
             Self::Ingest(error) => write!(f, "{error}"),
+            Self::EmptySourceKey => write!(f, "a restore record's source key is empty"),
         }
     }
 }
@@ -108,13 +124,11 @@ pub fn restore_published_corpus(
             .find(|record| record.book == verified_book.receipt.book)
             .ok_or(RestoreError::Decode(DecodeError::InvalidSection))?;
         let source = std::str::from_utf8(&record.source).unwrap_or_default();
-        // An empty source key is a malformed `records` input -- not a decode
-        // defect in `packed` itself, but there is no braid::IngestError this
-        // maps to either (SourceKey::new only ever rejects emptiness, so
-        // there is no valid SourceKey to build one from): treated the same
-        // as this loop's other records/container correspondence failures.
-        let source_key = braid::SourceKey::new(record.source_key.clone())
-            .ok_or(RestoreError::Decode(DecodeError::InvalidSection))?;
+        // An empty source key: see `RestoreError::EmptySourceKey`'s own doc
+        // comment for why this is its own variant rather than `Decode` or a
+        // force-fit `Ingest(braid::IngestError::DuplicateSourceKey)`.
+        let source_key =
+            braid::SourceKey::new(record.source_key.clone()).ok_or(RestoreError::EmptySourceKey)?;
         let tokens = materialized
             .iter()
             .find(|(candidate, _)| *candidate == book)
@@ -442,5 +456,38 @@ mod tests {
 
         let restored_summary = reopened.lint().summary;
         assert_eq!(restored_summary, expected_summary);
+    }
+
+    /// Clean-room re-review P1: an empty `source_key` must classify as
+    /// `RestoreError::EmptySourceKey` -- not silently reclassified as a
+    /// decode defect (which is what falling through to one of this
+    /// function's `RestoreError::Decode(DecodeError::InvalidSection)` sites
+    /// would have produced). This is the fact the wasm crate's conversion
+    /// depends on to reproduce its own pre-extraction classification
+    /// (`{kind: "ingest", error: {kind: "duplicateSourceKey", source: ""}}`)
+    /// byte-for-byte -- see `usfm_onion_wasm::resident`'s own match arm.
+    #[test]
+    fn an_empty_source_key_is_its_own_classification_not_a_decode_defect() {
+        let mut original = empty_resident();
+        original
+            .replace_corpus(CorpusInput::new(vec![BookInput::Usfm {
+                source_key: SourceKey::new("GEN.usfm").unwrap(),
+                book: book("GEN"),
+                source: GEN.to_string(),
+            }]))
+            .expect("one book");
+        let mut cache = PublicationCache::default();
+        let published = publish_corpus(&mut original, &mut cache).expect("publishes");
+
+        let records = vec![PublishedCorpusSource {
+            book: "GEN".to_string(),
+            source_key: String::new(),
+            source: published.books[0].source.clone().unwrap().into_bytes(),
+        }];
+
+        let mut reopened = empty_resident();
+        let error = restore_published_corpus(&mut reopened, &published.bytes, &records)
+            .expect_err("an empty source key must refuse");
+        assert_eq!(error, RestoreError::EmptySourceKey);
     }
 }
