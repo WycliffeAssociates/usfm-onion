@@ -5452,3 +5452,106 @@ golden:wasm`/`golden:wasm:web` green (7 fixtures); `cargo fmt --all --
 unchanged (no public signature moved -- the fix is entirely inside the
 host-to-wasm conversion match arm), only `.wasm` binaries moved. Fresh-clone
 build+test verified after commit.
+
+## 2026-08-03 — v0.1.3: js/packed.js understands the combined publish() container
+
+Editor-reported gap, owner-confirmed: the combined `publish()` corpus
+container could not be materialized pure-JS on the main thread.
+Whole-corpus bytes -> `restorePublishedCorpus()` (wasm, seeds braid)
+worked; per-book `PackedRecord[]` bytes -> `verifyPackedCorpus`/
+`materialize`/`decodeTokens` (JS main thread) worked; but the SAME
+transferred `ArrayBuffer` a worker used to seed braid could not be decoded
+main-thread-JS for rendering. That main-thread lane is the whole point of
+the §H architecture (transfer beats marshalling; JS materialization of
+CERTIFIED buffers), so the editor was forced to choose between the
+combined container and the fast render path. Pure JS-layer change; no
+Rust source touched.
+
+**New JS API** (`js/packed.js` + `js/packed.d.ts`), naming mirrors the
+per-book layer's own conventions rather than doubling the wasm verb's own
+name (`verifyPublishedCorpus` is the wasm-level certifier `wasm.
+verifyPublishedCorpus`; the JS composition around it is
+`verifyPublishedPacked`, matching `verifyPackedCorpus`'s
+composition-around-`verifyPackedBook` shape one level up):
+```js
+verifyPublishedPacked(wasm, packed, sources) -> { ok, verified, findings, snapshotId } | { ok: false, error }
+receiptForPublished(verified, book) -> { book, receipt }
+materializePublished(verified, selector?) -> Map<book, { book, tokens, stableIds? }>
+decodeTokensPublished(verified, book) -> { book, tokens, stableIds? }
+```
+Certification stays wasm-only (§H: no JS hashing/validation, ever) --
+`verifyPublishedPacked` makes exactly one wasm call
+(`wasm.verifyPublishedCorpus`), copies bytes at mint (`Uint8Array#slice`,
+matching `verifyPackedCorpus`'s copy-at-mint rule), and mints a SEPARATE
+opaque handle type (`VerifiedPublished`, its own `WeakMap`-backed private
+state, `CORPUS_STATE` not `STATE`) rather than reusing `VerifiedPacked` --
+the two are not interchangeable: a combined container addresses books by
+code (no per-book caller path exists), a per-book corpus by path.
+
+**Materialization reuses the existing per-book decoders, not a second
+one** (the whole point of §P.3's position-independent sections): the
+combined-corpus reader (`corpusTokenReader`) and the per-book reader
+(`tokenReader`) both resolve to the SAME extracted core
+(`buildTokenReader`, `materializeFromReader`) -- the only thing that
+differs between the two layers is *how* a book's own token section is
+located: the per-book layer requires its whole buffer name exactly one
+section (one book per buffer); the combined layer reads the corpus TOC
+once, at verify time, and filters it by book code (many books share one
+buffer). Selective `{book, chapter}` materialization works identically to
+the per-book layer's `{path, book, chapter}` (a combined container has no
+per-book path, so that selector key is absent).
+
+**Receipts/marker descriptors**: same hardening as the per-book layer,
+verbatim -- one-time `deepFreeze` on `descriptors` at verify time (not per
+materialize call), `receiptForPublished` returns a `structuredClone`
+detached snapshot (never the live `WeakMap` state), copy-at-mint on
+`packed`/every book's `source`.
+
+**Gates**:
+- `js/packed-consumer.fixture.ts` (the tsc consumer-fixture gate) extended
+  with the corpus API: opacity of `VerifiedPublished`, the frozen
+  `MaterializedPublishedBook` shape (no `path` field, unlike
+  `MaterializedBook`), `ReadonlyMap` return type, marker-descriptor/
+  `messageParams` field types -- same load-bearing checks the per-book
+  fixture already made, mirrored for the new types.
+- New `scripts/test-publish-js-materialize.mjs` (sibling to
+  `test-publish-round-trip.mjs`; `npm run test:publish:js[:web]`): the
+  cross-lane equivalence gate this whole gap is about. Publishes a
+  corpus, then materializes the SAME bytes three ways -- braid's own live
+  state, `materializePublished` (pure JS, no wasm call), and a wasm-side
+  `restorePublishedCorpus` into a fresh handle -- and asserts all three
+  agree, token for token and finding for finding, for both a one-book and
+  a two-book corpus. Also asserts selective single-book materialization
+  matches the full pass, and (since a one-book combined container is, by
+  construction, also a valid single-book container -- the same fact the
+  native equivalence gate already proves) that the per-book layer
+  (`verifyPackedCorpus`/`materialize`/`decodeTokens`) decodes that
+  one-book case identically to the new combined layer. 25 checks, both
+  targets.
+
+**Version**: 0.1.3 in all four manifests. No wasm signature changed this
+round (loudly not needed: `verifyPublishedCorpus`/`restorePublishedCorpus`
+already existed from v0.1.1/v0.1.2; this round only adds JS composition
+around the former), so pkg regen (release, both targets) confirmed
+`.d.ts`/`.js` byte-for-byte unchanged -- only `.wasm` binaries and
+`package.json` version fields moved.
+
+Gates: `RUSTFLAGS="-D warnings" cargo build/test --workspace
+--all-features` clean and green, unchanged counts from the prior round
+(braid 101, usfm_onion 291, usfm_onion_host 9+1 ignored, usfm_onion_wasm
+33+1 ignored, usfm_onion_wire 200+5 ignored) -- no Rust source moved;
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+--all-features` clean; `cargo test --release --test lint_oracle --
+--ignored` byte-identical; `RUSTFLAGS="-D warnings" cargo test --release
+-p braid -p usfm_onion_wire -p usfm_onion_wasm -p usfm_onion_host --
+--ignored` green; `npm run test:packed`/`test:packed:web` green (410
+cases, tsc gate included); `npm run test:parity`/`test:parity:web` green
+(68 steps, 0 divergences -- the fixture's packed-byte content moved again
+from the version-bump-driven catalog/engine stamp change, same benign
+mechanism as the v0.1.2 round); `npm run test:publish`/`test:publish:web`
+green (12 checks); `npm run test:publish:js`/`test:publish:js:web` green
+(25 checks, the new gate); `npm run golden:wasm`/`golden:wasm:web` green
+(7 fixtures); `cargo fmt --all -- --check` clean. pkg regen: `.wasm`
+binaries + `package.json` version only, `.d.ts`/`.js` confirmed
+byte-identical via direct diff. Fresh-clone build+test to follow after
+commit.

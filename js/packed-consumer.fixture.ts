@@ -11,17 +11,30 @@
 
 import {
   decodeTokens,
+  decodeTokensPublished,
   materialize,
+  materializePublished,
   receiptFor,
+  receiptForPublished,
   verifyPackedCorpus,
+  verifyPublishedPacked,
   type MaterializedBook,
+  type MaterializedPublishedBook,
   type PackedRecord,
+  type PublishedCorpusSource,
   type VerifiedPacked,
+  type VerifiedPublished,
   type VerifyPackedResult,
+  type VerifyPublishedResult,
 } from "./packed.js";
 
-declare const wasm: { verifyPackedBook(packed: Uint8Array, source: Uint8Array): unknown };
+declare const wasm: {
+  verifyPackedBook(packed: Uint8Array, source: Uint8Array): unknown;
+  verifyPublishedCorpus(packed: Uint8Array, sources: unknown): unknown;
+};
 declare const records: readonly PackedRecord[];
+declare const publishedPacked: Uint8Array;
+declare const publishedSources: readonly PublishedCorpusSource[];
 
 const result: VerifyPackedResult = verifyPackedCorpus(wasm as never, records);
 
@@ -81,4 +94,49 @@ if (result.ok) {
   // `MaterializedBook` has no `range` field (frozen shape).
   // @ts-expect-error `range` was removed from the public per-book result.
   void book.range;
+}
+
+// --- the combined-corpus layer -----------------------------------------------
+
+const publishedResult: VerifyPublishedResult = verifyPublishedPacked(
+  wasm as never,
+  publishedPacked,
+  publishedSources,
+);
+
+if (publishedResult.ok) {
+  const verified: VerifiedPublished = publishedResult.verified;
+
+  // Opaque the same way `VerifiedPacked` is.
+  // @ts-expect-error `VerifiedPublished` carries no `.books` (or anything else).
+  void verified.books;
+
+  const snapshotId: string = publishedResult.snapshotId;
+  void snapshotId;
+
+  for (const issues of publishedResult.findings.values()) {
+    for (const issue of issues) {
+      const params: Record<string, string> = issue.messageParams;
+      void params;
+    }
+  }
+
+  const { receipt } = receiptForPublished(verified, "GEN");
+  for (const descriptor of receipt.descriptors) {
+    const canonical: string | undefined = descriptor.markerMetadata.canonical;
+    void canonical;
+  }
+
+  const publishedBook: MaterializedPublishedBook = decodeTokensPublished(verified, "GEN");
+  // No `path` field on a combined-corpus result (frozen shape).
+  // @ts-expect-error a combined container has no caller-supplied path.
+  void publishedBook.path;
+  for (const token of publishedBook.tokens) {
+    const canonical: string | undefined = token.markerMetadata?.canonical;
+    void canonical;
+  }
+
+  const allPublished = materializePublished(verified);
+  // @ts-expect-error ReadonlyMap has no `set` — proves the return type isn't `Map`.
+  allPublished.set("GEN", publishedBook);
 }

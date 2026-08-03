@@ -9,6 +9,14 @@ import type {
   Token,
 } from "../pkg-bundler/usfm_onion_web.js";
 
+/** One book's own source for a combined-corpus verify: addressed by book
+ * code alone, the same as `usfm_onion_host::PublishedCorpusSourceInput` --
+ * a combined container has no per-book caller-supplied path. */
+export type PublishedCorpusSource = Readonly<{
+  book: string;
+  source: Uint8Array;
+}>;
+
 /** One record to restore: the caller's key, the packed container, its exact source. */
 export type PackedRecord = Readonly<{
   path: string;
@@ -76,6 +84,52 @@ declare const verifiedBrand: unique symbol;
  * the threat-model note on {@link verifyPackedCorpus}.
  */
 export type VerifiedPacked = Readonly<{ readonly [verifiedBrand]: true }>;
+
+declare const verifiedPublishedBrand: unique symbol;
+
+/**
+ * Certified combined-corpus bytes (a `publish()` container). Opaque, the
+ * same footgun-elimination shape as {@link VerifiedPacked}: mintable only
+ * by {@link verifyPublishedPacked}, no data members, every decoder input
+ * lives in a module-private `WeakMap`. Use {@link receiptForPublished} to
+ * inspect a book's receipt.
+ */
+export type VerifiedPublished = Readonly<{ readonly [verifiedPublishedBrand]: true }>;
+
+/** What `wasm.verifyPublishedCorpus` returns for a combined container. */
+export type PublishedCorpusOutcome =
+  | Readonly<{
+      status: "verified";
+      snapshotId: string;
+      books: readonly Readonly<{ receipt: PackedBookReceipt; findings: readonly LintIssue[] }>[];
+    }>
+  | Readonly<{ status: "rejected"; error: PackedDecodeError }>;
+
+export type VerifyPublishedResult =
+  | Readonly<{
+      ok: true;
+      verified: VerifiedPublished;
+      snapshotId: string;
+      /** Rust-materialized `LintIssue` DTOs, keyed by book code. */
+      findings: ReadonlyMap<string, readonly LintIssue[]>;
+    }>
+  | Readonly<{ ok: false; error: PackedDecodeError }>;
+
+/**
+ * One book's tokens out of a combined-corpus materialization: `{book,
+ * tokens, stableIds?}` -- no `path` (a combined container has none) where
+ * {@link MaterializedBook} has one.
+ */
+export type MaterializedPublishedBook = Readonly<{
+  book: string;
+  tokens: readonly Token[];
+  stableIds?: readonly string[];
+}>;
+
+export type MaterializePublishedSelector = Readonly<{
+  book?: string;
+  chapter?: number;
+}>;
 
 /** What the wasm export returns for one record. A rejection is a value, not a throw. */
 export type PackedBookOutcome =
@@ -164,6 +218,52 @@ export declare function materialize(
 
 /** Tokens-only entry for one book, by the path the caller supplied. */
 export declare function decodeTokens(verified: VerifiedPacked, path: string): MaterializedBook;
+
+// --- the combined-corpus layer -----------------------------------------------
+
+/**
+ * Verifies a combined `publish()` container through the Rust trust boundary
+ * (`wasm.verifyPublishedCorpus`, the sole certifier) and mints the opaque
+ * `VerifiedPublished` handle.
+ */
+export declare function verifyPublishedPacked(
+  wasm: {
+    verifyPublishedCorpus(
+      packed: Uint8Array,
+      sources: readonly Readonly<{ book: string; source: readonly number[] }>[],
+    ): PublishedCorpusOutcome;
+  },
+  packed: Uint8Array,
+  sources: readonly PublishedCorpusSource[],
+): VerifyPublishedResult;
+
+/**
+ * A detached snapshot of what verification certified for one book, by book
+ * code -- a combined container has no caller-supplied path (contrast
+ * {@link receiptFor}, keyed by path).
+ */
+export declare function receiptForPublished(
+  verified: VerifiedPublished,
+  book: string,
+): Readonly<{ book: string; receipt: PackedBookReceipt }>;
+
+/**
+ * Materializes tokens from a certified combined corpus in the JS engine,
+ * with no wasm call. No selector materializes every book, keyed by book
+ * code; `{book}` one book; adding `{chapter}` materializes only that
+ * chapter's contiguous row range, identical to the corresponding slice of
+ * the full pass.
+ */
+export declare function materializePublished(
+  verified: VerifiedPublished,
+  selector?: MaterializePublishedSelector,
+): ReadonlyMap<string, MaterializedPublishedBook>;
+
+/** Tokens-only entry for one book, by book code. */
+export declare function decodeTokensPublished(
+  verified: VerifiedPublished,
+  book: string,
+): MaterializedPublishedBook;
 
 /**
  * Reuses `previous`'s finding objects wherever a finding is unchanged, so a consumer
