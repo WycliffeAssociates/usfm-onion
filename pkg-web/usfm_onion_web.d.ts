@@ -658,11 +658,6 @@ export type PatchPreparation = { kind: "unchanged" } | { kind: "ready"; id: Form
 export type ScopedPublishError = { kind: "scope"; error: ScopeError } | { kind: "encode"; error: PackedEncodeError };
 
 /**
- * Why [`Braid::publish_scope`] could not produce a scoped publication.
- */
-export type ScopedPublishError = ({ kind: "scope" } & ScopeError) | { kind: "encode"; error: PackedEncodeError };
-
-/**
  * Why a publish could not produce packed bytes.
  *
  * Every variant is a pathological-input safety net (see

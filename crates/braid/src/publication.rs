@@ -304,10 +304,14 @@ pub struct ScopedPublication {
 }
 
 /// Why [`Braid::publish_scope`] could not produce a scoped publication.
+///
+/// Native-only, like [`crate::RestoreError`]: the wasm crate declares its own
+/// `ScopedPublishError` DTO (its `Scope` arm projects braid's native
+/// [`ScopeError`] to the boundary's String-based shape), so a `Tsify` derive
+/// here would emit a second, conflicting declaration of that name into the
+/// generated `.d.ts`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(tag = "kind", rename_all = "camelCase"))]
 pub enum ScopedPublishError {
     Scope(ScopeError),
