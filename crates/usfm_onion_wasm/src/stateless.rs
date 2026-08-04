@@ -203,7 +203,12 @@ pub fn wasm_parse(source: &str) -> ParsedUsfm {
 /// (the caller falls back to normal USFM ingest) and it carries the frozen
 /// `DecodeError` variant rather than a message a consumer would have to parse.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// This IS the direct wasm-ABI return type of `wasm_verify_packed_book`, so
+// its own `hashmap_as_object` is what actually governs how the nested
+// `LintIssue.messageParams` map serializes -- a nested type's own tsify
+// config is never consulted once it is reached only by composition (see the
+// `outcome!` macro's own comment in `resident.rs` for the mechanism).
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -269,7 +274,10 @@ pub struct PublishedCorpusBook {
 /// supplied, and findings that carry stamps must all carry the *same*
 /// stamps -- rather than book by book.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// The direct wasm-ABI return type of `wasm_verify_published_corpus` -- see
+// `PackedBookOutcome`'s own comment above for why `hashmap_as_object` has to
+// live here rather than (only) on the nested `LintIssue`.
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",

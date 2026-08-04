@@ -164,7 +164,7 @@ async function crossLaneEquivalence(books, label) {
   const { sources, records } = concatPublishedSources(published.books);
   const verifiedResult = verifyPublishedPacked(
     wasm,
-    new Uint8Array(published.bytes),
+    published.bytes,
     sources,
     records,
   );
@@ -202,7 +202,7 @@ async function crossLaneEquivalence(books, label) {
   // with, since both take the identical buffer-plus-extents pairing.
   const reopened = new wasm.Braid(config, makeMinter());
   const restored = unwrap(
-    reopened.restorePublishedCorpus(new Uint8Array(published.bytes), sources, records),
+    reopened.restorePublishedCorpus(published.bytes, sources, records),
     `${label}: restorePublishedCorpus`,
   );
   check(restored.seeded.length, books.length, `${label}: every book seeded`);
@@ -300,14 +300,14 @@ await crossLaneEquivalence(
 
   const publishedResult = verifyPublishedPacked(
     wasm,
-    new Uint8Array(published.bytes),
+    published.bytes,
     genSource,
     [{ book: "GEN", sourceKey: "GEN.usfm", byteOffset: 0, byteLength: genSource.length }],
   );
   assert.ok(publishedResult.ok, "per-book equivalence: verifyPublishedPacked");
   const combinedTokens = materializePublished(publishedResult.verified).get("GEN").tokens;
 
-  const perBookResult = verifyPackedCorpus(wasm, new Uint8Array(published.bytes), genSource, [
+  const perBookResult = verifyPackedCorpus(wasm, published.bytes, genSource, [
     {
       path: "GEN.usfm",
       packed: { byteOffset: 0, byteLength: published.bytes.length },

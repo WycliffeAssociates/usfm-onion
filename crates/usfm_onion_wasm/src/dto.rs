@@ -61,17 +61,24 @@ pub use usfm_onion_wire::dto::{
 // contract recorded under `crates/usfm_onion_wasm/golden/outputs/`.
 // ---------------------------------------------------------------------------
 
-/// Diff result grouped by book and chapter: `{ "GEN": { 1: [...], 2: [...] } }`.
+/// Diff result grouped by book and chapter: `{ "GEN": { "1": [...], "2": [...] } }`.
+/// Both map levels cross as a plain JS object (`#[tsify(hashmap_as_object)]`,
+/// v0.1.5's bytes-at-boundary follow-up): the chapter key is `String`, not
+/// `u32`, purely so it can serialize to the `JsString` an object key
+/// requires -- the JS-visible shape (`{"1": ...}`) is unchanged, since a JS
+/// object's own keys are strings regardless of what put them there.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(transparent)]
 pub struct DiffsByChapterMap(
-    pub std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>>,
+    pub std::collections::BTreeMap<String, std::collections::BTreeMap<String, DiffSkeleton>>,
 );
 
 /// Verse-reference map: `{ "GEN 1:1": "...", "GEN 1:2": "...", ... }`.
+/// Crosses as a plain JS object (`#[tsify(hashmap_as_object)]`), not an ES
+/// `Map` -- the shape this type has always had.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(transparent)]
 pub struct VrefMap(pub std::collections::BTreeMap<String, String>);
 
@@ -184,7 +191,7 @@ pub struct LintOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct LintIssue {
     pub(crate) code: LintCode,
@@ -211,7 +218,7 @@ pub struct LintIssue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct LintSummary {
     pub(crate) by_category: std::collections::BTreeMap<LintCategory, usize>,
@@ -222,7 +229,10 @@ pub struct LintSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// A direct wasm-ABI return type on its own (`wasm_lint_usfm`/
+// `wasm_lint_tokens`), not only reached by composition -- needs its own
+// `hashmap_as_object` for the same reason `PackedBookOutcome` does.
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct LintResult {
     pub(crate) issues: Vec<LintIssue>,
@@ -230,7 +240,7 @@ pub struct LintResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
@@ -408,7 +418,7 @@ pub struct DiffSkeleton {
 // `crate::stateless::wasm_merge_diff_blocks`, which would change it.
 #[allow(rustdoc::broken_intra_doc_links)]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct MergeRequest {
     // Crate-visible rather than private now that the exports live in their own
@@ -1058,7 +1068,7 @@ pub(crate) fn map_diffs_by_chapter<T: DiffableToken>(
     >,
     map_token: impl Fn(&T) -> Token,
     text_diff_mode: NativeTextDiffMode,
-) -> std::collections::BTreeMap<String, std::collections::BTreeMap<u32, DiffSkeleton>> {
+) -> std::collections::BTreeMap<String, std::collections::BTreeMap<String, DiffSkeleton>> {
     by_chapter
         .iter()
         .map(|(book, chapters)| {
@@ -1066,9 +1076,20 @@ pub(crate) fn map_diffs_by_chapter<T: DiffableToken>(
                 book.clone(),
                 chapters
                     .iter()
+                    // The inner key crosses as a decimal string, not `u32`:
+                    // `#[tsify(hashmap_as_object)]` (v0.1.5, bytes-at-
+                    // boundary follow-up) renders every map on this
+                    // boundary as a plain JS object, and
+                    // `serde-wasm-bindgen`'s object-shaped `MapSerializer`
+                    // requires every key to serialize to a `JsString` --
+                    // a `u32` key serializes to a JS `number` and would
+                    // throw ("Map key is not a string"). The observable
+                    // shape is unchanged either way: a JS object's own
+                    // keys are always strings, so `{1: ...}` and
+                    // `{"1": ...}` are the same object.
                     .map(|(chapter, skeleton)| {
                         (
-                            *chapter,
+                            chapter.to_string(),
                             map_native_skeleton(skeleton, &map_token, text_diff_mode),
                         )
                     })

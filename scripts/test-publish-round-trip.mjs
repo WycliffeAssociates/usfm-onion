@@ -9,11 +9,12 @@
 //   -> identical resident state (books, findings, summary, snapshot id)
 //   and identical materialized USFM, both build targets.
 //
-// v0.1.5 bytes-at-boundary convention: bytes never cross this boundary as a
-// JS `number[]`. Every corpus-grain byte payload crosses as ONE buffer plus
-// extent records (`{byteOffset, byteLength}`) into it -- this file's own
-// diff (against the pre-v0.1.5 version) is the editor's migration guide for
-// every one of `restoreCorpus`/`restorePublishedCorpus`/`verifyPublishedCorpus`/
+// v0.1.5 bytes-at-boundary convention: every corpus-grain byte payload
+// crosses as ONE real `Uint8Array` per side (never a per-book array, never a
+// JS `number[]`), with extent records (`{byteOffset, byteLength}`) naming
+// each book's own slice into it -- this file's own diff (against the
+// pre-v0.1.5 version) is the editor's migration guide for every one of
+// `restoreCorpus`/`restorePublishedCorpus`/`verifyPublishedCorpus`/
 // `publishScope`.
 //
 //   node scripts/test-publish-round-trip.mjs [bundler|web]
@@ -117,12 +118,11 @@ function roundTrip(label) {
   const expectedUsfm = unwrap(original.toUsfm({ kind: "all" }), `${label}: toUsfm`);
 
   // 1. publish() -- the verb this whole gate exists to prove is reachable.
-  // `published.bytes` is one whole-corpus buffer (a plain `number[]` --
-  // `tsify`'s resolved `json` feature does not honor `serde_bytes`, see
-  // `PublishedCorpus::bytes`'s own doc comment; wrapped ONCE here, never
-  // per book).
+  // `published.bytes` is already a real `Uint8Array` (`serde_bytes`, honored
+  // now that this workspace's `tsify` dependency resolves its `js` feature)
+  // -- one whole-corpus buffer, no wrap needed.
   const published = unwrap(original.publish(), `${label}: publish`);
-  const publishedBytes = new Uint8Array(published.bytes);
+  assert.ok(published.bytes instanceof Uint8Array, `${label}: publish().bytes is a real Uint8Array`);
   assert.equal(published.books.length, 2, `${label}: two books published`);
   assert.ok(
     published.books.every((book) => book.encoded && book.source !== undefined && book.source !== null),
@@ -134,7 +134,7 @@ function roundTrip(label) {
   // `records` is the buffer-plus-extents pairing every corpus-grain verb in
   // this file now shares.
   const { sources, records } = concatSources(published.books);
-  const verified = wasm.verifyPublishedCorpus(publishedBytes, sources, records);
+  const verified = wasm.verifyPublishedCorpus(published.bytes, sources, records);
   assert.equal(verified.status, "verified", `${label}: verifyPublishedCorpus: ${JSON.stringify(verified)}`);
   check(verified.snapshotId, published.snapshotId, `${label}: verified snapshot id matches published`);
   check(
@@ -148,7 +148,7 @@ function roundTrip(label) {
   // Reuses the SAME `sources`/`records` step 2 just verified with.
   const reopened = new wasm.Braid(config, makeMinter());
   const restored = unwrap(
-    reopened.restorePublishedCorpus(publishedBytes, sources, records),
+    reopened.restorePublishedCorpus(published.bytes, sources, records),
     `${label}: restorePublishedCorpus`,
   );
   check(restored.seeded.length, 2, `${label}: both books seeded`);
@@ -206,11 +206,8 @@ function scopedTwoBookCorpus() {
     "publishScope: replaceCorpus",
   );
   const scoped = unwrap(original.publishScope({ kind: "all" }), "publishScope: all");
-  // `packed`/`sources` are plain `number[]` (see `ScopedPublication`'s own
-  // doc comment) -- wrapped ONCE here, immediately, so every caller below
-  // works with real buffers rather than repeating the wrap.
-  scoped.packed = new Uint8Array(scoped.packed);
-  scoped.sources = new Uint8Array(scoped.sources);
+  // `packed`/`sources` are already real `Uint8Array`s (`ScopedPublication`'s
+  // own doc comment) -- no wrap needed.
   return { original, scoped };
 }
 
@@ -221,6 +218,8 @@ function scopedTwoBookCorpus() {
 {
   const { original, scoped } = scopedTwoBookCorpus();
   assert.equal(scoped.books.length, 2, "publishScope: both books in scope");
+  assert.ok(scoped.packed instanceof Uint8Array, "publishScope: packed is a real Uint8Array");
+  assert.ok(scoped.sources instanceof Uint8Array, "publishScope: sources is a real Uint8Array");
   assert.ok(
     scoped.books.every((book) => book.packed.byteLength > 0 && book.source.byteLength > 0),
     "publishScope: every book is always encoded with its source",
@@ -397,7 +396,6 @@ function scopedTwoBookCorpus() {
       })(),
       "adversarial: publish",
     );
-    genPublish.bytes = new Uint8Array(genPublish.bytes);
     const outOfBounds = wasm.verifyPublishedCorpus(genPublish.bytes, sources, [
       { ...records[0], byteLength: sources.length + 1 },
     ]);
@@ -464,7 +462,7 @@ const suppressingConfig = {
   const reopened = new wasm.Braid(suppressingConfig, makeMinter());
   const { sources, records } = concatSources(published.books);
   const restored = unwrap(
-    reopened.restorePublishedCorpus(new Uint8Array(published.bytes), sources, records),
+    reopened.restorePublishedCorpus(published.bytes, sources, records),
     "suppressing: restorePublishedCorpus",
   );
   check(restored.seeded.length, 1, "suppressing: book seeded");
@@ -495,13 +493,75 @@ const suppressingConfig = {
   const sources = new TextEncoder().encode(published.books[0].source);
   const records = [{ book: "GEN", sourceKey: "", byteOffset: 0, byteLength: sources.length }];
   const reopened = new wasm.Braid(config, makeMinter());
-  const outcome = reopened.restorePublishedCorpus(new Uint8Array(published.bytes), sources, records);
+  const outcome = reopened.restorePublishedCorpus(published.bytes, sources, records);
   assert.equal(outcome.status, "error", `empty source key: expected a refusal, got ${JSON.stringify(outcome)}`);
   check(
     outcome.error,
     { kind: "ingest", error: { kind: "duplicateSourceKey", source: "" } },
     "empty source key: classified as the pre-extraction ingest/duplicateSourceKey shape",
   );
+}
+
+// --- shape pin: tsify's `js` feature, permanently -----------------------
+//
+// Pins the actual JS shapes the v0.1.5 bytes-at-boundary convention (plus
+// this round's tsify `js`-feature migration) depends on, forever -- not
+// just today's manual verification. If a future dependency bump or Cargo
+// feature change silently drags `tsify` back onto its legacy `json`
+// feature (`JsValue::from_serde`), every byte field here regresses to a
+// plain `number[]` and every map-shaped field regresses to an ES `Map`, and
+// this section is what catches it.
+{
+  const original = new wasm.Braid(config, makeMinter());
+  unwrap(
+    original.replaceCorpus({
+      books: [
+        // A duplicate verse number (GEN 1:1 twice) so `findings`/`summary`
+        // are non-empty -- an always-empty map would trivially pass an
+        // "is it a plain object" check without proving anything.
+        { kind: "usfm", sourceKey: "GEN.usfm", book: "GEN", source: GEN },
+      ],
+    }),
+    "shape pin: replaceCorpus",
+  );
+
+  // Bytes: real Uint8Array, not number[], on every corpus-grain byte field.
+  const published = unwrap(original.publish(), "shape pin: publish");
+  assert.ok(published.bytes instanceof Uint8Array, "shape pin: PublishedCorpus.bytes is a Uint8Array");
+  const scoped = unwrap(original.publishScope({ kind: "all" }), "shape pin: publishScope");
+  assert.ok(scoped.packed instanceof Uint8Array, "shape pin: ScopedPublication.packed is a Uint8Array");
+  assert.ok(scoped.sources instanceof Uint8Array, "shape pin: ScopedPublication.sources is a Uint8Array");
+
+  // Maps: plain JS object (constructor === Object), never an ES Map.
+  const lint = original.lint();
+  assert.ok(lint.summary.byCategory.constructor === Object, "shape pin: LintSummary.byCategory is a plain object");
+  assert.ok(!(lint.summary.byCategory instanceof Map), "shape pin: LintSummary.byCategory is not a Map");
+  assert.ok(
+    Object.keys(lint.summary.byCategory).length > 0,
+    "shape pin: fixture actually produces a non-empty byCategory (not a vacuous pass)",
+  );
+  const finding = lint.books[0].findings.find((f) => Object.keys(f.messageParams).length > 0);
+  assert.ok(finding, "shape pin: fixture must produce a finding with non-empty messageParams");
+  assert.ok(finding.messageParams.constructor === Object, "shape pin: LintIssue.messageParams is a plain object");
+  assert.ok(!(finding.messageParams instanceof Map), "shape pin: LintIssue.messageParams is not a Map");
+
+  // Enum-keyed and nested maps: still plain objects with string keys.
+  const left = wasm.parse(GEN);
+  const right = wasm.parse(GEN.replace("text\n", "TEXT\n"));
+  const byChapter = left.diffByChapter(right, undefined);
+  assert.ok(byChapter.constructor === Object, "shape pin: DiffsByChapterMap outer level is a plain object");
+  const firstBook = Object.values(byChapter)[0];
+  assert.ok(firstBook.constructor === Object, "shape pin: DiffsByChapterMap inner (chapter) level is a plain object");
+  assert.ok(
+    Object.keys(firstBook).every((key) => typeof key === "string"),
+    "shape pin: chapter keys are strings, not numbers wrapped in a Map",
+  );
+
+  // VrefMap newtype: Record<string,string>, not wrapped in an extra layer.
+  const vrefMap = left.toVref(undefined);
+  assert.ok(vrefMap.constructor === Object, "shape pin: VrefMap is a plain object");
+  assert.ok(!(vrefMap instanceof Map), "shape pin: VrefMap is not a Map");
+  checks += 1;
 }
 
 console.log(`${target} publish round trip passed: ${checks} checks`);

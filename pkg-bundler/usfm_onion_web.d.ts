@@ -86,23 +86,14 @@ export type IngestError = { kind: "duplicateBook"; book: string; sources: string
  */
 export interface PublishedCorpus {
     /**
-     * One whole-corpus container, already a single buffer. An extent record
-     * would be vacuous here: this field already *is* one complete buffer,
-     * with nothing else to slice it out of.
-     *
-     * Crosses wasm as a plain `number[]`, unchanged from every prior
-     * release: `#[serde(with = \"serde_bytes\")]` was tried here for v0.1.5\'s
-     * bytes-at-boundary convention and reverted -- this crate\'s `tsify`
-     * dependency resolves its default `json` feature (`JsValue::from_serde`,
-     * no bytes-as-`Uint8Array` support) rather than its `js` feature
-     * (`serde-wasm-bindgen`, which does support it), and switching would
-     * also flip every existing map-shaped field in this and the wasm
-     * crate\'s own DTOs (`LintSummary`, `message_params`, `VrefMap`, ...)
-     * from a plain JS object to an ES `Map`, a much larger and riskier
-     * migration than this one field justifies on its own. A caller that
-     * wants a real `Uint8Array` wraps this ONE buffer once
-     * (`new Uint8Array(published.bytes)`) -- the same single wrap this
-     * field has always required, and never a per-book cost.
+     * One whole-corpus container, already a single buffer -- crosses wasm
+     * as a real `Uint8Array` (`serde_bytes`, the `Vec<u8>` -> bytes rather
+     * than sequence representation, honored because this crate\'s `tsify`
+     * dependency resolves its `js` feature/`serde-wasm-bindgen`, not the
+     * legacy `json`/`JsValue::from_serde` default -- v0.1.5\'s bytes-at-
+     * boundary convention). An extent record would be vacuous here: this
+     * field already *is* one complete buffer, with nothing else to slice it
+     * out of.
      */
     bytes: number[];
     snapshotId: string;
@@ -192,9 +183,14 @@ export type PackedSectionKind = "token" | "finding";
 export type MarkerPayload = "bookCode" | "numberRange";
 
 /**
- * Diff result grouped by book and chapter: `{ \"GEN\": { 1: [...], 2: [...] } }`.
+ * Diff result grouped by book and chapter: `{ \"GEN\": { \"1\": [...], \"2\": [...] } }`.
+ * Both map levels cross as a plain JS object (`#[tsify(hashmap_as_object)]`,
+ * v0.1.5\'s bytes-at-boundary follow-up): the chapter key is `String`, not
+ * `u32`, purely so it can serialize to the `JsString` an object key
+ * requires -- the JS-visible shape (`{\"1\": ...}`) is unchanged, since a JS
+ * object\'s own keys are strings regardless of what put them there.
  */
-export type DiffsByChapterMap = Record<string, Record<number, DiffSkeleton>>;
+export type DiffsByChapterMap = Record<string, Record<string, DiffSkeleton>>;
 
 /**
  * Every verse\'s lossless projection, as `[sid, projection]` pairs in the order
@@ -289,7 +285,7 @@ export interface PublishedBookInfo {
      * its previous publication\'s sections were spliced in unchanged.
      */
     encoded: boolean;
-    source: string | null;
+    source: string | undefined;
 }
 
 /**
@@ -413,6 +409,13 @@ export interface BookEntry {
 
 /**
  * One resolved fix, addressable and inspectable without applying it.
+ *
+ * Needs its own `hashmap_as_object`, not only `PatchOutcome`\'s: `Braid::
+ * patches()` returns `Vec<Patch>` directly, and a `Vec<T>` crossing the
+ * wasm ABI calls `T::into_js()` -- and so reads `T`\'s own
+ * `SERIALIZATION_CONFIG` -- once per element, not once for the whole `Vec`
+ * (unlike a `Patch` reached only by nesting inside `PatchOutcome`, which
+ * serializes through `PatchOutcome`\'s single top-level call instead).
  */
 export interface Patch {
     id: PatchId;
@@ -541,6 +544,8 @@ export interface Utf16Span {
 
 /**
  * Verse-reference map: `{ \"GEN 1:1\": \"...\", \"GEN 1:2\": \"...\", ... }`.
+ * Crosses as a plain JS object (`#[tsify(hashmap_as_object)]`), not an ES
+ * `Map` -- the shape this type has always had.
  */
 export type VrefMap = Record<string, string>;
 
@@ -576,22 +581,15 @@ export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; b
  * [`Braid::restore_corpus`]\'s input. `packed`/`sources` forward verbatim as
  * `restoreCorpus`\'s first two arguments, and `books` forwards verbatim
  * (after trivial per-book field renaming, `sourceHash`/`packed`/`source` ->
- * `sourceKey`/`packed`/`source`) as its `records` -- zero reshaping, and
- * (see below) at most one wrap per buffer, never one per book.
+ * `sourceKey`/`packed`/`source`) as its `records` -- zero reshaping,
+ * on either side of a postMessage/structured-clone hop.
  *
- * `packed`/`sources` cross as plain `number[]`, not `Uint8Array`: this
- * crate\'s `tsify` dependency resolves its default `json` feature
- * (`JsValue::from_serde`), not its `js` feature (`serde-wasm-bindgen`,
- * which is what would honor a `#[serde(with = \"serde_bytes\")]` field
- * annotation) -- confirmed by an isolated repro, not assumed. Switching
- * features crate-wide would also flip every existing map-shaped DTO field
- * (`LintSummary`, `message_params`, `VrefMap`, ...) from a plain JS object
- * to an ES `Map`, a far larger and riskier migration than this verb alone
- * justifies. The win this convention still delivers without that
- * migration: ONE array per buffer regardless of how many books are in
- * scope (`new Uint8Array(scoped.packed)`, `new Uint8Array(scoped.sources)`
- * -- the same single wrap `PublishedCorpus::bytes` has always required),
- * never the O(books) `Array.from` a per-book byte array would have needed.
+ * `packed`/`sources` cross as real `Uint8Array`s (`serde_bytes`, honored
+ * because this crate\'s `tsify` dependency resolves its `js` feature): one
+ * buffer per side regardless of corpus size, so a scoped publication is
+ * transfer-ready as exactly two `ArrayBuffer`s -- a plain JS `number[]`
+ * structured-clones by copying; a `Uint8Array`\'s backing `ArrayBuffer` can
+ * be transferred, zero-copy, ownership moved.
  *
  * Native `braid::ScopedPublication` keeps its own per-book owned shape
  * (a native caller wants one owned value per book, not buffer
@@ -837,21 +835,21 @@ export interface DupContext {
 }
 
 export interface FormatOptions {
-    recoverMalformedMarkers?: boolean | null;
-    collapseWhitespaceInText?: boolean | null;
-    ensureInlineSeparators?: boolean | null;
-    removeDuplicateVerseNumbers?: boolean | null;
-    normalizeSpacingAfterParagraphMarkers?: boolean | null;
-    removeUnwantedLinebreaks?: boolean | null;
-    bridgeConsecutiveVerseMarkers?: boolean | null;
-    removeOrphanEmptyVerseBeforeContentfulVerse?: boolean | null;
-    removeBridgeVerseEnumerators?: boolean | null;
-    moveChapterLabelAfterChapterMarker?: boolean | null;
-    insertDefaultParagraphAfterChapterIntro?: boolean | null;
-    removeEmptyParagraphs?: boolean | null;
-    insertStructuralLinebreaks?: boolean | null;
-    collapseConsecutiveLinebreaks?: boolean | null;
-    normalizeMarkerWhitespaceAtLineStart?: boolean | null;
+    recoverMalformedMarkers?: boolean | undefined;
+    collapseWhitespaceInText?: boolean | undefined;
+    ensureInlineSeparators?: boolean | undefined;
+    removeDuplicateVerseNumbers?: boolean | undefined;
+    normalizeSpacingAfterParagraphMarkers?: boolean | undefined;
+    removeUnwantedLinebreaks?: boolean | undefined;
+    bridgeConsecutiveVerseMarkers?: boolean | undefined;
+    removeOrphanEmptyVerseBeforeContentfulVerse?: boolean | undefined;
+    removeBridgeVerseEnumerators?: boolean | undefined;
+    moveChapterLabelAfterChapterMarker?: boolean | undefined;
+    insertDefaultParagraphAfterChapterIntro?: boolean | undefined;
+    removeEmptyParagraphs?: boolean | undefined;
+    insertStructuralLinebreaks?: boolean | undefined;
+    collapseConsecutiveLinebreaks?: boolean | undefined;
+    normalizeMarkerWhitespaceAtLineStart?: boolean | undefined;
 }
 
 export interface FormatResult {
@@ -866,10 +864,10 @@ export interface FormatRuleMeta {
 
 export interface HtmlOptions {
     wrapRoot?: boolean;
-    preferNativeElements?: boolean | null;
-    noteMode?: HtmlNoteMode | null;
-    callerStyle?: HtmlCallerStyle | null;
-    callerScope?: HtmlCallerScope | null;
+    preferNativeElements?: boolean | undefined;
+    noteMode?: HtmlNoteMode | undefined;
+    callerStyle?: HtmlCallerStyle | undefined;
+    callerScope?: HtmlCallerScope | undefined;
 }
 
 export interface LintCodeMeta {
@@ -902,7 +900,7 @@ export interface LintOptions {
      * caller silently get whole-book id-behavior.
      */
     scope: LintScope;
-    enabledCodes?: LintCode[] | null;
+    enabledCodes?: LintCode[] | undefined;
     disabledCodes?: LintCode[];
     suppressed?: LintSuppression[];
     allowImplicitChapterContentVerse?: boolean;
@@ -1045,7 +1043,7 @@ export interface UnitTextDiff {
 }
 
 export interface VrefOptions {
-    trim?: boolean | null;
+    trim?: boolean | undefined;
 }
 
 export type BlockBehavior = "none" | "paragraph" | "tableRow" | "tableCell" | "sidebarStart" | "sidebarEnd";

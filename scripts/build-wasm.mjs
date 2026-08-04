@@ -71,6 +71,14 @@ if (dev) {
   run("wasm-opt", [
     wasmOptLevel,
     "--enable-bulk-memory",
+    // Required as of the v0.1.5 tsify `js`-feature migration:
+    // `serde-wasm-bindgen`'s i64/BigInt serialization path emits
+    // `i64.trunc_sat_f64_s` (the "nontrapping float-to-int" proposal),
+    // which `wasm-opt` refuses to validate without this flag even though
+    // no DTO field in this crate actually crosses as an i64 -- the
+    // instruction is in the library's own generic codegen, not gated on
+    // whether any caller reaches that branch.
+    "--enable-nontrapping-float-to-int",
     path.join(outDir, "usfm_onion_web_bg.wasm"),
     "-o",
     path.join(outDir, "usfm_onion_web_bg.wasm"),

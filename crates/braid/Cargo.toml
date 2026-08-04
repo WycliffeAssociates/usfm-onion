@@ -11,7 +11,7 @@ default = []
 # Plain serde derives over braid's own lifecycle types, and over the
 # publication/restore types the packed compositions return — what a native
 # (Tauri) resident host needs, with no tsify or wasm-bindgen in the binary.
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_bytes"]
 # Adds tsify derives to the publication/restore types and forwards to wire's
 # own "wasm" feature, so a wasm-bindgen consumer gets the exact types tsify
 # can project across the boundary rather than a second hand-mirror of them.
@@ -27,7 +27,15 @@ serde_json = "1"
 # whole book, which is exactly what this crate's clippy.toml wants FxHash for.
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"], optional = true }
-tsify = { version = "0.5.6", optional = true }
+# Only ever activated alongside `serde` (see the `serde` feature above): lets
+# `PublishedCorpus::bytes` opt into the `Vec<u8>` -> bytes (not sequence)
+# serde representation, which is what makes it cross wasm as a `Uint8Array`
+# rather than a JS `number[]` under tsify's `js` feature below -- the v0.1.5
+# bytes-at-boundary convention.
+serde_bytes = { version = "0.11", optional = true }
+# `js`, not the default `json` -- see usfm_onion_wasm's own Cargo.toml
+# comment on this same dependency for why.
+tsify = { version = "0.5.6", default-features = false, features = ["js"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 usfm_onion = { path = "../.." }
 # Composition, not layout. braid owns no byte layout -- every offset,

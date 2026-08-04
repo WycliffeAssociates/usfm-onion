@@ -183,23 +183,15 @@ pub struct PublishedBookInfo {
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedCorpus {
-    /// One whole-corpus container, already a single buffer. An extent record
-    /// would be vacuous here: this field already *is* one complete buffer,
-    /// with nothing else to slice it out of.
-    ///
-    /// Crosses wasm as a plain `number[]`, unchanged from every prior
-    /// release: `#[serde(with = "serde_bytes")]` was tried here for v0.1.5's
-    /// bytes-at-boundary convention and reverted -- this crate's `tsify`
-    /// dependency resolves its default `json` feature (`JsValue::from_serde`,
-    /// no bytes-as-`Uint8Array` support) rather than its `js` feature
-    /// (`serde-wasm-bindgen`, which does support it), and switching would
-    /// also flip every existing map-shaped field in this and the wasm
-    /// crate's own DTOs (`LintSummary`, `message_params`, `VrefMap`, ...)
-    /// from a plain JS object to an ES `Map`, a much larger and riskier
-    /// migration than this one field justifies on its own. A caller that
-    /// wants a real `Uint8Array` wraps this ONE buffer once
-    /// (`new Uint8Array(published.bytes)`) -- the same single wrap this
-    /// field has always required, and never a per-book cost.
+    /// One whole-corpus container, already a single buffer -- crosses wasm
+    /// as a real `Uint8Array` (`serde_bytes`, the `Vec<u8>` -> bytes rather
+    /// than sequence representation, honored because this crate's `tsify`
+    /// dependency resolves its `js` feature/`serde-wasm-bindgen`, not the
+    /// legacy `json`/`JsValue::from_serde` default -- v0.1.5's bytes-at-
+    /// boundary convention). An extent record would be vacuous here: this
+    /// field already *is* one complete buffer, with nothing else to slice it
+    /// out of.
+    #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     pub bytes: Vec<u8>,
     pub snapshot_id: String,
     /// One entry per resident book, in corpus order -- not only the freshly

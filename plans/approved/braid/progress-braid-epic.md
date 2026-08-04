@@ -5890,6 +5890,9 @@ for why the attempt was made and reverted. Flagged here for a possible dedicated
 (migrating `tsify` to its `js` feature workspace-wide, with `hashmap_as_object` added everywhere
 it is needed first) rather than folded into this one.
 
+**RESOLVED in the very next addendum below** (owner ruled: complete it now, inside v0.1.5, rather
+than leave it as a follow-up) — see "tsify `js`-feature migration" immediately after.
+
 **Gates, all green, final numbers:** `cargo test --workspace --all-features`
 (`RUSTFLAGS=-D warnings`) — **675 passed**, 0 failed, 28 ignored (was 664; +11 new: 7 unit tests
 in the new `bytes.rs` plus 4 new `resident.rs` extent-bounds tests exercising
@@ -5912,5 +5915,157 @@ each, unchanged; `golden:wasm`/`:web` — 7 fixtures each, unchanged. `test:pack
 this round (every `test:*`/`golden:*` npm script rebuilds a dev wasm package first); restored via
 `git restore pkg-bundler pkg-web` and rebuilt release before the final `test:parity` re-check and
 `git status`/commit, per the same discipline the prior addendum's escape note established.
+
+No version bump for this addendum — additive within the already-released-to-branch v0.1.5.
+
+### Addendum (same day, same v0.1.5, no new version number) — tsify `js`-feature migration
+
+Owner-ruled: complete the bytes-at-boundary convention NOW, inside v0.1.5, rather than leave the
+`Uint8Array` half as a deferred follow-up. This resolves the deviation the previous addendum
+flagged: `tsify` (0.5.6) now resolves its `js` feature (`serde-wasm-bindgen`) in both `Cargo.toml`s
+that declare it (`crates/usfm_onion_wasm`, `crates/braid`'s optional `wasm` feature), not its
+default `json` feature (`JsValue::from_serde`/`gloo-utils`) — the legacy path that ignores
+`#[serde(with = "serde_bytes")]` entirely and, it turned out, also ignores every other
+`SerializationConfig` knob including `hashmap_as_object`.
+
+**Sequencing, exactly as ordered:** hashmap sweep FIRST, then the feature flip, then re-adding
+`serde_bytes`, then empirical re-verification. Flipping the feature first (with no
+`hashmap_as_object` anywhere) would have silently turned every existing `BTreeMap`-shaped field
+into an ES `Map` the instant the dependency changed — a real regression window, avoided entirely
+by annotating every map-shaped type before the flip ever lands in the same commit.
+
+**The `hashmap_as_object` sweep.** `tsify`'s `SerializationConfig` (and the
+`serde_wasm_bindgen::Serializer` it configures) is read from the OUTERMOST type actually crossing
+the wasm ABI for a given call — the one `#[wasm_bindgen]` return type — and threaded through ONE
+serializer instance for the whole nested value; a nested type's own `#[tsify(hashmap_as_object)]`
+is consulted only if THAT type is also, independently, used as a direct boundary type somewhere
+(a bare `Vec<T>` return crosses via `T::into_js()` called once per element, so `T`'s own attribute
+matters there too). Sweeping every one of `usfm_onion_wasm/src/dto.rs`'s map-shaped types plus
+every DIRECT boundary type reachable by composition or by `Vec<T>`-per-element, both confirmed by
+reading `tsify-macros-0.5.6/src/wasm_bindgen.rs`'s generated `IntoWasmAbi` impls rather than
+assumed:
+- Leaf map-shaped types: `DiffsByChapterMap`, `VrefMap`, `LintIssue.messageParams`,
+  `LintSummary.byCategory`/`bySeverity`/`byIssueType`, `TokenFix.labelParams` (all three variants),
+  `MergeRequest.decisions`, `Patch.labelParams`.
+- Outer composite/direct-crossing types that nest one of the above and are themselves reached
+  either directly or via `Vec<T>`: the `outcome!` macro in `resident.rs` (covers every
+  `ApiResult<T, E>`-wrapped verb uniformly, including ones with no map field at all — harmless),
+  `PackedBookOutcome`, `PublishedCorpusOutcome`, `LintResult` (a direct return of
+  `wasm_lint_usfm`/`wasm_lint_tokens`, not only reached by nesting), `LintSnapshot` (`Braid::lint`,
+  which cannot fail so is not `outcome!`-wrapped), `Patch` (`Braid::patches()` returns `Vec<Patch>`
+  directly, so `Patch`'s own attribute — not `PatchOutcome`'s — is what governs it there).
+- No missed spots found in `usfm_onion_wire`'s own `dto.rs`: it has zero `BTreeMap`/`HashMap`
+  fields on any Tsify-derived type (confirmed by grep, not assumed), so wire's own (separate,
+  optional) `tsify` dependency needed no attribute changes, even though it now resolves `js` too
+  via Cargo's ordinary feature unification across the one shared `tsify` instance in the build.
+
+**One field changed shape at the Rust level to make this possible, with no observable JS change:**
+`DiffsByChapterMap`'s inner (chapter) map was `BTreeMap<u32, DiffSkeleton>`. Under
+`hashmap_as_object`, `serde-wasm-bindgen`'s object-shaped `MapSerializer` requires every key to
+serialize to a `JsString` (`key.dyn_into::<JsString>()`, confirmed by reading
+`serde-wasm-bindgen-0.6.5/src/ser.rs`); a `u32` key serializes to a JS `number` and throws
+("Map key is not a string and cannot be an object key"). `map_diffs_by_chapter` now stringifies
+the chapter key (`chapter.to_string()`) before building the map, so the Rust-side key type is
+`String`. The JS-visible shape is unchanged either way (`{"1": [...], "2": [...]}`): a JS object's
+own keys are always strings regardless of what put them there, and this was empirically confirmed
+against the committed golden fixtures (below), not merely reasoned about.
+
+**`serde_bytes` restored, this time for real.** `braid::PublishedCorpus::bytes` and the new
+`resident::ScopedPublication::packed`/`sources` (from the prior addendum) both carry
+`#[serde(with = "serde_bytes")]` again; the `serde_bytes` optional dependency is back in both
+`Cargo.toml`s. Empirically re-verified with the same isolated-repro method the prior addendum used
+to discover the bug in the first place (a throwaway `#[wasm_bindgen]` function, built, called from
+Node, deleted afterward) — `publish().bytes`, `publishScope().packed`, and `publishScope().sources`
+all came back `instanceof Uint8Array === true` in both build targets, not a plain `Array`.
+
+**Hazards, each independently verified (not assumed), per the owner's explicit list:**
+- *Enum-keyed maps still serialize with string keys as plain objects* — CONFIRMED:
+  `LintSummary.byCategory`/`byIssueType` (`BTreeMap<LintCategory, usize>`/`BTreeMap<LintIssueType,
+  usize>`) render as `{"context": 2, "numbering": 1}`-shaped plain objects (`constructor ===
+  Object`, not `instanceof Map`) — `serde`'s derived `serialize_unit_variant` for a C-like enum
+  produces a JS string via `serde-wasm-bindgen`'s `static_str_to_js`, satisfying the object-key
+  requirement automatically, no extra work needed.
+- *`VrefMap` newtype still crosses as `Record<string,string>`, not wrapped* — CONFIRMED:
+  `ParsedUsfm.toVref()` returns `{"GEN 1:1": "...", "GEN 1:2": "...", ...}`, `constructor ===
+  Object`, not `instanceof Map`.
+- *Integer/BigInt audit: nothing crosses as `u64`* — CONFIRMED by exhaustive grep of every
+  Tsify-derived type's own field list across `usfm_onion_wasm`'s `dto.rs`/`resident.rs`/
+  `stateless.rs` and `usfm_onion_wire`'s `dto.rs`: zero `u64` fields. Every native `u64` (snapshot
+  id, source hash, catalog stamp) is already formatted as a 16-hex-digit `String` before it ever
+  reaches a wasm DTO — established well before this round, not something this round changed.
+  Counts/offsets/positions crossing as raw numbers are `u32`/`usize` (32-bit on `wasm32`), nowhere
+  near 2^53. `serialize_large_number_types_as_bigints` stayed at its `false` default throughout —
+  never needed.
+- *Option/null handling, missing-vs-undefined drift* — CONFIRMED clean: `golden:wasm`/`:web` (the
+  byte-identical fixture gate) passed with ZERO re-bless, both targets, both before and after the
+  feature flip. Default assumption honored: no fixture was touched, no byte class changed:
+  no owner sign-off was needed because nothing drifted to begin with.
+- *`TokenFix.labelParams`/`MergeRequest.decisions` with genuinely non-empty content* — CONFIRMED
+  both directions: a throwaway probe proved `TokenFix.labelParams` serializes non-empty content
+  (`{"a": "1"}`) as a plain object on the OUTPUT side; `scripts/test-web-package.mjs`'s existing
+  mixed-decisions merge case (`{[changedUnit.id]: "baseline"}`, a real non-empty decisions map)
+  proved `MergeRequest.decisions` deserializes correctly from a plain JS object on the INPUT side
+  — both checked because every current native lint fix rule happens to leave `label_params` at
+  `Default::default()` (empty), so an empty-map check alone would have been suggestive but not
+  conclusive.
+- One new build-time hazard, NOT on the owner's list, found only by running the release build:
+  `serde-wasm-bindgen`'s generic i64/`BigInt` serialization codegen emits `i64.trunc_sat_f64_s`
+  (the "nontrapping float-to-int" proposal) in the compiled wasm regardless of whether any DTO
+  field actually uses `i64` (confirmed none do, per the audit above) — the instruction is in the
+  library's own generic code, not gated on a caller ever reaching that branch. `wasm-opt` refused
+  to validate it without an explicit flag. Fixed in `scripts/build-wasm.mjs`: added
+  `--enable-nontrapping-float-to-int` alongside the existing `--enable-bulk-memory`. A stable,
+  default-on engine feature in every shipping wasm runtime — safe to require.
+
+**New gate, permanent: the shape pin.** `scripts/test-publish-round-trip.mjs` gained a dedicated
+"shape pin" section (both build targets), asserting `instanceof Uint8Array` on every corpus-grain
+byte field (`PublishedCorpus.bytes`, `ScopedPublication.packed`/`sources`) and `constructor ===
+Object` (never `instanceof Map`) on every map-shaped field this addendum swept
+(`LintSummary.byCategory`, `LintIssue.messageParams`, `DiffsByChapterMap` at both levels including
+its now-`String`-keyed chapter level, `VrefMap`), each driven through a fixture engineered to
+produce non-empty content so an always-empty map cannot trivially pass. This exists so a future
+dependency bump or Cargo feature change that silently drags `tsify` back onto its legacy `json`
+feature (or somehow unwinds `hashmap_as_object`) fails LOUD, here, rather than as a silent
+consumer-facing regression discovered downstream.
+
+**Doc-comment cleanup.** Every "tried and reverted" apology this round's predecessor wrote (on
+`PublishedCorpus::bytes`, `ScopedPublication`, and the surrounding module comment in `resident.rs`)
+is rewritten to state the true, now-permanent story: bytes cross as `Uint8Array` because `tsify`
+resolves `js`; maps cross as plain objects because of the `hashmap_as_object` sweep above. No
+apology language should remain anywhere in the tree — checked by grep, not by memory.
+
+**Redundant JS-side wraps removed.** `scripts/test-publish-round-trip.mjs`/
+`test-publish-js-materialize.mjs` no longer call `new Uint8Array(published.bytes)` /
+`new Uint8Array(scoped.packed)` / `new Uint8Array(scoped.sources)` before use — those values are
+already real `Uint8Array`s now, so the wrap was copying a buffer that never needed copying.
+`js/packed.js`/`packed.d.ts` needed no changes: their own `verifyPackedCorpus`/
+`verifyPublishedPacked` already typed `packed`/`sources` parameters as `Uint8Array` (they are
+JS-authored functions independent of whatever produced the caller's buffer), so nothing there was
+coupled to the old `number[]` shape in the first place.
+
+**Gates, all green, final numbers:** `cargo test --workspace --all-features`
+(`RUSTFLAGS=-D warnings`) — **675 passed**, 0 failed, 28 ignored (unchanged from the prior
+addendum -- this round is wasm-boundary/JS-visible only, no new native test surface); `cargo doc
+--workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) — clean; `cargo fmt --all
+--check` — clean; lint oracle (`--ignored`) — 1 passed, byte-identical, no re-bless; `npm run
+build` (release, both targets) — clean after the `--enable-nontrapping-float-to-int` fix above
+(first attempt failed at the `wasm-opt` step; root-caused and fixed, not routed around);
+`test:packed`/`:web` — 410 cases / 5,717,153 tokens each, unchanged; `test:parity`/`:web` — **94
+steps** × 2 lanes, **0 divergences**, transcript regenerated LAST (twice — once mid-round, once
+final, byte-identical both times, confirming idempotence), then re-verified with a direct
+`test-parity.mjs` run against the exact release-built `pkg-bundler` tree; `test:publish`/`:web` —
+**32 checks** each (was 31; +1 for the new shape-pin section, which itself carries roughly a dozen
+individual assertions under that one `checks` increment, consistent with this file's existing
+per-section counting convention); `test:publish:js`/`:js:web` — 27 checks each, unchanged;
+`golden:wasm`/`:web` — **7 fixtures each, byte-identical, zero re-bless, both before and after the
+feature flip** — the hazard this addendum was most worried about (a silent shape regression
+hiding inside an already-passing-looking gate) is the one gate that would have caught it, and it
+stayed green throughout; `test:packed:types` (`tsc --noEmit`) — clean, no `.d.ts` type changes were
+needed for this round (the `ByteExtent`/`PublishedCorpusRecord`/`PackedRecord` types the prior
+addendum introduced were already extent-shaped, untouched by the `Uint8Array`/map-shape work
+here). Dev-mode gate runs dirtied the committed `pkg-*` trees during this round; restored via `git
+restore pkg-bundler pkg-web` and rebuilt release before the final `test:parity`/`golden:wasm`/
+`test:publish` re-checks and `git status`/commit, per the same discipline both prior addenda
+established.
 
 No version bump for this addendum — additive within the already-released-to-branch v0.1.5.

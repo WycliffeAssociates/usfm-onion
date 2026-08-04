@@ -56,7 +56,16 @@ macro_rules! outcome {
     ($(#[$meta:meta])* $name:ident, $value:ty, $error:ty) => {
         $(#[$meta])*
         #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-        #[tsify(into_wasm_abi, from_wasm_abi)]
+        // `hashmap_as_object` unconditionally: this newtype, not whatever map-
+        // shaped DTO it happens to wrap this time, is what actually crosses
+        // the wasm ABI (tsify's `SERIALIZATION_CONFIG` is read from the
+        // OUTERMOST type reaching `#[wasm_bindgen]`, then threaded through
+        // one `serde_wasm_bindgen::Serializer` instance for the whole nested
+        // value -- a nested type's own `#[tsify(hashmap_as_object)]` is
+        // never consulted unless that nested type is ALSO, independently,
+        // used as a direct boundary type somewhere else). Harmless on the
+        // many instantiations with no map field at all.
+        #[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
         #[serde(transparent)]
         pub struct $name(pub ApiResult<$value, $error>);
 
@@ -1326,7 +1335,11 @@ pub struct BookLintSnapshot {
 /// renderer in one language, so findings cross this boundary already materialized.
 /// Packed bytes are a separate question with a separate verb.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// A direct wasm-ABI return type (`Braid::lint`, which cannot fail so it is
+// not `outcome!`-wrapped) that nests `LintSummary`'s maps and each book's
+// own `LintIssue.messageParams` -- needs its own `hashmap_as_object` for the
+// same reason `PackedBookOutcome`/`LintResult` do.
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct LintSnapshot {
     pub snapshot_id: String,
@@ -1702,9 +1715,9 @@ impl From<braid::RestoreReport> for RestoreReport {
 // (re-exported below), not a second, wasm-only mirror of them: braid's
 // `wasm` feature already derives `Tsify` on them directly, so there is
 // nothing for this crate to redefine. `PublishedCorpus::bytes` crosses as a
-// plain `number[]`, same as ever -- see its own doc comment in braid for why
-// `serde_bytes` was tried and reverted here (a `tsify` infrastructure
-// limitation, not a design choice).
+// real `Uint8Array` via braid's own `serde_bytes` annotation -- see its own
+// doc comment for why that is honored (this crate's `tsify` dependency
+// resolves the `js` feature).
 //
 // `PublishedCorpusSource`/`ScopedPublication`/`ScopedPublishedBook` are NOT
 // re-exported here (v0.1.5, bytes-at-boundary convention): each one embeds a
@@ -1737,22 +1750,15 @@ pub struct ScopedPublishedBook {
 /// [`Braid::restore_corpus`]'s input. `packed`/`sources` forward verbatim as
 /// `restoreCorpus`'s first two arguments, and `books` forwards verbatim
 /// (after trivial per-book field renaming, `sourceHash`/`packed`/`source` ->
-/// `sourceKey`/`packed`/`source`) as its `records` -- zero reshaping, and
-/// (see below) at most one wrap per buffer, never one per book.
+/// `sourceKey`/`packed`/`source`) as its `records` -- zero reshaping,
+/// on either side of a postMessage/structured-clone hop.
 ///
-/// `packed`/`sources` cross as plain `number[]`, not `Uint8Array`: this
-/// crate's `tsify` dependency resolves its default `json` feature
-/// (`JsValue::from_serde`), not its `js` feature (`serde-wasm-bindgen`,
-/// which is what would honor a `#[serde(with = "serde_bytes")]` field
-/// annotation) -- confirmed by an isolated repro, not assumed. Switching
-/// features crate-wide would also flip every existing map-shaped DTO field
-/// (`LintSummary`, `message_params`, `VrefMap`, ...) from a plain JS object
-/// to an ES `Map`, a far larger and riskier migration than this verb alone
-/// justifies. The win this convention still delivers without that
-/// migration: ONE array per buffer regardless of how many books are in
-/// scope (`new Uint8Array(scoped.packed)`, `new Uint8Array(scoped.sources)`
-/// -- the same single wrap `PublishedCorpus::bytes` has always required),
-/// never the O(books) `Array.from` a per-book byte array would have needed.
+/// `packed`/`sources` cross as real `Uint8Array`s (`serde_bytes`, honored
+/// because this crate's `tsify` dependency resolves its `js` feature): one
+/// buffer per side regardless of corpus size, so a scoped publication is
+/// transfer-ready as exactly two `ArrayBuffer`s -- a plain JS `number[]`
+/// structured-clones by copying; a `Uint8Array`'s backing `ArrayBuffer` can
+/// be transferred, zero-copy, ownership moved.
 ///
 /// Native `braid::ScopedPublication` keeps its own per-book owned shape
 /// (a native caller wants one owned value per book, not buffer
@@ -1764,7 +1770,9 @@ pub struct ScopedPublishedBook {
 #[serde(rename_all = "camelCase")]
 pub struct ScopedPublication {
     pub snapshot_id: String,
+    #[serde(with = "serde_bytes")]
     pub packed: Vec<u8>,
+    #[serde(with = "serde_bytes")]
     pub sources: Vec<u8>,
     pub books: Vec<ScopedPublishedBook>,
 }
@@ -1976,8 +1984,15 @@ pub struct PatchRow {
 }
 
 /// One resolved fix, addressable and inspectable without applying it.
+///
+/// Needs its own `hashmap_as_object`, not only `PatchOutcome`'s: `Braid::
+/// patches()` returns `Vec<Patch>` directly, and a `Vec<T>` crossing the
+/// wasm ABI calls `T::into_js()` -- and so reads `T`'s own
+/// `SERIALIZATION_CONFIG` -- once per element, not once for the whole `Vec`
+/// (unlike a `Patch` reached only by nesting inside `PatchOutcome`, which
+/// serializes through `PatchOutcome`'s single top-level call instead).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct Patch {
     pub id: PatchId,
