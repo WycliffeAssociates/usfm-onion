@@ -5598,3 +5598,31 @@ Test-only change (scripts/test-publish-js-materialize.mjs only); no
 production `.js`/`.rs` source touched, no version bump, no pkg regen
 needed for shipping (dev-build artifacts from local gate runs discarded
 via `git restore`). Not merged, awaiting review.
+
+## 2026-08-03 — v0.1.4: braid absorbs the composition layer; usfm_onion_host deleted
+
+Owner-directed (freeze §R): the "host" layer was unnecessary. `braid` now depends on
+`usfm_onion_wire` unconditionally and `braid::Braid` carries the composition as inherent
+methods — `publish()`, `restore_packed_books(records)`, `restore_published_corpus(packed,
+records)` — owning a private `PublicationCache` (mem::take around the publish call; both
+paths restore the field, reviewer-verified). The moved types gate serde under braid's
+existing feature; a new braid `wasm` feature gates tsify/wasm-bindgen (default/serde trees
+link neither). The wasm Braid is DTO glue over the one implementation.
+
+**NATIVE-SURFACE BREAKING CHANGE**: the v0.1.2 free functions `publish_corpus`/
+`restore_published_corpus` no longer exist; `usfm_onion_host` is deleted from the workspace.
+Accepted at 0.x — no released downstream had migrated. The Cargo members glob (`crates/*`)
+remains: with the directory gone it resolves to exactly the intended crates (an intermediate
+enumeration existed mid-round and was reverted; the earlier report's claim otherwise was
+stale).
+
+Tests: host's 14 fold into braid as 13 (one legitimate merge — the surviving publish→restore
+round trip asserts the complete summary by exhaustive destructure, a strict superset).
+braid lib 11→23 passed +1 ignored; wasm unchanged. Parity fixture moved only in the packed
+byte arrays (engine stamp + dependent checksums); proven byte-neutral by regenerating under
+the old version (empty diff). npm `.d.ts`/`.js` byte-identical; wasm binary shrank ~18KB.
+
+Clean-room verdict: no production findings; docs-only closeout (this entry, §R wording,
+stale host-crate references in comments) landed by the director. Process note: the crate
+deletion executed in the main session under the owner's own permission system after the
+builder sandbox correctly refused it on relayed authority.

@@ -2128,3 +2128,19 @@ baseline operations unconditionally leave current tokens, corpus identity, and m
 untouched (the resident case returns the no-op effect shape). If a cold-open "install saved
 content and declare it baseline atomically" verb is ever needed, it belongs on the restore/ingest
 surface as an explicit combined operation.
+
+## R. Amendment — 2026-08-03 (owner): braid absorbs the composition layer; the host crate dies
+
+Owner ruling during the v0.1.4 packet ("the name 'host' seems unnecessary"), taken with the
+standing consolidation direction to its structural conclusion:
+
+- `braid` gains an unconditional dependency on `usfm_onion_wire`. The original "braid stays
+  byte-free" boundary is AMENDED, not violated in spirit: braid still contains no byte LAYOUT
+  (wire keeps every codec, section format, checksum, and framing decision); braid may now
+  COMPOSE wire's public codecs.
+- The publish/restore composition becomes inherent methods on `braid::Braid`, which owns its
+  `PublicationCache`. There is exactly ONE Braid; the wasm class is DTO glue over it.
+- `usfm_onion_host` (introduced v0.1.2) is deleted. Its free functions were consumed by no
+  released downstream; the 0.x native surface break is accepted and ledger-recorded.
+- One workspace crate is deleted; the remaining DAG is a straight line of four:
+  core ← wire ← braid ← wasm (each depending leftward), with no side composition crate.

@@ -2,9 +2,9 @@
 //!
 //! One module per responsibility: the boundary value types and their conversions
 //! ([`dto`]), the stateless one-shot exports ([`stateless`]), and the resident
-//! corpus handle ([`resident`]). Publish/restorePublishedCorpus's own
-//! composition (the publication adapter) lives in `usfm_onion_host` now, not
-//! here -- this crate only projects it across the wasm-bindgen boundary. This
+//! corpus handle ([`resident`]). Every resident verb's own composition,
+//! packed publish/restore included, lives in `braid` -- this crate only
+//! projects it across the wasm-bindgen boundary. This
 //! root holds only what belongs to the crate as a whole — the hand-written
 //! TypeScript section, and the re-exports that keep every public item
 //! reachable at the crate root whichever module declares it.

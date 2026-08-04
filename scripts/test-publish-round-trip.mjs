@@ -206,7 +206,7 @@ const suppressingConfig = {
 // Clean-room re-review P1: an empty sourceKey must classify as
 // {kind: "ingest", error: {kind: "duplicateSourceKey", source: ""}} through
 // the actual built package -- the pre-extraction wasm behavior, reproduced
-// via usfm_onion_host::RestoreError::EmptySourceKey rather than silently
+// via braid::RestoreError::EmptySourceKey rather than silently
 // reclassified as a decode defect. This is also pinned in the parity
 // transcript (restore_published_corpus_empty_source_key); this check
 // exercises the same case through the real npm package end to end.

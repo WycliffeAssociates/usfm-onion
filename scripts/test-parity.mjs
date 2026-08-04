@@ -141,7 +141,7 @@ const METHODS = {
   publish: { js: "publish", wrapped: true, args: () => [] },
   // Clean-room re-review P1: pins the empty-sourceKey classification
   // (`{kind: "ingest", error: {kind: "duplicateSourceKey", source: ""}}`),
-  // the pre-extraction wasm behavior `usfm_onion_host::RestoreError::
+  // the pre-extraction wasm behavior `braid::RestoreError::
   // EmptySourceKey` now reproduces. `packed` is a direct `Vec<u8>` function
   // parameter (not a struct field), which crosses as `Uint8Array` -- unlike
   // `records[].source`, a plain struct field that is already the right
