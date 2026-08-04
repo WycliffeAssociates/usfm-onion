@@ -68,6 +68,26 @@ use usfm_onion::token::{
 
 use crate::error::TokenInputError;
 
+/// Deserializes a defaultable field that a JS caller may hand over as an own
+/// property holding `undefined` (`{ attributes: undefined }`).
+///
+/// The legacy `JsValue::from_serde` path ran through `JSON.stringify`, which
+/// silently erased such properties, so they arrived as *missing* and
+/// `#[serde(default)]` covered them. `serde-wasm-bindgen` reads each own
+/// property with `Reflect.get` and hands `undefined` to the field's
+/// deserializer — fatal for any non-`Option` field (a sequence read from
+/// `undefined` throws before serde even sees a value). Routing through
+/// `Option` first restores the exact old tolerance: present-but-`undefined`
+/// means default, same as absent. Apply to every non-`Option`
+/// `#[serde(default)]` field on a boundary-crossing DTO.
+pub fn undefined_is_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
@@ -803,7 +823,7 @@ pub struct AttributeItem {
     pub text: String,
     pub key: String,
     pub value: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "undefined_is_default")]
     pub is_default: bool,
 }
 
@@ -878,7 +898,11 @@ pub struct Token {
     pub book_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub book_code_valid: Option<bool>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "undefined_is_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub attributes: Vec<AttributeItem>,
     /// Verbatim `|...` attribute-list slice (native `MarkerAttrs.attribute_source`),
     /// carried across the wire so a passed-through token stays byte-lossless
@@ -1655,7 +1679,7 @@ impl From<NativeUnitTextDiff> for UnitTextDiff {
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(rename_all = "camelCase")]
 pub struct DiffOptions {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "undefined_is_default")]
     text_diff: TextDiffMode,
 }
 

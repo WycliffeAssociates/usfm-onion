@@ -182,11 +182,20 @@ pub struct LintOptions {
     pub(crate) scope: LintScope,
     #[serde(default)]
     pub(crate) enabled_codes: Option<Vec<LintCode>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "usfm_onion_wire::dto::undefined_is_default"
+    )]
     pub(crate) disabled_codes: Vec<LintCode>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "usfm_onion_wire::dto::undefined_is_default"
+    )]
     pub(crate) suppressed: Vec<LintSuppression>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "usfm_onion_wire::dto::undefined_is_default"
+    )]
     pub(crate) allow_implicit_chapter_content_verse: bool,
 }
 
@@ -329,7 +338,10 @@ pub struct FormatResult {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct HtmlOptions {
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "usfm_onion_wire::dto::undefined_is_default"
+    )]
     pub(crate) wrap_root: bool,
     #[serde(default)]
     pub(crate) prefer_native_elements: Option<bool>,

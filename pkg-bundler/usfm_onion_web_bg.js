@@ -1,3 +1,5 @@
+//#region exports
+
 /**
  * The resident corpus handle.
  */
@@ -18,8 +20,10 @@ export class Braid {
      * @returns {FormatMutationOutcome}
      */
     applyFormatPatch(id) {
-        const ret = wasm.braid_applyFormatPatch(this.__wbg_ptr, addHeapObject(id));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_applyFormatPatch(this.__wbg_ptr, id);
+        return ret;
     }
     /**
      * Applies a patch as an ordinary mutation, atomically.
@@ -27,25 +31,22 @@ export class Braid {
      * @returns {PatchMutationOutcome}
      */
     applyPatch(id) {
-        const ret = wasm.braid_applyPatch(this.__wbg_ptr, addHeapObject(id));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_applyPatch(this.__wbg_ptr, id);
+        return ret;
     }
     /**
      * Resident books with their derived stamps, in corpus order.
      * @returns {BookEntry[]}
      */
     books() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.braid_books(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_books(this.__wbg_ptr);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * Books whose findings are stale, in corpus order. Derived from authoritative
@@ -53,17 +54,12 @@ export class Braid {
      * @returns {string[]}
      */
     booksAwaitingLint() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.braid_booksAwaitingLint(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_booksAwaitingLint(this.__wbg_ptr);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * One book's chapter-run labels in source order, duplicates included.
@@ -71,18 +67,22 @@ export class Braid {
      * @returns {ChapterLabelsOutcome}
      */
     chapterLabels(book) {
-        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.braid_chapterLabels(this.__wbg_ptr, ptr0, len0);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Drops every resident book. Clearing an empty corpus is a no-op.
      * @returns {MutationEffect}
      */
     clear() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.braid_clear(this.__wbg_ptr);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Forgets one book's baseline. Clearing an absent one is a no-op.
@@ -90,10 +90,12 @@ export class Braid {
      * @returns {MutationOutcome}
      */
     clearBaseline(book) {
-        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.braid_clearBaseline(this.__wbg_ptr, ptr0, len0);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * The resident diff against the baseline.
@@ -101,8 +103,10 @@ export class Braid {
      * @returns {DiffBaselineOutcome}
      */
     diffBaseline(scope) {
-        const ret = wasm.braid_diffBaseline(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_diffBaseline(this.__wbg_ptr, scope);
+        return ret;
     }
     /**
      * The corpus's content-derived identity, as a 16-digit hex string.
@@ -116,16 +120,14 @@ export class Braid {
         let deferred1_0;
         let deferred1_1;
         try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.braid_expectedSnapshotId(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            deferred1_0 = r0;
-            deferred1_1 = r1;
-            return getStringFromWasm0(r0, r1);
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
+            const ret = wasm.braid_expectedSnapshotId(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
@@ -134,8 +136,10 @@ export class Braid {
      * @returns {DirtyOutcome}
      */
     isDirty(scope) {
-        const ret = wasm.braid_isDirty(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_isDirty(this.__wbg_ptr, scope);
+        return ret;
     }
     /**
      * Recomputes every book awaiting it and returns the complete snapshot.
@@ -146,8 +150,10 @@ export class Braid {
      * @returns {LintSnapshot}
      */
     lint() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.braid_lint(this.__wbg_ptr);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Creates an empty handle bound to the application's own id minter.
@@ -165,7 +171,7 @@ export class Braid {
      * @param {Function} minter
      */
     constructor(config, minter) {
-        const ret = wasm.braid_new(addHeapObject(config), addHeapObject(minter));
+        const ret = wasm.braid_new(config, minter);
         this.__wbg_ptr = ret >>> 0;
         BraidFinalization.register(this, this.__wbg_ptr, this);
         return this;
@@ -176,8 +182,10 @@ export class Braid {
      * @returns {PatchOutcome}
      */
     patch(id) {
-        const ret = wasm.braid_patch(this.__wbg_ptr, addHeapObject(id));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_patch(this.__wbg_ptr, id);
+        return ret;
     }
     /**
      * Every patch of the current snapshot, in corpus order and then each book's own
@@ -188,17 +196,12 @@ export class Braid {
      * @returns {Patch[]}
      */
     patches() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.braid_patches(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_patches(this.__wbg_ptr);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * Prepares a formatting pass over a scope without applying it.
@@ -207,8 +210,10 @@ export class Braid {
      * @returns {FormatPreparationOutcome}
      */
     prepareFormatPatch(scope, options) {
-        const ret = wasm.braid_prepareFormatPatch(this.__wbg_ptr, addHeapObject(scope), isLikeNone(options) ? 0 : addHeapObject(options));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_prepareFormatPatch(this.__wbg_ptr, scope, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        return ret;
     }
     /**
      * The token stream the patch would produce, without applying it.
@@ -220,8 +225,10 @@ export class Braid {
      * @returns {PatchPreviewOutcome}
      */
     previewPatch(id) {
-        const ret = wasm.braid_previewPatch(this.__wbg_ptr, addHeapObject(id));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_previewPatch(this.__wbg_ptr, id);
+        return ret;
     }
     /**
      * Publishes the resident corpus as one packed `corpus.bin` container.
@@ -236,8 +243,10 @@ export class Braid {
      * @returns {PublishOutcome}
      */
     publish() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.braid_publish(this.__wbg_ptr);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Publishes exactly the books a scope names, as per-book packed
@@ -250,8 +259,10 @@ export class Braid {
      * @returns {ScopedPublishOutcome}
      */
     publishScope(scope) {
-        const ret = wasm.braid_publishScope(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_publishScope(this.__wbg_ptr, scope);
+        return ret;
     }
     /**
      * Removes a book. Removing an absent book is a no-op, not an error: the
@@ -260,10 +271,12 @@ export class Braid {
      * @returns {MutationOutcome}
      */
     removeBook(book) {
-        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passStringToWasm0(book, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.braid_removeBook(this.__wbg_ptr, ptr0, len0);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Removes one chapter run's tokens from its book. The effect is whole-book:
@@ -272,8 +285,10 @@ export class Braid {
      * @returns {ScopedMutationOutcome}
      */
     removeChapter(target) {
-        const ret = wasm.braid_removeChapter(this.__wbg_ptr, addHeapObject(target));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_removeChapter(this.__wbg_ptr, target);
+        return ret;
     }
     /**
      * Replaces the whole corpus with a validated candidate.
@@ -285,8 +300,10 @@ export class Braid {
      * @returns {MutationOutcome}
      */
     replaceCorpus(corpus) {
-        const ret = wasm.braid_replaceCorpus(this.__wbg_ptr, addHeapObject(corpus));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_replaceCorpus(this.__wbg_ptr, corpus);
+        return ret;
     }
     /**
      * Seeds the whole corpus from packed bytes plus the sources they were bound to
@@ -319,14 +336,16 @@ export class Braid {
      * @returns {RestoreOutcome}
      */
     restoreCorpus(packed_all, sources, records) {
-        const ptr0 = passArray8ToWasm0(packed_all, wasm.__wbindgen_export);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passArray8ToWasm0(packed_all, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
+        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_malloc);
         const len2 = WASM_VECTOR_LEN;
         const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Restores the whole resident corpus from one packed `corpus.bin`
@@ -352,14 +371,16 @@ export class Braid {
      * @returns {RestoreOutcome}
      */
     restorePublishedCorpus(packed, sources, records) {
-        const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
+        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_malloc);
         const len2 = WASM_VECTOR_LEN;
         const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * Whole-book replacement from each targeted book's own declared
@@ -376,8 +397,10 @@ export class Braid {
      * @returns {RevertBaselineOutcome}
      */
     revertToBaseline(scope) {
-        const ret = wasm.braid_revertToBaseline(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_revertToBaseline(this.__wbg_ptr, scope);
+        return ret;
     }
     /**
      * Records one book's baseline — the state later comparisons are against.
@@ -389,8 +412,10 @@ export class Braid {
      * @returns {BaselineMutationOutcome}
      */
     setBaseline(book) {
-        const ret = wasm.braid_setBaseline(this.__wbg_ptr, addHeapObject(book));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_setBaseline(this.__wbg_ptr, book);
+        return ret;
     }
     /**
      * Declares each in-scope book's CURRENT resident state as its baseline
@@ -404,8 +429,10 @@ export class Braid {
      * @returns {RevertBaselineOutcome}
      */
     setBaselineToCurrent(scope) {
-        const ret = wasm.braid_setBaselineToCurrent(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_setBaselineToCurrent(this.__wbg_ptr, scope);
+        return ret;
     }
     /**
      * Current tokens for the requested scopes — the single hydration verb.
@@ -418,10 +445,12 @@ export class Braid {
      * @returns {ScopeTokensOutcome}
      */
     toTokens(scopes) {
-        const ptr0 = passArrayJsValueToWasm0(scopes, wasm.__wbindgen_export);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passArrayJsValueToWasm0(scopes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.braid_toTokens(this.__wbg_ptr, ptr0, len0);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * The exact bytes a scope would be saved as.
@@ -429,8 +458,10 @@ export class Braid {
      * @returns {UsfmOutcome}
      */
     toUsfm(scope) {
-        const ret = wasm.braid_toUsfm(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_toUsfm(this.__wbg_ptr, scope);
+        return ret;
     }
     /**
      * Replaces one book, or appends it when it is not resident yet.
@@ -441,8 +472,10 @@ export class Braid {
      * @returns {MutationOutcome}
      */
     updateBook(book) {
-        const ret = wasm.braid_updateBook(this.__wbg_ptr, addHeapObject(book));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_updateBook(this.__wbg_ptr, book);
+        return ret;
     }
     /**
      * Replaces exactly one existing chapter run with the caller's content.
@@ -455,8 +488,10 @@ export class Braid {
      * @returns {MutationOutcome}
      */
     updateChapter(target, replacement) {
-        const ret = wasm.braid_updateChapter(this.__wbg_ptr, addHeapObject(target), addHeapObject(replacement));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_updateChapter(this.__wbg_ptr, target, replacement);
+        return ret;
     }
     /**
      * Replaces the resident configuration.
@@ -469,8 +504,10 @@ export class Braid {
      * @returns {MutationEffect}
      */
     updateConfig(config) {
-        const ret = wasm.braid_updateConfig(this.__wbg_ptr, addHeapObject(config));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_updateConfig(this.__wbg_ptr, config);
+        return ret;
     }
     /**
      * Every verse's lossless text projection for a scope, in document order.
@@ -488,13 +525,18 @@ export class Braid {
      * @returns {VrefIndexOutcome}
      */
     vrefIndex(scope) {
-        const ret = wasm.braid_vrefIndex(this.__wbg_ptr, addHeapObject(scope));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.braid_vrefIndex(this.__wbg_ptr, scope);
+        return ret;
     }
 }
 if (Symbol.dispose) Braid.prototype[Symbol.dispose] = Braid.prototype.free;
 
 export class ParsedUsfm {
+    constructor() {
+        throw new Error('cannot invoke `new` directly');
+    }
     static __wrap(ptr) {
         ptr = ptr >>> 0;
         const obj = Object.create(ParsedUsfm.prototype);
@@ -517,24 +559,21 @@ export class ParsedUsfm {
      * @returns {Token[]}
      */
     applyTokenFix(fix) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_applyTokenFix(retptr, this.__wbg_ptr, addHeapObject(fix));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.parsedusfm_applyTokenFix(this.__wbg_ptr, fix);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * @returns {CstDocument}
      */
     cst() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_cst(this.__wbg_ptr);
-        return takeObject(ret);
+        return ret;
     }
     /**
      * @param {ParsedUsfm} other
@@ -542,9 +581,14 @@ export class ParsedUsfm {
      * @returns {DiffSkeleton}
      */
     diff(other, options) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         _assertClass(other, ParsedUsfm);
-        const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
-        return takeObject(ret);
+        if (other.__wbg_ptr === 0) {
+            throw new Error('Attempt to use a moved value');
+        }
+        const ret = wasm.parsedusfm_diff(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        return ret;
     }
     /**
      * @param {ParsedUsfm} other
@@ -552,9 +596,14 @@ export class ParsedUsfm {
      * @returns {DiffsByChapterMap}
      */
     diffByChapter(other, options) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         _assertClass(other, ParsedUsfm);
-        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
-        return takeObject(ret);
+        if (other.__wbg_ptr === 0) {
+            throw new Error('Attempt to use a moved value');
+        }
+        const ret = wasm.parsedusfm_diffByChapter(this.__wbg_ptr, other.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        return ret;
     }
     /**
      * @param {FormatOptions | null} [options]
@@ -564,16 +613,14 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_format(retptr, this.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            deferred1_0 = r0;
-            deferred1_1 = r1;
-            return getStringFromWasm0(r0, r1);
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
+            const ret = wasm.parsedusfm_format(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
@@ -581,8 +628,10 @@ export class ParsedUsfm {
      * @returns {LintResult}
      */
     lint(options) {
-        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, addHeapObject(options));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.parsedusfm_lint(this.__wbg_ptr, options);
+        return ret;
     }
     /**
      * @param {ParsedUsfm} current
@@ -590,25 +639,21 @@ export class ParsedUsfm {
      * @returns {Token[]}
      */
     revertDiffBlock(current, block_id) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            _assertClass(current, ParsedUsfm);
-            const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-            const len0 = WASM_VECTOR_LEN;
-            wasm.parsedusfm_revertDiffBlock(retptr, this.__wbg_ptr, current.__wbg_ptr, ptr0, len0);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
-            if (r3) {
-                throw takeObject(r2);
-            }
-            var v2 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v2;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertClass(current, ParsedUsfm);
+        if (current.__wbg_ptr === 0) {
+            throw new Error('Attempt to use a moved value');
         }
+        const ptr0 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.parsedusfm_revertDiffBlock(this.__wbg_ptr, current.__wbg_ptr, ptr0, len0);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v2;
     }
     /**
      * @param {HtmlOptions | null} [options]
@@ -618,16 +663,14 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_toHtml(retptr, this.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            deferred1_0 = r0;
-            deferred1_1 = r1;
-            return getStringFromWasm0(r0, r1);
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
+            const ret = wasm.parsedusfm_toHtml(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
@@ -637,35 +680,27 @@ export class ParsedUsfm {
         let deferred1_0;
         let deferred1_1;
         try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_toUsfm(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            deferred1_0 = r0;
-            deferred1_1 = r1;
-            return getStringFromWasm0(r0, r1);
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
+            const ret = wasm.parsedusfm_toUsfm(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
      * @returns {any}
      */
     toUsj() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_toUsj(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return takeObject(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.parsedusfm_toUsj(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
         }
+        return takeFromExternrefTable0(ret[0]);
     }
     /**
      * @returns {string}
@@ -674,24 +709,20 @@ export class ParsedUsfm {
         let deferred2_0;
         let deferred2_1;
         try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_toUsx(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
-            var ptr1 = r0;
-            var len1 = r1;
-            if (r3) {
+            if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+            _assertNum(this.__wbg_ptr);
+            const ret = wasm.parsedusfm_toUsx(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
                 ptr1 = 0; len1 = 0;
-                throw takeObject(r2);
+                throw takeFromExternrefTable0(ret[2]);
             }
             deferred2_0 = ptr1;
             deferred2_1 = len1;
             return getStringFromWasm0(ptr1, len1);
         } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-            wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
         }
     }
     /**
@@ -699,36 +730,38 @@ export class ParsedUsfm {
      * @returns {VrefMap}
      */
     toVref(options) {
-        const ret = wasm.parsedusfm_toVref(this.__wbg_ptr, isLikeNone(options) ? 0 : addHeapObject(options));
-        return takeObject(ret);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.parsedusfm_toVref(this.__wbg_ptr, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        return ret;
     }
     /**
      * @returns {Token[]}
      */
     tokens() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.parsedusfm_tokens(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.parsedusfm_tokens(this.__wbg_ptr);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * @returns {VrefIndex}
      */
     vrefIndex() {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
         const ret = wasm.parsedusfm_vrefIndex(this.__wbg_ptr);
-        return takeObject(ret);
+        return ret;
     }
 }
 if (Symbol.dispose) ParsedUsfm.prototype[Symbol.dispose] = ParsedUsfm.prototype.free;
 
 export class UsfmMarkerCatalog {
+    constructor() {
+        throw new Error('cannot invoke `new` directly');
+    }
     static __wrap(ptr) {
         ptr = ptr >>> 0;
         const obj = Object.create(UsfmMarkerCatalog.prototype);
@@ -750,24 +783,21 @@ export class UsfmMarkerCatalog {
      * @returns {MarkerInfo[]}
      */
     all() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.usfmmarkercatalog_all(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export4(r0, r1 * 4, 4);
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ret = wasm.usfmmarkercatalog_all(this.__wbg_ptr);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
     }
     /**
      * @param {string} marker
      * @returns {boolean}
      */
     contains(marker) {
-        const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.usfmmarkercatalog_contains(this.__wbg_ptr, ptr0, len0);
         return ret !== 0;
@@ -777,10 +807,12 @@ export class UsfmMarkerCatalog {
      * @returns {MarkerInfo | undefined}
      */
     get(marker) {
-        const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.usfmmarkercatalog_get(this.__wbg_ptr, ptr0, len0);
-        return takeObject(ret);
+        return ret;
     }
 }
 if (Symbol.dispose) UsfmMarkerCatalog.prototype[Symbol.dispose] = UsfmMarkerCatalog.prototype.free;
@@ -791,19 +823,12 @@ if (Symbol.dispose) UsfmMarkerCatalog.prototype[Symbol.dispose] = UsfmMarkerCata
  * @returns {Token[]}
  */
 export function applyTokenFix(tokens, fix) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.applyTokenFix(retptr, ptr0, len0, addHeapObject(fix));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v2 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v2;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.applyTokenFix(ptr0, len0, fix);
+    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v2;
 }
 
 /**
@@ -813,12 +838,12 @@ export function applyTokenFix(tokens, fix) {
  * @returns {DiffSkeleton}
  */
 export function diffTokens(left, right, options) {
-    const ptr0 = passArrayJsValueToWasm0(left, wasm.__wbindgen_export);
+    const ptr0 = passArrayJsValueToWasm0(left, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArrayJsValueToWasm0(right, wasm.__wbindgen_export);
+    const ptr1 = passArrayJsValueToWasm0(right, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffTokens(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
-    return takeObject(ret);
+    const ret = wasm.diffTokens(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    return ret;
 }
 
 /**
@@ -828,12 +853,12 @@ export function diffTokens(left, right, options) {
  * @returns {DiffSkeleton}
  */
 export function diffUsfm(left, right, options) {
-    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
-    return takeObject(ret);
+    const ret = wasm.diffUsfm(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    return ret;
 }
 
 /**
@@ -843,46 +868,32 @@ export function diffUsfm(left, right, options) {
  * @returns {DiffsByChapterMap}
  */
 export function diffUsfmByChapter(left, right, options) {
-    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(left, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr1 = passStringToWasm0(right, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addHeapObject(options));
-    return takeObject(ret);
+    const ret = wasm.diffUsfmByChapter(ptr0, len0, ptr1, len1, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    return ret;
 }
 
 /**
  * @returns {FormatRuleMeta[]}
  */
 export function formatRuleMeta() {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.formatRuleMeta(retptr);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v1;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ret = wasm.formatRuleMeta();
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
  * @returns {string[]}
  */
 export function formatRules() {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.formatRules(retptr);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v1;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ret = wasm.formatRules();
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
@@ -891,10 +902,10 @@ export function formatRules() {
  * @returns {FormatResult}
  */
 export function formatTokens(tokens, options) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.formatTokens(ptr0, len0, isLikeNone(options) ? 0 : addHeapObject(options));
-    return takeObject(ret);
+    const ret = wasm.formatTokens(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    return ret;
 }
 
 /**
@@ -903,19 +914,12 @@ export function formatTokens(tokens, options) {
  * @returns {Token[]}
  */
 export function formatTokensMut(tokens, options) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.formatTokensMut(retptr, ptr0, len0, isLikeNone(options) ? 0 : addHeapObject(options));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v2 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v2;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.formatTokensMut(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v2;
 }
 
 /**
@@ -927,18 +931,14 @@ export function formatUsfm(source, options) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(source, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        wasm.formatUsfm(retptr, ptr0, len0, isLikeNone(options) ? 0 : addHeapObject(options));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred2_0 = r0;
-        deferred2_1 = r1;
-        return getStringFromWasm0(r0, r1);
+        const ret = wasm.formatUsfm(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -947,7 +947,7 @@ export function formatUsfm(source, options) {
  * @returns {boolean}
  */
 export function isKnownMarker(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.isKnownMarker(ptr0, len0);
     return ret !== 0;
@@ -957,34 +957,20 @@ export function isKnownMarker(marker) {
  * @returns {LintCodeMeta[]}
  */
 export function lintCodeMeta() {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.lintCodeMeta(retptr);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v1;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ret = wasm.lintCodeMeta();
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
  * @returns {LintCode[]}
  */
 export function lintCodes() {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.lintCodes(retptr);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v1;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ret = wasm.lintCodes();
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
@@ -993,10 +979,10 @@ export function lintCodes() {
  * @returns {LintResult}
  */
 export function lintTokens(tokens, options) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.lintTokens(ptr0, len0, addHeapObject(options));
-    return takeObject(ret);
+    const ret = wasm.lintTokens(ptr0, len0, options);
+    return ret;
 }
 
 /**
@@ -1005,10 +991,10 @@ export function lintTokens(tokens, options) {
  * @returns {LintResult}
  */
 export function lintUsfm(source, options) {
-    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.lintUsfm(ptr0, len0, addHeapObject(options));
-    return takeObject(ret);
+    const ret = wasm.lintUsfm(ptr0, len0, options);
+    return ret;
 }
 
 /**
@@ -1024,10 +1010,10 @@ export function markerCatalog() {
  * @returns {MarkerInfo}
  */
 export function markerInfo(marker) {
-    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(marker, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.markerInfo(ptr0, len0);
-    return takeObject(ret);
+    return ret;
 }
 
 /**
@@ -1037,26 +1023,17 @@ export function markerInfo(marker) {
  * @returns {Token[]}
  */
 export function mergeDiffBlocks(baseline, current, request) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_export);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.mergeDiffBlocks(retptr, ptr0, len0, ptr1, len1, addHeapObject(request));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
-        if (r3) {
-            throw takeObject(r2);
-        }
-        var v3 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v3;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
+    const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.mergeDiffBlocks(ptr0, len0, ptr1, len1, request);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
     }
+    var v3 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v3;
 }
 
 /**
@@ -1065,21 +1042,14 @@ export function mergeDiffBlocks(baseline, current, request) {
  * @returns {Token[]}
  */
 export function normalizeTokenSids(tokens, book_code) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(book_code, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.normalizeTokenSids(retptr, ptr0, len0, ptr1, len1);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var v3 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v3;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(book_code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.normalizeTokenSids(ptr0, len0, ptr1, len1);
+    var v3 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v3;
 }
 
 /**
@@ -1087,7 +1057,7 @@ export function normalizeTokenSids(tokens, book_code) {
  * @returns {ParsedUsfm}
  */
 export function parse(source) {
-    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.parse(ptr0, len0);
     return ParsedUsfm.__wrap(ret);
@@ -1100,28 +1070,19 @@ export function parse(source) {
  * @returns {Token[]}
  */
 export function revertDiffBlock(baseline, current, block_id) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_export);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_export);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(block_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len2 = WASM_VECTOR_LEN;
-        wasm.revertDiffBlock(retptr, ptr0, len0, ptr1, len1, ptr2, len2);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
-        if (r3) {
-            throw takeObject(r2);
-        }
-        var v4 = getArrayJsValueFromWasm0(r0, r1).slice();
-        wasm.__wbindgen_export4(r0, r1 * 4, 4);
-        return v4;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
+    const ptr0 = passArrayJsValueToWasm0(baseline, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayJsValueToWasm0(current, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(block_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.revertDiffBlock(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
     }
+    var v4 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v4;
 }
 
 /**
@@ -1133,18 +1094,14 @@ export function tokensToHtml(tokens, options) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
+        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        wasm.tokensToHtml(retptr, ptr0, len0, isLikeNone(options) ? 0 : addHeapObject(options));
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred2_0 = r0;
-        deferred2_1 = r1;
-        return getStringFromWasm0(r0, r1);
+        const ret = wasm.tokensToHtml(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -1156,18 +1113,14 @@ export function tokensToUsfm(tokens) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
+        const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        wasm.tokensToUsfm(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred2_0 = r0;
-        deferred2_1 = r1;
-        return getStringFromWasm0(r0, r1);
+        const ret = wasm.tokensToUsfm(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export4(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -1190,12 +1143,12 @@ export function tokensToUsfm(tokens) {
  * @returns {PackedBookOutcome}
  */
 export function verifyPackedBook(packed, source) {
-    const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
+    const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArray8ToWasm0(source, wasm.__wbindgen_export);
+    const ptr1 = passArray8ToWasm0(source, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.verifyPackedBook(ptr0, len0, ptr1, len1);
-    return takeObject(ret);
+    return ret;
 }
 
 /**
@@ -1221,14 +1174,14 @@ export function verifyPackedBook(packed, source) {
  * @returns {PublishedCorpusOutcome}
  */
 export function verifyPublishedCorpus(packed, sources, records) {
-    const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
+    const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
+    const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+    const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_malloc);
     const len2 = WASM_VECTOR_LEN;
     const ret = wasm.verifyPublishedCorpus(ptr0, len0, ptr1, len1, ptr2, len2);
-    return takeObject(ret);
+    return ret;
 }
 
 /**
@@ -1239,10 +1192,10 @@ export function verifyPublishedCorpus(packed, sources, records) {
  * @returns {VrefIndex}
  */
 export function vrefIndexTokens(tokens) {
-    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_export);
+    const ptr0 = passArrayJsValueToWasm0(tokens, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.vrefIndexTokens(ptr0, len0);
-    return takeObject(ret);
+    return ret;
 }
 
 /**
@@ -1250,87 +1203,108 @@ export function vrefIndexTokens(tokens) {
  * @returns {VrefIndex}
  */
 export function vrefIndexUsfm(source) {
-    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.vrefIndexUsfm(ptr0, len0);
-    return takeObject(ret);
-}
-export function __wbg_Error_83742b46f01ce22d(arg0, arg1) {
-    const ret = Error(getStringFromWasm0(arg0, arg1));
-    return addHeapObject(ret);
-}
-export function __wbg_Number_a5a435bd7bbec835(arg0) {
-    const ret = Number(getObject(arg0));
     return ret;
 }
-export function __wbg_String_8564e559799eccda(arg0, arg1) {
-    const ret = String(getObject(arg1));
-    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+
+//#endregion
+
+//#region wasm imports
+export function __wbg_Error_83742b46f01ce22d() { return logError(function (arg0, arg1) {
+    const ret = Error(getStringFromWasm0(arg0, arg1));
+    return ret;
+}, arguments); }
+export function __wbg_Number_a5a435bd7bbec835() { return logError(function (arg0) {
+    const ret = Number(arg0);
+    return ret;
+}, arguments); }
+export function __wbg_String_8564e559799eccda() { return logError(function (arg0, arg1) {
+    const ret = String(arg1);
+    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-}
+}, arguments); }
 export function __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda(arg0, arg1) {
-    const v = getObject(arg1);
+    const v = arg1;
     const ret = typeof(v) === 'bigint' ? v : undefined;
+    if (!isLikeNone(ret)) {
+        _assertBigInt(ret);
+    }
     getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
 }
 export function __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1(arg0) {
-    const v = getObject(arg0);
+    const v = arg0;
     const ret = typeof(v) === 'boolean' ? v : undefined;
+    if (!isLikeNone(ret)) {
+        _assertBoolean(ret);
+    }
     return isLikeNone(ret) ? 0xFFFFFF : ret ? 1 : 0;
 }
 export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
-    const ret = debugString(getObject(arg1));
-    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const ret = debugString(arg1);
+    const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
 }
 export function __wbg___wbindgen_in_41dbb8413020e076(arg0, arg1) {
-    const ret = getObject(arg0) in getObject(arg1);
+    const ret = arg0 in arg1;
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_bigint_e2141d4f045b7eda(arg0) {
-    const ret = typeof(getObject(arg0)) === 'bigint';
+    const ret = typeof(arg0) === 'bigint';
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_function_3c846841762788c1(arg0) {
-    const ret = typeof(getObject(arg0)) === 'function';
+    const ret = typeof(arg0) === 'function';
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_object_781bc9f159099513(arg0) {
-    const val = getObject(arg0);
+    const val = arg0;
     const ret = typeof(val) === 'object' && val !== null;
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_string_7ef6b97b02428fae(arg0) {
-    const ret = typeof(getObject(arg0)) === 'string';
+    const ret = typeof(arg0) === 'string';
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_is_undefined_52709e72fb9f179c(arg0) {
-    const ret = getObject(arg0) === undefined;
+    const ret = arg0 === undefined;
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_jsval_eq_ee31bfad3e536463(arg0, arg1) {
-    const ret = getObject(arg0) === getObject(arg1);
+    const ret = arg0 === arg1;
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b(arg0, arg1) {
-    const ret = getObject(arg0) == getObject(arg1);
+    const ret = arg0 == arg1;
+    _assertBoolean(ret);
     return ret;
 }
 export function __wbg___wbindgen_number_get_34bb9d9dcfa21373(arg0, arg1) {
-    const obj = getObject(arg1);
+    const obj = arg1;
     const ret = typeof(obj) === 'number' ? obj : undefined;
+    if (!isLikeNone(ret)) {
+        _assertNum(ret);
+    }
     getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
 }
 export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
-    const obj = getObject(arg1);
+    const obj = arg1;
     const ret = typeof(obj) === 'string' ? obj : undefined;
-    var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len1 = WASM_VECTOR_LEN;
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
@@ -1339,160 +1313,172 @@ export function __wbg___wbindgen_throw_6ddd609b62940d55(arg0, arg1) {
     throw new Error(getStringFromWasm0(arg0, arg1));
 }
 export function __wbg_call_e133b57c9155d22c() { return handleError(function (arg0, arg1) {
-    const ret = getObject(arg0).call(getObject(arg1));
-    return addHeapObject(ret);
-}, arguments); }
-export function __wbg_done_08ce71ee07e3bd17(arg0) {
-    const ret = getObject(arg0).done;
+    const ret = arg0.call(arg1);
     return ret;
-}
-export function __wbg_entries_e8a20ff8c9757101(arg0) {
-    const ret = Object.entries(getObject(arg0));
-    return addHeapObject(ret);
-}
-export function __wbg_from_4bdf88943703fd48(arg0) {
-    const ret = Array.from(getObject(arg0));
-    return addHeapObject(ret);
-}
+}, arguments); }
+export function __wbg_done_08ce71ee07e3bd17() { return logError(function (arg0) {
+    const ret = arg0.done;
+    _assertBoolean(ret);
+    return ret;
+}, arguments); }
+export function __wbg_entries_e8a20ff8c9757101() { return logError(function (arg0) {
+    const ret = Object.entries(arg0);
+    return ret;
+}, arguments); }
+export function __wbg_from_4bdf88943703fd48() { return logError(function (arg0) {
+    const ret = Array.from(arg0);
+    return ret;
+}, arguments); }
 export function __wbg_get_326e41e095fb2575() { return handleError(function (arg0, arg1) {
-    const ret = Reflect.get(getObject(arg0), getObject(arg1));
-    return addHeapObject(ret);
+    const ret = Reflect.get(arg0, arg1);
+    return ret;
 }, arguments); }
-export function __wbg_get_a8ee5c45dabc1b3b(arg0, arg1) {
-    const ret = getObject(arg0)[arg1 >>> 0];
-    return addHeapObject(ret);
-}
-export function __wbg_get_unchecked_329cfe50afab7352(arg0, arg1) {
-    const ret = getObject(arg0)[arg1 >>> 0];
-    return addHeapObject(ret);
-}
-export function __wbg_get_with_ref_key_6412cf3094599694(arg0, arg1) {
-    const ret = getObject(arg0)[getObject(arg1)];
-    return addHeapObject(ret);
-}
-export function __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6(arg0) {
+export function __wbg_get_a8ee5c45dabc1b3b() { return logError(function (arg0, arg1) {
+    const ret = arg0[arg1 >>> 0];
+    return ret;
+}, arguments); }
+export function __wbg_get_unchecked_329cfe50afab7352() { return logError(function (arg0, arg1) {
+    const ret = arg0[arg1 >>> 0];
+    return ret;
+}, arguments); }
+export function __wbg_get_with_ref_key_6412cf3094599694() { return logError(function (arg0, arg1) {
+    const ret = arg0[arg1];
+    return ret;
+}, arguments); }
+export function __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6() { return logError(function (arg0) {
     let result;
     try {
-        result = getObject(arg0) instanceof ArrayBuffer;
+        result = arg0 instanceof ArrayBuffer;
     } catch (_) {
         result = false;
     }
     const ret = result;
+    _assertBoolean(ret);
     return ret;
-}
-export function __wbg_instanceof_Map_f194b366846aca0c(arg0) {
+}, arguments); }
+export function __wbg_instanceof_Map_f194b366846aca0c() { return logError(function (arg0) {
     let result;
     try {
-        result = getObject(arg0) instanceof Map;
+        result = arg0 instanceof Map;
     } catch (_) {
         result = false;
     }
     const ret = result;
+    _assertBoolean(ret);
     return ret;
-}
-export function __wbg_instanceof_Uint8Array_740438561a5b956d(arg0) {
+}, arguments); }
+export function __wbg_instanceof_Uint8Array_740438561a5b956d() { return logError(function (arg0) {
     let result;
     try {
-        result = getObject(arg0) instanceof Uint8Array;
+        result = arg0 instanceof Uint8Array;
     } catch (_) {
         result = false;
     }
     const ret = result;
+    _assertBoolean(ret);
     return ret;
-}
-export function __wbg_isArray_33b91feb269ff46e(arg0) {
-    const ret = Array.isArray(getObject(arg0));
+}, arguments); }
+export function __wbg_isArray_33b91feb269ff46e() { return logError(function (arg0) {
+    const ret = Array.isArray(arg0);
+    _assertBoolean(ret);
     return ret;
-}
-export function __wbg_isSafeInteger_ecd6a7f9c3e053cd(arg0) {
-    const ret = Number.isSafeInteger(getObject(arg0));
+}, arguments); }
+export function __wbg_isSafeInteger_ecd6a7f9c3e053cd() { return logError(function (arg0) {
+    const ret = Number.isSafeInteger(arg0);
+    _assertBoolean(ret);
     return ret;
-}
-export function __wbg_iterator_d8f549ec8fb061b1() {
+}, arguments); }
+export function __wbg_iterator_d8f549ec8fb061b1() { return logError(function () {
     const ret = Symbol.iterator;
-    return addHeapObject(ret);
-}
-export function __wbg_length_b3416cf66a5452c8(arg0) {
-    const ret = getObject(arg0).length;
     return ret;
-}
-export function __wbg_length_ea16607d7b61445b(arg0) {
-    const ret = getObject(arg0).length;
-    return ret;
-}
-export function __wbg_new_49d5571bd3f0c4d4() {
-    const ret = new Map();
-    return addHeapObject(ret);
-}
-export function __wbg_new_5f486cdf45a04d78(arg0) {
-    const ret = new Uint8Array(getObject(arg0));
-    return addHeapObject(ret);
-}
-export function __wbg_new_a70fbab9066b301f() {
-    const ret = new Array();
-    return addHeapObject(ret);
-}
-export function __wbg_new_ab79df5bd7c26067() {
-    const ret = new Object();
-    return addHeapObject(ret);
-}
-export function __wbg_next_11b99ee6237339e3() { return handleError(function (arg0) {
-    const ret = getObject(arg0).next();
-    return addHeapObject(ret);
 }, arguments); }
-export function __wbg_next_e01a967809d1aa68(arg0) {
-    const ret = getObject(arg0).next;
-    return addHeapObject(ret);
-}
-export function __wbg_prototypesetcall_d62e5099504357e6(arg0, arg1, arg2) {
-    Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), getObject(arg2));
-}
-export function __wbg_set_282384002438957f(arg0, arg1, arg2) {
-    getObject(arg0)[arg1 >>> 0] = takeObject(arg2);
-}
-export function __wbg_set_6be42768c690e380(arg0, arg1, arg2) {
-    getObject(arg0)[takeObject(arg1)] = takeObject(arg2);
-}
-export function __wbg_set_bf7251625df30a02(arg0, arg1, arg2) {
-    const ret = getObject(arg0).set(getObject(arg1), getObject(arg2));
-    return addHeapObject(ret);
-}
-export function __wbg_value_21fc78aab0322612(arg0) {
-    const ret = getObject(arg0).value;
-    return addHeapObject(ret);
-}
-export function __wbindgen_cast_0000000000000001(arg0) {
+export function __wbg_length_b3416cf66a5452c8() { return logError(function (arg0) {
+    const ret = arg0.length;
+    _assertNum(ret);
+    return ret;
+}, arguments); }
+export function __wbg_length_ea16607d7b61445b() { return logError(function (arg0) {
+    const ret = arg0.length;
+    _assertNum(ret);
+    return ret;
+}, arguments); }
+export function __wbg_new_49d5571bd3f0c4d4() { return logError(function () {
+    const ret = new Map();
+    return ret;
+}, arguments); }
+export function __wbg_new_5f486cdf45a04d78() { return logError(function (arg0) {
+    const ret = new Uint8Array(arg0);
+    return ret;
+}, arguments); }
+export function __wbg_new_a70fbab9066b301f() { return logError(function () {
+    const ret = new Array();
+    return ret;
+}, arguments); }
+export function __wbg_new_ab79df5bd7c26067() { return logError(function () {
+    const ret = new Object();
+    return ret;
+}, arguments); }
+export function __wbg_next_11b99ee6237339e3() { return handleError(function (arg0) {
+    const ret = arg0.next();
+    return ret;
+}, arguments); }
+export function __wbg_next_e01a967809d1aa68() { return logError(function (arg0) {
+    const ret = arg0.next;
+    return ret;
+}, arguments); }
+export function __wbg_prototypesetcall_d62e5099504357e6() { return logError(function (arg0, arg1, arg2) {
+    Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
+}, arguments); }
+export function __wbg_set_282384002438957f() { return logError(function (arg0, arg1, arg2) {
+    arg0[arg1 >>> 0] = arg2;
+}, arguments); }
+export function __wbg_set_6be42768c690e380() { return logError(function (arg0, arg1, arg2) {
+    arg0[arg1] = arg2;
+}, arguments); }
+export function __wbg_set_bf7251625df30a02() { return logError(function (arg0, arg1, arg2) {
+    const ret = arg0.set(arg1, arg2);
+    return ret;
+}, arguments); }
+export function __wbg_value_21fc78aab0322612() { return logError(function (arg0) {
+    const ret = arg0.value;
+    return ret;
+}, arguments); }
+export function __wbindgen_cast_0000000000000001() { return logError(function (arg0) {
     // Cast intrinsic for `F64 -> Externref`.
     const ret = arg0;
-    return addHeapObject(ret);
-}
-export function __wbindgen_cast_0000000000000002(arg0) {
+    return ret;
+}, arguments); }
+export function __wbindgen_cast_0000000000000002() { return logError(function (arg0) {
     // Cast intrinsic for `I64 -> Externref`.
     const ret = arg0;
-    return addHeapObject(ret);
-}
-export function __wbindgen_cast_0000000000000003(arg0, arg1) {
+    return ret;
+}, arguments); }
+export function __wbindgen_cast_0000000000000003() { return logError(function (arg0, arg1) {
     // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
     const ret = getArrayU8FromWasm0(arg0, arg1);
-    return addHeapObject(ret);
-}
-export function __wbindgen_cast_0000000000000004(arg0, arg1) {
+    return ret;
+}, arguments); }
+export function __wbindgen_cast_0000000000000004() { return logError(function (arg0, arg1) {
     // Cast intrinsic for `Ref(String) -> Externref`.
     const ret = getStringFromWasm0(arg0, arg1);
-    return addHeapObject(ret);
-}
-export function __wbindgen_cast_0000000000000005(arg0) {
+    return ret;
+}, arguments); }
+export function __wbindgen_cast_0000000000000005() { return logError(function (arg0) {
     // Cast intrinsic for `U64 -> Externref`.
     const ret = BigInt.asUintN(64, arg0);
-    return addHeapObject(ret);
+    return ret;
+}, arguments); }
+export function __wbindgen_init_externref_table() {
+    const table = wasm.__wbindgen_externrefs;
+    const offset = table.grow(4);
+    table.set(0, undefined);
+    table.set(offset + 0, undefined);
+    table.set(offset + 1, null);
+    table.set(offset + 2, true);
+    table.set(offset + 3, false);
 }
-export function __wbindgen_object_clone_ref(arg0) {
-    const ret = getObject(arg0);
-    return addHeapObject(ret);
-}
-export function __wbindgen_object_drop_ref(arg0) {
-    takeObject(arg0);
-}
+
+//#endregion
 const BraidFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_braid_free(ptr >>> 0, 1));
@@ -1503,19 +1489,32 @@ const UsfmMarkerCatalogFinalization = (typeof FinalizationRegistry === 'undefine
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_usfmmarkercatalog_free(ptr >>> 0, 1));
 
-function addHeapObject(obj) {
-    if (heap_next === heap.length) heap.push(heap.length + 1);
-    const idx = heap_next;
-    heap_next = heap[idx];
 
-    heap[idx] = obj;
+//#region intrinsics
+function addToExternrefTable0(obj) {
+    const idx = wasm.__externref_table_alloc();
+    wasm.__wbindgen_externrefs.set(idx, obj);
     return idx;
+}
+
+function _assertBigInt(n) {
+    if (typeof(n) !== 'bigint') throw new Error(`expected a bigint argument, found ${typeof(n)}`);
+}
+
+function _assertBoolean(n) {
+    if (typeof(n) !== 'boolean') {
+        throw new Error(`expected a boolean argument, found ${typeof(n)}`);
+    }
 }
 
 function _assertClass(instance, klass) {
     if (!(instance instanceof klass)) {
         throw new Error(`expected instance of ${klass.name}`);
     }
+}
+
+function _assertNum(n) {
+    if (typeof(n) !== 'number') throw new Error(`expected a number argument, found ${typeof(n)}`);
 }
 
 function debugString(val) {
@@ -1583,19 +1582,14 @@ function debugString(val) {
     return className;
 }
 
-function dropObject(idx) {
-    if (idx < 1028) return;
-    heap[idx] = heap_next;
-    heap_next = idx;
-}
-
 function getArrayJsValueFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     const mem = getDataViewMemory0();
     const result = [];
     for (let i = ptr; i < ptr + 4 * len; i += 4) {
-        result.push(takeObject(mem.getUint32(i, true)));
+        result.push(wasm.__wbindgen_externrefs.get(mem.getUint32(i, true)));
     }
+    wasm.__externref_drop_slice(ptr, len);
     return result;
 }
 
@@ -1625,23 +1619,33 @@ function getUint8ArrayMemory0() {
     return cachedUint8ArrayMemory0;
 }
 
-function getObject(idx) { return heap[idx]; }
-
 function handleError(f, args) {
     try {
         return f.apply(this, args);
     } catch (e) {
-        wasm.__wbindgen_export3(addHeapObject(e));
+        const idx = addToExternrefTable0(e);
+        wasm.__wbindgen_exn_store(idx);
     }
 }
 
-let heap = new Array(1024).fill(undefined);
-heap.push(undefined, null, true, false);
-
-let heap_next = heap.length;
-
 function isLikeNone(x) {
     return x === undefined || x === null;
+}
+
+function logError(f, args) {
+    try {
+        return f.apply(this, args);
+    } catch (e) {
+        let error = (function () {
+            try {
+                return e instanceof Error ? `${e.message}\n\nStack:\n${e.stack}` : e.toString();
+            } catch(_) {
+                return "<failed to stringify thrown value>";
+            }
+        }());
+        console.error("wasm-bindgen: imported JS function that was not marked as `catch` threw an error:", error);
+        throw e;
+    }
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -1653,15 +1657,16 @@ function passArray8ToWasm0(arg, malloc) {
 
 function passArrayJsValueToWasm0(array, malloc) {
     const ptr = malloc(array.length * 4, 4) >>> 0;
-    const mem = getDataViewMemory0();
     for (let i = 0; i < array.length; i++) {
-        mem.setUint32(ptr + 4 * i, addHeapObject(array[i]), true);
+        const add = addToExternrefTable0(array[i]);
+        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
     }
     WASM_VECTOR_LEN = array.length;
     return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
+    if (typeof(arg) !== 'string') throw new Error(`expected a string argument, found ${typeof(arg)}`);
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
         const ptr = malloc(buf.length, 1) >>> 0;
@@ -1689,7 +1694,7 @@ function passStringToWasm0(arg, malloc, realloc) {
         ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
         const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
         const ret = cachedTextEncoder.encodeInto(arg, view);
-
+        if (ret.read !== arg.length) throw new Error('failed to pass whole string');
         offset += ret.written;
         ptr = realloc(ptr, len, offset, 1) >>> 0;
     }
@@ -1698,10 +1703,10 @@ function passStringToWasm0(arg, malloc, realloc) {
     return ptr;
 }
 
-function takeObject(idx) {
-    const ret = getObject(idx);
-    dropObject(idx);
-    return ret;
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
 }
 
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
@@ -1734,7 +1739,13 @@ if (!('encodeInto' in cachedTextEncoder)) {
 let WASM_VECTOR_LEN = 0;
 
 
+//#endregion
+
+//#region wasm loading
+
 let wasm;
 export function __wbg_set_wasm(val) {
     wasm = val;
 }
+
+//#endregion

@@ -564,4 +564,61 @@ const suppressingConfig = {
   checks += 1;
 }
 
+// --- undefined tolerance: own properties holding `undefined` -------------
+// The legacy JSON serializer erased `{ attributes: undefined }` before the
+// boundary; serde-wasm-bindgen reads it with Reflect.get and hands it to the
+// field's deserializer. Structured clone PRESERVES such properties, so
+// editor tokens genuinely arrive in this shape (v0.1.5 regression, reported
+// by the editor: TypeError out of tokensToUsfm/lintTokens). Every declared
+// `?:` field must accept present-but-undefined, and defaultable options
+// members must too.
+{
+  const parsed = wasm.parse(GEN);
+  const tokens = parsed.tokens();
+  const optional = [
+    "span",
+    "sid",
+    "marker",
+    "nested",
+    "markerMetadata",
+    "structural",
+    "numberInfo",
+    "bookCode",
+    "bookCodeValid",
+    "attributes",
+    "attributeSource",
+    "attributeOffset",
+  ];
+  const undef = tokens.map((token) => {
+    const out = { ...token };
+    for (const field of optional) out[field] = out[field] ?? undefined;
+    return out;
+  });
+  assert.ok(
+    undef.some((token) => Object.hasOwn(token, "attributes") && token.attributes === undefined),
+    "undefined tolerance: fixture actually carries own-property undefined (not a vacuous pass)",
+  );
+  const viaClean = wasm.tokensToUsfm(tokens);
+  assert.equal(
+    wasm.tokensToUsfm(undef),
+    viaClean,
+    "undefined tolerance: tokensToUsfm treats present-but-undefined as absent",
+  );
+  const lintClean = wasm.lintTokens(tokens, { scope: "book" });
+  const lintUndef = wasm.lintTokens(undef, {
+    scope: "book",
+    enabledCodes: undefined,
+    disabledCodes: undefined,
+    suppressed: undefined,
+    allowImplicitChapterContentVerse: undefined,
+  });
+  assert.deepEqual(
+    lintUndef.summary,
+    lintClean.summary,
+    "undefined tolerance: lintTokens summary identical with undefined-holding tokens and options",
+  );
+  wasm.tokensToHtml(tokens, { wrapRoot: undefined });
+  checks += 1;
+}
+
 console.log(`${target} publish round trip passed: ${checks} checks`);

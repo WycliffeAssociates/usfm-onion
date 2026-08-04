@@ -6130,3 +6130,36 @@ one final time before `git status`/commit -- same discipline every prior addendu
 followed.
 
 No version bump for this addendum -- additive within the already-released-to-branch v0.1.5.
+
+### v0.1.5 post-tag regression fix — undefined-holding own properties at the boundary (2026-08-04)
+
+Editor-reported runtime regression from the tsify js-feature migration:
+`TypeError: Reflect.get called on non-object` out of `tokensToUsfm`/`lintTokens`.
+Root cause (editor's diagnosis, verified): the legacy `json` path ran
+`JSON.stringify`, which silently erased own properties holding `undefined`;
+serde-wasm-bindgen reads each own property with `Reflect.get` and hands
+`undefined` to the field's deserializer — fatal for every non-`Option`
+`#[serde(default)]` field (a sequence read from `undefined` throws first).
+`Token.attributes` (bare `Vec` among `Option` siblings, wire dto.rs) was the
+reported field; the sweep found the same class on `AttributeItem.is_default`,
+`DiffOptions.text_diff`, `LintOptions.disabled_codes`/`suppressed`/
+`allow_implicit_chapter_content_verse`, and `HtmlOptions.wrap_root`.
+
+Fix: one shared `undefined_is_default` deserializer (wire dto.rs, routed
+through `Option` then `unwrap_or_default`) applied to every such field —
+restores the exact legacy tolerance (present-but-undefined == absent) without
+changing any declared TS type or native Rust field type. Structured clone
+preserves undefined-holding properties, so editor worker tokens genuinely
+arrive in this shape; the editor also fixed its emit side independently.
+
+New permanent gate: "undefined tolerance" section in
+test-publish-round-trip.mjs (both targets) — every optional Token field set
+to an explicit own-property `undefined` must round-trip `tokensToUsfm`
+byte-identically to the clean stream and lint to an identical summary,
+options members included; fixture pinned non-vacuous. Battery rerun green:
+workspace 675/0 (-D warnings, all-features), rustdoc, fmt, oracle
+byte-identical, packed 410, parity 94×2/0, publish 33 (+1), publish:js 27,
+golden 7/7. Lesson (standing, joins the serializer-flip family): a
+serializer migration's compatibility surface includes VALUES the old path
+silently erased, not just shapes it emitted — gates that only feed
+well-formed inputs cannot see it; the editor's real traffic was the gate.
