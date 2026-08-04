@@ -302,13 +302,30 @@ export class Braid {
      * A book whose cached findings cannot be adopted still seeds: residency and
      * lint-priming are independent facts, so that book arrives with no lex or parse
      * and is simply awaiting recompute.
+     *
+     * `packed_all`/`sources` are two single buffers -- every record's own
+     * container concatenated into the first, every record's own source
+     * concatenated into the second -- with `records` naming each one's
+     * extent into whichever buffer it belongs to (v0.1.5, bytes-at-boundary
+     * convention: this is the exact shape [`Braid::publish_scope`]'s output
+     * already is, so it forwards here with zero reshaping -- see
+     * [`ScopedPublication`]'s own doc comment). An extent that falls
+     * outside its buffer, or whose own end overflows computing it, is
+     * refused (`RestoreError::InvalidExtent`, naming the record's own
+     * `path`) before any native call -- never clamped, never truncated.
+     * @param {Uint8Array} packed_all
+     * @param {Uint8Array} sources
      * @param {RestoreRecord[]} records
      * @returns {RestoreOutcome}
      */
-    restoreCorpus(records) {
-        const ptr0 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+    restoreCorpus(packed_all, sources, records) {
+        const ptr0 = passArray8ToWasm0(packed_all, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0);
+        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
         return takeObject(ret);
     }
     /**
@@ -316,24 +333,32 @@ export class Braid {
      * container -- the corpus-grain counterpart to [`Self::publish`], as
      * [`Self::restore_corpus`] is to a per-book publication.
      *
-     * `records` supplies each book's own source key and exact bound source
-     * (a packed container names the book but never the key a corpus was
-     * addressed by, and a freshly-encoded book's bound source is wire's own
-     * serialization, not necessarily any file on disk -- see
-     * [`PublishedBookInfo::source`]). Verification is corpus-wide
-     * (`verify_corpus`): every book must have exactly one source supplied,
-     * and findings that carry stamps must all carry the *same* stamps,
-     * checked atomically before anything installs.
+     * `packed` is the one whole-corpus container (a single `Uint8Array`
+     * argument, one memcpy). `sources` is every named book's source bytes
+     * concatenated into one buffer; `records` supplies each book's own
+     * declared code, its source key (a packed container names the book but
+     * never the key a corpus was originally addressed by), and its own
+     * extent into `sources` (v0.1.5, bytes-at-boundary convention -- see
+     * [`crate::bytes`]). An extent outside `sources`, or one whose own end
+     * overflows computing it, refuses by name
+     * (`RestoreError::InvalidExtent`, naming the record's own `book`)
+     * before any native call. Verification is corpus-wide (`verify_corpus`):
+     * every book must have exactly one source supplied, and findings that
+     * carry stamps must all carry the *same* stamps, checked atomically
+     * before anything installs.
      * @param {Uint8Array} packed
-     * @param {PublishedCorpusSource[]} records
+     * @param {Uint8Array} sources
+     * @param {PublishedCorpusRecord[]} records
      * @returns {RestoreOutcome}
      */
-    restorePublishedCorpus(packed, records) {
+    restorePublishedCorpus(packed, sources, records) {
         const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
         return takeObject(ret);
     }
     /**
@@ -1180,21 +1205,29 @@ export function verifyPackedBook(packed, source) {
  * that wants to validate a `corpus.bin` before deciding whether to restore
  * it into a resident handle at all.
  *
+ * `packed` is the one whole-corpus container. `sources` is every named
+ * book's source bytes concatenated into one buffer; `records` names each
+ * book's own extent into it -- the same buffer-plus-extents pairing
+ * [`crate::resident::Braid::restore_published_corpus`] takes.
+ *
  * Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
  * (container/section structure, both integrity checksums, exact source
  * length and content hash, the marker-catalog stamp, the all-or-none lint
  * stamp invariant), and nothing more: no resident state is read or
  * mutated, and no token crosses this boundary.
  * @param {Uint8Array} packed
- * @param {PublishedCorpusSourceInput[]} sources
+ * @param {Uint8Array} sources
+ * @param {PublishedCorpusRecord[]} records
  * @returns {PublishedCorpusOutcome}
  */
-export function verifyPublishedCorpus(packed, sources) {
+export function verifyPublishedCorpus(packed, sources, records) {
     const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArrayJsValueToWasm0(sources, wasm.__wbindgen_export);
+    const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.verifyPublishedCorpus(ptr0, len0, ptr1, len1);
+    const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.verifyPublishedCorpus(ptr0, len0, ptr1, len1, ptr2, len2);
     return takeObject(ret);
 }
 

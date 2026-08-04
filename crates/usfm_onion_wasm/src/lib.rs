@@ -38,6 +38,10 @@ pub use usfm_onion_wire::dto::{
     UnitTextDiff, format_sid, map_marker_info,
 };
 
+/// Boundary-only byte-extent glue (v0.1.5, bytes-at-boundary convention) --
+/// see the module's own doc comment for why bytes never cross this boundary
+/// as JS number arrays.
+pub mod bytes;
 pub mod dto;
 pub mod resident;
 pub mod stateless;
@@ -48,6 +52,7 @@ pub mod stateless;
 #[cfg(test)]
 mod parity;
 
+pub use crate::bytes::ByteExtent;
 pub use crate::dto::*;
 pub use crate::stateless::*;
 

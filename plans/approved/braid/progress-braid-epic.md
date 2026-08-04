@@ -5794,3 +5794,123 @@ pkg-web` and rebuilt release before proceeding, with a direct `test:parity` re-c
 web) against the exact release-built tree as the last step before `git status`/commit.
 
 No version bump for this addendum — additive within the already-released-to-branch v0.1.5.
+
+### Addendum (same day, same v0.1.5, no new version number) — bytes-at-boundary convention
+
+Owner-approved RFC addendum: a stated convention for how byte payloads cross the wasm boundary
+on the corpus-grain restore/verify/publish verbs, plus the code changes needed to actually live
+by it. No native `braid` API change (`restore_corpus`/`restore_published_corpus`/
+`publish_scope` keep their existing signatures); this is glue-layer and JS-layer work in
+`usfm_onion_wasm`/`js/packed.js`, plus one adversarial hardening pass.
+
+**The convention, stated plainly:** a corpus-grain byte payload never crosses this boundary as a
+per-book `Vec<u8>`/`number[]` again. Every multi-book verb takes (or returns) exactly two
+buffers — one for every book's packed container concatenated, one for every book's source
+concatenated — plus a `records: Vec<{book|path, byteOffset, byteLength, ...}>` naming each
+book's own extent into whichever buffer it belongs to. `crates/usfm_onion_wasm/src/bytes.rs`
+(new file) is the one shared implementation of that extent-slicing: `slice_extent`/
+`slice_extent_str`, each refusing — not clamping, not truncating, not panicking — on an
+out-of-bounds or overflowing extent (`byte_offset + byte_length` computed via `checked_add`,
+compared against the buffer's own length, both before any slicing is attempted) or, for the
+`_str` form, on invalid UTF-8. Every one of `restore_corpus`, `restore_published_corpus`, and
+the new `verifyPublishedCorpus` (`stateless.rs`, rewritten from a per-book `Vec<u8>` array to
+this same buffer-plus-records shape) refuses through this one function, naming the offending
+book/path in a `RestoreError::InvalidExtent { book }` (or the stateless equivalent) rather than
+ever reaching a native call with a bad slice. Both `packed`'s and `source`'s extents go through
+`slice_extent_str`, not the plain byte form, specifically so an invalid-UTF-8 source refuses
+*at this boundary*, naming the book — reaching native's own decode check instead would still
+refuse, but with no book identifier attached, since `braid::RestoreError::Decode` carries none.
+
+**Transferability, the actual motivation.** A plain JS `number[]` structured-clones by *copying*
+across a postMessage hop (main thread ↔ worker); a `Uint8Array`'s backing `ArrayBuffer` can be
+*transferred* (zero-copy, ownership moves). Concatenating every in-scope book's bytes into one
+buffer per side (rather than one `Uint8Array` per book) is what makes a whole scoped publication
+transferable as exactly two objects regardless of corpus size — the corpus-scale case (66+
+books) this exists for would otherwise mean 66+ separate transfer/copy operations per
+`publishScope` call.
+
+**Key symmetry: `publishScope` -> `restoreCorpus` verbatim-forward.** `ScopedPublication`
+(`resident.rs`, new struct) is deliberately byte-for-byte `restore_corpus`'s own input shape:
+`packed`/`sources` forward as `restoreCorpus`'s first two arguments unchanged, and
+`books: Vec<ScopedPublishedBook>` forwards as `records` after only a trivial per-book field
+rename (`sourceHash`/`packed`/`source` -> `sourceKey`/`packed`/`source`) — zero reshaping of
+either extent on either side. This is proven, not asserted: `scripts/test-publish-round-trip.mjs`
+now runs a dedicated verbatim-forward round trip (`publishScope` on one handle, straight into
+`restoreCorpus` on a second, fresh handle, with token/finding equality checked against the
+first) alongside the existing `publishScope` -> pure-JS-materialize lane, plus a whole
+adversarial section: out-of-bounds packed/source extents, an overflow-scale
+(`0xffffffff`/`0xffffffff`) extent, and an invalid-UTF-8 source extent, each proven to refuse by
+name rather than throw, run through `restoreCorpus`, `verifyPublishedCorpus`,
+`restorePublishedCorpus`, and the pure-JS `verifyPackedCorpus` in `js/packed.js` alike.
+
+**`PublishedCorpusSourceInput`/`PublishedCorpusSource` (the old per-book `{book, source:
+Vec<u8>}` verify-input shape) deleted, not deprecated.** It existed only to feed the old
+per-book-array `verifyPublishedCorpus`; once that function takes the buffer-plus-records shape
+instead, the per-book wrapper struct has no remaining caller in this crate and there is no
+migration value in keeping a now-provably-dead type around "just in case." `js/packed.js`'s
+`verifyPublishedPacked`/`verifyPackedCorpus` were rewritten in step: both gained a
+`sliceExtent(buf, extent)` helper that mirrors the Rust glue's own refuse-don't-clamp discipline
+(JS `TypedArray#subarray` clamps silently on an out-of-range end, which is exactly the failure
+mode this exists to intercept before a bad extent ever reaches a real buffer view), and every
+internal `Array.from(...)`-to-`number[]` conversion this file used to do per book is gone —
+replaced by zero-copy `subarray` views into the one buffer each function defensively copies
+once, at mint.
+
+**Deviation from the RFC, discovered and reverted, not silently worked around.** The RFC's
+original ask included `PublishedCorpus::bytes` (braid, existing field) and the new
+`ScopedPublication::packed`/`sources` crossing as real `Uint8Array` via
+`#[serde(with = "serde_bytes")]`. That was implemented, and empirically DID NOT WORK: an
+isolated repro (a throwaway `#[wasm_bindgen]` function returning a two-field struct with a
+`serde_bytes`-annotated `Vec<u8>`) came back as a plain JS `Array`, not a `Uint8Array`, in both
+build targets. Root cause, traced to source rather than guessed: this workspace's `tsify`
+dependency (`0.5.6`) is pulled in with its *default* `json` feature active (`Cargo.toml` never
+requests `features = ["js"]`), and under `json` its `into_js` path is `JsValue::from_serde`
+(`gloo-utils`), which has no bytes-as-`Uint8Array` special case at all — only `tsify`'s `js`
+feature (`serde-wasm-bindgen`) honors `#[serde(with = "serde_bytes")]`. Switching the crate to
+`js` was evaluated and declined as **too large a blast radius for this addendum**: `js`'s
+`Serializer` defaults `serialize_maps_as_objects` to `false`, meaning every existing
+`BTreeMap`-shaped field across the whole public API (`LintSummary::by_category`/`by_severity`/
+`by_issue_type`, every `message_params`/`label_params`, `VrefMap`, merge `decisions`, ...) would
+silently flip from a plain JS object to an ES `Map` — a real breaking change to the shipped npm
+API, for callers having nothing to do with this addendum, and one that would need `#[tsify(
+hashmap_as_object)]` added to every one of those pre-existing types to avoid, a much larger and
+separately-riskier migration than one addendum justifies. **Reverted**: `PublishedCorpus::bytes`
+and `ScopedPublication::packed`/`sources` all cross as plain `number[]`, exactly the
+representation `PublishedCorpus::bytes` has always had (no regression there) and the one
+`ScopedPublication` now also has (no regression possible, since it is new). The `serde_bytes`
+optional dependency added to `braid`'s and `usfm_onion_wasm`'s `Cargo.toml` for the attempt was
+removed again in the same round — `git diff` against this addendum's start shows zero net change
+to either `Cargo.toml`/`Cargo.lock`. The buffer-concatenation half of the convention (one array
+per buffer, not one per book) still delivers its own real win independent of the `Uint8Array`
+question: O(1) conversions per `publishScope`/`publish` call regardless of corpus size, down
+from what would otherwise be O(books) `Array.from` calls under the pre-existing per-book shape.
+A caller wanting a real `Uint8Array` still wraps once (`new Uint8Array(scoped.packed)`), never
+per book — documented on `ScopedPublication`'s own doc comment, and on `PublishedCorpus::bytes`'s
+for why the attempt was made and reverted. Flagged here for a possible dedicated follow-up
+(migrating `tsify` to its `js` feature workspace-wide, with `hashmap_as_object` added everywhere
+it is needed first) rather than folded into this one.
+
+**Gates, all green, final numbers:** `cargo test --workspace --all-features`
+(`RUSTFLAGS=-D warnings`) — **675 passed**, 0 failed, 28 ignored (was 664; +11 new: 7 unit tests
+in the new `bytes.rs` plus 4 new `resident.rs` extent-bounds tests exercising
+`restore_corpus`/`restore_published_corpus` natively, no JS engine involved); `cargo doc
+--workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) — clean; `cargo fmt --all
+--check` — clean; lint oracle (`--ignored`) — 1 passed, byte-identical, no re-bless; `npm run
+build` (release, both targets) — clean; `test:packed`/`:web` — 410 cases / 5,717,153 tokens each,
+unchanged; `test:parity`/`:web` — **94 steps** × 2 lanes, **0 divergences** (same step count as
+the prior addendum — this round changed argument SHAPES on existing steps, not step count),
+transcript regenerated LAST after every code change, then re-verified with a direct
+`test-parity.mjs` run against the exact release-built `pkg-bundler` tree being committed (not
+only the dev-mode `npm run test:parity` wrapper, which rebuilds its own dev package first);
+`test:publish`/`:web` — **31 checks** each (was 17; +14 new: the verbatim-forward
+`publishScope` -> `restoreCorpus` round trip, plus the adversarial out-of-bounds/overflow/
+invalid-UTF-8 extent section across all four verbs); `test:publish:js`/`:js:web` — 27 checks
+each, unchanged; `golden:wasm`/`:web` — 7 fixtures each, unchanged. `test:packed:types`
+(`tsc --noEmit`) also updated and green: `js/packed-consumer.fixture.ts` and the deleted
+`PublishedCorpusSource` type it imported both moved to the new `verifyPackedCorpus`/
+`verifyPublishedPacked` signatures. Dev-mode gate runs dirtied the committed `pkg-*` trees during
+this round (every `test:*`/`golden:*` npm script rebuilds a dev wasm package first); restored via
+`git restore pkg-bundler pkg-web` and rebuilt release before the final `test:parity` re-check and
+`git status`/commit, per the same discipline the prior addendum's escape note established.
+
+No version bump for this addendum — additive within the already-released-to-branch v0.1.5.

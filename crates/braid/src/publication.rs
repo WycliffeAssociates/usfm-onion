@@ -183,6 +183,23 @@ pub struct PublishedBookInfo {
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedCorpus {
+    /// One whole-corpus container, already a single buffer. An extent record
+    /// would be vacuous here: this field already *is* one complete buffer,
+    /// with nothing else to slice it out of.
+    ///
+    /// Crosses wasm as a plain `number[]`, unchanged from every prior
+    /// release: `#[serde(with = "serde_bytes")]` was tried here for v0.1.5's
+    /// bytes-at-boundary convention and reverted -- this crate's `tsify`
+    /// dependency resolves its default `json` feature (`JsValue::from_serde`,
+    /// no bytes-as-`Uint8Array` support) rather than its `js` feature
+    /// (`serde-wasm-bindgen`, which does support it), and switching would
+    /// also flip every existing map-shaped field in this and the wasm
+    /// crate's own DTOs (`LintSummary`, `message_params`, `VrefMap`, ...)
+    /// from a plain JS object to an ES `Map`, a much larger and riskier
+    /// migration than this one field justifies on its own. A caller that
+    /// wants a real `Uint8Array` wraps this ONE buffer once
+    /// (`new Uint8Array(published.bytes)`) -- the same single wrap this
+    /// field has always required, and never a per-book cost.
     pub bytes: Vec<u8>,
     pub snapshot_id: String,
     /// One entry per resident book, in corpus order -- not only the freshly
@@ -256,10 +273,16 @@ pub(crate) fn encode_one_book_container(
 /// them the same shape would let a caller feed a scoped result to whatever
 /// consumes a `PublishedCorpus` and get back something that looks complete
 /// but is not.
+///
+/// Native-only, deliberately not `wasm`/`tsify`-derived (v0.1.5,
+/// bytes-at-boundary convention): `packed: Vec<u8>` crossing wasm directly
+/// would be a JS `number[]`. The wasm crate concatenates every in-scope
+/// book's `packed`/`source` into two single buffers plus extent records at
+/// the boundary and exposes its own DTOs for that shape -- this native
+/// per-book, owned-`Vec<u8>` shape is what a native caller actually wants
+/// (one value per book, no buffer bookkeeping of its own).
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct ScopedPublishedBook {
     pub book: String,
@@ -274,8 +297,6 @@ pub struct ScopedPublishedBook {
 /// containers, in corpus order.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct ScopedPublication {
     /// The corpus identity from the same `lint()` read this call published

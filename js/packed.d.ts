@@ -9,19 +9,35 @@ import type {
   Token,
 } from "../pkg-bundler/usfm_onion_web.js";
 
-/** One book's own source for a combined-corpus verify: addressed by book
- * code alone, the same as the native side's `PublishedCorpusSource` --
- * a combined container has no per-book caller-supplied path. */
-export type PublishedCorpusSource = Readonly<{
-  book: string;
-  source: Uint8Array;
+/**
+ * A byte range `[byteOffset, byteOffset + byteLength)` into whichever
+ * sibling buffer the record pairs it with -- boundary-only (v0.1.5,
+ * bytes-at-boundary convention): bytes never cross as a JS `number[]`, so a
+ * corpus-grain payload crosses as one buffer plus extent records like this
+ * one into it.
+ */
+export type ByteExtent = Readonly<{
+  byteOffset: number;
+  byteLength: number;
 }>;
 
-/** One record to restore: the caller's key, the packed container, its exact source. */
+/** One book's own extent for a combined-corpus verify: addressed by book
+ * code and its extent into the `sources` buffer -- a combined container has
+ * no per-book caller-supplied path. */
+export type PublishedCorpusRecord = Readonly<{
+  book: string;
+  sourceKey: string;
+}> &
+  ByteExtent;
+
+/** One record to restore: the caller's key, plus its own `packed`/`source`
+ * extents into the two buffers {@link verifyPackedCorpus} takes alongside
+ * `records` -- deliberately the same shape a `publishScope` result's own
+ * `books[]` already is. */
 export type PackedRecord = Readonly<{
   path: string;
-  packed: Uint8Array;
-  source: Uint8Array;
+  packed: ByteExtent;
+  source: ByteExtent;
 }>;
 
 /**
@@ -113,7 +129,7 @@ export type VerifyPublishedResult =
       /** Rust-materialized `LintIssue` DTOs, keyed by book code. */
       findings: ReadonlyMap<string, readonly LintIssue[]>;
     }>
-  | Readonly<{ ok: false; error: PackedDecodeError }>;
+  | Readonly<{ ok: false; error: PackedDecodeError | Readonly<{ kind: "invalidExtent"; book: string }> }>;
 
 /**
  * One book's tokens out of a combined-corpus materialization: `{book,
@@ -143,7 +159,11 @@ export type VerifyPackedResult =
       /** Rust-materialized `LintIssue` DTOs, keyed by `path`. */
       findings: ReadonlyMap<string, readonly LintIssue[]>;
     }>
-  | Readonly<{ ok: false; path: string; error: PackedDecodeError }>;
+  | Readonly<{
+      ok: false;
+      path: string;
+      error: PackedDecodeError | Readonly<{ kind: "invalidExtent" }>;
+    }>;
 
 /**
  * One book's tokens (frozen shape: `{path, book, tokens, stableIds?}` — no
@@ -190,6 +210,8 @@ export declare class PackedError extends Error {
  */
 export declare function verifyPackedCorpus(
   wasm: { verifyPackedBook(packed: Uint8Array, source: Uint8Array): PackedBookOutcome },
+  packedAll: Uint8Array,
+  sources: Uint8Array,
   records: readonly PackedRecord[],
 ): VerifyPackedResult;
 
@@ -230,11 +252,13 @@ export declare function verifyPublishedPacked(
   wasm: {
     verifyPublishedCorpus(
       packed: Uint8Array,
-      sources: readonly Readonly<{ book: string; source: readonly number[] }>[],
+      sources: Uint8Array,
+      records: readonly PublishedCorpusRecord[],
     ): PublishedCorpusOutcome;
   },
   packed: Uint8Array,
-  sources: readonly PublishedCorpusSource[],
+  sources: Uint8Array,
+  records: readonly PublishedCorpusRecord[],
 ): VerifyPublishedResult;
 
 /**

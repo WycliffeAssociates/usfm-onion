@@ -9,10 +9,17 @@ use usfm_onion_wire::error::DecodeError;
 /// re-publish needs to address it: by its resident book code *and* its own
 /// source key (a packed container names the book but not the key a corpus
 /// was originally addressed by).
+///
+/// Native-only, deliberately not `wasm`/`tsify`-derived (v0.1.5, bytes-at-
+/// boundary convention): a `source: Vec<u8>` field crossing wasm directly
+/// would be a JS `number[]`, exactly the array-of-numbers shape the
+/// convention exists to eliminate. The wasm crate builds this type as a
+/// plain internal value -- sliced from its own single concatenated buffer
+/// plus extent records -- immediately before calling
+/// [`Braid::restore_published_corpus`], never exposing it as a JS-facing
+/// type of its own.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedCorpusSource {
     pub book: String,

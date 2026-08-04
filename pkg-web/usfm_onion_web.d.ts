@@ -55,6 +55,15 @@ export type BaselineError = { kind: "scope"; error: ScopeError } | { kind: "miss
 export type SetBaselineError = { kind: "bookNotResident"; book: string } | { kind: "invalid"; error: IngestError };
 
 /**
+ * A byte range `[byte_offset, byte_offset + byte_length)` into whichever
+ * sibling buffer the record pairs it with.
+ */
+export interface ByteExtent {
+    byteOffset: number;
+    byteLength: number;
+}
+
+/**
  * A chapter run\'s label, exactly as the source spells it.
  */
 export type ChapterLabel = { kind: "frontMatter" } | { kind: "number"; label: string };
@@ -76,6 +85,25 @@ export type IngestError = { kind: "duplicateBook"; book: string; sources: string
  * needs to restore or re-publish it later.
  */
 export interface PublishedCorpus {
+    /**
+     * One whole-corpus container, already a single buffer. An extent record
+     * would be vacuous here: this field already *is* one complete buffer,
+     * with nothing else to slice it out of.
+     *
+     * Crosses wasm as a plain `number[]`, unchanged from every prior
+     * release: `#[serde(with = \"serde_bytes\")]` was tried here for v0.1.5\'s
+     * bytes-at-boundary convention and reverted -- this crate\'s `tsify`
+     * dependency resolves its default `json` feature (`JsValue::from_serde`,
+     * no bytes-as-`Uint8Array` support) rather than its `js` feature
+     * (`serde-wasm-bindgen`, which does support it), and switching would
+     * also flip every existing map-shaped field in this and the wasm
+     * crate\'s own DTOs (`LintSummary`, `message_params`, `VrefMap`, ...)
+     * from a plain JS object to an ES `Map`, a much larger and riskier
+     * migration than this one field justifies on its own. A caller that
+     * wants a real `Uint8Array` wraps this ONE buffer once
+     * (`new Uint8Array(published.bytes)`) -- the same single wrap this
+     * field has always required, and never a per-book cost.
+     */
     bytes: number[];
     snapshotId: string;
     /**
@@ -232,18 +260,6 @@ export interface PackedBookReceipt {
 }
 
 /**
- * One book\'s exact source, keyed the same way a corpus-grain restore or
- * re-publish needs to address it: by its resident book code *and* its own
- * source key (a packed container names the book but not the key a corpus
- * was originally addressed by).
- */
-export interface PublishedCorpusSource {
-    book: string;
-    sourceKey: string;
-    source: number[];
-}
-
-/**
  * One book\'s lint contribution.
  */
 export interface BookLintSnapshot {
@@ -277,54 +293,22 @@ export interface PublishedBookInfo {
 }
 
 /**
- * One book\'s own packed container from a [`Braid::publish_scope`] call --
- * deliberately the same shape [`crate::RestoreRecord`] consumes
- * (book/path, packed, source), and deliberately NOT [`PublishedCorpus`]-shaped.
- *
- * A partial container -- one or a few books out of a whole corpus -- must be
- * structurally unrepresentable as a complete corpus container: the two are
- * different guarantees (a scoped publish for a live rebase preview or a
- * partial sync is never \"the whole corpus, safe to reopen cold\"), and giving
- * them the same shape would let a caller feed a scoped result to whatever
- * consumes a `PublishedCorpus` and get back something that looks complete
- * but is not.
- */
-export interface ScopedPublishedBook {
-    book: string;
-    packed: number[];
-    /**
-     * Always present -- see [`Braid::publish_scope`]\'s own doc comment for
-     * why a scoped publish never has a splice-reuse arm.
-     */
-    source: string;
-    sourceHash: string;
-}
-
-/**
- * One book\'s own source, for [`wasm_verify_published_corpus`] -- addressed by
- * book code alone, since verifying a corpus-wide container needs no source
- * key (that is a resident-corpus concept; the container itself never names
- * one).
- */
-export interface PublishedCorpusSourceInput {
-    book: string;
-    source: number[];
-}
-
-/**
- * One book\'s packed bytes and the source they were bound to.
+ * One book\'s packed-container extent plus the source extent it was bound
+ * to -- both into the two buffers [`Braid::restore_corpus`] takes
+ * alongside `records` (`packedAll`/`sources`), never an owned byte payload
+ * of its own (v0.1.5, bytes-at-boundary convention). This is deliberately
+ * the exact shape [`ScopedPublication::books`] emits, so a
+ * [`Braid::publish_scope`] result forwards into a [`Braid::restore_corpus`]
+ * call with no reshaping -- see [`ScopedPublication`]\'s own doc comment for
+ * the symmetry.
  */
 export interface RestoreRecord {
     /**
      * The caller\'s own binding for where the book came from — normally a path.
      */
     path: string;
-    packed: number[];
-    /**
-     * The exact bytes the container was bound to. Bytes rather than a string so a
-     * host can hand over what it read from disk without a UTF-16 round trip.
-     */
-    source: number[];
+    packed: ByteExtent;
+    source: ByteExtent;
 }
 
 /**
@@ -334,6 +318,20 @@ export interface RestoreRecord {
 export interface PublishedCorpusBook {
     receipt: PackedBookReceipt;
     findings: LintIssue[];
+}
+
+/**
+ * One book\'s source extent for [`Braid::restore_published_corpus`] -- into
+ * the `sources` buffer that call takes alongside the one whole-corpus
+ * `packed` container (which needs no extent of its own: it already crosses
+ * as a single `Uint8Array`, the same reasoning
+ * [`PublishedCorpus::bytes`]\'s own doc comment gives).
+ */
+export interface PublishedCorpusRecord {
+    book: string;
+    sourceKey: string;
+    byteOffset: number;
+    byteLength: number;
 }
 
 /**
@@ -349,6 +347,18 @@ export interface SourceOutput<T> {
  * One book\'s worth of resident input.
  */
 export type BookInput = { kind: "usfm"; sourceKey: string; book: string; source: string } | { kind: "tokens"; sourceKey: string; book: string; tokens: Token[]; lineEnding: LineEnding };
+
+/**
+ * One buffer\'s extent, plus the book it belongs to -- what
+ * [`ScopedPublication::books`] carries per book, boundary-only (see
+ * [`crate::bytes`]\'s own doc comment).
+ */
+export interface ScopedPublishedBook {
+    book: string;
+    sourceHash: string;
+    packed: ByteExtent;
+    source: ByteExtent;
+}
 
 /**
  * One chapter run\'s address.
@@ -553,20 +563,46 @@ export type PackedBookOutcome = { status: "verified"; receipt: PackedBookReceipt
  * supplied, and findings that carry stamps must all carry the *same*
  * stamps -- rather than book by book.
  */
-export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; books: PublishedCorpusBook[] } | { status: "rejected"; error: PackedDecodeError };
+export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; books: PublishedCorpusBook[] } | { status: "rejected"; error: PackedDecodeError } | { status: "invalidExtent"; book: string };
 
 /**
- * What one [`Braid::publish_scope`] call produced: per-book packed
- * containers, in corpus order.
+ * What one [`Braid::publish_scope`] call produced, transfer-ready: every
+ * in-scope book\'s packed container concatenated into `packed`, every
+ * in-scope book\'s source concatenated (UTF-8) into `sources`, and
+ * `books[].packed`/`books[].source` naming each book\'s own extent into
+ * whichever of those two buffers it belongs to.
+ *
+ * **Key symmetry, by construction:** this shape is byte-for-byte
+ * [`Braid::restore_corpus`]\'s input. `packed`/`sources` forward verbatim as
+ * `restoreCorpus`\'s first two arguments, and `books` forwards verbatim
+ * (after trivial per-book field renaming, `sourceHash`/`packed`/`source` ->
+ * `sourceKey`/`packed`/`source`) as its `records` -- zero reshaping, and
+ * (see below) at most one wrap per buffer, never one per book.
+ *
+ * `packed`/`sources` cross as plain `number[]`, not `Uint8Array`: this
+ * crate\'s `tsify` dependency resolves its default `json` feature
+ * (`JsValue::from_serde`), not its `js` feature (`serde-wasm-bindgen`,
+ * which is what would honor a `#[serde(with = \"serde_bytes\")]` field
+ * annotation) -- confirmed by an isolated repro, not assumed. Switching
+ * features crate-wide would also flip every existing map-shaped DTO field
+ * (`LintSummary`, `message_params`, `VrefMap`, ...) from a plain JS object
+ * to an ES `Map`, a far larger and riskier migration than this verb alone
+ * justifies. The win this convention still delivers without that
+ * migration: ONE array per buffer regardless of how many books are in
+ * scope (`new Uint8Array(scoped.packed)`, `new Uint8Array(scoped.sources)`
+ * -- the same single wrap `PublishedCorpus::bytes` has always required),
+ * never the O(books) `Array.from` a per-book byte array would have needed.
+ *
+ * Native `braid::ScopedPublication` keeps its own per-book owned shape
+ * (a native caller wants one owned value per book, not buffer
+ * bookkeeping); this concatenation is the one honest transformation this
+ * boundary performs, the same class of conversion [`MutationEffect::from`]
+ * already does for every other verb.
  */
 export interface ScopedPublication {
-    /**
-     * The corpus identity from the same `lint()` read this call published
-     * against -- callers assert it against a subsequent
-     * [`crate::MutationEffect::snapshot_id`] to detect a race between reading
-     * this publication and a concurrent mutation.
-     */
     snapshotId: string;
+    packed: number[];
+    sources: number[];
     books: ScopedPublishedBook[];
 }
 
@@ -640,7 +676,7 @@ export type PublishError = { kind: "encode"; error: PackedEncodeError };
  * cannot be installed. A single book whose cached findings are not adoptable is not
  * a refusal — it seeds anyway and appears in the report\'s rejections.
  */
-export type RestoreError = { kind: "decode"; error: PackedDecodeError } | { kind: "ingest"; error: IngestError };
+export type RestoreError = { kind: "decode"; error: PackedDecodeError } | { kind: "ingest"; error: IngestError } | { kind: "invalidExtent"; book: string };
 
 /**
  * Why one book\'s cached lint contribution was not adopted.
@@ -698,6 +734,12 @@ export type UsfmOutcome = ApiResult<ScopedOutput<string>, ScopeError>;
 export type VrefIndexOutcome = ApiResult<ScopedOutput<VrefIndex>, ScopeError>;
 
 /**
+ *r" A transfer-ready scoped publication, or the reason it could not be
+ *r" produced.
+ */
+export type ScopedPublishOutcome = ApiResult<ScopedPublication, ScopedPublishError>;
+
+/**
  *r" A warm restore's report, or the reason the bytes were refused.
  */
 export type RestoreOutcome = ApiResult<RestoreReport, RestoreError>;
@@ -726,12 +768,6 @@ export type ChapterLabelsOutcome = ApiResult<ChapterLabel[], ScopeError>;
  *r" One patch, or the reason it is not addressable.
  */
 export type PatchOutcome = ApiResult<Patch, PatchError>;
-
-/**
- *r" Per-book packed containers for a scope, or the reason it could not be
- *r" produced.
- */
-export type ScopedPublishOutcome = ApiResult<ScopedPublication, ScopedPublishError>;
 
 /**
  *r" Whether a scope differs from its baseline, or the reason it does not resolve.
@@ -1223,23 +1259,39 @@ export class Braid {
      * A book whose cached findings cannot be adopted still seeds: residency and
      * lint-priming are independent facts, so that book arrives with no lex or parse
      * and is simply awaiting recompute.
+     *
+     * `packed_all`/`sources` are two single buffers -- every record's own
+     * container concatenated into the first, every record's own source
+     * concatenated into the second -- with `records` naming each one's
+     * extent into whichever buffer it belongs to (v0.1.5, bytes-at-boundary
+     * convention: this is the exact shape [`Braid::publish_scope`]'s output
+     * already is, so it forwards here with zero reshaping -- see
+     * [`ScopedPublication`]'s own doc comment). An extent that falls
+     * outside its buffer, or whose own end overflows computing it, is
+     * refused (`RestoreError::InvalidExtent`, naming the record's own
+     * `path`) before any native call -- never clamped, never truncated.
      */
-    restoreCorpus(records: RestoreRecord[]): RestoreOutcome;
+    restoreCorpus(packed_all: Uint8Array, sources: Uint8Array, records: RestoreRecord[]): RestoreOutcome;
     /**
      * Restores the whole resident corpus from one packed `corpus.bin`
      * container -- the corpus-grain counterpart to [`Self::publish`], as
      * [`Self::restore_corpus`] is to a per-book publication.
      *
-     * `records` supplies each book's own source key and exact bound source
-     * (a packed container names the book but never the key a corpus was
-     * addressed by, and a freshly-encoded book's bound source is wire's own
-     * serialization, not necessarily any file on disk -- see
-     * [`PublishedBookInfo::source`]). Verification is corpus-wide
-     * (`verify_corpus`): every book must have exactly one source supplied,
-     * and findings that carry stamps must all carry the *same* stamps,
-     * checked atomically before anything installs.
+     * `packed` is the one whole-corpus container (a single `Uint8Array`
+     * argument, one memcpy). `sources` is every named book's source bytes
+     * concatenated into one buffer; `records` supplies each book's own
+     * declared code, its source key (a packed container names the book but
+     * never the key a corpus was originally addressed by), and its own
+     * extent into `sources` (v0.1.5, bytes-at-boundary convention -- see
+     * [`crate::bytes`]). An extent outside `sources`, or one whose own end
+     * overflows computing it, refuses by name
+     * (`RestoreError::InvalidExtent`, naming the record's own `book`)
+     * before any native call. Verification is corpus-wide (`verify_corpus`):
+     * every book must have exactly one source supplied, and findings that
+     * carry stamps must all carry the *same* stamps, checked atomically
+     * before anything installs.
      */
-    restorePublishedCorpus(packed: Uint8Array, records: PublishedCorpusSource[]): RestoreOutcome;
+    restorePublishedCorpus(packed: Uint8Array, sources: Uint8Array, records: PublishedCorpusRecord[]): RestoreOutcome;
     /**
      * Whole-book replacement from each targeted book's own declared
      * baseline, atomic across the scope. `all`/`book` scopes only -- a
@@ -1421,13 +1473,18 @@ export function verifyPackedBook(packed: Uint8Array, source: Uint8Array): Packed
  * that wants to validate a `corpus.bin` before deciding whether to restore
  * it into a resident handle at all.
  *
+ * `packed` is the one whole-corpus container. `sources` is every named
+ * book's source bytes concatenated into one buffer; `records` names each
+ * book's own extent into it -- the same buffer-plus-extents pairing
+ * [`crate::resident::Braid::restore_published_corpus`] takes.
+ *
  * Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
  * (container/section structure, both integrity checksums, exact source
  * length and content hash, the marker-catalog stamp, the all-or-none lint
  * stamp invariant), and nothing more: no resident state is read or
  * mutated, and no token crosses this boundary.
  */
-export function verifyPublishedCorpus(packed: Uint8Array, sources: PublishedCorpusSourceInput[]): PublishedCorpusOutcome;
+export function verifyPublishedCorpus(packed: Uint8Array, sources: Uint8Array, records: PublishedCorpusRecord[]): PublishedCorpusOutcome;
 
 /**
  * Build the vref index from an existing token stream (the editor's live
@@ -1467,8 +1524,8 @@ export interface InitOutput {
     readonly braid_removeBook: (a: number, b: number, c: number) => number;
     readonly braid_removeChapter: (a: number, b: number) => number;
     readonly braid_replaceCorpus: (a: number, b: number) => number;
-    readonly braid_restoreCorpus: (a: number, b: number, c: number) => number;
-    readonly braid_restorePublishedCorpus: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly braid_restoreCorpus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
+    readonly braid_restorePublishedCorpus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
     readonly braid_revertToBaseline: (a: number, b: number) => number;
     readonly braid_setBaseline: (a: number, b: number) => number;
     readonly braid_setBaselineToCurrent: (a: number, b: number) => number;
@@ -1516,7 +1573,7 @@ export interface InitOutput {
     readonly usfmmarkercatalog_contains: (a: number, b: number, c: number) => number;
     readonly usfmmarkercatalog_get: (a: number, b: number, c: number) => number;
     readonly verifyPackedBook: (a: number, b: number, c: number, d: number) => number;
-    readonly verifyPublishedCorpus: (a: number, b: number, c: number, d: number) => number;
+    readonly verifyPublishedCorpus: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly vrefIndexTokens: (a: number, b: number) => number;
     readonly vrefIndexUsfm: (a: number, b: number) => number;
     readonly markerCatalog: () => number;
