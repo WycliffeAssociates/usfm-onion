@@ -1754,8 +1754,10 @@ pub struct ScopedPublishedBook {
 /// on either side of a postMessage/structured-clone hop.
 ///
 /// `packed`/`sources` cross as real `Uint8Array`s (`serde_bytes`, honored
-/// because this crate's `tsify` dependency resolves its `js` feature): one
-/// buffer per side regardless of corpus size, so a scoped publication is
+/// because this crate's `tsify` dependency resolves its `js` feature, plus
+/// `#[tsify(type = "Uint8Array")]` on each field so the generated `.d.ts`
+/// declares it too -- `serde_bytes` alone only fixes the runtime shape):
+/// one buffer per side regardless of corpus size, so a scoped publication is
 /// transfer-ready as exactly two `ArrayBuffer`s -- a plain JS `number[]`
 /// structured-clones by copying; a `Uint8Array`'s backing `ArrayBuffer` can
 /// be transferred, zero-copy, ownership moved.
@@ -1771,8 +1773,10 @@ pub struct ScopedPublishedBook {
 pub struct ScopedPublication {
     pub snapshot_id: String,
     #[serde(with = "serde_bytes")]
+    #[tsify(type = "Uint8Array")]
     pub packed: Vec<u8>,
     #[serde(with = "serde_bytes")]
+    #[tsify(type = "Uint8Array")]
     pub sources: Vec<u8>,
     pub books: Vec<ScopedPublishedBook>,
 }

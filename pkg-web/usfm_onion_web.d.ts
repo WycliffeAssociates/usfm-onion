@@ -93,9 +93,12 @@ export interface PublishedCorpus {
      * legacy `json`/`JsValue::from_serde` default -- v0.1.5\'s bytes-at-
      * boundary convention). An extent record would be vacuous here: this
      * field already *is* one complete buffer, with nothing else to slice it
-     * out of.
+     * out of. `serde_bytes` governs runtime shape only -- `tsify` cannot
+     * infer a `.d.ts` type from it, so `#[tsify(type = \"Uint8Array\")]`
+     * overrides the declaration too; without it the generated type would
+     * still (falsely) read `number[]`.
      */
-    bytes: number[];
+    bytes: Uint8Array;
     snapshotId: string;
     /**
      * One entry per resident book, in corpus order -- not only the freshly
@@ -585,8 +588,10 @@ export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; b
  * on either side of a postMessage/structured-clone hop.
  *
  * `packed`/`sources` cross as real `Uint8Array`s (`serde_bytes`, honored
- * because this crate\'s `tsify` dependency resolves its `js` feature): one
- * buffer per side regardless of corpus size, so a scoped publication is
+ * because this crate\'s `tsify` dependency resolves its `js` feature, plus
+ * `#[tsify(type = \"Uint8Array\")]` on each field so the generated `.d.ts`
+ * declares it too -- `serde_bytes` alone only fixes the runtime shape):
+ * one buffer per side regardless of corpus size, so a scoped publication is
  * transfer-ready as exactly two `ArrayBuffer`s -- a plain JS `number[]`
  * structured-clones by copying; a `Uint8Array`\'s backing `ArrayBuffer` can
  * be transferred, zero-copy, ownership moved.
@@ -599,8 +604,8 @@ export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; b
  */
 export interface ScopedPublication {
     snapshotId: string;
-    packed: number[];
-    sources: number[];
+    packed: Uint8Array;
+    sources: Uint8Array;
     books: ScopedPublishedBook[];
 }
 

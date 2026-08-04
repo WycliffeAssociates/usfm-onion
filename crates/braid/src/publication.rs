@@ -190,8 +190,12 @@ pub struct PublishedCorpus {
     /// legacy `json`/`JsValue::from_serde` default -- v0.1.5's bytes-at-
     /// boundary convention). An extent record would be vacuous here: this
     /// field already *is* one complete buffer, with nothing else to slice it
-    /// out of.
+    /// out of. `serde_bytes` governs runtime shape only -- `tsify` cannot
+    /// infer a `.d.ts` type from it, so `#[tsify(type = "Uint8Array")]`
+    /// overrides the declaration too; without it the generated type would
+    /// still (falsely) read `number[]`.
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub bytes: Vec<u8>,
     pub snapshot_id: String,
     /// One entry per resident book, in corpus order -- not only the freshly

@@ -6069,3 +6069,64 @@ restore pkg-bundler pkg-web` and rebuilt release before the final `test:parity`/
 established.
 
 No version bump for this addendum — additive within the already-released-to-branch v0.1.5.
+
+### Addendum (same day, same v0.1.5, no new version number) — director-caught fix: type-override on the three byte fields
+
+Director verification of the `tsify`-migration commit (`821639a`) caught a P1 this round's own gates
+never exercise: `serde_bytes` fixes the RUNTIME shape (`Uint8Array` at the wasm ABI) but `tsify`
+cannot infer a `.d.ts` declaration from a `serde(with = ...)` annotation — every TypeScript
+consumer of `PublishedCorpus.bytes`, `ScopedPublication.packed`, and `ScopedPublication.sources`
+was still typed `number[]`, the exact inverse of the runtime value. A caller writing `.map()`
+against the declared `number[]` type would typecheck cleanly and then diverge from actual
+`Uint8Array` behavior at runtime -- a hazard the shape-pin gate (which asserts the runtime value,
+not the declared type) cannot see, and one the previous addendum's own hazard list did not think
+to check.
+
+**Fix, verified against source before applying:** confirmed `#[tsify(type = "...")]` is a real,
+supported per-field attribute in `tsify-macros` 0.5.6 by reading its `attrs.rs` directly (`type_override:
+Option<String>`, parsed off `meta.path.is_ident("type")`) rather than assuming the spelling.
+Applied `#[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]` to `PublishedCorpus.bytes`
+(`crates/braid/src/publication.rs`) and `#[tsify(type = "Uint8Array")]` to `ScopedPublication.packed`/
+`.sources` (`crates/usfm_onion_wasm/src/resident.rs`). Rebuilt and grepped the generated `.d.ts` in
+both `pkg-bundler` and `pkg-web` directly: all three fields now declare `Uint8Array`; the only
+remaining occurrences of the string `number[]` anywhere in either `.d.ts` are inside doc-comment
+prose explaining what a plain JS array would have cost, not a field declaration.
+
+**Swept for other misses, found none.** Checked every other `Vec<u8>` field in both crates:
+`braid::ScopedPublishedBook.packed` is native-only, deliberately not `Tsify`-derived (documented on
+the type itself as the reason a scoped publish's per-book native shape is never exposed to wasm
+directly), so it was never a wasm-boundary declaration to begin with and needed no attribute. No
+other byte-shaped field exists anywhere else in `usfm_onion_wasm`'s or `braid`'s `Tsify`-derived
+types.
+
+**Doc comments corrected to be fully truthful about the two-part fix**, not just the runtime half:
+`PublishedCorpus.bytes`'s doc comment (`crates/braid/src/publication.rs`) and
+`ScopedPublication`'s (`crates/usfm_onion_wasm/src/resident.rs`) now both state plainly that
+`serde_bytes` governs the runtime shape only and `#[tsify(type = "Uint8Array")]` is the separate,
+required fix for the declared `.d.ts` type -- without it the generation would still (falsely) read
+`number[]` even though the value crossing at runtime is a real `Uint8Array`.
+
+**Gates, all green, final numbers, re-run in full standing-battery order after the fix:**
+`cargo test --workspace --all-features` (`RUSTFLAGS=-D warnings`) -- **675 passed**, 0 failed, 28
+ignored, unchanged (this fix is `.d.ts`-declaration-only, no serialized-value change, so no test
+surface moved); `cargo doc --workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) --
+clean; `cargo fmt --all --check` -- clean; lint oracle (`--ignored`) -- 1 passed, byte-identical;
+`npm run build` (release, both targets) -- clean; parity transcript regenerated (a `tsify`
+type-only attribute still triggers a wasm rebuild, so regenerated and re-verified per the
+coordinator's instruction) -- byte-identical to the already-committed transcript, confirming the
+attribute is genuinely declaration-only with zero effect on serialized bytes; `test:parity`/`:web`
+-- **94 steps** × 2 lanes, **0 divergences**, both targets; `test:packed`/`:web` -- **410 cases /
+5,717,153 tokens** each, unchanged; `test:packed:types` (`tsc --noEmit -p
+tsconfig.packed-fixture.json`) -- **clean, exit 0**, re-run directly (not only as `test:packed`'s
+prerequisite step) since this was the gate the P1 slipped past; `test:publish`/`:web` -- 32 checks
+each, unchanged; `test:publish:js`/`:js:web` -- 27 checks each, unchanged (the coordinator noted a
+transient failure of `test:publish:js` under concurrent parallel gate runs elsewhere, attributed to
+pkg-tree contention between simultaneous npm scripts, not a defect in this change -- this round ran
+every gate serially and both targets passed clean); `golden:wasm`/`:web` -- **7 fixtures each,
+byte-identical, zero re-bless**. Dev-mode gate runs (`test:packed`/`:packed:web`) dirtied the
+committed `pkg-*` trees again this round; restored via `git restore pkg-bundler pkg-web`, rebuilt
+release, and re-verified `test:parity`/`golden:wasm`/`test:publish` against that exact release tree
+one final time before `git status`/commit -- same discipline every prior addendum in this file has
+followed.
+
+No version bump for this addendum -- additive within the already-released-to-branch v0.1.5.
