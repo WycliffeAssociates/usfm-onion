@@ -878,6 +878,11 @@ export function verifyPublishedPacked(wasm, packed, sources, records) {
     }
   }
   const outcome = wasm.verifyPublishedCorpus(packedCopy, sourcesCopy, records);
+  if (outcome.status === "invalidExtent") {
+    // Normally unreachable: every extent was pre-checked against `sources`
+    // above. Kept honest anyway -- this arm carries `book`, not `error`.
+    return { ok: false, error: { kind: "invalidExtent", book: outcome.book } };
+  }
   if (outcome.status !== "verified") {
     return { ok: false, error: outcome.error };
   }

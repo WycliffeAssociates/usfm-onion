@@ -119,7 +119,8 @@ export type PublishedCorpusOutcome =
       snapshotId: string;
       books: readonly Readonly<{ receipt: PackedBookReceipt; findings: readonly LintIssue[] }>[];
     }>
-  | Readonly<{ status: "rejected"; error: PackedDecodeError }>;
+  | Readonly<{ status: "rejected"; error: PackedDecodeError }>
+  | Readonly<{ status: "invalidExtent"; book: string }>;
 
 export type VerifyPublishedResult =
   | Readonly<{
