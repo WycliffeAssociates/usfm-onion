@@ -5725,3 +5725,72 @@ non-breaking on both surfaces).
 Not tagged, not merged, not pushed — branch `v0.1.5-scoped` off `master` (b6a1fcd, v0.1.4),
 awaiting review. This entry covers both commits on the branch: the feature commit and this
 follow-up fixture-regeneration commit.
+
+### Addendum (same day, same v0.1.5, no new version number) — `set_baseline_to_current`
+
+Owner-approved RFC addendum, folded into v0.1.5 rather than bumping a new version: a third verb,
+`Braid::set_baseline_to_current(scope) -> Result<MutationEffect, BaselineError>`, beside
+`revert_to_baseline` in `crates/braid/src/baseline.rs`.
+
+**The verb.** Declares each in-scope book's CURRENT resident state as its baseline via
+`BaselineState::of(&self.books[index])` directly — no `BookInput`, no parse, no validation,
+because the content is already resident and already validated. **No-parse motivation, with the
+editor's own measurement:** the editor's warm-restore path (reopen a saved corpus, then declare
+every just-restored book's content as its baseline) had no route to this fact except
+round-tripping every book back out through `set_baseline`'s `BookInput::Usfm` arm, which
+re-parses the whole corpus purely to restate content braid already holds resident — measured at
+1.3-1.6s across a 66-book corpus. This verb reaches the same end state with zero re-parses: a
+direct snapshot of already-validated state, the same shape `set_baseline`'s own internal step
+already takes once a candidate is built, just without building a candidate at all.
+
+**Scope rule, and the deviation from the editor RFC.** `Book`/`All` scopes only; a `Chapter`
+scope refuses via the existing `BaselineError::ChapterScopeUnsupported`. The editor RFC proposed
+a bare `ScopeError` for this verb's chapter case; that was declined in favor of deliberate
+symmetry with `revert_to_baseline`: a baseline is a whole-book slot, not a per-chapter one, so
+the *set* and *revert* halves of that one slot's lifecycle have to agree on what scopes can
+address it at all. A `ScopeError`-only chapter refusal here would have let a caller successfully
+call `set_baseline_to_current` at chapter scope (silently — under a bare `ScopeError` there is
+no distinct "this shape is unsupported" signal, only "this address doesn't resolve," which a
+valid chapter address would pass) while `revert_to_baseline` on that same chapter scope refuses
+outright — baseline state reachable on one side of the pair and structurally unreachable on the
+other. Reusing `ChapterScopeUnsupported` keeps the pair's scope contract single-sourced.
+
+**Other semantics, as specified:** idempotent (a second call is another no-op); no
+`MissingBaseline` case (this verb's whole point is to create baselines, never requires one exist
+first); the returned `MutationEffect` is always the no-op shape (a baseline slot never
+participates in `changed`/`removed`/`reordered`, same as `set_baseline`/`clear_baseline`);
+afterwards `is_dirty(scope)` is `false` and `diff_baseline(scope)` reports equality for every
+book in scope; `All` on an empty corpus is a trivially successful no-op.
+
+**Wasm glue:** `setBaselineToCurrent` on the wasm `Braid` class, pure delegation via
+`scope_into_native`, sharing the existing `RevertBaselineOutcome` wrapper (`MutationEffect`/
+`BaselineError`) rather than minting a new one with an identical shape — the two verbs return the
+same value/error pair, so one outcome type serves both.
+
+**Tests** (`crates/braid/tests/revert_baseline.rs`, +5, total 13 in that file): mutate-then-
+set-baseline-to-current leaves `is_dirty` false and `diff_baseline` empty; idempotence (second
+call, still a no-op, still clean); chapter-scope refusal; `All` on an empty corpus succeeds; and
+the key contract test — `set_baseline_to_current` then `revert_to_baseline` is a no-op with zero
+changed books AND the token IDS are byte-for-byte unchanged (not merely equal content), driven
+through the token-push lane with distinctly-prefixed opaque ids specifically so a positional
+re-parse could not coincidentally mask an identity bug.
+
+**Gates, all green, final numbers:** `cargo test --workspace --all-features`
+(`RUSTFLAGS=-D warnings`) — 664 passed, 0 failed, 28 ignored, summed across every test binary in
+the workspace (braid's `revert_baseline.rs` integration test alone went 8 → 13; the corpus-scale
+`#[ignore]`d fixtures elsewhere are unaffected and unrun by default, which is where the 28
+ignored come from); `cargo doc --workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) —
+clean after fixing three new private-intra-doc-links (`BaselineState::of`, `BaselineState`,
+`crate::corpus::BookState` are not part of the public API surface; reworded to point at the
+module's own doc comment and drop the direct links instead); `cargo fmt --all --check` — clean;
+lint oracle (`--ignored`) — byte-identical, no re-bless; `npm run build` (release) — clean;
+`test:packed`/`:web` — 410 cases each, unchanged; `test:parity`/`:web` — **94 steps** × 2 lanes
+(was 82; +12 new `set_baseline_to_current*` steps), **0 divergences**, transcript regenerated
+LAST after every code and formatting change, per this same ledger's own escape note two entries
+up; `test:publish`/`:web` — 17 checks each, unchanged; `test:publish:js`/`:js:web` — 27 checks
+each, unchanged; `golden:wasm`/`:web` — 7 fixtures each, unchanged. Dev-mode gate runs dirtied the
+committed `pkg-*` trees twice in this round; both times restored via `git restore pkg-bundler
+pkg-web` and rebuilt release before proceeding, with a direct `test:parity` re-check (bundler and
+web) against the exact release-built tree as the last step before `git status`/commit.
+
+No version bump for this addendum — additive within the already-released-to-branch v0.1.5.

@@ -4960,6 +4960,122 @@
     },
     {
       "args": {
+        "corpus": {
+          "books": [
+            {
+              "book": "GEN",
+              "kind": "usfm",
+              "source": "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n\\v 2 And the earth.\\q1\n\\v 3 Light.\n\\c 2\n\\p\n\\v 1 And God said.\n",
+              "sourceKey": "01-GEN.usfm"
+            }
+          ]
+        }
+      },
+      "lane": "usfm",
+      "output": {
+        "changed": [
+          {
+            "book": "GEN"
+          }
+        ],
+        "removed": [],
+        "snapshotId": "10c3d95f3cf73a30"
+      },
+      "step": "set_baseline_to_current_seed"
+    },
+    {
+      "args": {
+        "book": {
+          "book": "GEN",
+          "kind": "usfm",
+          "source": "\\id GEN\n\\c 1\n\\p\n\\v 1 In the beginning.\\p\n\\v 2 And the earth below.\\q1\n\\v 3 Light.\n\\c 2\n\\p\n\\v 1 And God said.\n",
+          "sourceKey": "01-GEN.usfm"
+        }
+      },
+      "lane": "usfm",
+      "output": {
+        "changed": [
+          {
+            "book": "GEN"
+          }
+        ],
+        "removed": [],
+        "snapshotId": "5898e8f0b5354899"
+      },
+      "step": "set_baseline_to_current_edit"
+    },
+    {
+      "args": {
+        "scope": {
+          "book": "GEN",
+          "kind": "book"
+        }
+      },
+      "lane": "usfm",
+      "output": {
+        "changed": [],
+        "removed": [],
+        "snapshotId": "5898e8f0b5354899"
+      },
+      "step": "set_baseline_to_current"
+    },
+    {
+      "args": {
+        "scope": {
+          "book": "GEN",
+          "kind": "book"
+        }
+      },
+      "lane": "usfm",
+      "output": {
+        "changed": [],
+        "removed": [],
+        "snapshotId": "5898e8f0b5354899"
+      },
+      "step": "set_baseline_to_current_idempotent"
+    },
+    {
+      "args": {
+        "scope": {
+          "kind": "chapter",
+          "target": {
+            "book": "GEN",
+            "label": {
+              "kind": "number",
+              "label": "1"
+            }
+          }
+        }
+      },
+      "lane": "usfm",
+      "output": {
+        "kind": "chapterScopeUnsupported",
+        "target": {
+          "book": "GEN",
+          "label": {
+            "kind": "number",
+            "label": "1"
+          }
+        }
+      },
+      "step": "set_baseline_to_current_chapter_unsupported"
+    },
+    {
+      "args": {
+        "scope": {
+          "kind": "all"
+        }
+      },
+      "lane": "usfm",
+      "output": {
+        "changed": [],
+        "removed": [],
+        "snapshotId": "2d06800538d394c2"
+      },
+      "step": "set_baseline_to_current_empty_corpus"
+    },
+    {
+      "args": {
         "records": [
           {
             "packed": [
@@ -20590,6 +20706,754 @@
         }
       },
       "step": "revert_to_baseline_chapter_unsupported"
+    },
+    {
+      "args": {
+        "corpus": {
+          "books": [
+            {
+              "book": "GEN",
+              "kind": "tokens",
+              "lineEnding": "lf",
+              "sourceKey": "01-GEN.usfm",
+              "tokens": [
+                {
+                  "id": "GEN-0",
+                  "kind": "marker",
+                  "marker": "id",
+                  "markerMetadata": {
+                    "canonical": "id",
+                    "kind": "header"
+                  },
+                  "nested": false,
+                  "source": "\\id ",
+                  "structural": {
+                    "scopeKind": "header"
+                  }
+                },
+                {
+                  "bookCode": "GEN",
+                  "bookCodeValid": true,
+                  "id": "GEN-1",
+                  "kind": "bookCode",
+                  "sid": "GEN 0:0",
+                  "source": "GEN"
+                },
+                {
+                  "id": "GEN-2",
+                  "kind": "newline",
+                  "sid": "GEN 0:0",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-3",
+                  "kind": "marker",
+                  "marker": "c",
+                  "markerMetadata": {
+                    "canonical": "c",
+                    "kind": "chapter"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:0",
+                  "source": "\\c ",
+                  "structural": {
+                    "scopeKind": "chapter"
+                  }
+                },
+                {
+                  "id": "GEN-4",
+                  "kind": "number",
+                  "numberInfo": {
+                    "kind": "single",
+                    "start": 1
+                  },
+                  "sid": "GEN 1:0",
+                  "source": "1"
+                },
+                {
+                  "id": "GEN-5",
+                  "kind": "newline",
+                  "sid": "GEN 1:0",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-6",
+                  "kind": "marker",
+                  "marker": "p",
+                  "markerMetadata": {
+                    "canonical": "p",
+                    "kind": "paragraph"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:0",
+                  "source": "\\p",
+                  "structural": {
+                    "inlineContext": "para",
+                    "scopeKind": "block"
+                  }
+                },
+                {
+                  "id": "GEN-7",
+                  "kind": "newline",
+                  "sid": "GEN 1:0",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-8",
+                  "kind": "marker",
+                  "marker": "v",
+                  "markerMetadata": {
+                    "canonical": "v",
+                    "kind": "verse"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:1",
+                  "source": "\\v ",
+                  "structural": {
+                    "scopeKind": "verse"
+                  }
+                },
+                {
+                  "id": "GEN-9",
+                  "kind": "number",
+                  "numberInfo": {
+                    "kind": "single",
+                    "start": 1
+                  },
+                  "sid": "GEN 1:1",
+                  "source": "1 "
+                },
+                {
+                  "id": "GEN-10",
+                  "kind": "text",
+                  "sid": "GEN 1:1",
+                  "source": "In the beginning."
+                },
+                {
+                  "id": "GEN-11",
+                  "kind": "marker",
+                  "marker": "p",
+                  "markerMetadata": {
+                    "canonical": "p",
+                    "kind": "paragraph"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:1",
+                  "source": "\\p",
+                  "structural": {
+                    "inlineContext": "para",
+                    "scopeKind": "block"
+                  }
+                },
+                {
+                  "id": "GEN-12",
+                  "kind": "newline",
+                  "sid": "GEN 1:1",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-13",
+                  "kind": "marker",
+                  "marker": "v",
+                  "markerMetadata": {
+                    "canonical": "v",
+                    "kind": "verse"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:2",
+                  "source": "\\v ",
+                  "structural": {
+                    "scopeKind": "verse"
+                  }
+                },
+                {
+                  "id": "GEN-14",
+                  "kind": "number",
+                  "numberInfo": {
+                    "kind": "single",
+                    "start": 2
+                  },
+                  "sid": "GEN 1:2",
+                  "source": "2 "
+                },
+                {
+                  "id": "GEN-15",
+                  "kind": "text",
+                  "sid": "GEN 1:2",
+                  "source": "And the earth."
+                },
+                {
+                  "id": "GEN-16",
+                  "kind": "marker",
+                  "marker": "q1",
+                  "markerMetadata": {
+                    "canonical": "q1",
+                    "kind": "paragraph"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:2",
+                  "source": "\\q1",
+                  "structural": {
+                    "inlineContext": "para",
+                    "scopeKind": "block"
+                  }
+                },
+                {
+                  "id": "GEN-17",
+                  "kind": "newline",
+                  "sid": "GEN 1:2",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-18",
+                  "kind": "marker",
+                  "marker": "v",
+                  "markerMetadata": {
+                    "canonical": "v",
+                    "kind": "verse"
+                  },
+                  "nested": false,
+                  "sid": "GEN 1:3",
+                  "source": "\\v ",
+                  "structural": {
+                    "scopeKind": "verse"
+                  }
+                },
+                {
+                  "id": "GEN-19",
+                  "kind": "number",
+                  "numberInfo": {
+                    "kind": "single",
+                    "start": 3
+                  },
+                  "sid": "GEN 1:3",
+                  "source": "3 "
+                },
+                {
+                  "id": "GEN-20",
+                  "kind": "text",
+                  "sid": "GEN 1:3",
+                  "source": "Light."
+                },
+                {
+                  "id": "GEN-21",
+                  "kind": "newline",
+                  "sid": "GEN 1:3",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-22",
+                  "kind": "marker",
+                  "marker": "c",
+                  "markerMetadata": {
+                    "canonical": "c",
+                    "kind": "chapter"
+                  },
+                  "nested": false,
+                  "sid": "GEN 2:0",
+                  "source": "\\c ",
+                  "structural": {
+                    "scopeKind": "chapter"
+                  }
+                },
+                {
+                  "id": "GEN-23",
+                  "kind": "number",
+                  "numberInfo": {
+                    "kind": "single",
+                    "start": 2
+                  },
+                  "sid": "GEN 2:0",
+                  "source": "2"
+                },
+                {
+                  "id": "GEN-24",
+                  "kind": "newline",
+                  "sid": "GEN 2:0",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-25",
+                  "kind": "marker",
+                  "marker": "p",
+                  "markerMetadata": {
+                    "canonical": "p",
+                    "kind": "paragraph"
+                  },
+                  "nested": false,
+                  "sid": "GEN 2:0",
+                  "source": "\\p",
+                  "structural": {
+                    "inlineContext": "para",
+                    "scopeKind": "block"
+                  }
+                },
+                {
+                  "id": "GEN-26",
+                  "kind": "newline",
+                  "sid": "GEN 2:0",
+                  "source": "\n"
+                },
+                {
+                  "id": "GEN-27",
+                  "kind": "marker",
+                  "marker": "v",
+                  "markerMetadata": {
+                    "canonical": "v",
+                    "kind": "verse"
+                  },
+                  "nested": false,
+                  "sid": "GEN 2:1",
+                  "source": "\\v ",
+                  "structural": {
+                    "scopeKind": "verse"
+                  }
+                },
+                {
+                  "id": "GEN-28",
+                  "kind": "number",
+                  "numberInfo": {
+                    "kind": "single",
+                    "start": 1
+                  },
+                  "sid": "GEN 2:1",
+                  "source": "1 "
+                },
+                {
+                  "id": "GEN-29",
+                  "kind": "text",
+                  "sid": "GEN 2:1",
+                  "source": "And God said."
+                },
+                {
+                  "id": "GEN-30",
+                  "kind": "newline",
+                  "sid": "GEN 2:1",
+                  "source": "\n"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "lane": "tokens",
+      "output": {
+        "changed": [
+          {
+            "book": "GEN"
+          }
+        ],
+        "removed": [],
+        "snapshotId": "10c3d95f3cf73a30"
+      },
+      "step": "set_baseline_to_current_seed"
+    },
+    {
+      "args": {
+        "book": {
+          "book": "GEN",
+          "kind": "tokens",
+          "lineEnding": "lf",
+          "sourceKey": "01-GEN.usfm",
+          "tokens": [
+            {
+              "id": "GEN-0",
+              "kind": "marker",
+              "marker": "id",
+              "markerMetadata": {
+                "canonical": "id",
+                "kind": "header"
+              },
+              "nested": false,
+              "source": "\\id ",
+              "structural": {
+                "scopeKind": "header"
+              }
+            },
+            {
+              "bookCode": "GEN",
+              "bookCodeValid": true,
+              "id": "GEN-1",
+              "kind": "bookCode",
+              "sid": "GEN 0:0",
+              "source": "GEN"
+            },
+            {
+              "id": "GEN-2",
+              "kind": "newline",
+              "sid": "GEN 0:0",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-3",
+              "kind": "marker",
+              "marker": "c",
+              "markerMetadata": {
+                "canonical": "c",
+                "kind": "chapter"
+              },
+              "nested": false,
+              "sid": "GEN 1:0",
+              "source": "\\c ",
+              "structural": {
+                "scopeKind": "chapter"
+              }
+            },
+            {
+              "id": "GEN-4",
+              "kind": "number",
+              "numberInfo": {
+                "kind": "single",
+                "start": 1
+              },
+              "sid": "GEN 1:0",
+              "source": "1"
+            },
+            {
+              "id": "GEN-5",
+              "kind": "newline",
+              "sid": "GEN 1:0",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-6",
+              "kind": "marker",
+              "marker": "p",
+              "markerMetadata": {
+                "canonical": "p",
+                "kind": "paragraph"
+              },
+              "nested": false,
+              "sid": "GEN 1:0",
+              "source": "\\p",
+              "structural": {
+                "inlineContext": "para",
+                "scopeKind": "block"
+              }
+            },
+            {
+              "id": "GEN-7",
+              "kind": "newline",
+              "sid": "GEN 1:0",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-8",
+              "kind": "marker",
+              "marker": "v",
+              "markerMetadata": {
+                "canonical": "v",
+                "kind": "verse"
+              },
+              "nested": false,
+              "sid": "GEN 1:1",
+              "source": "\\v ",
+              "structural": {
+                "scopeKind": "verse"
+              }
+            },
+            {
+              "id": "GEN-9",
+              "kind": "number",
+              "numberInfo": {
+                "kind": "single",
+                "start": 1
+              },
+              "sid": "GEN 1:1",
+              "source": "1 "
+            },
+            {
+              "id": "GEN-10",
+              "kind": "text",
+              "sid": "GEN 1:1",
+              "source": "In the beginning."
+            },
+            {
+              "id": "GEN-11",
+              "kind": "marker",
+              "marker": "p",
+              "markerMetadata": {
+                "canonical": "p",
+                "kind": "paragraph"
+              },
+              "nested": false,
+              "sid": "GEN 1:1",
+              "source": "\\p",
+              "structural": {
+                "inlineContext": "para",
+                "scopeKind": "block"
+              }
+            },
+            {
+              "id": "GEN-12",
+              "kind": "newline",
+              "sid": "GEN 1:1",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-13",
+              "kind": "marker",
+              "marker": "v",
+              "markerMetadata": {
+                "canonical": "v",
+                "kind": "verse"
+              },
+              "nested": false,
+              "sid": "GEN 1:2",
+              "source": "\\v ",
+              "structural": {
+                "scopeKind": "verse"
+              }
+            },
+            {
+              "id": "GEN-14",
+              "kind": "number",
+              "numberInfo": {
+                "kind": "single",
+                "start": 2
+              },
+              "sid": "GEN 1:2",
+              "source": "2 "
+            },
+            {
+              "id": "GEN-15",
+              "kind": "text",
+              "sid": "GEN 1:2",
+              "source": "And the earth below."
+            },
+            {
+              "id": "GEN-16",
+              "kind": "marker",
+              "marker": "q1",
+              "markerMetadata": {
+                "canonical": "q1",
+                "kind": "paragraph"
+              },
+              "nested": false,
+              "sid": "GEN 1:2",
+              "source": "\\q1",
+              "structural": {
+                "inlineContext": "para",
+                "scopeKind": "block"
+              }
+            },
+            {
+              "id": "GEN-17",
+              "kind": "newline",
+              "sid": "GEN 1:2",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-18",
+              "kind": "marker",
+              "marker": "v",
+              "markerMetadata": {
+                "canonical": "v",
+                "kind": "verse"
+              },
+              "nested": false,
+              "sid": "GEN 1:3",
+              "source": "\\v ",
+              "structural": {
+                "scopeKind": "verse"
+              }
+            },
+            {
+              "id": "GEN-19",
+              "kind": "number",
+              "numberInfo": {
+                "kind": "single",
+                "start": 3
+              },
+              "sid": "GEN 1:3",
+              "source": "3 "
+            },
+            {
+              "id": "GEN-20",
+              "kind": "text",
+              "sid": "GEN 1:3",
+              "source": "Light."
+            },
+            {
+              "id": "GEN-21",
+              "kind": "newline",
+              "sid": "GEN 1:3",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-22",
+              "kind": "marker",
+              "marker": "c",
+              "markerMetadata": {
+                "canonical": "c",
+                "kind": "chapter"
+              },
+              "nested": false,
+              "sid": "GEN 2:0",
+              "source": "\\c ",
+              "structural": {
+                "scopeKind": "chapter"
+              }
+            },
+            {
+              "id": "GEN-23",
+              "kind": "number",
+              "numberInfo": {
+                "kind": "single",
+                "start": 2
+              },
+              "sid": "GEN 2:0",
+              "source": "2"
+            },
+            {
+              "id": "GEN-24",
+              "kind": "newline",
+              "sid": "GEN 2:0",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-25",
+              "kind": "marker",
+              "marker": "p",
+              "markerMetadata": {
+                "canonical": "p",
+                "kind": "paragraph"
+              },
+              "nested": false,
+              "sid": "GEN 2:0",
+              "source": "\\p",
+              "structural": {
+                "inlineContext": "para",
+                "scopeKind": "block"
+              }
+            },
+            {
+              "id": "GEN-26",
+              "kind": "newline",
+              "sid": "GEN 2:0",
+              "source": "\n"
+            },
+            {
+              "id": "GEN-27",
+              "kind": "marker",
+              "marker": "v",
+              "markerMetadata": {
+                "canonical": "v",
+                "kind": "verse"
+              },
+              "nested": false,
+              "sid": "GEN 2:1",
+              "source": "\\v ",
+              "structural": {
+                "scopeKind": "verse"
+              }
+            },
+            {
+              "id": "GEN-28",
+              "kind": "number",
+              "numberInfo": {
+                "kind": "single",
+                "start": 1
+              },
+              "sid": "GEN 2:1",
+              "source": "1 "
+            },
+            {
+              "id": "GEN-29",
+              "kind": "text",
+              "sid": "GEN 2:1",
+              "source": "And God said."
+            },
+            {
+              "id": "GEN-30",
+              "kind": "newline",
+              "sid": "GEN 2:1",
+              "source": "\n"
+            }
+          ]
+        }
+      },
+      "lane": "tokens",
+      "output": {
+        "changed": [
+          {
+            "book": "GEN"
+          }
+        ],
+        "removed": [],
+        "snapshotId": "5898e8f0b5354899"
+      },
+      "step": "set_baseline_to_current_edit"
+    },
+    {
+      "args": {
+        "scope": {
+          "book": "GEN",
+          "kind": "book"
+        }
+      },
+      "lane": "tokens",
+      "output": {
+        "changed": [],
+        "removed": [],
+        "snapshotId": "5898e8f0b5354899"
+      },
+      "step": "set_baseline_to_current"
+    },
+    {
+      "args": {
+        "scope": {
+          "book": "GEN",
+          "kind": "book"
+        }
+      },
+      "lane": "tokens",
+      "output": {
+        "changed": [],
+        "removed": [],
+        "snapshotId": "5898e8f0b5354899"
+      },
+      "step": "set_baseline_to_current_idempotent"
+    },
+    {
+      "args": {
+        "scope": {
+          "kind": "chapter",
+          "target": {
+            "book": "GEN",
+            "label": {
+              "kind": "number",
+              "label": "1"
+            }
+          }
+        }
+      },
+      "lane": "tokens",
+      "output": {
+        "kind": "chapterScopeUnsupported",
+        "target": {
+          "book": "GEN",
+          "label": {
+            "kind": "number",
+            "label": "1"
+          }
+        }
+      },
+      "step": "set_baseline_to_current_chapter_unsupported"
+    },
+    {
+      "args": {
+        "scope": {
+          "kind": "all"
+        }
+      },
+      "lane": "tokens",
+      "output": {
+        "changed": [],
+        "removed": [],
+        "snapshotId": "2d06800538d394c2"
+      },
+      "step": "set_baseline_to_current_empty_corpus"
     },
     {
       "args": {

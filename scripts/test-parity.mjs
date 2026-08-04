@@ -167,6 +167,28 @@ const METHODS = {
     wrapped: true,
     args: (a) => [a.scope],
   },
+  // set_baseline_to_current: its own fresh handle, seeded/edited via their
+  // own recorded steps, then the no-parse baseline declaration, its
+  // idempotence, and the chapter-scope refusal, all on that same instance.
+  set_baseline_to_current_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  set_baseline_to_current_edit: { js: "updateBook", wrapped: true, args: (a) => [a.book] },
+  set_baseline_to_current: { js: "setBaselineToCurrent", wrapped: true, args: (a) => [a.scope] },
+  set_baseline_to_current_idempotent: {
+    js: "setBaselineToCurrent",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
+  set_baseline_to_current_chapter_unsupported: {
+    js: "setBaselineToCurrent",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
+  // All scope on an empty corpus, on its own never-seeded fresh handle.
+  set_baseline_to_current_empty_corpus: {
+    js: "setBaselineToCurrent",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
 };
 
 /** Steps that build their own fresh `Braid` rather than continuing the
@@ -186,6 +208,8 @@ const FRESH_INSTANCE_STEPS = new Set([
   "restore_published_corpus_empty_source_key",
   "publish_scope_seed",
   "revert_seed",
+  "set_baseline_to_current_seed",
+  "set_baseline_to_current_empty_corpus",
 ]);
 
 function makeMinter() {

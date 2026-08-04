@@ -370,6 +370,21 @@ export class Braid {
         return takeObject(ret);
     }
     /**
+     * Declares each in-scope book's CURRENT resident state as its baseline
+     * -- no re-parse, no `BookInput`: the bulk, no-parse counterpart to
+     * `setBaseline`. `all`/`book` scopes only, deliberately symmetric with
+     * `revertToBaseline` (a baseline is a whole-book slot, so the set and
+     * revert halves of its lifecycle agree on what scopes can address it);
+     * a chapter scope refuses the same way. Idempotent, and there is no
+     * missing-baseline case -- this verb's whole point is to create one.
+     * @param {CorpusScope} scope
+     * @returns {RevertBaselineOutcome}
+     */
+    setBaselineToCurrent(scope) {
+        const ret = wasm.braid_setBaselineToCurrent(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+    /**
      * Current tokens for the requested scopes — the single hydration verb.
      *
      * Returns current truth, not state as of any earlier effect. The input is

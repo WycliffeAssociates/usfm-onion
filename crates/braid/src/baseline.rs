@@ -155,6 +155,59 @@ impl Braid {
 
         Ok(self.effect(changed, Vec::new()))
     }
+
+    /// Declares each in-scope book's CURRENT resident state as its baseline —
+    /// the bulk counterpart to [`Self::set_baseline`], with no `BookInput`, no
+    /// parse, and no validation, because the content is already resident and
+    /// already validated: this is a pure snapshot of what braid already
+    /// holds, taken directly from each targeted book's own resident state.
+    ///
+    /// Motivation: an editor's warm-restore path (reopen a saved corpus, then
+    /// declare every book's just-restored content as its baseline) had no
+    /// route to this fact except round-tripping every book back out through
+    /// [`Self::set_baseline`]'s `BookInput::Usfm` arm — which re-parses the
+    /// whole corpus purely to restate content braid already has resident,
+    /// measured at 1.3-1.6s across a 66-book corpus. This verb is that same
+    /// end state reached without a single re-parse.
+    ///
+    /// `Book`/`All` scopes only, deliberately symmetric with
+    /// [`Self::revert_to_baseline`] rather than accepting the bare
+    /// [`ScopeError`] an editor RFC originally proposed for this verb: a
+    /// baseline is a whole-book slot (see this module's own doc comment), so
+    /// the set and revert halves of that slot's lifecycle must agree on what
+    /// scopes address it at all — a caller that could set a chapter-scoped
+    /// baseline here but never revert to it would have built state with no
+    /// way back through the pair's own verbs. A chapter scope therefore
+    /// refuses via the same [`BaselineError::ChapterScopeUnsupported`]
+    /// `revert_to_baseline` uses, not a bare `ScopeError`.
+    ///
+    /// Idempotent, and there is no `MissingBaseline` case: this verb's whole
+    /// point is to create baselines, not to require them already exist. The
+    /// returned effect is always the no-op shape — a baseline slot never
+    /// participates in `changed`/`removed`/`reordered`, the same as
+    /// [`Self::set_baseline`]/[`Self::clear_baseline`]. Afterwards
+    /// `is_dirty(scope)` is `false` and `diff_baseline(scope)` reports
+    /// equality for every book in scope; `All` on an empty corpus is a
+    /// trivially successful no-op.
+    pub fn set_baseline_to_current(
+        &mut self,
+        scope: CorpusScope,
+    ) -> Result<MutationEffect, BaselineError> {
+        let indices: Vec<usize> = match scope {
+            CorpusScope::Chapter(target) => {
+                return Err(BaselineError::ChapterScopeUnsupported(target));
+            }
+            CorpusScope::Book(book) => {
+                vec![self.index_of(book).ok_or(ScopeError::BookNotFound(book))?]
+            }
+            CorpusScope::All => (0..self.books.len()).collect(),
+        };
+
+        for index in indices {
+            self.books[index].baseline = Some(BaselineState::of(&self.books[index]));
+        }
+        Ok(self.effect(Vec::new(), Vec::new()))
+    }
 }
 
 /// A baseline declaration that could not be installed.

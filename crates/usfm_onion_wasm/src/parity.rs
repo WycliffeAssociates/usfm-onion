@@ -878,6 +878,109 @@ fn run_lane(lane: &str, steps: &mut Vec<Step>) {
         json!({ "scope": { "kind": "chapter", "target": dto_chapter_target("GEN", "1") } }),
         json!(resident::BaselineError::from(error)),
     );
+
+    // ---- set_baseline_to_current: its own fresh handle, seeded then
+    // edited via recorded steps, then the no-parse baseline declaration
+    // itself, its idempotence, and the chapter-scope refusal.
+    let mut current_baseliner = NativeBraid::new(braid_config(), minter());
+    let current_book_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let current_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let seed_effect = current_baseliner
+        .replace_corpus(braid::CorpusInput::new(vec![current_book]))
+        .expect("one book");
+    push(
+        "set_baseline_to_current_seed",
+        json!({ "corpus": { "books": [current_book_dto] } }),
+        json!(resident::MutationEffect::from(seed_effect)),
+    );
+
+    let edit_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_EDITED_WHOLE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let edit = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_EDITED_WHOLE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let effect = current_baseliner.update_book(edit).expect("valid edit");
+    push(
+        "set_baseline_to_current_edit",
+        json!({ "book": edit_dto }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    let effect = current_baseliner
+        .set_baseline_to_current(braid::CorpusScope::Book(book_id("GEN")))
+        .expect("GEN is resident");
+    push(
+        "set_baseline_to_current",
+        json!({ "scope": { "kind": "book", "book": "GEN" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    // Idempotence: a second call is another no-op.
+    let effect = current_baseliner
+        .set_baseline_to_current(braid::CorpusScope::Book(book_id("GEN")))
+        .expect("GEN is still resident");
+    push(
+        "set_baseline_to_current_idempotent",
+        json!({ "scope": { "kind": "book", "book": "GEN" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    // Chapter scope refuses, symmetric with revert_to_baseline.
+    let error = current_baseliner
+        .set_baseline_to_current(braid::CorpusScope::Chapter(native_chapter_target(
+            "GEN", "1",
+        )))
+        .expect_err("chapter scope is unsupported");
+    push(
+        "set_baseline_to_current_chapter_unsupported",
+        json!({ "scope": { "kind": "chapter", "target": dto_chapter_target("GEN", "1") } }),
+        json!(resident::BaselineError::from(error)),
+    );
+
+    // All scope on an empty corpus: a trivially successful no-op, on its
+    // own fresh (never-seeded) handle.
+    let mut empty = NativeBraid::new(braid_config(), minter());
+    let effect = empty
+        .set_baseline_to_current(braid::CorpusScope::All)
+        .expect("an empty scope has nothing to refuse");
+    push(
+        "set_baseline_to_current_empty_corpus",
+        json!({ "scope": { "kind": "all" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
 }
 
 /// Publish → restore → compare, both findings and summary — the packed

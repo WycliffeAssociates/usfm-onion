@@ -1262,6 +1262,16 @@ export class Braid {
      */
     setBaseline(book: BookInput): BaselineMutationOutcome;
     /**
+     * Declares each in-scope book's CURRENT resident state as its baseline
+     * -- no re-parse, no `BookInput`: the bulk, no-parse counterpart to
+     * `setBaseline`. `all`/`book` scopes only, deliberately symmetric with
+     * `revertToBaseline` (a baseline is a whole-book slot, so the set and
+     * revert halves of its lifecycle agree on what scopes can address it);
+     * a chapter scope refuses the same way. Idempotent, and there is no
+     * missing-baseline case -- this verb's whole point is to create one.
+     */
+    setBaselineToCurrent(scope: CorpusScope): RevertBaselineOutcome;
+    /**
      * Current tokens for the requested scopes — the single hydration verb.
      *
      * Returns current truth, not state as of any earlier effect. The input is
@@ -1461,6 +1471,7 @@ export interface InitOutput {
     readonly braid_restorePublishedCorpus: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly braid_revertToBaseline: (a: number, b: number) => number;
     readonly braid_setBaseline: (a: number, b: number) => number;
+    readonly braid_setBaselineToCurrent: (a: number, b: number) => number;
     readonly braid_toTokens: (a: number, b: number, c: number) => number;
     readonly braid_toUsfm: (a: number, b: number) => number;
     readonly braid_updateBook: (a: number, b: number) => number;

@@ -30,6 +30,7 @@ export const braid_restoreCorpus: (a: number, b: number, c: number) => number;
 export const braid_restorePublishedCorpus: (a: number, b: number, c: number, d: number, e: number) => number;
 export const braid_revertToBaseline: (a: number, b: number) => number;
 export const braid_setBaseline: (a: number, b: number) => number;
+export const braid_setBaselineToCurrent: (a: number, b: number) => number;
 export const braid_toTokens: (a: number, b: number, c: number) => number;
 export const braid_toUsfm: (a: number, b: number) => number;
 export const braid_updateBook: (a: number, b: number) => number;

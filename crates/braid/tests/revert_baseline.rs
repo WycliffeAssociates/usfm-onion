@@ -275,3 +275,125 @@ fn a_book_not_resident_refuses_via_scope_error() {
         BaselineError::Scope(braid::ScopeError::BookNotFound(id("LEV")))
     );
 }
+
+// ---- set_baseline_to_current ------------------------------------------
+
+/// After mutating a book and then declaring its current state as the
+/// baseline (no `BookInput`, no re-parse), the book must read as clean and
+/// diff as empty against that just-declared baseline.
+#[test]
+fn set_baseline_to_current_makes_the_scope_clean() {
+    let mut resident = seeded();
+    resident.update_book(usfm("GEN", GEN_EDITED)).unwrap();
+    assert!(resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap());
+
+    let effect = resident
+        .set_baseline_to_current(CorpusScope::Book(id("GEN")))
+        .expect("GEN is resident");
+    assert!(effect.is_noop(), "a baseline slot never appears in changed");
+    assert!(!resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap());
+
+    let diff = match resident
+        .diff_baseline(CorpusScope::Book(id("GEN")))
+        .unwrap()
+    {
+        braid::ScopedOutput::Single(skeleton) => skeleton,
+        braid::ScopedOutput::All(_) => panic!("expected a single-scope diff"),
+    };
+    assert!(
+        diff.units
+            .iter()
+            .all(|unit| matches!(unit.status, usfm_onion::diff::DecisionStatus::Unchanged)),
+        "the just-declared baseline must diff as fully unchanged against current content"
+    );
+}
+
+/// Calling it twice in a row is a no-op both times: idempotent, not merely
+/// successful once.
+#[test]
+fn set_baseline_to_current_is_idempotent() {
+    let mut resident = seeded();
+    resident.update_book(usfm("GEN", GEN_EDITED)).unwrap();
+
+    let first = resident
+        .set_baseline_to_current(CorpusScope::All)
+        .expect("succeeds");
+    assert!(first.is_noop());
+    assert!(!resident.is_dirty(CorpusScope::All).unwrap());
+
+    let second = resident
+        .set_baseline_to_current(CorpusScope::All)
+        .expect("succeeds again");
+    assert!(second.is_noop());
+    assert!(!resident.is_dirty(CorpusScope::All).unwrap());
+}
+
+/// Deliberately symmetric with `revert_to_baseline`: a chapter scope refuses
+/// the same way, rather than accepting a bare `ScopeError`.
+#[test]
+fn set_baseline_to_current_chapter_scope_refuses() {
+    let mut resident = seeded();
+    let target = ChapterTarget::new(id("GEN"), ChapterLabel::Number("1".into()));
+    let error = resident
+        .set_baseline_to_current(CorpusScope::Chapter(target.clone()))
+        .expect_err("chapter scope is unsupported");
+    assert_eq!(error, BaselineError::ChapterScopeUnsupported(target));
+    // No baseline was created for GEN by the refused call.
+    assert!(resident.is_dirty(CorpusScope::Book(id("GEN"))).unwrap());
+}
+
+/// `All` on an empty corpus is a trivially successful no-op -- there is
+/// nothing to fail on and nothing to baseline.
+#[test]
+fn set_baseline_to_current_all_on_an_empty_corpus_succeeds() {
+    let mut resident = braid();
+    let effect = resident
+        .set_baseline_to_current(CorpusScope::All)
+        .expect("an empty scope has nothing to refuse");
+    assert!(effect.is_noop());
+}
+
+/// The key contract: `set_baseline_to_current` then `revert_to_baseline` is a
+/// no-op with zero changed books, and -- the point of the whole verb -- the
+/// token IDS are unchanged, not merely equivalent content. The baseline
+/// captured current identity, not a re-derived equivalent: were this verb to
+/// go through any re-parse or re-mint path, the ids compared here would
+/// still happen to match for a positional-lane fixture, so this drives the
+/// token-push lane with the editor's own distinctly-prefixed opaque ids, the
+/// same technique `revert_identity_reinstalls_the_baselines_own_token_ids`
+/// uses, to actually distinguish "same ids" from "merely equal content".
+#[test]
+fn set_baseline_to_current_then_revert_is_a_true_no_op() {
+    let mut resident = seeded();
+    resident
+        .update_book(token_push("GEN", relabelled(GEN_SOURCE, "live")))
+        .unwrap();
+    let before_ids: Vec<String> = resident.to_tokens(braid::Scope::book(id("GEN"))).unwrap()[0]
+        .tokens
+        .iter()
+        .map(|token| token.id().as_str().to_string())
+        .collect();
+
+    resident
+        .set_baseline_to_current(CorpusScope::Book(id("GEN")))
+        .expect("GEN is resident");
+
+    let effect = resident
+        .revert_to_baseline(CorpusScope::Book(id("GEN")))
+        .expect("GEN now has a baseline");
+    assert_eq!(
+        effect.changed,
+        Vec::new(),
+        "reverting to the baseline just captured from current state changes nothing"
+    );
+
+    let after_ids: Vec<String> = resident.to_tokens(braid::Scope::book(id("GEN"))).unwrap()[0]
+        .tokens
+        .iter()
+        .map(|token| token.id().as_str().to_string())
+        .collect();
+    assert_eq!(
+        after_ids, before_ids,
+        "token identity must be exactly what set_baseline_to_current captured, not merely equal content"
+    );
+}

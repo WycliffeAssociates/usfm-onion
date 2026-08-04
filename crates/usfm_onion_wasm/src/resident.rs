@@ -813,6 +813,31 @@ impl Braid {
         )
     }
 
+    /// Declares each in-scope book's CURRENT resident state as its baseline
+    /// -- no re-parse, no `BookInput`: the bulk, no-parse counterpart to
+    /// `setBaseline`. `all`/`book` scopes only, deliberately symmetric with
+    /// `revertToBaseline` (a baseline is a whole-book slot, so the set and
+    /// revert halves of its lifecycle agree on what scopes can address it);
+    /// a chapter scope refuses the same way. Idempotent, and there is no
+    /// missing-baseline case -- this verb's whole point is to create one.
+    #[wasm_bindgen(js_name = setBaselineToCurrent)]
+    pub fn set_baseline_to_current(&mut self, scope: CorpusScope) -> RevertBaselineOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return RevertBaselineOutcome::refused(BaselineError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        RevertBaselineOutcome::from(
+            self.inner
+                .set_baseline_to_current(native)
+                .map(MutationEffect::from)
+                .map_err(BaselineError::from),
+        )
+    }
+
     /// Every verse's lossless text projection for a scope, in document order.
     ///
     /// The resident answer to what the stateless projection computes from scratch:
