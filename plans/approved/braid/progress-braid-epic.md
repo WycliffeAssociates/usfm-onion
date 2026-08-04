@@ -5676,23 +5676,52 @@ delegation following the `publish`/`diffBaseline` patterns exactly. `braid::Scop
 mirrors because they carry a `ScopeError`/`ChapterTarget`, which — like every other
 scope-shaped error at this boundary — projects to the crate's own String-based DTO.
 
-Gates, all green: `cargo test --workspace --all-features` (291 braid+wasm+wire+core tests,
-0 failed, +14 new native tests: scoped-publish round trip through `restore_corpus` into a
-fresh `Braid`, always-encode on a clean previously-published book, snapshot-id-equals-lint,
-publication-cache non-interference, revert atomicity/identity/no-op/chapter-refusal);
-`cargo doc --workspace --no-deps --all-features -D warnings` clean; `cargo fmt --all --check`
-clean; lint oracle byte-identical (no re-bless); JS: `test:packed`/`:web` (410 cases,
-unchanged), `test:parity`/`:web` (82 steps × 2 lanes, 0 divergences — new steps
-`publish_scope(_seed)`/`revert_seed`/`revert_set_baseline`/`revert_update_book`/
-`revert_to_baseline`/`revert_to_baseline_chapter_unsupported` each on their own fresh handle so
-they don't perturb the existing 19-step sequence), `test:publish`/`:web` (17 checks, +1 new
-publishScope→verifyPackedCorpus/materialize round trip compared against `toTokens()`),
-`test:publish:js`/`:js:web` (27 checks, unchanged), `golden:wasm`/`:web` (7 fixtures,
-unchanged). Dev-mode gate runs dirtied the committed `pkg-*` trees; restored via `git restore
-pkg-bundler pkg-web` and rebuilt release (`npm run build`) before this commit.
+Gates, all green (final numbers, see escape note below for why an earlier report of these same
+gates was wrong): `cargo test --workspace --all-features` (`RUSTFLAGS=-D warnings`) — 640 tests
+total across every workspace crate, 0 failed, 12 ignored (incl. +14 new native braid tests:
+scoped-publish round trip through `restore_corpus` into a fresh `Braid`, always-encode on a
+clean previously-published book, snapshot-id-equals-lint, publication-cache non-interference,
+revert atomicity/identity/no-op/chapter-refusal); `cargo doc --workspace --no-deps
+--all-features` (`RUSTDOCFLAGS=-D warnings`) clean; `cargo fmt --all --check` clean; lint
+oracle (`--ignored`) byte-identical, no re-bless; JS (bundler + web, both variants of every
+gate): `test:packed` 410 cases / 5,717,153 tokens; `test:parity` 82 steps × 2 lanes, 0
+divergences (new steps `publish_scope(_seed)`/`revert_seed`/`revert_set_baseline`/
+`revert_update_book`/`revert_to_baseline`/`revert_to_baseline_chapter_unsupported`, each on its
+own fresh handle so they don't perturb the existing 19-step sequence); `test:publish` 17 checks
+(+1 new publishScope→verifyPackedCorpus/materialize round trip compared against `toTokens()`);
+`test:publish:js` 27 checks; `golden:wasm` 7 fixtures. Dev-mode gate runs repeatedly dirtied the
+committed `pkg-*` trees; restored via `git restore pkg-bundler pkg-web` and rebuilt release
+(`npm run build`) before the final commit, with `test:parity` re-run directly (bundler and web)
+against that exact release-built, about-to-be-committed tree as the last check before `git
+status`/commit.
+
+**Escape, corrected in this same round: a reported-green gate that was never run against the
+final tree.** The first pass reported `test:parity` as "82 steps × 2 lanes, 0 divergences," but
+that run happened *before* the version bump to 0.1.5 — the parity transcript
+(`crates/usfm_onion_wasm/tests/fixtures/parity-transcript.json`) was generated once, right after
+writing the new parity steps, and never regenerated after `Cargo.toml`/`package.json` moved to
+0.1.5 and the wasm packages were rebuilt at that version. Root cause:
+`braid::stamps::LintEngineStamp::current()` hashes `"usfm_onion@{CRATE_VERSION}:rules{RULES_VERSION}"`
+— by design (see its own doc comment and
+`a_version_bump_invalidates_every_cache_built_under_the_old_one`), a version bump is meant to
+invalidate every warm lint cache built under the old one. The committed transcript's
+`restore_corpus`/`restore_corpus_then_lint`/`publish`/`publish_scope` steps had 0.1.4's stamp
+baked into their expected output (rejections, container hash fields, and downstream finding
+spans all derive from or gate on that stamp), so replaying them against the real 0.1.5-built
+wasm package produced exactly the class of divergence a version bump is supposed to produce —
+not a real regression, but a stale fixture. Director verification caught this because it ran
+the gate fresh against the committed tree rather than trusting the prior report; the builder's
+mistake was bumping the version and rebuilding without re-running the generator
+(`cargo test -p usfm_onion_wasm --lib -- --ignored generate_parity_transcript`) one more time
+before reporting gates green. Fix applied: regenerated the transcript against the final 0.1.5
+code (the only change in this follow-up commit besides this ledger entry), then reran every gate
+listed above in the required order from a clean tree, ending with a direct `test:parity`
+re-check against the exact release-built tree being committed. No change to the comparison
+logic itself — the fixture was stale, not the check.
 
 Version bump: workspace `Cargo.toml` and npm `package.json` 0.1.4 → 0.1.5 (additive,
 non-breaking on both surfaces).
 
 Not tagged, not merged, not pushed — branch `v0.1.5-scoped` off `master` (b6a1fcd, v0.1.4),
-awaiting review.
+awaiting review. This entry covers both commits on the branch: the feature commit and this
+follow-up fixture-regeneration commit.
