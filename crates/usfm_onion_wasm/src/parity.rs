@@ -782,7 +782,6 @@ fn run_restore(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: usfm_onion_host::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -902,7 +901,6 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(suppressed_braid_config(), minter()),
-        publication: usfm_onion_host::PublicationCache::default(),
     };
     let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
         path: "01-GEN.usfm".to_string(),
@@ -934,10 +932,10 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
     });
 }
 
-/// Pins `Braid::publish`'s wasm projection against the native adapter it
-/// wraps: both sides run `PublicationCache::publish` over the identical
-/// corpus and must produce byte-identical `corpus.bin` bytes, since the wasm
-/// verb is meant to be a thin pass-through and nothing else. That equality
+/// Pins `Braid::publish`'s wasm projection against the native verb it wraps:
+/// both sides run `braid::Braid::publish` over the identical corpus and must
+/// produce byte-identical `corpus.bin` bytes, since the wasm verb is meant to
+/// be a thin pass-through and nothing else. That equality
 /// is asserted directly here, in Rust, before the fixture is ever written --
 /// the recorded step below then pins the wasm-shaped *value* the node
 /// comparator re-checks against the real, built package.
@@ -956,10 +954,9 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     native_publisher
         .replace_corpus(braid::CorpusInput::new(vec![native_book]))
         .expect("one book");
-    let mut native_cache = usfm_onion_host::PublicationCache::default();
-    let native_publication =
-        usfm_onion_host::publish_corpus(&mut native_publisher, &mut native_cache)
-            .expect("native adapter publishes");
+    let native_publication = native_publisher
+        .publish()
+        .expect("the native composition publishes");
 
     let wasm_book = match lane {
         "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
@@ -973,7 +970,6 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     };
     let mut wasm_braid = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: usfm_onion_host::PublicationCache::default(),
     };
     let corpus_args = json!({ "corpus": { "books": [wasm_book.clone()] } });
     let outcome = wasm_braid.replace_corpus(resident::CorpusInput {
@@ -999,7 +995,7 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
 
     assert_eq!(
         published.bytes, native_publication.bytes,
-        "{lane}: the wasm verb's bytes must be byte-identical to the native adapter's -- \
+        "{lane}: the wasm verb's bytes must be byte-identical to the native verb's -- \
          it is meant to be a thin projection, nothing else"
     );
 
@@ -1013,7 +1009,7 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     // Clean-room re-review P1: an empty `sourceKey` on a `restorePublishedCorpus`
     // record must classify as `{kind: "ingest", error: {kind:
     // "duplicateSourceKey", source: ""}}` -- the pre-extraction wasm
-    // classification, reproduced through `usfm_onion_host::RestoreError::
+    // classification, reproduced through `braid::RestoreError::
     // EmptySourceKey` -- not silently reclassified as a decode defect. Pinned
     // here so a future change to that mapping shows up as a parity
     // divergence, not a silent drift.
@@ -1034,7 +1030,6 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     });
     let mut restore_target = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
-        publication: usfm_onion_host::PublicationCache::default(),
     };
     let error = restore_target
         .restore_published_corpus(published.bytes.clone(), empty_source_key_records)

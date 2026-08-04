@@ -2,8 +2,7 @@
 //! `corpus.bin` container, with a reuse cache that keeps a republication of
 //! an unchanged corpus cheap.
 
-use braid::{Braid, LintConfigFingerprint, LintEngineStamp, SourceHash, TokenIdentity};
-use serde::{Deserialize, Serialize};
+use crate::{Braid, LintConfigFingerprint, LintEngineStamp, SourceHash, TokenIdentity};
 use usfm_onion::token::BookId;
 use usfm_onion_wire::corpus_codec::{
     CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
@@ -37,7 +36,7 @@ struct CachedBook {
 
 /// What one publication produced, before it is turned into the public
 /// [`PublishedCorpus`] shape (which also needs a fresh `lint()` read for
-/// each book's source hash -- see [`publish_corpus`]).
+/// each book's source hash -- see [`Braid::publish`]).
 #[derive(Debug)]
 struct Publication {
     bytes: Vec<u8>,
@@ -55,13 +54,13 @@ struct Publication {
 /// Holds only what wire produced and what decides its reuse; no source bytes, no
 /// IO, and no knowledge of what is inside a section. A host that wants the cache
 /// to outlive the process persists [`PublishedCorpus::bytes`] and reseeds through
-/// [`crate::restore_published_corpus`] — this type is an in-memory accelerator,
+/// [`Braid::restore_published_corpus`] — this type is an in-memory accelerator,
 /// not a storage format.
 ///
-/// Unchanged semantics from the wasm-only adapter this was extracted from:
-/// self-validating per publish (every `publish_corpus` call re-derives reuse
-/// from the resident corpus's own current state), no external invalidation
-/// hooks — a caller never has to remember to tell this cache anything moved.
+/// Self-validating per publish: every [`Braid::publish`] re-derives reuse from
+/// the resident corpus's own current state, so there are no external
+/// invalidation hooks and a caller never has to remember to tell this cache
+/// that anything moved.
 #[derive(Debug, Default)]
 pub struct PublicationCache {
     books: Vec<(BookId, CachedBook)>,
@@ -161,10 +160,11 @@ impl PublicationCache {
 /// caller is expected to already hold it from whichever earlier publish
 /// first reported `encoded: true` for that book -- the same asymmetry
 /// `EncodedCorpus::sources` documents natively.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedBookInfo {
     pub book: String,
     pub source_hash: String,
@@ -176,10 +176,11 @@ pub struct PublishedBookInfo {
 
 /// A packed corpus, ready to persist as `corpus.bin`, plus what the caller
 /// needs to restore or re-publish it later.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedCorpus {
     pub bytes: Vec<u8>,
     pub snapshot_id: String,
@@ -202,67 +203,85 @@ pub struct PublishedCorpus {
 // change at all for this extraction. `PackedEncodeError` itself is
 // `usfm_onion_wire::dto::PackedEncodeError`, referenced correctly below.
 #[allow(rustdoc::broken_intra_doc_links)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[cfg_attr(feature = "serde", serde(tag = "kind", rename_all = "camelCase"))]
 pub enum PublishError {
     Encode {
         error: usfm_onion_wire::dto::PackedEncodeError,
     },
 }
 
-/// Publishes the resident corpus as one packed `corpus.bin` container.
-///
-/// `cache` is the caller's own [`PublicationCache`] (owned by whatever handle
-/// wraps `braid` for its lifetime) so a repeat publish gets the cache's whole
-/// point -- splice-reuse of whatever did not change -- automatically. Dirty
-/// books are linted first (braid's own rule, via the `lint()` this runs
-/// internally); the reuse-cache's own sections/bytes never leave this
-/// function -- only the per-book bookkeeping in [`PublishedBookInfo`] does.
-pub fn publish_corpus(
-    braid: &mut Braid,
-    cache: &mut PublicationCache,
-) -> Result<PublishedCorpus, PublishError> {
-    let publication = cache.publish(braid).map_err(|error| PublishError::Encode {
-        error: error.into(),
-    })?;
+impl Braid {
+    /// Publishes the resident corpus as one packed `corpus.bin` container.
+    ///
+    /// Uses this handle's own [`PublicationCache`], so a repeat publish gets
+    /// the cache's whole point -- splice-reuse of whatever did not change --
+    /// automatically, with nothing for a caller to thread through. Dirty books
+    /// are linted first (braid's own rule, via the `lint()` this runs
+    /// internally); the reuse-cache's own sections and bytes never leave this
+    /// method -- only the per-book bookkeeping in [`PublishedBookInfo`] does.
+    pub fn publish(&mut self) -> Result<PublishedCorpus, PublishError> {
+        // The cache is moved out for the duration of the publish and put
+        // straight back. `PublicationCache::publish` needs `&mut` on both the
+        // cache and the corpus, which as one `&mut self` would alias; taking
+        // the field is how that is expressed without either splitting the
+        // borrow unsafely or making the cache the caller's problem again.
+        // `PublicationCache: Default` is an empty cache, so the window where
+        // the field is empty is a window in which nothing reads it, and a
+        // refusal restores it just as an success does.
+        let mut cache = std::mem::take(&mut self.publication);
+        let result = self.publish_with(&mut cache);
+        self.publication = cache;
+        result
+    }
 
-    // A second `lint()` read, not a second lint *pass*: every book was just
-    // made clean by the publish above, so this is a read of already-resident
-    // state, needed only for the per-book source hash the bookkeeping DTO
-    // reports (the internal `Publication` does not restate it).
-    let snapshot = braid.lint();
-    let books = snapshot
-        .books
-        .iter()
-        .map(|book| {
-            let encoded = publication.encoded.contains(&book.book);
-            let source = publication
-                .sources
-                .iter()
-                .find(|(candidate, _)| *candidate == book.book)
-                .map(|(_, source)| source.clone());
-            PublishedBookInfo {
-                book: book.book.as_str().to_string(),
-                source_hash: format!("{:016x}", book.source_hash.0),
-                encoded,
-                source,
-            }
+    fn publish_with(
+        &mut self,
+        cache: &mut PublicationCache,
+    ) -> Result<PublishedCorpus, PublishError> {
+        let publication = cache.publish(self).map_err(|error| PublishError::Encode {
+            error: error.into(),
+        })?;
+
+        // A second `lint()` read, not a second lint *pass*: every book was just
+        // made clean by the publish above, so this is a read of already-resident
+        // state, needed only for the per-book source hash the bookkeeping DTO
+        // reports (the internal `Publication` does not restate it).
+        let snapshot = self.lint();
+        let books = snapshot
+            .books
+            .iter()
+            .map(|book| {
+                let encoded = publication.encoded.contains(&book.book);
+                let source = publication
+                    .sources
+                    .iter()
+                    .find(|(candidate, _)| *candidate == book.book)
+                    .map(|(_, source)| source.clone());
+                PublishedBookInfo {
+                    book: book.book.as_str().to_string(),
+                    source_hash: format!("{:016x}", book.source_hash.0),
+                    encoded,
+                    source,
+                }
+            })
+            .collect();
+
+        Ok(PublishedCorpus {
+            bytes: publication.bytes,
+            snapshot_id: format!("{:016x}", snapshot.id.0),
+            books,
         })
-        .collect();
-
-    Ok(PublishedCorpus {
-        bytes: publication.bytes,
-        snapshot_id: format!("{:016x}", snapshot.id.0),
-        books,
-    })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use braid::{
+    use crate::{
         BookInput, BraidConfig, ChapterInput, ChapterLabel, ChapterTarget, CorpusInput, SourceKey,
     };
     use std::fs;
@@ -331,11 +350,11 @@ mod tests {
                     .iter()
                     .map(OwnedToken::from_parsed)
                     .collect();
-                let relabelled = braid::BookTokensInput {
+                let relabelled = crate::BookTokensInput {
                     source_key: SourceKey::new("EXO.usfm").unwrap(),
                     book: book("EXO"),
                     tokens,
-                    line_ending: braid::LineEnding::Lf,
+                    line_ending: crate::LineEnding::Lf,
                 };
                 // Re-pushing the same tokens is a no-op; what matters here is the
                 // lane, which the corpus gate below exercises with real edits.
@@ -344,8 +363,7 @@ mod tests {
                     .expect("token push");
             }
 
-            let mut cache = PublicationCache::default();
-            let published = publish_corpus(&mut resident, &mut cache).expect("publishes");
+            let published = resident.publish().expect("publishes");
             let encoded: Vec<&str> = published
                 .books
                 .iter()
@@ -398,12 +416,11 @@ mod tests {
         resident
             .replace_corpus(CorpusInput::new(vec![usfm("GEN", GEN), usfm("EXO", EXO)]))
             .expect("two books");
-        let mut cache = PublicationCache::default();
-        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        let first = resident.publish().expect("first publication");
         assert_eq!(first.books.iter().filter(|book| book.encoded).count(), 2);
 
         // Publishing again with nothing changed encodes nothing.
-        let unchanged = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let unchanged = resident.publish().expect("republication");
         assert!(
             unchanged.books.iter().all(|book| !book.encoded),
             "a clean publish re-encodes nothing"
@@ -427,7 +444,7 @@ mod tests {
             .expect("a real edit");
         assert!(!effect.is_noop());
 
-        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let second = resident.publish().expect("republication");
         let encoded: Vec<&str> = second
             .books
             .iter()
@@ -444,10 +461,10 @@ mod tests {
         assert_eq!(reused, vec!["EXO"], "the other spliced");
 
         let edited_source = match resident
-            .to_usfm(braid::CorpusScope::Book(book("GEN")))
+            .to_usfm(crate::CorpusScope::Book(book("GEN")))
             .expect("bytes")
         {
-            braid::ScopedOutput::Single(source) => source,
+            crate::ScopedOutput::Single(source) => source,
             other => panic!("expected one book, got {other:?}"),
         };
         let verified = verify(
@@ -467,8 +484,7 @@ mod tests {
         resident
             .replace_corpus(CorpusInput::new(vec![usfm("GEN", GEN)]))
             .expect("one book");
-        let mut cache = PublicationCache::default();
-        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        let first = resident.publish().expect("first publication");
         assert!(first.books.iter().all(|book| book.encoded));
 
         let mut options = LintOptions::scoped(LintScope::Book);
@@ -478,7 +494,7 @@ mod tests {
         // No token moved, so identity and hydration are untouched.
         assert!(effect.is_noop());
 
-        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let second = resident.publish().expect("republication");
         assert!(
             second.books.iter().all(|book| book.encoded),
             "a stamp change must re-encode, not reuse"
@@ -501,8 +517,7 @@ mod tests {
             .find(|entry| entry.book == book("GEN"))
             .expect("resident")
             .source_hash;
-        let mut cache = PublicationCache::default();
-        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        let first = resident.publish().expect("first publication");
         assert!(first.books.iter().all(|book| book.encoded));
         let before = verify(&first, &[(book("GEN"), GEN), (book("EXO"), EXO)]);
         let old_anchor = before.books[0]
@@ -527,11 +542,11 @@ mod tests {
             })
             .collect();
         let effect = resident
-            .update_book(BookInput::Tokens(braid::BookTokensInput {
+            .update_book(BookInput::Tokens(crate::BookTokensInput {
                 source_key: SourceKey::new("GEN.usfm").unwrap(),
                 book: book("GEN"),
                 tokens: relabelled,
-                line_ending: braid::LineEnding::Lf,
+                line_ending: crate::LineEnding::Lf,
             }))
             .expect("an identity-only push");
         assert!(!effect.is_noop());
@@ -542,7 +557,7 @@ mod tests {
             .unwrap();
         assert_eq!(entry.source_hash, hash_before, "not one byte changed");
 
-        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let second = resident.publish().expect("republication");
         let encoded: Vec<&str> = second
             .books
             .iter()
@@ -595,8 +610,7 @@ mod tests {
                 usfm("EXO", EXO),
             ]))
             .expect("two books");
-        let mut cache = PublicationCache::default();
-        let first = publish_corpus(&mut resident, &mut cache).expect("first publication");
+        let first = resident.publish().expect("first publication");
         assert!(first.books.iter().all(|book| book.encoded));
 
         // Re-push GEN with each attribute's recorded spelling narrowed by its
@@ -638,11 +652,11 @@ mod tests {
             .unwrap()
             .token_identity;
         resident
-            .update_book(BookInput::Tokens(braid::BookTokensInput {
+            .update_book(BookInput::Tokens(crate::BookTokensInput {
                 source_key: SourceKey::new("GEN.usfm").unwrap(),
                 book: book("GEN"),
                 tokens: respelled,
-                line_ending: braid::LineEnding::Lf,
+                line_ending: crate::LineEnding::Lf,
             }))
             .expect("a spelling-only push");
         let entry = resident
@@ -655,7 +669,7 @@ mod tests {
             "the attribute spelling moved, so the token identity must"
         );
 
-        let second = publish_corpus(&mut resident, &mut cache).expect("republication");
+        let second = resident.publish().expect("republication");
         let encoded: Vec<&str> = second
             .books
             .iter()
@@ -747,8 +761,7 @@ mod tests {
             ))
             .expect("the whole corpus is resident");
 
-        let mut cache = PublicationCache::default();
-        let first = publish_corpus(&mut resident, &mut cache).expect("publishes");
+        let first = resident.publish().expect("publishes");
         assert_eq!(first.books.iter().filter(|book| book.encoded).count(), 66);
 
         let sources: Vec<(BookId, &str)> = fixtures
@@ -836,7 +849,7 @@ mod tests {
             )
             .expect("a real edit");
 
-        let second = publish_corpus(&mut resident, &mut cache).expect("republishes");
+        let second = resident.publish().expect("republishes");
         let encoded: Vec<BookId> = second
             .books
             .iter()
@@ -871,10 +884,10 @@ mod tests {
 
         // And the republication still decodes against the new truth.
         let edited_source = match resident
-            .to_usfm(braid::CorpusScope::Book(target_book))
+            .to_usfm(crate::CorpusScope::Book(target_book))
             .expect("bytes")
         {
-            braid::ScopedOutput::Single(source) => source,
+            crate::ScopedOutput::Single(source) => source,
             other => panic!("expected one book, got {other:?}"),
         };
         let sources: Vec<(BookId, &str)> = fixtures

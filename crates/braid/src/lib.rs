@@ -35,6 +35,8 @@ mod format_patch;
 mod input;
 mod lint;
 mod patch;
+mod publication;
+mod restore;
 mod stamps;
 mod state;
 mod vref;
@@ -60,6 +62,8 @@ pub use crate::input::{
 };
 pub use crate::lint::{BookLintSnapshot, LintSnapshot};
 pub use crate::patch::{Patch, PatchId, PatchOp, PatchRow};
+pub use crate::publication::{PublicationCache, PublishError, PublishedBookInfo, PublishedCorpus};
+pub use crate::restore::{PublishedCorpusSource, RestoreError, RestoreRecord};
 pub use crate::stamps::{LintConfigFingerprint, LintEngineStamp};
 pub use crate::state::{
     BookEntry, BookLintPrime, LintPrimeInput, MutationEffect, PrimeRejectReason, PrimeRejection,
@@ -109,6 +113,16 @@ pub struct Braid {
     /// check every other ingest path goes through, so a colliding minter is a
     /// typed rejection rather than a corrupted book.
     minter: Box<dyn FnMut() -> String>,
+    /// This handle's own packed-publication reuse cache.
+    ///
+    /// Handle-held rather than a per-call argument for the same reason the
+    /// minter is: a repeat [`Braid::publish`] only gets the cache's whole
+    /// point -- splice-reuse of every book whose bytes and stamps did not
+    /// move -- if it is handed the same cache each time, and a caller
+    /// threading one through by hand can always forget to. Self-validating,
+    /// so nothing ever has to tell it that state moved: every publish
+    /// re-derives reuse from the corpus's own current hashes and stamps.
+    publication: PublicationCache,
 }
 
 impl std::fmt::Debug for Braid {
@@ -135,6 +149,7 @@ impl Braid {
             snapshot_id: SnapshotId::of([]),
             format_patches: Vec::new(),
             minter: Box::new(minter),
+            publication: PublicationCache::default(),
         }
     }
 

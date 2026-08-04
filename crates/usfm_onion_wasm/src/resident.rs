@@ -192,6 +192,18 @@ impl BraidConfig {
 }
 
 /// The resident corpus handle.
+//
+// A `#[wasm_bindgen]` projection of `braid::Braid` and nothing
+// else: every verb below converts its wasm-facing DTO arguments into that
+// handle's native types, calls the same-named native verb, and projects the
+// native `Result` back into this file's `ApiResult` shape. No verb here
+// composes anything -- a second copy of composition logic on this side of the
+// boundary is exactly what the native handle exists to prevent.
+//
+// Kept as a plain comment rather than doc prose on purpose: tsify/wasm-bindgen
+// copy a doc comment on this struct verbatim into the generated `.d.ts` and
+// `.js`, and an internal note about which Rust crate owns the composition is
+// not something a JS consumer's published surface should move for.
 #[wasm_bindgen]
 pub struct Braid {
     // `pub(crate)` rather than private: the parity transcript generator
@@ -201,11 +213,6 @@ pub struct Braid {
     // outside a real JS engine. No production code outside `resident.rs`
     // reaches into this field.
     pub(crate) inner: NativeBraid,
-    /// This handle's own publication cache -- one per resident corpus, not a
-    /// free function, so a repeat `publish()` gets the adapter's whole point
-    /// (splice-reuse of whatever did not change) automatically rather than a
-    /// caller having to thread a cache through by hand.
-    pub(crate) publication: usfm_onion_host::PublicationCache,
 }
 
 #[wasm_bindgen]
@@ -232,7 +239,6 @@ impl Braid {
         };
         Braid {
             inner: NativeBraid::new(config.into_native(), mint),
-            publication: usfm_onion_host::PublicationCache::default(),
         }
     }
 
@@ -270,135 +276,28 @@ impl Braid {
     /// A book whose cached findings cannot be adopted still seeds: residency and
     /// lint-priming are independent facts, so that book arrives with no lex or parse
     /// and is simply awaiting recompute.
+    //
+    // The composition itself (`braid::Braid::restore_packed_books`) lives in
+    // braid; this is the DTO conversion either side of it. `RestoreRecord`
+    // and `braid::RestoreRecord` are separate types on purpose: the wasm one
+    // is tsify-derived and travels as JSON, the native one is a plain struct,
+    // and the field-for-field move between them is the only work this verb
+    // does.
     #[wasm_bindgen(js_name = restoreCorpus)]
     pub fn restore_corpus(&mut self, records: Vec<RestoreRecord>) -> RestoreOutcome {
-        let mut books = Vec::with_capacity(records.len());
-        // Every record is verified individually (`verify_book`, right below),
-        // but the batch's stamps are what braid's own per-book adoption check
-        // compares *every* book's cached lint against, so this loop also has
-        // to enforce `verify_corpus`'s own invariant across records — "findings
-        // that carry stamps must all carry the same stamps" — itself: nothing
-        // else here ever compares one record's stamps against another's.
-        let mut agreed_stamps: Option<usfm_onion_wire::corpus_codec::LintStamps> = None;
-        // Restore adoption already requires stamp equality with this resident's
-        // OWN config, so the restoring side's live `LintOptions` -- not anything
-        // in the packed bytes -- is the config a primed summary would be judged
-        // against. Packed bytes carry the post-suppression `Vec<LintIssue>` (each
-        // one individually correct) but never a `suppressed_count`: with any
-        // suppression configured that count is unknowable from the bytes alone,
-        // so it must not be primed into the cache as if it were known. Findings
-        // themselves are still valid and still seed; only the summary is
-        // withheld, and the next `lint()` recomputes it honestly. A schema change
-        // to persist summary counts in the packed format was considered and
-        // deferred (see the ledger) as a candidate for after this release.
-        let summary_unknowable = !self.inner.config().lint.suppressed.is_empty();
-        for record in &records {
-            let source = match std::str::from_utf8(&record.source) {
-                Ok(source) => source,
-                Err(_) => {
-                    return RestoreOutcome::refused(RestoreError::Decode {
-                        error: crate::PackedDecodeError::InvalidUtf8,
-                    });
-                }
-            };
-            let verified = match usfm_onion_wire::verify::verify_book(&record.packed, source) {
-                Ok(verified) => verified,
-                Err(error) => {
-                    return RestoreOutcome::refused(RestoreError::Decode {
-                        error: error.into(),
-                    });
-                }
-            };
-            if let Some(found) = verified.lint_stamps {
-                match agreed_stamps {
-                    None => agreed_stamps = Some(found),
-                    Some(existing) if existing == found => {}
-                    Some(_) => {
-                        // Atomic: nothing has been installed into `self.inner`
-                        // yet, so refusing here leaves resident state exactly
-                        // as it was, the same guarantee every other rejected
-                        // mutation gives.
-                        return RestoreOutcome::refused(RestoreError::Decode {
-                            error: crate::PackedDecodeError::InvalidSection,
-                        });
-                    }
-                }
-            }
-            let tokens =
-                match usfm_onion_wire::verify::materialize_owned_tokens(&record.packed, source) {
-                    Ok(tokens) => tokens,
-                    Err(error) => {
-                        return RestoreOutcome::refused(RestoreError::Decode {
-                            error: error.into(),
-                        });
-                    }
-                };
-            let book = match usfm_onion::token::BookId::from_str(&verified.receipt.book) {
-                Some(book) => book,
-                None => {
-                    return RestoreOutcome::refused(RestoreError::Decode {
-                        error: crate::PackedDecodeError::InvalidSection,
-                    });
-                }
-            };
-            let source_key = match braid::SourceKey::new(record.path.clone()) {
-                Some(key) => key,
-                None => {
-                    return RestoreOutcome::refused(RestoreError::Ingest {
-                        error: IngestError::DuplicateSourceKey {
-                            source: record.path.clone(),
-                        },
-                    });
-                }
-            };
-            books.push(braid::BookRestoreInput {
-                source_key,
-                book,
-                source: source.to_string(),
-                tokens,
-                line_ending: usfm_onion::token::LineEnding::detect(source),
-                // The findings the container carried are adoptable only if its own
-                // stamps say what produced them; braid re-checks them against the
-                // resident configuration before it trusts any of it.
-                lint: (!summary_unknowable)
-                    .then_some(())
-                    .and(verified.lint_stamps)
-                    .map(|_| braid::BookLintPrime {
-                        book,
-                        source_hash: braid::SourceHash(
-                            u64::from_str_radix(&verified.receipt.source_hash, 16)
-                                .unwrap_or_default(),
-                        ),
-                        result: usfm_onion::lint::LintResult {
-                            summary: summarize_findings(&verified.findings),
-                            issues: verified.findings,
-                        },
-                    }),
-            });
-        }
-
-        // Whatever the batch agreed on above (or the all-zero placeholder
-        // when no record carried any stamps at all, which never matches a
-        // real config/engine fingerprint and so admits nothing) — never a
-        // second, independent re-verification of one arbitrarily chosen
-        // record, which is what let a batch's real, already-checked
-        // agreement go unused while re-deriving the exact same fact worse.
-        let stamps = agreed_stamps.unwrap_or(usfm_onion_wire::corpus_codec::LintStamps {
-            config_fingerprint: 0,
-            engine_stamp: 0,
-        });
-
+        let native: Vec<braid::RestoreRecord> = records
+            .into_iter()
+            .map(|record| braid::RestoreRecord {
+                path: record.path,
+                packed: record.packed,
+                source: record.source,
+            })
+            .collect();
         RestoreOutcome::from(
             self.inner
-                .restore_corpus(braid::CorpusRestoreInput::new(
-                    braid::LintConfigFingerprint(stamps.config_fingerprint),
-                    braid::LintEngineStamp(stamps.engine_stamp),
-                    books,
-                ))
+                .restore_packed_books(&native)
                 .map(RestoreReport::from)
-                .map_err(|error| RestoreError::Ingest {
-                    error: error.into(),
-                }),
+                .map_err(RestoreError::from),
         )
     }
 
@@ -412,18 +311,15 @@ impl Braid {
     /// and the reuse-cache's own sections/bytes never cross this boundary --
     /// only the per-book bookkeeping in [`PublishedBookInfo`] does.
     //
-    // The adapter itself (`publish_corpus`, and this handle's own
-    // `PublicationCache`) now lives in `usfm_onion_host` -- Rust-first,
-    // primary API -- not here. `PublishedCorpus`/`PublishedBookInfo`/
-    // `PublishError` *are* the host's own types (re-exported, tsify-derived
-    // via its `wasm` feature), not a second, wasm-only mirror of them, so
-    // there is nothing left to convert in this one-line delegation.
+    // The composition itself, and the `PublicationCache` it reuses across
+    // calls, are `braid::Braid`'s own -- Rust-first, primary API -- not this
+    // crate's. `PublishedCorpus`/`PublishedBookInfo`/`PublishError` *are*
+    // braid's own types (re-exported, tsify-derived via its `wasm` feature),
+    // not a second, wasm-only mirror of them, so there is nothing left to
+    // convert in this one-line delegation.
     #[wasm_bindgen(js_name = publish)]
     pub fn publish(&mut self) -> PublishOutcome {
-        PublishOutcome::from(usfm_onion_host::publish_corpus(
-            &mut self.inner,
-            &mut self.publication,
-        ))
+        PublishOutcome::from(self.inner.publish())
     }
 
     /// Restores the whole resident corpus from one packed `corpus.bin`
@@ -439,43 +335,24 @@ impl Braid {
     /// and findings that carry stamps must all carry the *same* stamps,
     /// checked atomically before anything installs.
     //
-    // The composition itself (`restore_published_corpus`) now lives in
-    // `usfm_onion_host`. Its own `RestoreReport`/`RestoreError` are
-    // deliberately native (`braid::RestoreReport`, `braid::IngestError`
-    // verbatim) rather than tsify-derivable -- braid must not grow a
-    // wasm-bindgen dependency to make that possible -- so this still
-    // converts into the wasm-facing `RestoreReport`/`RestoreError` DTOs
-    // below, reusing the exact same `From<braid::RestoreReport>`/
-    // `From<braid::IngestError>` conversions `restore_corpus` already calls,
-    // not a second hand-copy of them.
+    // The composition itself (`braid::Braid::restore_published_corpus`)
+    // lives in braid. Its `RestoreReport`/`RestoreError` stay native
+    // (`braid::RestoreReport`, `braid::IngestError` verbatim) rather than
+    // tsify-derived, because their String-projected shape is this boundary's
+    // business and not braid's -- so this converts into the wasm-facing
+    // `RestoreReport`/`RestoreError` DTOs below, through the same conversions
+    // `restore_corpus` uses.
     #[wasm_bindgen(js_name = restorePublishedCorpus)]
     pub fn restore_published_corpus(
         &mut self,
         packed: Vec<u8>,
-        records: Vec<usfm_onion_host::PublishedCorpusSource>,
+        records: Vec<braid::PublishedCorpusSource>,
     ) -> RestoreOutcome {
         RestoreOutcome::from(
-            usfm_onion_host::restore_published_corpus(&mut self.inner, &packed, &records)
+            self.inner
+                .restore_published_corpus(&packed, &records)
                 .map(RestoreReport::from)
-                .map_err(|error| match error {
-                    usfm_onion_host::RestoreError::Decode(error) => RestoreError::Decode {
-                        error: error.into(),
-                    },
-                    usfm_onion_host::RestoreError::Ingest(error) => RestoreError::Ingest {
-                        error: error.into(),
-                    },
-                    // Reproduces the pre-extraction classification exactly
-                    // (an empty source key was always reported the same way
-                    // a caller-declared duplicate one is): see
-                    // `usfm_onion_host::RestoreError::EmptySourceKey`'s own
-                    // doc comment for why the host side can't express this
-                    // as `braid::IngestError::DuplicateSourceKey` itself.
-                    usfm_onion_host::RestoreError::EmptySourceKey => RestoreError::Ingest {
-                        error: IngestError::DuplicateSourceKey {
-                            source: String::new(),
-                        },
-                    },
-                }),
+                .map_err(RestoreError::from),
         )
     }
 
@@ -925,36 +802,6 @@ impl Braid {
     #[wasm_bindgen(js_name = expectedSnapshotId)]
     pub fn expected_snapshot_id(&self) -> String {
         format!("{:016x}", self.inner.expected_snapshot_id().0)
-    }
-}
-
-/// Rebuilds a lint summary from a restored container's own findings — the
-/// packed wire format carries only the final `Vec<LintIssue>` (§ container
-/// schema; no separate summary section, and no `suppressed_count` at all,
-/// since a suppressed issue is dropped before packing and that fact is not
-/// recoverable from the bytes alone), so a primed cache built with
-/// `summary: Default::default()` reported a warm reopen's `total_count` as
-/// zero with findings plainly present. Every other field (`by_category`,
-/// `by_severity`, `by_issue_type`, `total_count`) *is* fully recoverable —
-/// they are just counts over the findings this call already has — so this
-/// mirrors core's own (private) `summarize` exactly for those, and leaves
-/// `suppressed_count` at `0` as the honest limit of what packed bytes alone
-/// can answer, not a second zeroed field masquerading as a fix.
-fn summarize_findings(findings: &[usfm_onion::lint::LintIssue]) -> usfm_onion::lint::LintSummary {
-    let mut by_category = std::collections::BTreeMap::new();
-    let mut by_severity = std::collections::BTreeMap::new();
-    let mut by_issue_type = std::collections::BTreeMap::new();
-    for issue in findings {
-        *by_category.entry(issue.category).or_insert(0) += 1;
-        *by_severity.entry(issue.severity).or_insert(0) += 1;
-        *by_issue_type.entry(issue.issue_type).or_insert(0) += 1;
-    }
-    usfm_onion::lint::LintSummary {
-        by_category,
-        by_severity,
-        by_issue_type,
-        total_count: findings.len(),
-        suppressed_count: 0,
     }
 }
 
@@ -1570,6 +1417,31 @@ pub enum RestoreError {
     Ingest { error: IngestError },
 }
 
+impl From<braid::RestoreError> for RestoreError {
+    fn from(error: braid::RestoreError) -> Self {
+        match error {
+            braid::RestoreError::Decode(error) => Self::Decode {
+                error: error.into(),
+            },
+            braid::RestoreError::Ingest(error) => Self::Ingest {
+                error: error.into(),
+            },
+            // Reproduces the pre-extraction classification exactly (an empty
+            // source key was always reported the same way a caller-declared
+            // duplicate one is, and the key it names is empty by definition
+            // of the variant): see
+            // `braid::RestoreError::EmptySourceKey`'s own doc
+            // comment for why the host side can't express this as
+            // `braid::IngestError::DuplicateSourceKey` itself.
+            braid::RestoreError::EmptySourceKey => Self::Ingest {
+                error: IngestError::DuplicateSourceKey {
+                    source: String::new(),
+                },
+            },
+        }
+    }
+}
+
 /// Why one book's cached lint contribution was not adopted.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -1641,14 +1513,11 @@ impl From<braid::RestoreReport> for RestoreReport {
 }
 
 // `PublishedBookInfo`/`PublishedCorpus`/`PublishError`/`PublishedCorpusSource`
-// are `usfm_onion_host`'s own types (re-exported below), not a second,
-// wasm-only mirror of them: host's `wasm` feature already derives `Tsify` on
-// them directly, so there is nothing for this crate to redefine. See
-// `usfm_onion_host::publication`/`usfm_onion_host::restore` for their
-// definitions and doc comments.
-pub use usfm_onion_host::{
-    PublishError, PublishedBookInfo, PublishedCorpus, PublishedCorpusSource,
-};
+// are braid's own types (re-exported below), not a second, wasm-only mirror
+// of them: braid's `wasm` feature already derives `Tsify` on them directly,
+// so there is nothing for this crate to redefine. See braid's own
+// `publication`/`restore` modules for their definitions and doc comments.
+pub use braid::{PublishError, PublishedBookInfo, PublishedCorpus, PublishedCorpusSource};
 
 /// A baseline that could not be recorded.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -1863,14 +1732,13 @@ mod restore_tests {
     fn empty_resident() -> Braid {
         let mut next = 0u32;
         Braid {
-            inner: braid::Braid::new(
+            inner: NativeBraid::new(
                 BraidConfig::new(LintOptions::scoped(LintScope::Book)),
                 move || {
                     next += 1;
                     format!("minted-{next}")
                 },
             ),
-            publication: usfm_onion_host::PublicationCache::default(),
         }
     }
 
@@ -1885,7 +1753,7 @@ mod restore_tests {
     /// whole multi-book publication like `PublicationCache::publish`
     /// produces).
     fn encode_one_book(
-        resident: &mut braid::Braid,
+        resident: &mut NativeBraid,
         book: usfm_onion::token::BookId,
         stamps: LintStamps,
     ) -> (Vec<u8>, String) {
@@ -1915,7 +1783,7 @@ mod restore_tests {
         (bytes, source)
     }
 
-    fn current_stamps(resident: &braid::Braid) -> LintStamps {
+    fn current_stamps(resident: &NativeBraid) -> LintStamps {
         LintStamps {
             config_fingerprint: braid::LintConfigFingerprint::of(&resident.config().lint).0,
             engine_stamp: braid::LintEngineStamp::current().0,
@@ -2094,11 +1962,10 @@ mod restore_tests {
             sid: "GEN 1:1".to_string(),
         }];
         Braid {
-            inner: braid::Braid::new(BraidConfig::new(options), move || {
+            inner: NativeBraid::new(BraidConfig::new(options), move || {
                 next += 1;
                 format!("minted-{next}")
             }),
-            publication: usfm_onion_host::PublicationCache::default(),
         }
     }
 

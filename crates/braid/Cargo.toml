@@ -8,11 +8,16 @@ publish = false
 
 [features]
 default = []
-# Plain serde derives over braid's own lifecycle types — what a native
+# Plain serde derives over braid's own lifecycle types, and over the
+# publication/restore types the packed compositions return — what a native
 # (Tauri) resident host needs, with no tsify or wasm-bindgen in the binary.
-# The `wasm` feature that adds tsify/wasm-bindgen glue lands with the wasm
-# composition root, not here.
 serde = ["dep:serde"]
+# Adds tsify derives to the publication/restore types and forwards to wire's
+# own "wasm" feature, so a wasm-bindgen consumer gets the exact types tsify
+# can project across the boundary rather than a second hand-mirror of them.
+# Strictly additive and off by default: a plain native build of this crate
+# links neither tsify nor wasm-bindgen.
+wasm = ["dep:tsify", "dep:wasm-bindgen", "serde", "usfm_onion_wire/wasm"]
 
 [dev-dependencies]
 serde_json = "1"
@@ -22,8 +27,18 @@ serde_json = "1"
 # whole book, which is exactly what this crate's clippy.toml wants FxHash for.
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"], optional = true }
+tsify = { version = "0.5.6", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 usfm_onion = { path = "../.." }
+# Composition, not layout. braid owns no byte layout -- every offset,
+# checksum, discriminant, and section header stays wire's -- but braid is
+# where the resident corpus and wire's codecs are *composed*, because
+# `publish`/`restore_published_corpus`/`restore_packed_books` are resident
+# verbs whose implementation happens to need an encoder. Splitting that
+# composition into a third crate only bought a name, and cost every native
+# host an extra dependency and an extra handle type to hold.
+usfm_onion_wire = { path = "../usfm_onion_wire" }
 # Per-book source hashes and the content-derived snapshot id are xxhash3-64,
-# the same persisted fingerprint the wire container uses. Braid computes its
-# own (it never depends on wire); the algorithm and seed are what must match.
+# the same persisted fingerprint the wire container uses. The algorithm and
+# seed are what must match.
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
