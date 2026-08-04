@@ -165,6 +165,43 @@ fn native_chapter_target(book: &str, label: &str) -> braid::ChapterTarget {
     braid::ChapterTarget::new(book_id(book), braid::ChapterLabel::Number(label.into()))
 }
 
+/// Concatenates each entry's `packed`/`source` into the two buffers
+/// `restore_corpus` takes (v0.1.5, bytes-at-boundary convention), returning
+/// `(packed_all, sources, records, dto_records_json)` -- the last one the
+/// exact JSON shape (`{path, packed: {byteOffset, byteLength}, source: {...}}`)
+/// the node harness replays against the real wasm method.
+fn restore_records_with_buffers(
+    entries: &[(&str, Vec<u8>, String)],
+) -> (Vec<u8>, Vec<u8>, Vec<resident::RestoreRecord>, Value) {
+    let mut packed_all = Vec::new();
+    let mut sources = Vec::new();
+    let mut records = Vec::with_capacity(entries.len());
+    let mut dto_records = Vec::with_capacity(entries.len());
+    for (path, packed, source) in entries {
+        let packed_extent = crate::ByteExtent {
+            byte_offset: packed_all.len() as u32,
+            byte_length: packed.len() as u32,
+        };
+        packed_all.extend_from_slice(packed);
+        let source_extent = crate::ByteExtent {
+            byte_offset: sources.len() as u32,
+            byte_length: source.len() as u32,
+        };
+        sources.extend_from_slice(source.as_bytes());
+        records.push(resident::RestoreRecord {
+            path: path.to_string(),
+            packed: packed_extent,
+            source: source_extent,
+        });
+        dto_records.push(json!({
+            "path": path,
+            "packed": packed_extent,
+            "source": source_extent,
+        }));
+    }
+    (packed_all, sources, records, json!(dto_records))
+}
+
 // ---- fixture sources --------------------------------------------------
 
 /// Two whitespace-missing-delimiter findings (the same shape braid's own
@@ -704,6 +741,287 @@ fn run_lane(lane: &str, steps: &mut Vec<Step>) {
             result.expect_err("a repeated token id is refused")
         )),
     );
+
+    // ---- publish_scope / revert_to_baseline: each on its own fresh handle
+    // (recorded via its own "_seed" step, the same pattern `run_publish`
+    // uses), so neither disturbs any step recorded above.
+
+    // publish_scope(all): per-book packed containers.
+    let mut scoped_publisher = NativeBraid::new(braid_config(), minter());
+    let scoped_books_dto = match lane {
+        "usfm" => vec![
+            dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+            dto_book_usfm("02-EXO.usfm", "EXO", EXO_SOURCE),
+        ],
+        "tokens" => vec![
+            dto_book_tokens(
+                "01-GEN.usfm",
+                "GEN",
+                &owned(GEN_SOURCE),
+                resident::LineEnding::Lf,
+            ),
+            dto_book_tokens(
+                "02-EXO.usfm",
+                "EXO",
+                &owned(EXO_SOURCE),
+                resident::LineEnding::Lf,
+            ),
+        ],
+        _ => unreachable!(),
+    };
+    let scoped_books = match lane {
+        "usfm" => vec![
+            native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+            native_book_usfm("02-EXO.usfm", "EXO", EXO_SOURCE),
+        ],
+        "tokens" => vec![
+            native_book_tokens(
+                "01-GEN.usfm",
+                "GEN",
+                owned(GEN_SOURCE),
+                braid::LineEnding::Lf,
+            ),
+            native_book_tokens(
+                "02-EXO.usfm",
+                "EXO",
+                owned(EXO_SOURCE),
+                braid::LineEnding::Lf,
+            ),
+        ],
+        _ => unreachable!(),
+    };
+    let seed_effect = scoped_publisher
+        .replace_corpus(braid::CorpusInput::new(scoped_books))
+        .expect("two books");
+    push(
+        "publish_scope_seed",
+        json!({ "corpus": { "books": scoped_books_dto } }),
+        json!(resident::MutationEffect::from(seed_effect)),
+    );
+    let scoped = scoped_publisher
+        .publish_scope(braid::CorpusScope::All)
+        .expect("publishes");
+    // Recorded as the real wasm-shaped output (buffers concatenated, per-book
+    // extents), not the native per-book value `publish_scope` itself
+    // returns -- that projection is exactly what this parity gate exists to
+    // pin against the real, built wasm method.
+    push(
+        "publish_scope",
+        json!({ "scope": { "kind": "all" } }),
+        json!(resident::ScopedPublication::from(scoped)),
+    );
+
+    // revert_to_baseline: book-scoped revert after a divergent edit, plus the
+    // chapter-scope refusal, on the same freshly-seeded handle.
+    let mut reverter = NativeBraid::new(braid_config(), minter());
+    let revert_book_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let revert_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let seed_effect = reverter
+        .replace_corpus(braid::CorpusInput::new(vec![revert_book]))
+        .expect("one book");
+    push(
+        "revert_seed",
+        json!({ "corpus": { "books": [revert_book_dto] } }),
+        json!(resident::MutationEffect::from(seed_effect)),
+    );
+
+    let baseline_seed_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let baseline_seed = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let effect = reverter
+        .set_baseline(baseline_seed)
+        .expect("GEN is resident");
+    push(
+        "revert_set_baseline",
+        json!({ "book": baseline_seed_dto }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    let further_edit_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_EDITED_WHOLE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let further_edit = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_EDITED_WHOLE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let effect = reverter.update_book(further_edit).expect("valid edit");
+    push(
+        "revert_update_book",
+        json!({ "book": further_edit_dto }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    let effect = reverter
+        .revert_to_baseline(braid::CorpusScope::Book(book_id("GEN")))
+        .expect("GEN has a baseline");
+    push(
+        "revert_to_baseline",
+        json!({ "scope": { "kind": "book", "book": "GEN" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    // revert_to_baseline: chapter scope refuses.
+    let error = reverter
+        .revert_to_baseline(braid::CorpusScope::Chapter(native_chapter_target(
+            "GEN", "1",
+        )))
+        .expect_err("chapter scope is unsupported");
+    push(
+        "revert_to_baseline_chapter_unsupported",
+        json!({ "scope": { "kind": "chapter", "target": dto_chapter_target("GEN", "1") } }),
+        json!(resident::BaselineError::from(error)),
+    );
+
+    // ---- set_baseline_to_current: its own fresh handle, seeded then
+    // edited via recorded steps, then the no-parse baseline declaration
+    // itself, its idempotence, and the chapter-scope refusal.
+    let mut current_baseliner = NativeBraid::new(braid_config(), minter());
+    let current_book_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let current_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let seed_effect = current_baseliner
+        .replace_corpus(braid::CorpusInput::new(vec![current_book]))
+        .expect("one book");
+    push(
+        "set_baseline_to_current_seed",
+        json!({ "corpus": { "books": [current_book_dto] } }),
+        json!(resident::MutationEffect::from(seed_effect)),
+    );
+
+    let edit_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_EDITED_WHOLE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let edit = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_EDITED_WHOLE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let effect = current_baseliner.update_book(edit).expect("valid edit");
+    push(
+        "set_baseline_to_current_edit",
+        json!({ "book": edit_dto }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    let effect = current_baseliner
+        .set_baseline_to_current(braid::CorpusScope::Book(book_id("GEN")))
+        .expect("GEN is resident");
+    push(
+        "set_baseline_to_current",
+        json!({ "scope": { "kind": "book", "book": "GEN" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    // Idempotence: a second call is another no-op.
+    let effect = current_baseliner
+        .set_baseline_to_current(braid::CorpusScope::Book(book_id("GEN")))
+        .expect("GEN is still resident");
+    push(
+        "set_baseline_to_current_idempotent",
+        json!({ "scope": { "kind": "book", "book": "GEN" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    // Chapter scope refuses, symmetric with revert_to_baseline.
+    let error = current_baseliner
+        .set_baseline_to_current(braid::CorpusScope::Chapter(native_chapter_target(
+            "GEN", "1",
+        )))
+        .expect_err("chapter scope is unsupported");
+    push(
+        "set_baseline_to_current_chapter_unsupported",
+        json!({ "scope": { "kind": "chapter", "target": dto_chapter_target("GEN", "1") } }),
+        json!(resident::BaselineError::from(error)),
+    );
+
+    // All scope on an empty corpus: a trivially successful no-op, on its
+    // own fresh (never-seeded) handle.
+    let mut empty = NativeBraid::new(braid_config(), minter());
+    let effect = empty
+        .set_baseline_to_current(braid::CorpusScope::All)
+        .expect("an empty scope has nothing to refuse");
+    push(
+        "set_baseline_to_current_empty_corpus",
+        json!({ "scope": { "kind": "all" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
 }
 
 /// Publish → restore → compare, both findings and summary — the packed
@@ -769,25 +1087,22 @@ fn run_restore(lane: &str, steps: &mut Vec<Step>) {
         .1;
     drop(snapshot);
 
-    // `Vec<u8>` args travel as plain JSON number arrays; the node side turns
-    // them into a `Uint8Array` before constructing the real `RestoreRecord`,
-    // exactly what a host reading bytes off disk would hand over.
+    // `packedAll`/`sources` travel as plain JSON number arrays; the node
+    // side turns each into a `Uint8Array` before calling the real method,
+    // exactly what a host reading bytes off disk (or forwarding a
+    // `publishScope` result) would hand over.
+    let (packed_all, sources, records, dto_records) =
+        restore_records_with_buffers(&[("01-GEN.usfm", bytes, source)]);
     let args = json!({
-        "records": [{
-            "path": "01-GEN.usfm",
-            "packed": bytes,
-            "source": source.as_bytes(),
-        }],
+        "packedAll": packed_all,
+        "sources": sources,
+        "records": dto_records,
     });
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
     };
-    let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
-        path: "01-GEN.usfm".to_string(),
-        packed: bytes,
-        source: source.as_bytes().to_vec(),
-    }]);
+    let outcome = reopened.restore_corpus(&packed_all, &sources, records);
     let resident::ApiResult::Ok { value: report } = outcome.0 else {
         panic!("{lane}: a fresh, matching-stamp restore must succeed: {outcome:?}");
     };
@@ -890,23 +1205,19 @@ fn run_restore_suppressed(lane: &str, steps: &mut Vec<Step>) {
         .1;
     drop(snapshot);
 
+    let (packed_all, sources, records, dto_records) =
+        restore_records_with_buffers(&[("01-GEN.usfm", bytes, source)]);
     let args = json!({
         "config": { "lint": suppressed_lint_options() },
-        "records": [{
-            "path": "01-GEN.usfm",
-            "packed": bytes,
-            "source": source.as_bytes(),
-        }],
+        "packedAll": packed_all,
+        "sources": sources,
+        "records": dto_records,
     });
 
     let mut reopened = resident::Braid {
         inner: NativeBraid::new(suppressed_braid_config(), minter()),
     };
-    let outcome = reopened.restore_corpus(vec![resident::RestoreRecord {
-        path: "01-GEN.usfm".to_string(),
-        packed: bytes,
-        source: source.as_bytes().to_vec(),
-    }]);
+    let outcome = reopened.restore_corpus(&packed_all, &sources, records);
     let resident::ApiResult::Ok { value: report } = outcome.0 else {
         panic!("{lane}: a fresh, matching-stamp restore must still seed the book: {outcome:?}");
     };
@@ -1013,26 +1324,33 @@ fn run_publish(lane: &str, steps: &mut Vec<Step>) {
     // EmptySourceKey` -- not silently reclassified as a decode defect. Pinned
     // here so a future change to that mapping shows up as a parity
     // divergence, not a silent drift.
-    let empty_source_key_records = vec![resident::PublishedCorpusSource {
+    let empty_source_key_source = published
+        .books
+        .iter()
+        .find(|book| book.book == "GEN")
+        .and_then(|book| book.source.clone())
+        .expect("GEN's freshly-encoded source");
+    let empty_source_key_sources = empty_source_key_source.clone().into_bytes();
+    let empty_source_key_records = vec![resident::PublishedCorpusRecord {
         book: "GEN".to_string(),
         source_key: String::new(),
-        source: published
-            .books
-            .iter()
-            .find(|book| book.book == "GEN")
-            .and_then(|book| book.source.clone())
-            .expect("GEN's freshly-encoded source")
-            .into_bytes(),
+        byte_offset: 0,
+        byte_length: empty_source_key_sources.len() as u32,
     }];
     let empty_source_key_args = json!({
         "packed": published.bytes,
+        "sources": empty_source_key_sources,
         "records": empty_source_key_records,
     });
     let mut restore_target = resident::Braid {
         inner: NativeBraid::new(braid_config(), minter()),
     };
     let error = restore_target
-        .restore_published_corpus(published.bytes.clone(), empty_source_key_records)
+        .restore_published_corpus(
+            &published.bytes,
+            &empty_source_key_sources,
+            empty_source_key_records,
+        )
         .0;
     let resident::ApiResult::Error { error } = error else {
         panic!("{lane}: an empty source key must refuse: {error:?}");

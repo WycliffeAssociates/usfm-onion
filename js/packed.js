@@ -594,16 +594,54 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
 // --- public surface ---------------------------------------------------------
 
 /**
+ * Slices `buf` at `extent` (`{byteOffset, byteLength}`), refusing -- never
+ * clamping or truncating -- when the extent falls outside `buf`. `subarray`
+ * itself clamps silently, which is exactly the failure mode this bounds
+ * check exists to intercept before it ever reaches one: an out-of-range or
+ * overflowing extent returns `null` rather than a shorter-than-requested (or
+ * wrapped) view (v0.1.5, bytes-at-boundary convention).
+ *
+ * @param {Uint8Array} buf
+ * @param {{ byteOffset: number, byteLength: number }} extent
+ * @returns {Uint8Array | null}
+ */
+function sliceExtent(buf, extent) {
+  const { byteOffset, byteLength } = extent;
+  if (
+    !Number.isInteger(byteOffset)
+    || !Number.isInteger(byteLength)
+    || byteOffset < 0
+    || byteLength < 0
+    || byteOffset + byteLength > buf.length
+  ) {
+    return null;
+  }
+  return buf.subarray(byteOffset, byteOffset + byteLength);
+}
+
+/**
  * Verifies every record through the Rust trust boundary and mints the opaque
  * `VerifiedPacked` handle.
+ *
+ * `packedAll`/`sources` are two single buffers -- every record's own
+ * container concatenated into the first, every record's own source
+ * concatenated into the second -- with `records` naming each one's extent
+ * into whichever buffer it belongs to (v0.1.5, bytes-at-boundary
+ * convention): the exact shape `wasm.restoreCorpus` takes, and exactly what
+ * `publishScope`'s wasm output already is, so a scoped publication forwards
+ * here with zero reshaping. An extent outside its buffer refuses
+ * (`{kind: "invalidExtent"}`, naming the record's own `path`) before any
+ * bytes reach wasm at all -- no `Array.from`, no per-record copy: each
+ * record's own `packed`/`source` is a zero-copy `subarray` view into the one
+ * defensive copy this function takes of each whole buffer up front.
  *
  * The first rejected record short-circuits the whole corpus: a partially
  * restored corpus is not a state the caller asked for, and a typed rejection is
  * the signal to fall back to normal USFM ingest/parse.
  *
- * The caller's `packed`/`source` bytes are copied (`Uint8Array#slice`, never an
+ * `packedAll`/`sources` are copied (`Uint8Array#slice`, never an
  * `ArrayBuffer` transfer/detach) into handle-private state before they are
- * verified. Without this, a caller could mutate its own array after minting
+ * verified. Without this, a caller could mutate its own buffer after minting
  * and pair a still-valid certification with changed bytes.
  *
  * Threat model (dated 2026-07-29): this module protects HONEST use — a
@@ -614,14 +652,21 @@ function applyAttributes(token, attributes, rowIndex, strings, sourceText) {
  * deliberately trying to subvert this module's own state.
  *
  * @param {{ verifyPackedBook: (packed: Uint8Array, source: Uint8Array) => any }} wasm
- * @param {readonly { path: string, packed: Uint8Array, source: Uint8Array }[]} records
+ * @param {Uint8Array} packedAll
+ * @param {Uint8Array} sources
+ * @param {readonly { path: string, packed: { byteOffset: number, byteLength: number }, source: { byteOffset: number, byteLength: number } }[]} records
  */
-export function verifyPackedCorpus(wasm, records) {
+export function verifyPackedCorpus(wasm, packedAll, sources, records) {
+  const packedAllCopy = packedAll.slice();
+  const sourcesCopy = sources.slice();
   const books = new Map();
   const findings = new Map();
   for (const record of records) {
-    const packed = record.packed.slice();
-    const source = record.source.slice();
+    const packed = sliceExtent(packedAllCopy, record.packed);
+    const source = sliceExtent(sourcesCopy, record.source);
+    if (packed === null || source === null) {
+      return { ok: false, path: record.path, error: { kind: "invalidExtent" } };
+    }
     const outcome = wasm.verifyPackedBook(packed, source);
     if (outcome.status !== "verified") {
       return { ok: false, path: record.path, error: outcome.error };
@@ -804,41 +849,51 @@ function requireVerifiedCorpus(verified) {
  * (`wasm.verifyPublishedCorpus`, the sole certifier -- no JS hashing or
  * validation, ever) and mints the opaque `VerifiedPublished` handle.
  *
- * The caller's `packed`/`source` bytes are copied (`Uint8Array#slice`) into
- * handle-private state before they are verified, the same copy-at-mint rule
+ * `packed` is the one whole-corpus container. `sources` is every named
+ * book's source bytes concatenated into one buffer; `records` supplies each
+ * book's own code and its extent into `sources` (v0.1.5, bytes-at-boundary
+ * convention) -- the same pairing `wasm.restorePublishedCorpus` takes. An
+ * extent outside `sources` refuses (`{kind: "invalidExtent"}`, naming the
+ * record's own `book`) before any bytes reach wasm.
+ *
+ * `packed`/`sources` are copied (`Uint8Array#slice`) into handle-private
+ * state before they are verified, the same copy-at-mint rule
  * `verifyPackedCorpus` follows and for the same reason: a caller mutating
  * its own buffers after minting must not silently invalidate what was
- * already certified out from under a still-valid handle.
+ * already certified out from under a still-valid handle. No `Array.from`
+ * anywhere in this path: every book's own source is a zero-copy `subarray`
+ * view into that one defensive copy.
  *
- * @param {{ verifyPublishedCorpus: (packed: Uint8Array, sources: { book: string, source: number[] }[]) => any }} wasm
+ * @param {{ verifyPublishedCorpus: (packed: Uint8Array, sources: Uint8Array, records: { book: string, sourceKey: string, byteOffset: number, byteLength: number }[]) => any }} wasm
  * @param {Uint8Array} packed
- * @param {readonly { book: string, source: Uint8Array }[]} sources
+ * @param {Uint8Array} sources
+ * @param {readonly { book: string, sourceKey: string, byteOffset: number, byteLength: number }[]} records
  */
-export function verifyPublishedPacked(wasm, packed, sources) {
+export function verifyPublishedPacked(wasm, packed, sources, records) {
   const packedCopy = packed.slice();
-  const sourceCopies = sources.map((entry) => ({
-    book: entry.book,
-    source: entry.source.slice(),
-  }));
-  const outcome = wasm.verifyPublishedCorpus(
-    packedCopy,
-    sourceCopies.map((entry) => ({ book: entry.book, source: Array.from(entry.source) })),
-  );
+  const sourcesCopy = sources.slice();
+  for (const record of records) {
+    if (sliceExtent(sourcesCopy, record) === null) {
+      return { ok: false, error: { kind: "invalidExtent", book: record.book } };
+    }
+  }
+  const outcome = wasm.verifyPublishedCorpus(packedCopy, sourcesCopy, records);
   if (outcome.status !== "verified") {
     return { ok: false, error: outcome.error };
   }
   const toc = readContainer(packedCopy);
-  const sourceByBook = new Map(sourceCopies.map((entry) => [entry.book, entry.source]));
+  const recordByBook = new Map(records.map((record) => [record.book, record]));
   const books = new Map();
   const findings = new Map();
   for (const entry of outcome.books) {
     const book = entry.receipt.book;
-    const source = sourceByBook.get(book);
+    const record = recordByBook.get(book);
     // Unreachable given `wasm.verifyPublishedCorpus` already enforces exactly
     // one source per book -- checked anyway, since this function's own
     // contract (never index a book it cannot find a source for) should not
     // depend on that invariant holding on trust.
-    if (source === undefined) fail("invalidToc", book);
+    if (record === undefined) fail("invalidToc", book);
+    const source = sliceExtent(sourcesCopy, record);
     // Same one-time freeze `verifyPackedCorpus` performs, same reason: every
     // token that attaches these objects by reference shares one frozen tree.
     deepFreeze(entry.receipt.descriptors);

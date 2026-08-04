@@ -5626,3 +5626,507 @@ Clean-room verdict: no production findings; docs-only closeout (this entry, §R 
 stale host-crate references in comments) landed by the director. Process note: the crate
 deletion executed in the main session under the owner's own permission system after the
 builder sandbox correctly refused it on relayed authority.
+
+## 2026-08-04 — v0.1.5: `publish_scope` and `revert_to_baseline` (editor-RFC'd verbs)
+
+Two additive verbs on `braid::Braid`, both composition over state braid already holds — no
+wire-format change, no new crate, non-breaking.
+
+**`Braid::publish_scope(scope) -> Result<ScopedPublication, ScopedPublishError>`.** Produces
+per-book packed containers, one `ScopedPublishedBook { book, packed, source, source_hash }`
+per book in scope, in corpus order. Deliberately `RestoreRecord`-shaped, deliberately NOT
+`PublishedCorpus`-shaped: a partial container has to be structurally unrepresentable as a
+complete corpus container, because the two are different guarantees and giving them the same
+shape would let a caller feed a scoped result to whatever consumes a complete publication and
+get back something that looks whole but is not. Every book is ALWAYS freshly encoded and
+ALWAYS carries its source — no splice-reuse arm, no `encoded: false` case — because the
+caller is by definition asking for bytes it does not already hold, and downstream
+materialization is certification-gated (needs source to verify against), so bytes without a
+source would be unusable the moment they arrived; this is also exactly why it is a separate
+verb rather than `publish(scope: Option<CorpusScope>)`, since `publish`'s entire contract is
+`PublicationCache` splice-reuse and a scoped call has nothing to reuse from or contribute to
+(`publish_scope` never reads or invalidates `self.publication`, proven by a dedicated test).
+Lint-first, same rule as `publish()`. `snapshot_id` is the corpus identity from the same
+`lint()` read. Chapter scope resolves to its book (containers are book-grain); per-book
+encoding shares the one real wire path (`encode_one_book_container`, promoted out of what was
+a `restore.rs`-only test helper) rather than a second hand-rolled `encode_corpus` call.
+
+**`Braid::revert_to_baseline(scope) -> Result<MutationEffect, BaselineError>`.** Whole-book
+replacement from `BaselineState`, atomic across the scope. `Book`/`All` only — a chapter scope
+refuses via `BaselineError::ChapterScopeUnsupported` (deferred, not planned as a near-term
+follow-up: a single chapter run has no baseline slot of its own, and reverting one run in
+isolation would mean reconstructing the book from a mix of current and baselined tokens, which
+is not what "revert" means; the sanctioned workaround is `diffBaseline` to see what changed
+followed by `updateChapter` with the baseline run's own tokens). Atomicity: the whole scope
+(every targeted book resident AND baselined) is validated before anything mutates; any missing
+baseline refuses with every offending book named at once, state untouched byte-for-byte. Token
+identity is load-bearing: the baseline's stored source, hash, tokens (their ORIGINAL ids),
+line ending, and runs are reinstalled verbatim via a new `BookState::reverted_to_baseline`,
+never re-parsed or re-minted — pinned by a test that uses distinctly-prefixed opaque token-push
+ids specifically because a positional re-parse would coincidentally re-derive the same ids and
+mask a "merely equal content" bug. A book already equal to its baseline is a no-op, absent from
+`changed`. Reuses the standard `effect()` path every mutation shares, so publication-cache and
+format-patch-table invalidation fire the same way any other mutation's does; the baseline slot
+itself is never touched.
+
+**Wasm glue**: `publishScope`/`revertToBaseline` on the wasm `Braid` class, pure DTO
+delegation following the `publish`/`diffBaseline` patterns exactly. `braid::ScopedPublication`/
+`ScopedPublishedBook` are reused directly (already tsify-derived, like `PublishedCorpus`);
+`ScopedPublishError`/`BaselineError`'s new `ChapterScopeUnsupported` arm get thin wasm-side
+mirrors because they carry a `ScopeError`/`ChapterTarget`, which — like every other
+scope-shaped error at this boundary — projects to the crate's own String-based DTO.
+
+Gates, all green (final numbers, see escape note below for why an earlier report of these same
+gates was wrong): `cargo test --workspace --all-features` (`RUSTFLAGS=-D warnings`) — 640 tests
+total across every workspace crate, 0 failed, 12 ignored (incl. +14 new native braid tests:
+scoped-publish round trip through `restore_corpus` into a fresh `Braid`, always-encode on a
+clean previously-published book, snapshot-id-equals-lint, publication-cache non-interference,
+revert atomicity/identity/no-op/chapter-refusal); `cargo doc --workspace --no-deps
+--all-features` (`RUSTDOCFLAGS=-D warnings`) clean; `cargo fmt --all --check` clean; lint
+oracle (`--ignored`) byte-identical, no re-bless; JS (bundler + web, both variants of every
+gate): `test:packed` 410 cases / 5,717,153 tokens; `test:parity` 82 steps × 2 lanes, 0
+divergences (new steps `publish_scope(_seed)`/`revert_seed`/`revert_set_baseline`/
+`revert_update_book`/`revert_to_baseline`/`revert_to_baseline_chapter_unsupported`, each on its
+own fresh handle so they don't perturb the existing 19-step sequence); `test:publish` 17 checks
+(+1 new publishScope→verifyPackedCorpus/materialize round trip compared against `toTokens()`);
+`test:publish:js` 27 checks; `golden:wasm` 7 fixtures. Dev-mode gate runs repeatedly dirtied the
+committed `pkg-*` trees; restored via `git restore pkg-bundler pkg-web` and rebuilt release
+(`npm run build`) before the final commit, with `test:parity` re-run directly (bundler and web)
+against that exact release-built, about-to-be-committed tree as the last check before `git
+status`/commit.
+
+**Escape, corrected in this same round: a reported-green gate that was never run against the
+final tree.** The first pass reported `test:parity` as "82 steps × 2 lanes, 0 divergences," but
+that run happened *before* the version bump to 0.1.5 — the parity transcript
+(`crates/usfm_onion_wasm/tests/fixtures/parity-transcript.json`) was generated once, right after
+writing the new parity steps, and never regenerated after `Cargo.toml`/`package.json` moved to
+0.1.5 and the wasm packages were rebuilt at that version. Root cause:
+`braid::stamps::LintEngineStamp::current()` hashes `"usfm_onion@{CRATE_VERSION}:rules{RULES_VERSION}"`
+— by design (see its own doc comment and
+`a_version_bump_invalidates_every_cache_built_under_the_old_one`), a version bump is meant to
+invalidate every warm lint cache built under the old one. The committed transcript's
+`restore_corpus`/`restore_corpus_then_lint`/`publish`/`publish_scope` steps had 0.1.4's stamp
+baked into their expected output (rejections, container hash fields, and downstream finding
+spans all derive from or gate on that stamp), so replaying them against the real 0.1.5-built
+wasm package produced exactly the class of divergence a version bump is supposed to produce —
+not a real regression, but a stale fixture. Director verification caught this because it ran
+the gate fresh against the committed tree rather than trusting the prior report; the builder's
+mistake was bumping the version and rebuilding without re-running the generator
+(`cargo test -p usfm_onion_wasm --lib -- --ignored generate_parity_transcript`) one more time
+before reporting gates green. Fix applied: regenerated the transcript against the final 0.1.5
+code (the only change in this follow-up commit besides this ledger entry), then reran every gate
+listed above in the required order from a clean tree, ending with a direct `test:parity`
+re-check against the exact release-built tree being committed. No change to the comparison
+logic itself — the fixture was stale, not the check.
+
+Version bump: workspace `Cargo.toml` and npm `package.json` 0.1.4 → 0.1.5 (additive,
+non-breaking on both surfaces).
+
+Not tagged, not merged, not pushed — branch `v0.1.5-scoped` off `master` (b6a1fcd, v0.1.4),
+awaiting review. This entry covers both commits on the branch: the feature commit and this
+follow-up fixture-regeneration commit.
+
+### Addendum (same day, same v0.1.5, no new version number) — `set_baseline_to_current`
+
+Owner-approved RFC addendum, folded into v0.1.5 rather than bumping a new version: a third verb,
+`Braid::set_baseline_to_current(scope) -> Result<MutationEffect, BaselineError>`, beside
+`revert_to_baseline` in `crates/braid/src/baseline.rs`.
+
+**The verb.** Declares each in-scope book's CURRENT resident state as its baseline via
+`BaselineState::of(&self.books[index])` directly — no `BookInput`, no parse, no validation,
+because the content is already resident and already validated. **No-parse motivation, with the
+editor's own measurement:** the editor's warm-restore path (reopen a saved corpus, then declare
+every just-restored book's content as its baseline) had no route to this fact except
+round-tripping every book back out through `set_baseline`'s `BookInput::Usfm` arm, which
+re-parses the whole corpus purely to restate content braid already holds resident — measured at
+1.3-1.6s across a 66-book corpus. This verb reaches the same end state with zero re-parses: a
+direct snapshot of already-validated state, the same shape `set_baseline`'s own internal step
+already takes once a candidate is built, just without building a candidate at all.
+
+**Scope rule, and the deviation from the editor RFC.** `Book`/`All` scopes only; a `Chapter`
+scope refuses via the existing `BaselineError::ChapterScopeUnsupported`. The editor RFC proposed
+a bare `ScopeError` for this verb's chapter case; that was declined in favor of deliberate
+symmetry with `revert_to_baseline`: a baseline is a whole-book slot, not a per-chapter one, so
+the *set* and *revert* halves of that one slot's lifecycle have to agree on what scopes can
+address it at all. A `ScopeError`-only chapter refusal here would have let a caller successfully
+call `set_baseline_to_current` at chapter scope (silently — under a bare `ScopeError` there is
+no distinct "this shape is unsupported" signal, only "this address doesn't resolve," which a
+valid chapter address would pass) while `revert_to_baseline` on that same chapter scope refuses
+outright — baseline state reachable on one side of the pair and structurally unreachable on the
+other. Reusing `ChapterScopeUnsupported` keeps the pair's scope contract single-sourced.
+
+**Other semantics, as specified:** idempotent (a second call is another no-op); no
+`MissingBaseline` case (this verb's whole point is to create baselines, never requires one exist
+first); the returned `MutationEffect` is always the no-op shape (a baseline slot never
+participates in `changed`/`removed`/`reordered`, same as `set_baseline`/`clear_baseline`);
+afterwards `is_dirty(scope)` is `false` and `diff_baseline(scope)` reports equality for every
+book in scope; `All` on an empty corpus is a trivially successful no-op.
+
+**Wasm glue:** `setBaselineToCurrent` on the wasm `Braid` class, pure delegation via
+`scope_into_native`, sharing the existing `RevertBaselineOutcome` wrapper (`MutationEffect`/
+`BaselineError`) rather than minting a new one with an identical shape — the two verbs return the
+same value/error pair, so one outcome type serves both.
+
+**Tests** (`crates/braid/tests/revert_baseline.rs`, +5, total 13 in that file): mutate-then-
+set-baseline-to-current leaves `is_dirty` false and `diff_baseline` empty; idempotence (second
+call, still a no-op, still clean); chapter-scope refusal; `All` on an empty corpus succeeds; and
+the key contract test — `set_baseline_to_current` then `revert_to_baseline` is a no-op with zero
+changed books AND the token IDS are byte-for-byte unchanged (not merely equal content), driven
+through the token-push lane with distinctly-prefixed opaque ids specifically so a positional
+re-parse could not coincidentally mask an identity bug.
+
+**Gates, all green, final numbers:** `cargo test --workspace --all-features`
+(`RUSTFLAGS=-D warnings`) — 664 passed, 0 failed, 28 ignored, summed across every test binary in
+the workspace (braid's `revert_baseline.rs` integration test alone went 8 → 13; the corpus-scale
+`#[ignore]`d fixtures elsewhere are unaffected and unrun by default, which is where the 28
+ignored come from); `cargo doc --workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) —
+clean after fixing three new private-intra-doc-links (`BaselineState::of`, `BaselineState`,
+`crate::corpus::BookState` are not part of the public API surface; reworded to point at the
+module's own doc comment and drop the direct links instead); `cargo fmt --all --check` — clean;
+lint oracle (`--ignored`) — byte-identical, no re-bless; `npm run build` (release) — clean;
+`test:packed`/`:web` — 410 cases each, unchanged; `test:parity`/`:web` — **94 steps** × 2 lanes
+(was 82; +12 new `set_baseline_to_current*` steps), **0 divergences**, transcript regenerated
+LAST after every code and formatting change, per this same ledger's own escape note two entries
+up; `test:publish`/`:web` — 17 checks each, unchanged; `test:publish:js`/`:js:web` — 27 checks
+each, unchanged; `golden:wasm`/`:web` — 7 fixtures each, unchanged. Dev-mode gate runs dirtied the
+committed `pkg-*` trees twice in this round; both times restored via `git restore pkg-bundler
+pkg-web` and rebuilt release before proceeding, with a direct `test:parity` re-check (bundler and
+web) against the exact release-built tree as the last step before `git status`/commit.
+
+No version bump for this addendum — additive within the already-released-to-branch v0.1.5.
+
+### Addendum (same day, same v0.1.5, no new version number) — bytes-at-boundary convention
+
+Owner-approved RFC addendum: a stated convention for how byte payloads cross the wasm boundary
+on the corpus-grain restore/verify/publish verbs, plus the code changes needed to actually live
+by it. No native `braid` API change (`restore_corpus`/`restore_published_corpus`/
+`publish_scope` keep their existing signatures); this is glue-layer and JS-layer work in
+`usfm_onion_wasm`/`js/packed.js`, plus one adversarial hardening pass.
+
+**The convention, stated plainly:** a corpus-grain byte payload never crosses this boundary as a
+per-book `Vec<u8>`/`number[]` again. Every multi-book verb takes (or returns) exactly two
+buffers — one for every book's packed container concatenated, one for every book's source
+concatenated — plus a `records: Vec<{book|path, byteOffset, byteLength, ...}>` naming each
+book's own extent into whichever buffer it belongs to. `crates/usfm_onion_wasm/src/bytes.rs`
+(new file) is the one shared implementation of that extent-slicing: `slice_extent`/
+`slice_extent_str`, each refusing — not clamping, not truncating, not panicking — on an
+out-of-bounds or overflowing extent (`byte_offset + byte_length` computed via `checked_add`,
+compared against the buffer's own length, both before any slicing is attempted) or, for the
+`_str` form, on invalid UTF-8. Every one of `restore_corpus`, `restore_published_corpus`, and
+the new `verifyPublishedCorpus` (`stateless.rs`, rewritten from a per-book `Vec<u8>` array to
+this same buffer-plus-records shape) refuses through this one function, naming the offending
+book/path in a `RestoreError::InvalidExtent { book }` (or the stateless equivalent) rather than
+ever reaching a native call with a bad slice. Both `packed`'s and `source`'s extents go through
+`slice_extent_str`, not the plain byte form, specifically so an invalid-UTF-8 source refuses
+*at this boundary*, naming the book — reaching native's own decode check instead would still
+refuse, but with no book identifier attached, since `braid::RestoreError::Decode` carries none.
+
+**Transferability, the actual motivation.** A plain JS `number[]` structured-clones by *copying*
+across a postMessage hop (main thread ↔ worker); a `Uint8Array`'s backing `ArrayBuffer` can be
+*transferred* (zero-copy, ownership moves). Concatenating every in-scope book's bytes into one
+buffer per side (rather than one `Uint8Array` per book) is what makes a whole scoped publication
+transferable as exactly two objects regardless of corpus size — the corpus-scale case (66+
+books) this exists for would otherwise mean 66+ separate transfer/copy operations per
+`publishScope` call.
+
+**Key symmetry: `publishScope` -> `restoreCorpus` verbatim-forward.** `ScopedPublication`
+(`resident.rs`, new struct) is deliberately byte-for-byte `restore_corpus`'s own input shape:
+`packed`/`sources` forward as `restoreCorpus`'s first two arguments unchanged, and
+`books: Vec<ScopedPublishedBook>` forwards as `records` after only a trivial per-book field
+rename (`sourceHash`/`packed`/`source` -> `sourceKey`/`packed`/`source`) — zero reshaping of
+either extent on either side. This is proven, not asserted: `scripts/test-publish-round-trip.mjs`
+now runs a dedicated verbatim-forward round trip (`publishScope` on one handle, straight into
+`restoreCorpus` on a second, fresh handle, with token/finding equality checked against the
+first) alongside the existing `publishScope` -> pure-JS-materialize lane, plus a whole
+adversarial section: out-of-bounds packed/source extents, an overflow-scale
+(`0xffffffff`/`0xffffffff`) extent, and an invalid-UTF-8 source extent, each proven to refuse by
+name rather than throw, run through `restoreCorpus`, `verifyPublishedCorpus`,
+`restorePublishedCorpus`, and the pure-JS `verifyPackedCorpus` in `js/packed.js` alike.
+
+**`PublishedCorpusSourceInput`/`PublishedCorpusSource` (the old per-book `{book, source:
+Vec<u8>}` verify-input shape) deleted, not deprecated.** It existed only to feed the old
+per-book-array `verifyPublishedCorpus`; once that function takes the buffer-plus-records shape
+instead, the per-book wrapper struct has no remaining caller in this crate and there is no
+migration value in keeping a now-provably-dead type around "just in case." `js/packed.js`'s
+`verifyPublishedPacked`/`verifyPackedCorpus` were rewritten in step: both gained a
+`sliceExtent(buf, extent)` helper that mirrors the Rust glue's own refuse-don't-clamp discipline
+(JS `TypedArray#subarray` clamps silently on an out-of-range end, which is exactly the failure
+mode this exists to intercept before a bad extent ever reaches a real buffer view), and every
+internal `Array.from(...)`-to-`number[]` conversion this file used to do per book is gone —
+replaced by zero-copy `subarray` views into the one buffer each function defensively copies
+once, at mint.
+
+**Deviation from the RFC, discovered and reverted, not silently worked around.** The RFC's
+original ask included `PublishedCorpus::bytes` (braid, existing field) and the new
+`ScopedPublication::packed`/`sources` crossing as real `Uint8Array` via
+`#[serde(with = "serde_bytes")]`. That was implemented, and empirically DID NOT WORK: an
+isolated repro (a throwaway `#[wasm_bindgen]` function returning a two-field struct with a
+`serde_bytes`-annotated `Vec<u8>`) came back as a plain JS `Array`, not a `Uint8Array`, in both
+build targets. Root cause, traced to source rather than guessed: this workspace's `tsify`
+dependency (`0.5.6`) is pulled in with its *default* `json` feature active (`Cargo.toml` never
+requests `features = ["js"]`), and under `json` its `into_js` path is `JsValue::from_serde`
+(`gloo-utils`), which has no bytes-as-`Uint8Array` special case at all — only `tsify`'s `js`
+feature (`serde-wasm-bindgen`) honors `#[serde(with = "serde_bytes")]`. Switching the crate to
+`js` was evaluated and declined as **too large a blast radius for this addendum**: `js`'s
+`Serializer` defaults `serialize_maps_as_objects` to `false`, meaning every existing
+`BTreeMap`-shaped field across the whole public API (`LintSummary::by_category`/`by_severity`/
+`by_issue_type`, every `message_params`/`label_params`, `VrefMap`, merge `decisions`, ...) would
+silently flip from a plain JS object to an ES `Map` — a real breaking change to the shipped npm
+API, for callers having nothing to do with this addendum, and one that would need `#[tsify(
+hashmap_as_object)]` added to every one of those pre-existing types to avoid, a much larger and
+separately-riskier migration than one addendum justifies. **Reverted**: `PublishedCorpus::bytes`
+and `ScopedPublication::packed`/`sources` all cross as plain `number[]`, exactly the
+representation `PublishedCorpus::bytes` has always had (no regression there) and the one
+`ScopedPublication` now also has (no regression possible, since it is new). The `serde_bytes`
+optional dependency added to `braid`'s and `usfm_onion_wasm`'s `Cargo.toml` for the attempt was
+removed again in the same round — `git diff` against this addendum's start shows zero net change
+to either `Cargo.toml`/`Cargo.lock`. The buffer-concatenation half of the convention (one array
+per buffer, not one per book) still delivers its own real win independent of the `Uint8Array`
+question: O(1) conversions per `publishScope`/`publish` call regardless of corpus size, down
+from what would otherwise be O(books) `Array.from` calls under the pre-existing per-book shape.
+A caller wanting a real `Uint8Array` still wraps once (`new Uint8Array(scoped.packed)`), never
+per book — documented on `ScopedPublication`'s own doc comment, and on `PublishedCorpus::bytes`'s
+for why the attempt was made and reverted. Flagged here for a possible dedicated follow-up
+(migrating `tsify` to its `js` feature workspace-wide, with `hashmap_as_object` added everywhere
+it is needed first) rather than folded into this one.
+
+**RESOLVED in the very next addendum below** (owner ruled: complete it now, inside v0.1.5, rather
+than leave it as a follow-up) — see "tsify `js`-feature migration" immediately after.
+
+**Gates, all green, final numbers:** `cargo test --workspace --all-features`
+(`RUSTFLAGS=-D warnings`) — **675 passed**, 0 failed, 28 ignored (was 664; +11 new: 7 unit tests
+in the new `bytes.rs` plus 4 new `resident.rs` extent-bounds tests exercising
+`restore_corpus`/`restore_published_corpus` natively, no JS engine involved); `cargo doc
+--workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) — clean; `cargo fmt --all
+--check` — clean; lint oracle (`--ignored`) — 1 passed, byte-identical, no re-bless; `npm run
+build` (release, both targets) — clean; `test:packed`/`:web` — 410 cases / 5,717,153 tokens each,
+unchanged; `test:parity`/`:web` — **94 steps** × 2 lanes, **0 divergences** (same step count as
+the prior addendum — this round changed argument SHAPES on existing steps, not step count),
+transcript regenerated LAST after every code change, then re-verified with a direct
+`test-parity.mjs` run against the exact release-built `pkg-bundler` tree being committed (not
+only the dev-mode `npm run test:parity` wrapper, which rebuilds its own dev package first);
+`test:publish`/`:web` — **31 checks** each (was 17; +14 new: the verbatim-forward
+`publishScope` -> `restoreCorpus` round trip, plus the adversarial out-of-bounds/overflow/
+invalid-UTF-8 extent section across all four verbs); `test:publish:js`/`:js:web` — 27 checks
+each, unchanged; `golden:wasm`/`:web` — 7 fixtures each, unchanged. `test:packed:types`
+(`tsc --noEmit`) also updated and green: `js/packed-consumer.fixture.ts` and the deleted
+`PublishedCorpusSource` type it imported both moved to the new `verifyPackedCorpus`/
+`verifyPublishedPacked` signatures. Dev-mode gate runs dirtied the committed `pkg-*` trees during
+this round (every `test:*`/`golden:*` npm script rebuilds a dev wasm package first); restored via
+`git restore pkg-bundler pkg-web` and rebuilt release before the final `test:parity` re-check and
+`git status`/commit, per the same discipline the prior addendum's escape note established.
+
+No version bump for this addendum — additive within the already-released-to-branch v0.1.5.
+
+### Addendum (same day, same v0.1.5, no new version number) — tsify `js`-feature migration
+
+Owner-ruled: complete the bytes-at-boundary convention NOW, inside v0.1.5, rather than leave the
+`Uint8Array` half as a deferred follow-up. This resolves the deviation the previous addendum
+flagged: `tsify` (0.5.6) now resolves its `js` feature (`serde-wasm-bindgen`) in both `Cargo.toml`s
+that declare it (`crates/usfm_onion_wasm`, `crates/braid`'s optional `wasm` feature), not its
+default `json` feature (`JsValue::from_serde`/`gloo-utils`) — the legacy path that ignores
+`#[serde(with = "serde_bytes")]` entirely and, it turned out, also ignores every other
+`SerializationConfig` knob including `hashmap_as_object`.
+
+**Sequencing, exactly as ordered:** hashmap sweep FIRST, then the feature flip, then re-adding
+`serde_bytes`, then empirical re-verification. Flipping the feature first (with no
+`hashmap_as_object` anywhere) would have silently turned every existing `BTreeMap`-shaped field
+into an ES `Map` the instant the dependency changed — a real regression window, avoided entirely
+by annotating every map-shaped type before the flip ever lands in the same commit.
+
+**The `hashmap_as_object` sweep.** `tsify`'s `SerializationConfig` (and the
+`serde_wasm_bindgen::Serializer` it configures) is read from the OUTERMOST type actually crossing
+the wasm ABI for a given call — the one `#[wasm_bindgen]` return type — and threaded through ONE
+serializer instance for the whole nested value; a nested type's own `#[tsify(hashmap_as_object)]`
+is consulted only if THAT type is also, independently, used as a direct boundary type somewhere
+(a bare `Vec<T>` return crosses via `T::into_js()` called once per element, so `T`'s own attribute
+matters there too). Sweeping every one of `usfm_onion_wasm/src/dto.rs`'s map-shaped types plus
+every DIRECT boundary type reachable by composition or by `Vec<T>`-per-element, both confirmed by
+reading `tsify-macros-0.5.6/src/wasm_bindgen.rs`'s generated `IntoWasmAbi` impls rather than
+assumed:
+- Leaf map-shaped types: `DiffsByChapterMap`, `VrefMap`, `LintIssue.messageParams`,
+  `LintSummary.byCategory`/`bySeverity`/`byIssueType`, `TokenFix.labelParams` (all three variants),
+  `MergeRequest.decisions`, `Patch.labelParams`.
+- Outer composite/direct-crossing types that nest one of the above and are themselves reached
+  either directly or via `Vec<T>`: the `outcome!` macro in `resident.rs` (covers every
+  `ApiResult<T, E>`-wrapped verb uniformly, including ones with no map field at all — harmless),
+  `PackedBookOutcome`, `PublishedCorpusOutcome`, `LintResult` (a direct return of
+  `wasm_lint_usfm`/`wasm_lint_tokens`, not only reached by nesting), `LintSnapshot` (`Braid::lint`,
+  which cannot fail so is not `outcome!`-wrapped), `Patch` (`Braid::patches()` returns `Vec<Patch>`
+  directly, so `Patch`'s own attribute — not `PatchOutcome`'s — is what governs it there).
+- No missed spots found in `usfm_onion_wire`'s own `dto.rs`: it has zero `BTreeMap`/`HashMap`
+  fields on any Tsify-derived type (confirmed by grep, not assumed), so wire's own (separate,
+  optional) `tsify` dependency needed no attribute changes, even though it now resolves `js` too
+  via Cargo's ordinary feature unification across the one shared `tsify` instance in the build.
+
+**One field changed shape at the Rust level to make this possible, with no observable JS change:**
+`DiffsByChapterMap`'s inner (chapter) map was `BTreeMap<u32, DiffSkeleton>`. Under
+`hashmap_as_object`, `serde-wasm-bindgen`'s object-shaped `MapSerializer` requires every key to
+serialize to a `JsString` (`key.dyn_into::<JsString>()`, confirmed by reading
+`serde-wasm-bindgen-0.6.5/src/ser.rs`); a `u32` key serializes to a JS `number` and throws
+("Map key is not a string and cannot be an object key"). `map_diffs_by_chapter` now stringifies
+the chapter key (`chapter.to_string()`) before building the map, so the Rust-side key type is
+`String`. The JS-visible shape is unchanged either way (`{"1": [...], "2": [...]}`): a JS object's
+own keys are always strings regardless of what put them there, and this was empirically confirmed
+against the committed golden fixtures (below), not merely reasoned about.
+
+**`serde_bytes` restored, this time for real.** `braid::PublishedCorpus::bytes` and the new
+`resident::ScopedPublication::packed`/`sources` (from the prior addendum) both carry
+`#[serde(with = "serde_bytes")]` again; the `serde_bytes` optional dependency is back in both
+`Cargo.toml`s. Empirically re-verified with the same isolated-repro method the prior addendum used
+to discover the bug in the first place (a throwaway `#[wasm_bindgen]` function, built, called from
+Node, deleted afterward) — `publish().bytes`, `publishScope().packed`, and `publishScope().sources`
+all came back `instanceof Uint8Array === true` in both build targets, not a plain `Array`.
+
+**Hazards, each independently verified (not assumed), per the owner's explicit list:**
+- *Enum-keyed maps still serialize with string keys as plain objects* — CONFIRMED:
+  `LintSummary.byCategory`/`byIssueType` (`BTreeMap<LintCategory, usize>`/`BTreeMap<LintIssueType,
+  usize>`) render as `{"context": 2, "numbering": 1}`-shaped plain objects (`constructor ===
+  Object`, not `instanceof Map`) — `serde`'s derived `serialize_unit_variant` for a C-like enum
+  produces a JS string via `serde-wasm-bindgen`'s `static_str_to_js`, satisfying the object-key
+  requirement automatically, no extra work needed.
+- *`VrefMap` newtype still crosses as `Record<string,string>`, not wrapped* — CONFIRMED:
+  `ParsedUsfm.toVref()` returns `{"GEN 1:1": "...", "GEN 1:2": "...", ...}`, `constructor ===
+  Object`, not `instanceof Map`.
+- *Integer/BigInt audit: nothing crosses as `u64`* — CONFIRMED by exhaustive grep of every
+  Tsify-derived type's own field list across `usfm_onion_wasm`'s `dto.rs`/`resident.rs`/
+  `stateless.rs` and `usfm_onion_wire`'s `dto.rs`: zero `u64` fields. Every native `u64` (snapshot
+  id, source hash, catalog stamp) is already formatted as a 16-hex-digit `String` before it ever
+  reaches a wasm DTO — established well before this round, not something this round changed.
+  Counts/offsets/positions crossing as raw numbers are `u32`/`usize` (32-bit on `wasm32`), nowhere
+  near 2^53. `serialize_large_number_types_as_bigints` stayed at its `false` default throughout —
+  never needed.
+- *Option/null handling, missing-vs-undefined drift* — CONFIRMED clean: `golden:wasm`/`:web` (the
+  byte-identical fixture gate) passed with ZERO re-bless, both targets, both before and after the
+  feature flip. Default assumption honored: no fixture was touched, no byte class changed:
+  no owner sign-off was needed because nothing drifted to begin with.
+- *`TokenFix.labelParams`/`MergeRequest.decisions` with genuinely non-empty content* — CONFIRMED
+  both directions: a throwaway probe proved `TokenFix.labelParams` serializes non-empty content
+  (`{"a": "1"}`) as a plain object on the OUTPUT side; `scripts/test-web-package.mjs`'s existing
+  mixed-decisions merge case (`{[changedUnit.id]: "baseline"}`, a real non-empty decisions map)
+  proved `MergeRequest.decisions` deserializes correctly from a plain JS object on the INPUT side
+  — both checked because every current native lint fix rule happens to leave `label_params` at
+  `Default::default()` (empty), so an empty-map check alone would have been suggestive but not
+  conclusive.
+- One new build-time hazard, NOT on the owner's list, found only by running the release build:
+  `serde-wasm-bindgen`'s generic i64/`BigInt` serialization codegen emits `i64.trunc_sat_f64_s`
+  (the "nontrapping float-to-int" proposal) in the compiled wasm regardless of whether any DTO
+  field actually uses `i64` (confirmed none do, per the audit above) — the instruction is in the
+  library's own generic code, not gated on a caller ever reaching that branch. `wasm-opt` refused
+  to validate it without an explicit flag. Fixed in `scripts/build-wasm.mjs`: added
+  `--enable-nontrapping-float-to-int` alongside the existing `--enable-bulk-memory`. A stable,
+  default-on engine feature in every shipping wasm runtime — safe to require.
+
+**New gate, permanent: the shape pin.** `scripts/test-publish-round-trip.mjs` gained a dedicated
+"shape pin" section (both build targets), asserting `instanceof Uint8Array` on every corpus-grain
+byte field (`PublishedCorpus.bytes`, `ScopedPublication.packed`/`sources`) and `constructor ===
+Object` (never `instanceof Map`) on every map-shaped field this addendum swept
+(`LintSummary.byCategory`, `LintIssue.messageParams`, `DiffsByChapterMap` at both levels including
+its now-`String`-keyed chapter level, `VrefMap`), each driven through a fixture engineered to
+produce non-empty content so an always-empty map cannot trivially pass. This exists so a future
+dependency bump or Cargo feature change that silently drags `tsify` back onto its legacy `json`
+feature (or somehow unwinds `hashmap_as_object`) fails LOUD, here, rather than as a silent
+consumer-facing regression discovered downstream.
+
+**Doc-comment cleanup.** Every "tried and reverted" apology this round's predecessor wrote (on
+`PublishedCorpus::bytes`, `ScopedPublication`, and the surrounding module comment in `resident.rs`)
+is rewritten to state the true, now-permanent story: bytes cross as `Uint8Array` because `tsify`
+resolves `js`; maps cross as plain objects because of the `hashmap_as_object` sweep above. No
+apology language should remain anywhere in the tree — checked by grep, not by memory.
+
+**Redundant JS-side wraps removed.** `scripts/test-publish-round-trip.mjs`/
+`test-publish-js-materialize.mjs` no longer call `new Uint8Array(published.bytes)` /
+`new Uint8Array(scoped.packed)` / `new Uint8Array(scoped.sources)` before use — those values are
+already real `Uint8Array`s now, so the wrap was copying a buffer that never needed copying.
+`js/packed.js`/`packed.d.ts` needed no changes: their own `verifyPackedCorpus`/
+`verifyPublishedPacked` already typed `packed`/`sources` parameters as `Uint8Array` (they are
+JS-authored functions independent of whatever produced the caller's buffer), so nothing there was
+coupled to the old `number[]` shape in the first place.
+
+**Gates, all green, final numbers:** `cargo test --workspace --all-features`
+(`RUSTFLAGS=-D warnings`) — **675 passed**, 0 failed, 28 ignored (unchanged from the prior
+addendum -- this round is wasm-boundary/JS-visible only, no new native test surface); `cargo doc
+--workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) — clean; `cargo fmt --all
+--check` — clean; lint oracle (`--ignored`) — 1 passed, byte-identical, no re-bless; `npm run
+build` (release, both targets) — clean after the `--enable-nontrapping-float-to-int` fix above
+(first attempt failed at the `wasm-opt` step; root-caused and fixed, not routed around);
+`test:packed`/`:web` — 410 cases / 5,717,153 tokens each, unchanged; `test:parity`/`:web` — **94
+steps** × 2 lanes, **0 divergences**, transcript regenerated LAST (twice — once mid-round, once
+final, byte-identical both times, confirming idempotence), then re-verified with a direct
+`test-parity.mjs` run against the exact release-built `pkg-bundler` tree; `test:publish`/`:web` —
+**32 checks** each (was 31; +1 for the new shape-pin section, which itself carries roughly a dozen
+individual assertions under that one `checks` increment, consistent with this file's existing
+per-section counting convention); `test:publish:js`/`:js:web` — 27 checks each, unchanged;
+`golden:wasm`/`:web` — **7 fixtures each, byte-identical, zero re-bless, both before and after the
+feature flip** — the hazard this addendum was most worried about (a silent shape regression
+hiding inside an already-passing-looking gate) is the one gate that would have caught it, and it
+stayed green throughout; `test:packed:types` (`tsc --noEmit`) — clean, no `.d.ts` type changes were
+needed for this round (the `ByteExtent`/`PublishedCorpusRecord`/`PackedRecord` types the prior
+addendum introduced were already extent-shaped, untouched by the `Uint8Array`/map-shape work
+here). Dev-mode gate runs dirtied the committed `pkg-*` trees during this round; restored via `git
+restore pkg-bundler pkg-web` and rebuilt release before the final `test:parity`/`golden:wasm`/
+`test:publish` re-checks and `git status`/commit, per the same discipline both prior addenda
+established.
+
+No version bump for this addendum — additive within the already-released-to-branch v0.1.5.
+
+### Addendum (same day, same v0.1.5, no new version number) — director-caught fix: type-override on the three byte fields
+
+Director verification of the `tsify`-migration commit (`821639a`) caught a P1 this round's own gates
+never exercise: `serde_bytes` fixes the RUNTIME shape (`Uint8Array` at the wasm ABI) but `tsify`
+cannot infer a `.d.ts` declaration from a `serde(with = ...)` annotation — every TypeScript
+consumer of `PublishedCorpus.bytes`, `ScopedPublication.packed`, and `ScopedPublication.sources`
+was still typed `number[]`, the exact inverse of the runtime value. A caller writing `.map()`
+against the declared `number[]` type would typecheck cleanly and then diverge from actual
+`Uint8Array` behavior at runtime -- a hazard the shape-pin gate (which asserts the runtime value,
+not the declared type) cannot see, and one the previous addendum's own hazard list did not think
+to check.
+
+**Fix, verified against source before applying:** confirmed `#[tsify(type = "...")]` is a real,
+supported per-field attribute in `tsify-macros` 0.5.6 by reading its `attrs.rs` directly (`type_override:
+Option<String>`, parsed off `meta.path.is_ident("type")`) rather than assuming the spelling.
+Applied `#[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]` to `PublishedCorpus.bytes`
+(`crates/braid/src/publication.rs`) and `#[tsify(type = "Uint8Array")]` to `ScopedPublication.packed`/
+`.sources` (`crates/usfm_onion_wasm/src/resident.rs`). Rebuilt and grepped the generated `.d.ts` in
+both `pkg-bundler` and `pkg-web` directly: all three fields now declare `Uint8Array`; the only
+remaining occurrences of the string `number[]` anywhere in either `.d.ts` are inside doc-comment
+prose explaining what a plain JS array would have cost, not a field declaration.
+
+**Swept for other misses, found none.** Checked every other `Vec<u8>` field in both crates:
+`braid::ScopedPublishedBook.packed` is native-only, deliberately not `Tsify`-derived (documented on
+the type itself as the reason a scoped publish's per-book native shape is never exposed to wasm
+directly), so it was never a wasm-boundary declaration to begin with and needed no attribute. No
+other byte-shaped field exists anywhere else in `usfm_onion_wasm`'s or `braid`'s `Tsify`-derived
+types.
+
+**Doc comments corrected to be fully truthful about the two-part fix**, not just the runtime half:
+`PublishedCorpus.bytes`'s doc comment (`crates/braid/src/publication.rs`) and
+`ScopedPublication`'s (`crates/usfm_onion_wasm/src/resident.rs`) now both state plainly that
+`serde_bytes` governs the runtime shape only and `#[tsify(type = "Uint8Array")]` is the separate,
+required fix for the declared `.d.ts` type -- without it the generation would still (falsely) read
+`number[]` even though the value crossing at runtime is a real `Uint8Array`.
+
+**Gates, all green, final numbers, re-run in full standing-battery order after the fix:**
+`cargo test --workspace --all-features` (`RUSTFLAGS=-D warnings`) -- **675 passed**, 0 failed, 28
+ignored, unchanged (this fix is `.d.ts`-declaration-only, no serialized-value change, so no test
+surface moved); `cargo doc --workspace --no-deps --all-features` (`RUSTDOCFLAGS=-D warnings`) --
+clean; `cargo fmt --all --check` -- clean; lint oracle (`--ignored`) -- 1 passed, byte-identical;
+`npm run build` (release, both targets) -- clean; parity transcript regenerated (a `tsify`
+type-only attribute still triggers a wasm rebuild, so regenerated and re-verified per the
+coordinator's instruction) -- byte-identical to the already-committed transcript, confirming the
+attribute is genuinely declaration-only with zero effect on serialized bytes; `test:parity`/`:web`
+-- **94 steps** × 2 lanes, **0 divergences**, both targets; `test:packed`/`:web` -- **410 cases /
+5,717,153 tokens** each, unchanged; `test:packed:types` (`tsc --noEmit -p
+tsconfig.packed-fixture.json`) -- **clean, exit 0**, re-run directly (not only as `test:packed`'s
+prerequisite step) since this was the gate the P1 slipped past; `test:publish`/`:web` -- 32 checks
+each, unchanged; `test:publish:js`/`:js:web` -- 27 checks each, unchanged (the coordinator noted a
+transient failure of `test:publish:js` under concurrent parallel gate runs elsewhere, attributed to
+pkg-tree contention between simultaneous npm scripts, not a defect in this change -- this round ran
+every gate serially and both targets passed clean); `golden:wasm`/`:web` -- **7 fixtures each,
+byte-identical, zero re-bless**. Dev-mode gate runs (`test:packed`/`:packed:web`) dirtied the
+committed `pkg-*` trees again this round; restored via `git restore pkg-bundler pkg-web`, rebuilt
+release, and re-verified `test:parity`/`golden:wasm`/`test:publish` against that exact release tree
+one final time before `git status`/commit -- same discipline every prior addendum in this file has
+followed.
+
+No version bump for this addendum -- additive within the already-released-to-branch v0.1.5.

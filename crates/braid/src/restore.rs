@@ -9,10 +9,17 @@ use usfm_onion_wire::error::DecodeError;
 /// re-publish needs to address it: by its resident book code *and* its own
 /// source key (a packed container names the book but not the key a corpus
 /// was originally addressed by).
+///
+/// Native-only, deliberately not `wasm`/`tsify`-derived (v0.1.5, bytes-at-
+/// boundary convention): a `source: Vec<u8>` field crossing wasm directly
+/// would be a JS `number[]`, exactly the array-of-numbers shape the
+/// convention exists to eliminate. The wasm crate builds this type as a
+/// plain internal value -- sliced from its own single concatenated buffer
+/// plus extent records -- immediately before calling
+/// [`Braid::restore_published_corpus`], never exposing it as a JS-facing
+/// type of its own.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedCorpusSource {
     pub book: String,
@@ -335,9 +342,7 @@ mod tests {
     use super::*;
     use crate::{BookInput, BraidConfig, CorpusInput, SourceKey};
     use usfm_onion::lint::{LintOptions, LintScope};
-    use usfm_onion_wire::corpus_codec::{
-        CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
-    };
+    use usfm_onion_wire::corpus_codec::LintStamps;
 
     fn empty_resident() -> Braid {
         let mut next = 0u32;
@@ -398,24 +403,17 @@ mod tests {
             .iter()
             .find(|entry| entry.book == target)
             .expect("book is resident");
-        let EncodedCorpus { bytes, sources, .. } = usfm_onion_wire::corpus_codec::encode_corpus(
+        // Shares the same per-book encode path `Braid::publish_scope` uses
+        // (`crate::publication::encode_one_book_container`), rather than a
+        // second, hand-rolled `encode_corpus` call here.
+        crate::publication::encode_one_book_container(
             snapshot.id.0,
-            Some(stamps),
-            &[CorpusSection::Fresh(CorpusSectionInput {
-                book: target,
-                tokens: CorpusSectionTokens::Owned {
-                    tokens: found.tokens,
-                },
-                findings: Some(found.result),
-            })],
+            target,
+            found.tokens,
+            found.result,
+            stamps,
         )
-        .expect("one book encodes");
-        let source = sources
-            .into_iter()
-            .find(|(candidate, _)| *candidate == target)
-            .expect("the book we just encoded has a source")
-            .1;
-        (bytes, source)
+        .expect("one book encodes")
     }
 
     fn current_stamps(resident: &Braid) -> LintStamps {

@@ -62,7 +62,10 @@ pub use crate::input::{
 };
 pub use crate::lint::{BookLintSnapshot, LintSnapshot};
 pub use crate::patch::{Patch, PatchId, PatchOp, PatchRow};
-pub use crate::publication::{PublicationCache, PublishError, PublishedBookInfo, PublishedCorpus};
+pub use crate::publication::{
+    PublicationCache, PublishError, PublishedBookInfo, PublishedCorpus, ScopedPublication,
+    ScopedPublishError, ScopedPublishedBook,
+};
 pub use crate::restore::{PublishedCorpusSource, RestoreError, RestoreRecord};
 pub use crate::stamps::{LintConfigFingerprint, LintEngineStamp};
 pub use crate::state::{

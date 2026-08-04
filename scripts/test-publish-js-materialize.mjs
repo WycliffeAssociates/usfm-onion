@@ -114,6 +114,32 @@ function comparableFindings(findings) {
 }
 
 /**
+ * Concatenates every published book's own source into one buffer plus
+ * per-book extent records (v0.1.5, bytes-at-boundary convention) -- the
+ * exact pairing `verifyPublishedPacked`/`restorePublishedCorpus` both take,
+ * so the SAME two values feed both lanes below.
+ */
+function concatPublishedSources(publishedBooks) {
+  const encoder = new TextEncoder();
+  const chunks = publishedBooks.map((book) => encoder.encode(book.source));
+  const sources = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  const records = [];
+  let offset = 0;
+  for (let index = 0; index < publishedBooks.length; index += 1) {
+    const chunk = chunks[index];
+    sources.set(chunk, offset);
+    records.push({
+      book: publishedBooks[index].book,
+      sourceKey: `${publishedBooks[index].book}.usfm`,
+      byteOffset: offset,
+      byteLength: chunk.length,
+    });
+    offset += chunk.length;
+  }
+  return { sources, records };
+}
+
+/**
  * Publishes a corpus, then materializes the SAME bytes three ways: braid's
  * own live state, the JS pure-materializer over the combined container, and
  * (for the round trip) a wasm-side restore into a fresh handle. All three
@@ -135,11 +161,13 @@ async function crossLaneEquivalence(books, label) {
   // Main-thread lane: verify + materialize in pure JS, no wasm call for the
   // materialization step itself (verifyPublishedPacked's one wasm call is
   // the certifier -- §H: no JS hashing/validation, ever).
-  const sources = published.books.map((b) => ({
-    book: b.book,
-    source: new TextEncoder().encode(b.source),
-  }));
-  const verifiedResult = verifyPublishedPacked(wasm, new Uint8Array(published.bytes), sources);
+  const { sources, records } = concatPublishedSources(published.books);
+  const verifiedResult = verifyPublishedPacked(
+    wasm,
+    published.bytes,
+    sources,
+    records,
+  );
   assert.ok(verifiedResult.ok, `${label}: verifyPublishedPacked: ${JSON.stringify(verifiedResult)}`);
   check(verifiedResult.snapshotId, published.snapshotId, `${label}: snapshot id matches published`);
 
@@ -169,15 +197,12 @@ async function crossLaneEquivalence(books, label) {
     `${label}: selective single-book materialize matches the full pass`,
   );
 
-  // Worker lane: the same bytes restored into a fresh handle via wasm.
+  // Worker lane: the same bytes restored into a fresh handle via wasm --
+  // reusing the SAME `sources`/`records` the main-thread lane just verified
+  // with, since both take the identical buffer-plus-extents pairing.
   const reopened = new wasm.Braid(config, makeMinter());
-  const records = published.books.map((b) => ({
-    book: b.book,
-    sourceKey: `${b.book}.usfm`,
-    source: Array.from(new TextEncoder().encode(b.source)),
-  }));
   const restored = unwrap(
-    reopened.restorePublishedCorpus(new Uint8Array(published.bytes), records),
+    reopened.restorePublishedCorpus(published.bytes, sources, records),
     `${label}: restorePublishedCorpus`,
   );
   check(restored.seeded.length, books.length, `${label}: every book seeded`);
@@ -271,16 +296,23 @@ await crossLaneEquivalence(
     "per-book equivalence: replaceCorpus",
   );
   const published = unwrap(original.publish(), "per-book equivalence: publish");
-  const genSource = published.books[0].source;
+  const genSource = new TextEncoder().encode(published.books[0].source);
 
-  const publishedResult = verifyPublishedPacked(wasm, new Uint8Array(published.bytes), [
-    { book: "GEN", source: new TextEncoder().encode(genSource) },
-  ]);
+  const publishedResult = verifyPublishedPacked(
+    wasm,
+    published.bytes,
+    genSource,
+    [{ book: "GEN", sourceKey: "GEN.usfm", byteOffset: 0, byteLength: genSource.length }],
+  );
   assert.ok(publishedResult.ok, "per-book equivalence: verifyPublishedPacked");
   const combinedTokens = materializePublished(publishedResult.verified).get("GEN").tokens;
 
-  const perBookResult = verifyPackedCorpus(wasm, [
-    { path: "GEN.usfm", packed: new Uint8Array(published.bytes), source: new TextEncoder().encode(genSource) },
+  const perBookResult = verifyPackedCorpus(wasm, published.bytes, genSource, [
+    {
+      path: "GEN.usfm",
+      packed: { byteOffset: 0, byteLength: published.bytes.length },
+      source: { byteOffset: 0, byteLength: genSource.length },
+    },
   ]);
   assert.ok(perBookResult.ok, `per-book equivalence: verifyPackedCorpus: ${JSON.stringify(perBookResult)}`);
   const perBookTokens = decodeTokens(perBookResult.verified, "GEN.usfm").tokens;

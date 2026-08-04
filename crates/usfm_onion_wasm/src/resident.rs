@@ -56,7 +56,16 @@ macro_rules! outcome {
     ($(#[$meta:meta])* $name:ident, $value:ty, $error:ty) => {
         $(#[$meta])*
         #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-        #[tsify(into_wasm_abi, from_wasm_abi)]
+        // `hashmap_as_object` unconditionally: this newtype, not whatever map-
+        // shaped DTO it happens to wrap this time, is what actually crosses
+        // the wasm ABI (tsify's `SERIALIZATION_CONFIG` is read from the
+        // OUTERMOST type reaching `#[wasm_bindgen]`, then threaded through
+        // one `serde_wasm_bindgen::Serializer` instance for the whole nested
+        // value -- a nested type's own `#[tsify(hashmap_as_object)]` is
+        // never consulted unless that nested type is ALSO, independently,
+        // used as a direct boundary type somewhere else). Harmless on the
+        // many instantiations with no map field at all.
+        #[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
         #[serde(transparent)]
         pub struct $name(pub ApiResult<$value, $error>);
 
@@ -176,6 +185,19 @@ outcome!(
     ScopedOutput<crate::DiffSkeleton>,
     BaselineError
 );
+outcome!(
+    /// A transfer-ready scoped publication, or the reason it could not be
+    /// produced.
+    ScopedPublishOutcome,
+    ScopedPublication,
+    ScopedPublishError
+);
+outcome!(
+    /// A baseline revert, or the reason it was refused.
+    RevertBaselineOutcome,
+    MutationEffect,
+    BaselineError
+);
 
 /// The resident configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -276,23 +298,48 @@ impl Braid {
     /// A book whose cached findings cannot be adopted still seeds: residency and
     /// lint-priming are independent facts, so that book arrives with no lex or parse
     /// and is simply awaiting recompute.
+    ///
+    /// `packed_all`/`sources` are two single buffers -- every record's own
+    /// container concatenated into the first, every record's own source
+    /// concatenated into the second -- with `records` naming each one's
+    /// extent into whichever buffer it belongs to (v0.1.5, bytes-at-boundary
+    /// convention: this is the exact shape [`Braid::publish_scope`]'s output
+    /// already is, so it forwards here with zero reshaping -- see
+    /// [`ScopedPublication`]'s own doc comment). An extent that falls
+    /// outside its buffer, or whose own end overflows computing it, is
+    /// refused (`RestoreError::InvalidExtent`, naming the record's own
+    /// `path`) before any native call -- never clamped, never truncated.
     //
     // The composition itself (`braid::Braid::restore_packed_books`) lives in
-    // braid; this is the DTO conversion either side of it. `RestoreRecord`
-    // and `braid::RestoreRecord` are separate types on purpose: the wasm one
-    // is tsify-derived and travels as JSON, the native one is a plain struct,
-    // and the field-for-field move between them is the only work this verb
-    // does.
+    // braid and is unchanged; this boundary's own job is resolving each
+    // record's two extents against its two buffers before building the
+    // native `Vec<braid::RestoreRecord>` that call actually takes.
     #[wasm_bindgen(js_name = restoreCorpus)]
-    pub fn restore_corpus(&mut self, records: Vec<RestoreRecord>) -> RestoreOutcome {
-        let native: Vec<braid::RestoreRecord> = records
-            .into_iter()
-            .map(|record| braid::RestoreRecord {
+    pub fn restore_corpus(
+        &mut self,
+        packed_all: &[u8],
+        sources: &[u8],
+        records: Vec<RestoreRecord>,
+    ) -> RestoreOutcome {
+        let mut native = Vec::with_capacity(records.len());
+        for record in records {
+            let Some(packed) = crate::bytes::slice_extent(packed_all, record.packed) else {
+                return RestoreOutcome::refused(RestoreError::InvalidExtent { book: record.path });
+            };
+            // `slice_extent_str`, not the plain byte slice: this is the
+            // boundary's own chance to refuse-and-name-the-book for invalid
+            // UTF-8, rather than reaching a native call whose own
+            // `DecodeError::InvalidUtf8` refusal carries no book identifier
+            // at all (v0.1.5, bytes-at-boundary convention).
+            let Some(source) = crate::bytes::slice_extent_str(sources, record.source) else {
+                return RestoreOutcome::refused(RestoreError::InvalidExtent { book: record.path });
+            };
+            native.push(braid::RestoreRecord {
                 path: record.path,
-                packed: record.packed,
-                source: record.source,
-            })
-            .collect();
+                packed: packed.to_vec(),
+                source: source.as_bytes().to_vec(),
+            });
+        }
         RestoreOutcome::from(
             self.inner
                 .restore_packed_books(&native)
@@ -322,21 +369,61 @@ impl Braid {
         PublishOutcome::from(self.inner.publish())
     }
 
+    /// Publishes exactly the books a scope names, as per-book packed
+    /// containers -- the exact shape `restoreCorpus` consumes, never
+    /// `PublishedCorpus`-shaped. Every returned book is always freshly
+    /// encoded and always carries its source; there is no splice-reuse arm,
+    /// and this call never reads or invalidates the handle's own
+    /// `PublicationCache` (that cache is `publish`'s alone).
+    //
+    // The composition itself (`braid::Braid::publish_scope`) lives in braid.
+    // This crate's own `ScopedPublication`/`ScopedPublishedBook` (defined
+    // below) concatenate every in-scope book's owned `packed`/`source` into
+    // the two buffers `restoreCorpus` takes verbatim -- see
+    // `ScopedPublication`'s own doc comment for the key symmetry.
+    #[wasm_bindgen(js_name = publishScope)]
+    pub fn publish_scope(&mut self, scope: CorpusScope) -> ScopedPublishOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return ScopedPublishOutcome::refused(ScopedPublishError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        ScopedPublishOutcome::from(
+            self.inner
+                .publish_scope(native)
+                .map(ScopedPublication::from)
+                .map_err(ScopedPublishError::from),
+        )
+    }
+
     /// Restores the whole resident corpus from one packed `corpus.bin`
     /// container -- the corpus-grain counterpart to [`Self::publish`], as
     /// [`Self::restore_corpus`] is to a per-book publication.
     ///
-    /// `records` supplies each book's own source key and exact bound source
-    /// (a packed container names the book but never the key a corpus was
-    /// addressed by, and a freshly-encoded book's bound source is wire's own
-    /// serialization, not necessarily any file on disk -- see
-    /// [`PublishedBookInfo::source`]). Verification is corpus-wide
-    /// (`verify_corpus`): every book must have exactly one source supplied,
-    /// and findings that carry stamps must all carry the *same* stamps,
-    /// checked atomically before anything installs.
+    /// `packed` is the one whole-corpus container (a single `Uint8Array`
+    /// argument, one memcpy). `sources` is every named book's source bytes
+    /// concatenated into one buffer; `records` supplies each book's own
+    /// declared code, its source key (a packed container names the book but
+    /// never the key a corpus was originally addressed by), and its own
+    /// extent into `sources` (v0.1.5, bytes-at-boundary convention -- see
+    /// [`crate::bytes`]). An extent outside `sources`, or one whose own end
+    /// overflows computing it, refuses by name
+    /// (`RestoreError::InvalidExtent`, naming the record's own `book`)
+    /// before any native call. Verification is corpus-wide (`verify_corpus`):
+    /// every book must have exactly one source supplied, and findings that
+    /// carry stamps must all carry the *same* stamps, checked atomically
+    /// before anything installs.
     //
     // The composition itself (`braid::Braid::restore_published_corpus`)
-    // lives in braid. Its `RestoreReport`/`RestoreError` stay native
+    // lives in braid and is unchanged; this boundary resolves every record's
+    // extent against `sources` and builds the native, per-book
+    // `braid::PublishedCorpusSource` values that call actually takes (that
+    // native type is deliberately not wasm/tsify-derived any more -- a
+    // `source: Vec<u8>` field crossing wasm directly would itself be a JS
+    // `number[]`). Its `RestoreReport`/`RestoreError` stay native
     // (`braid::RestoreReport`, `braid::IngestError` verbatim) rather than
     // tsify-derived, because their String-projected shape is this boundary's
     // business and not braid's -- so this converts into the wasm-facing
@@ -345,12 +432,32 @@ impl Braid {
     #[wasm_bindgen(js_name = restorePublishedCorpus)]
     pub fn restore_published_corpus(
         &mut self,
-        packed: Vec<u8>,
-        records: Vec<braid::PublishedCorpusSource>,
+        packed: &[u8],
+        sources: &[u8],
+        records: Vec<PublishedCorpusRecord>,
     ) -> RestoreOutcome {
+        let mut native = Vec::with_capacity(records.len());
+        for record in records {
+            let extent = crate::ByteExtent {
+                byte_offset: record.byte_offset,
+                byte_length: record.byte_length,
+            };
+            // `slice_extent_str`, for the same reason `restore_corpus`
+            // uses it on its own source extent: refuse-and-name-the-book
+            // here, rather than reaching a native call whose own decode
+            // refusal would carry no book identifier.
+            let Some(source) = crate::bytes::slice_extent_str(sources, extent) else {
+                return RestoreOutcome::refused(RestoreError::InvalidExtent { book: record.book });
+            };
+            native.push(braid::PublishedCorpusSource {
+                book: record.book,
+                source_key: record.source_key,
+                source: source.as_bytes().to_vec(),
+            });
+        }
         RestoreOutcome::from(
             self.inner
-                .restore_published_corpus(&packed, &records)
+                .restore_published_corpus(packed, &native)
                 .map(RestoreReport::from)
                 .map_err(RestoreError::from),
         )
@@ -740,6 +847,59 @@ impl Braid {
                         )
                     })
                 })
+                .map_err(BaselineError::from),
+        )
+    }
+
+    /// Whole-book replacement from each targeted book's own declared
+    /// baseline, atomic across the scope. `all`/`book` scopes only -- a
+    /// chapter scope refuses via `BaselineError.chapterScopeUnsupported`
+    /// rather than reverting one run in isolation (use `diffBaseline` plus
+    /// `updateChapter` with the baseline run's own tokens instead).
+    ///
+    /// Atomicity: every targeted book must be resident and baselined before
+    /// anything mutates -- any missing baseline refuses with every offender
+    /// named, and resident state is left exactly as it was. A book already
+    /// equal to its baseline is a no-op, absent from `changed`.
+    #[wasm_bindgen(js_name = revertToBaseline)]
+    pub fn revert_to_baseline(&mut self, scope: CorpusScope) -> RevertBaselineOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return RevertBaselineOutcome::refused(BaselineError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        RevertBaselineOutcome::from(
+            self.inner
+                .revert_to_baseline(native)
+                .map(MutationEffect::from)
+                .map_err(BaselineError::from),
+        )
+    }
+
+    /// Declares each in-scope book's CURRENT resident state as its baseline
+    /// -- no re-parse, no `BookInput`: the bulk, no-parse counterpart to
+    /// `setBaseline`. `all`/`book` scopes only, deliberately symmetric with
+    /// `revertToBaseline` (a baseline is a whole-book slot, so the set and
+    /// revert halves of its lifecycle agree on what scopes can address it);
+    /// a chapter scope refuses the same way. Idempotent, and there is no
+    /// missing-baseline case -- this verb's whole point is to create one.
+    #[wasm_bindgen(js_name = setBaselineToCurrent)]
+    pub fn set_baseline_to_current(&mut self, scope: CorpusScope) -> RevertBaselineOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return RevertBaselineOutcome::refused(BaselineError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        RevertBaselineOutcome::from(
+            self.inner
+                .set_baseline_to_current(native)
+                .map(MutationEffect::from)
                 .map_err(BaselineError::from),
         )
     }
@@ -1175,7 +1335,11 @@ pub struct BookLintSnapshot {
 /// renderer in one language, so findings cross this boundary already materialized.
 /// Packed bytes are a separate question with a separate verb.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// A direct wasm-ABI return type (`Braid::lint`, which cannot fail so it is
+// not `outcome!`-wrapped) that nests `LintSummary`'s maps and each book's
+// own `LintIssue.messageParams` -- needs its own `hashmap_as_object` for the
+// same reason `PackedBookOutcome`/`LintResult` do.
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct LintSnapshot {
     pub snapshot_id: String,
@@ -1391,17 +1555,37 @@ impl From<braid::FormatError> for FormatError {
     }
 }
 
-/// One book's packed bytes and the source they were bound to.
+/// One book's packed-container extent plus the source extent it was bound
+/// to -- both into the two buffers [`Braid::restore_corpus`] takes
+/// alongside `records` (`packedAll`/`sources`), never an owned byte payload
+/// of its own (v0.1.5, bytes-at-boundary convention). This is deliberately
+/// the exact shape [`ScopedPublication::books`] emits, so a
+/// [`Braid::publish_scope`] result forwards into a [`Braid::restore_corpus`]
+/// call with no reshaping -- see [`ScopedPublication`]'s own doc comment for
+/// the symmetry.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoreRecord {
     /// The caller's own binding for where the book came from — normally a path.
     pub path: String,
-    pub packed: Vec<u8>,
-    /// The exact bytes the container was bound to. Bytes rather than a string so a
-    /// host can hand over what it read from disk without a UTF-16 round trip.
-    pub source: Vec<u8>,
+    pub packed: crate::ByteExtent,
+    pub source: crate::ByteExtent,
+}
+
+/// One book's source extent for [`Braid::restore_published_corpus`] -- into
+/// the `sources` buffer that call takes alongside the one whole-corpus
+/// `packed` container (which needs no extent of its own: it already crosses
+/// as a single `Uint8Array`, the same reasoning
+/// [`PublishedCorpus::bytes`]'s own doc comment gives).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedCorpusRecord {
+    pub book: String,
+    pub source_key: String,
+    pub byte_offset: u32,
+    pub byte_length: u32,
 }
 
 /// Why a warm restore was refused outright.
@@ -1413,8 +1597,23 @@ pub struct RestoreRecord {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum RestoreError {
-    Decode { error: crate::PackedDecodeError },
-    Ingest { error: IngestError },
+    Decode {
+        error: crate::PackedDecodeError,
+    },
+    Ingest {
+        error: IngestError,
+    },
+    /// A record's own `packed`/`source` extent falls outside the buffer it
+    /// names, or overflows computing its own end -- refused by name rather
+    /// than by clamping or truncating (v0.1.5, bytes-at-boundary
+    /// convention; see [`crate::bytes`]). `book` is the record's own
+    /// caller-supplied identifier: for [`Braid::restore_corpus`] that is its
+    /// `path` (the book code is not known until the packed extent decodes),
+    /// and for [`Braid::restore_published_corpus`] it is the record's own
+    /// declared `book` code.
+    InvalidExtent {
+        book: String,
+    },
 }
 
 impl From<braid::RestoreError> for RestoreError {
@@ -1512,12 +1711,137 @@ impl From<braid::RestoreReport> for RestoreReport {
     }
 }
 
-// `PublishedBookInfo`/`PublishedCorpus`/`PublishError`/`PublishedCorpusSource`
-// are braid's own types (re-exported below), not a second, wasm-only mirror
-// of them: braid's `wasm` feature already derives `Tsify` on them directly,
-// so there is nothing for this crate to redefine. See braid's own
-// `publication`/`restore` modules for their definitions and doc comments.
-pub use braid::{PublishError, PublishedBookInfo, PublishedCorpus, PublishedCorpusSource};
+// `PublishedBookInfo`/`PublishedCorpus`/`PublishError` are braid's own types
+// (re-exported below), not a second, wasm-only mirror of them: braid's
+// `wasm` feature already derives `Tsify` on them directly, so there is
+// nothing for this crate to redefine. `PublishedCorpus::bytes` crosses as a
+// real `Uint8Array` via braid's own `serde_bytes` annotation -- see its own
+// doc comment for why that is honored (this crate's `tsify` dependency
+// resolves the `js` feature).
+//
+// `PublishedCorpusSource`/`ScopedPublication`/`ScopedPublishedBook` are NOT
+// re-exported here (v0.1.5, bytes-at-boundary convention): each one embeds a
+// raw `Vec<u8>`/`String` byte payload, so this crate now defines its own
+// boundary DTOs for the scoped-publish and restore-record shapes below, and
+// builds braid's native per-book types only as an internal step immediately
+// before calling into it.
+pub use braid::{PublishError, PublishedBookInfo, PublishedCorpus};
+
+/// One buffer's extent, plus the book it belongs to -- what
+/// [`ScopedPublication::books`] carries per book, boundary-only (see
+/// [`crate::bytes`]'s own doc comment).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopedPublishedBook {
+    pub book: String,
+    pub source_hash: String,
+    pub packed: crate::ByteExtent,
+    pub source: crate::ByteExtent,
+}
+
+/// What one [`Braid::publish_scope`] call produced, transfer-ready: every
+/// in-scope book's packed container concatenated into `packed`, every
+/// in-scope book's source concatenated (UTF-8) into `sources`, and
+/// `books[].packed`/`books[].source` naming each book's own extent into
+/// whichever of those two buffers it belongs to.
+///
+/// **Key symmetry, by construction:** this shape is byte-for-byte
+/// [`Braid::restore_corpus`]'s input. `packed`/`sources` forward verbatim as
+/// `restoreCorpus`'s first two arguments, and `books` forwards verbatim
+/// (after trivial per-book field renaming, `sourceHash`/`packed`/`source` ->
+/// `sourceKey`/`packed`/`source`) as its `records` -- zero reshaping,
+/// on either side of a postMessage/structured-clone hop.
+///
+/// `packed`/`sources` cross as real `Uint8Array`s (`serde_bytes`, honored
+/// because this crate's `tsify` dependency resolves its `js` feature, plus
+/// `#[tsify(type = "Uint8Array")]` on each field so the generated `.d.ts`
+/// declares it too -- `serde_bytes` alone only fixes the runtime shape):
+/// one buffer per side regardless of corpus size, so a scoped publication is
+/// transfer-ready as exactly two `ArrayBuffer`s -- a plain JS `number[]`
+/// structured-clones by copying; a `Uint8Array`'s backing `ArrayBuffer` can
+/// be transferred, zero-copy, ownership moved.
+///
+/// Native `braid::ScopedPublication` keeps its own per-book owned shape
+/// (a native caller wants one owned value per book, not buffer
+/// bookkeeping); this concatenation is the one honest transformation this
+/// boundary performs, the same class of conversion [`MutationEffect::from`]
+/// already does for every other verb.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopedPublication {
+    pub snapshot_id: String,
+    #[serde(with = "serde_bytes")]
+    #[tsify(type = "Uint8Array")]
+    pub packed: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    #[tsify(type = "Uint8Array")]
+    pub sources: Vec<u8>,
+    pub books: Vec<ScopedPublishedBook>,
+}
+
+impl From<braid::ScopedPublication> for ScopedPublication {
+    fn from(value: braid::ScopedPublication) -> Self {
+        let mut packed = Vec::new();
+        let mut sources = Vec::new();
+        let mut books = Vec::with_capacity(value.books.len());
+        for book in value.books {
+            let packed_start = packed.len() as u32;
+            packed.extend_from_slice(&book.packed);
+            let source_start = sources.len() as u32;
+            sources.extend_from_slice(book.source.as_bytes());
+            books.push(ScopedPublishedBook {
+                book: book.book,
+                source_hash: book.source_hash,
+                packed: crate::ByteExtent {
+                    byte_offset: packed_start,
+                    byte_length: book.packed.len() as u32,
+                },
+                source: crate::ByteExtent {
+                    byte_offset: source_start,
+                    byte_length: book.source.len() as u32,
+                },
+            });
+        }
+        Self {
+            snapshot_id: value.snapshot_id,
+            packed,
+            sources,
+            books,
+        }
+    }
+}
+
+/// Why [`Braid::publish_scope`] could not produce a scoped publication.
+///
+/// Mirrors `braid::ScopedPublishError` rather than reusing it verbatim (unlike
+/// [`PublishError`], which has no [`ScopeError`]-shaped variant to convert):
+/// its `Scope` arm wraps braid's own native `ScopeError`, which -- like every
+/// other scope-shaped error at this boundary -- projects to this crate's own
+/// String-based [`ScopeError`] DTO rather than crossing with braid's `BookId`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ScopedPublishError {
+    Scope {
+        error: ScopeError,
+    },
+    Encode {
+        error: usfm_onion_wire::dto::PackedEncodeError,
+    },
+}
+
+impl From<braid::ScopedPublishError> for ScopedPublishError {
+    fn from(error: braid::ScopedPublishError) -> Self {
+        match error {
+            braid::ScopedPublishError::Scope(error) => Self::Scope {
+                error: error.into(),
+            },
+            braid::ScopedPublishError::Encode { error } => Self::Encode { error },
+        }
+    }
+}
 
 /// A baseline that could not be recorded.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -1556,6 +1880,13 @@ pub enum BaselineError {
     MissingBaseline {
         books: Vec<String>,
     },
+    /// [`Braid::revert_to_baseline`] supports only `all`/`book` scopes; a
+    /// chapter scope refuses instead of reverting one run in isolation. Use
+    /// `diffBaseline` plus `updateChapter` with the baseline run's own
+    /// tokens instead.
+    ChapterScopeUnsupported {
+        target: ChapterTarget,
+    },
 }
 
 impl From<braid::BaselineError> for BaselineError {
@@ -1567,6 +1898,11 @@ impl From<braid::BaselineError> for BaselineError {
             braid::BaselineError::MissingBaseline { books } => Self::MissingBaseline {
                 books: books.iter().map(|book| book.as_str().to_string()).collect(),
             },
+            braid::BaselineError::ChapterScopeUnsupported(target) => {
+                Self::ChapterScopeUnsupported {
+                    target: target_out(&target),
+                }
+            }
         }
     }
 }
@@ -1652,8 +1988,15 @@ pub struct PatchRow {
 }
 
 /// One resolved fix, addressable and inspectable without applying it.
+///
+/// Needs its own `hashmap_as_object`, not only `PatchOutcome`'s: `Braid::
+/// patches()` returns `Vec<Patch>` directly, and a `Vec<T>` crossing the
+/// wasm ABI calls `T::into_js()` -- and so reads `T`'s own
+/// `SERIALIZATION_CONFIG` -- once per element, not once for the whole `Vec`
+/// (unlike a `Patch` reached only by nesting inside `PatchOutcome`, which
+/// serializes through `PatchOutcome`'s single top-level call instead).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(rename_all = "camelCase")]
 pub struct Patch {
     pub id: PatchId,
@@ -1790,12 +2133,34 @@ mod restore_tests {
         }
     }
 
-    fn record(path: &str, packed: Vec<u8>, source: &str) -> RestoreRecord {
-        RestoreRecord {
-            path: path.to_string(),
-            packed,
-            source: source.as_bytes().to_vec(),
+    /// Concatenates each entry's `packed`/`source` into the two buffers
+    /// `restore_corpus` now takes, returning `(packed_all, sources, records)`
+    /// with each record's own extents into them -- the same shape a real
+    /// caller builds by hand from several `RestoreRecord`s.
+    fn records_with_buffers(
+        entries: &[(&str, Vec<u8>, &str)],
+    ) -> (Vec<u8>, Vec<u8>, Vec<RestoreRecord>) {
+        let mut packed_all = Vec::new();
+        let mut sources = Vec::new();
+        let mut records = Vec::with_capacity(entries.len());
+        for (path, packed, source) in entries {
+            let packed_start = packed_all.len() as u32;
+            packed_all.extend_from_slice(packed);
+            let source_start = sources.len() as u32;
+            sources.extend_from_slice(source.as_bytes());
+            records.push(RestoreRecord {
+                path: path.to_string(),
+                packed: crate::ByteExtent {
+                    byte_offset: packed_start,
+                    byte_length: packed.len() as u32,
+                },
+                source: crate::ByteExtent {
+                    byte_offset: source_start,
+                    byte_length: source.len() as u32,
+                },
+            });
         }
+        (packed_all, sources, records)
     }
 
     /// Field-by-field, via exhaustive destructuring (no `..`) of both sides:
@@ -1870,7 +2235,8 @@ mod restore_tests {
         let (packed, source) = encode_one_book(&mut original.inner, book_id("GEN"), stamps);
 
         let mut reopened = empty_resident();
-        let outcome = reopened.restore_corpus(vec![record("GEN.usfm", packed, &source)]);
+        let (packed_all, sources, records) = records_with_buffers(&[("GEN.usfm", packed, &source)]);
+        let outcome = reopened.restore_corpus(&packed_all, &sources, records);
         let ApiResult::Ok { value: report } = outcome.0 else {
             panic!("a fresh, matching-stamp restore must succeed: {outcome:?}");
         };
@@ -1927,10 +2293,11 @@ mod restore_tests {
             .into_iter()
             .map(|entry| entry.book)
             .collect();
-        let outcome = reopened.restore_corpus(vec![
-            record("GEN.usfm", packed_gen, &source_gen),
-            record("EXO.usfm", packed_exo, &source_exo),
+        let (packed_all, sources, records) = records_with_buffers(&[
+            ("GEN.usfm", packed_gen, &source_gen),
+            ("EXO.usfm", packed_exo, &source_exo),
         ]);
+        let outcome = reopened.restore_corpus(&packed_all, &sources, records);
         assert!(
             matches!(
                 outcome.0,
@@ -1998,7 +2365,8 @@ mod restore_tests {
         let (packed, source) = encode_one_book(&mut original.inner, book_id("GEN"), stamps);
 
         let mut reopened = suppressing_resident();
-        let outcome = reopened.restore_corpus(vec![record("GEN.usfm", packed, &source)]);
+        let (packed_all, sources, records) = records_with_buffers(&[("GEN.usfm", packed, &source)]);
+        let outcome = reopened.restore_corpus(&packed_all, &sources, records);
         let ApiResult::Ok { value: report } = outcome.0 else {
             panic!("a fresh, matching-stamp restore must still seed the book: {outcome:?}");
         };
@@ -2066,22 +2434,28 @@ mod restore_tests {
             "a first publish encodes every book"
         );
 
-        let records: Vec<PublishedCorpusSource> = published
+        let mut sources = Vec::new();
+        let records: Vec<PublishedCorpusRecord> = published
             .books
             .iter()
-            .map(|book| PublishedCorpusSource {
-                book: book.book.clone(),
-                source_key: format!("{}.usfm", book.book),
-                source: book
+            .map(|book| {
+                let source = book
                     .source
                     .clone()
-                    .expect("a freshly encoded book carries its bound source")
-                    .into_bytes(),
+                    .expect("a freshly encoded book carries its bound source");
+                let offset = sources.len() as u32;
+                sources.extend_from_slice(source.as_bytes());
+                PublishedCorpusRecord {
+                    book: book.book.clone(),
+                    source_key: format!("{}.usfm", book.book),
+                    byte_offset: offset,
+                    byte_length: source.len() as u32,
+                }
             })
             .collect();
 
         let mut reopened = empty_resident();
-        let outcome = reopened.restore_published_corpus(published.bytes.clone(), records);
+        let outcome = reopened.restore_published_corpus(&published.bytes, &sources, records);
         let ApiResult::Ok { value: report } = outcome.0 else {
             panic!("a fresh, matching-stamp restore must succeed: {outcome:?}");
         };
@@ -2109,5 +2483,125 @@ mod restore_tests {
                 assert_eq!(restored.message, expected.message);
             }
         }
+    }
+
+    // ---- bytes-at-boundary: extent bounds-checking glue (v0.1.5) ----------
+    //
+    // `bytes.rs` itself unit-tests `slice_extent`/`slice_extent_str` in
+    // isolation; these drive the actual `restore_corpus`/
+    // `restore_published_corpus` methods natively (no JS engine, no
+    // `wasm_bindgen` ABI involved -- these are plain Rust calls) to prove the
+    // glue built on top of that slicing refuses cleanly, naming the
+    // offending record, rather than panicking or reaching a native call with
+    // a bad slice.
+
+    /// `restore_corpus`: a `packed` extent that runs off the end of
+    /// `packed_all` refuses `InvalidExtent`, naming the record's own `path`
+    /// (the only identifier available before a container is ever decoded).
+    #[test]
+    fn restore_corpus_refuses_an_out_of_bounds_packed_extent_naming_the_path() {
+        let mut reopened = empty_resident();
+        let packed_all = vec![0u8; 4];
+        let sources = b"abc".to_vec();
+        let records = vec![RestoreRecord {
+            path: "01-GEN.usfm".to_string(),
+            packed: crate::ByteExtent {
+                byte_offset: 0,
+                byte_length: 10, // past the end of a 4-byte buffer
+            },
+            source: crate::ByteExtent {
+                byte_offset: 0,
+                byte_length: 3,
+            },
+        }];
+        let outcome = reopened.restore_corpus(&packed_all, &sources, records);
+        assert!(matches!(
+            outcome.0,
+            ApiResult::Error {
+                error: RestoreError::InvalidExtent { ref book }
+            } if book == "01-GEN.usfm"
+        ));
+    }
+
+    /// `restore_corpus`: an extent whose `byteOffset + byteLength` would
+    /// overflow a narrower accumulator still refuses cleanly -- never
+    /// panics, never wraps into an in-bounds-looking value.
+    #[test]
+    fn restore_corpus_refuses_an_overflowing_source_extent_without_panicking() {
+        let mut reopened = empty_resident();
+        let packed_all = b"abcd".to_vec();
+        let sources = b"abc".to_vec();
+        let records = vec![RestoreRecord {
+            path: "01-GEN.usfm".to_string(),
+            packed: crate::ByteExtent {
+                byte_offset: 0,
+                byte_length: 4,
+            },
+            source: crate::ByteExtent {
+                byte_offset: u32::MAX,
+                byte_length: u32::MAX,
+            },
+        }];
+        let outcome = reopened.restore_corpus(&packed_all, &sources, records);
+        assert!(matches!(
+            outcome.0,
+            ApiResult::Error {
+                error: RestoreError::InvalidExtent { ref book }
+            } if book == "01-GEN.usfm"
+        ));
+    }
+
+    /// `restorePublishedCorpus`: a record's own extent past the end of
+    /// `sources` refuses `InvalidExtent`, naming the record's own declared
+    /// `book` (known up front here, unlike `restore_corpus`'s `path`).
+    #[test]
+    fn restore_published_corpus_refuses_an_out_of_bounds_source_extent_naming_the_book() {
+        let mut reopened = empty_resident();
+        let packed = b"whatever".to_vec();
+        let sources = b"abc".to_vec();
+        let records = vec![PublishedCorpusRecord {
+            book: "GEN".to_string(),
+            source_key: "GEN.usfm".to_string(),
+            byte_offset: 0,
+            byte_length: 10,
+        }];
+        let outcome = reopened.restore_published_corpus(&packed, &sources, records);
+        assert!(matches!(
+            outcome.0,
+            ApiResult::Error {
+                error: RestoreError::InvalidExtent { ref book }
+            } if book == "GEN"
+        ));
+    }
+
+    /// A zero-length extent passes through rather than being pre-emptively
+    /// refused by this layer -- an empty source's own classification (a
+    /// decode/ingest defect, not an extent defect) still applies downstream.
+    #[test]
+    fn restore_corpus_zero_length_source_extent_passes_through_to_native_classification() {
+        let mut reopened = empty_resident();
+        let packed_all = b"not a real container".to_vec();
+        let sources = Vec::new();
+        let records = vec![RestoreRecord {
+            path: "01-GEN.usfm".to_string(),
+            packed: crate::ByteExtent {
+                byte_offset: 0,
+                byte_length: packed_all.len() as u32,
+            },
+            source: crate::ByteExtent {
+                byte_offset: 0,
+                byte_length: 0,
+            },
+        }];
+        let outcome = reopened.restore_corpus(&packed_all, &sources, records);
+        // Not refused by the extent layer: it reaches native, which refuses
+        // it for its own reason (not a valid container) -- proving the empty
+        // extent itself was never the problem.
+        assert!(!matches!(
+            outcome.0,
+            ApiResult::Error {
+                error: RestoreError::InvalidExtent { .. }
+            }
+        ));
     }
 }

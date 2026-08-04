@@ -2,8 +2,9 @@
 //! `corpus.bin` container, with a reuse cache that keeps a republication of
 //! an unchanged corpus cheap.
 
-use crate::{Braid, LintConfigFingerprint, LintEngineStamp, SourceHash, TokenIdentity};
-use usfm_onion::token::BookId;
+use crate::input::CorpusScope;
+use crate::{Braid, LintConfigFingerprint, LintEngineStamp, ScopeError, SourceHash, TokenIdentity};
+use usfm_onion::token::{BookId, OwnedToken};
 use usfm_onion_wire::corpus_codec::{
     CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
     PublishedBook, encode_corpus,
@@ -182,6 +183,19 @@ pub struct PublishedBookInfo {
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct PublishedCorpus {
+    /// One whole-corpus container, already a single buffer -- crosses wasm
+    /// as a real `Uint8Array` (`serde_bytes`, the `Vec<u8>` -> bytes rather
+    /// than sequence representation, honored because this crate's `tsify`
+    /// dependency resolves its `js` feature/`serde-wasm-bindgen`, not the
+    /// legacy `json`/`JsValue::from_serde` default -- v0.1.5's bytes-at-
+    /// boundary convention). An extent record would be vacuous here: this
+    /// field already *is* one complete buffer, with nothing else to slice it
+    /// out of. `serde_bytes` governs runtime shape only -- `tsify` cannot
+    /// infer a `.d.ts` type from it, so `#[tsify(type = "Uint8Array")]`
+    /// overrides the declaration too; without it the generated type would
+    /// still (falsely) read `number[]`.
+    #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub bytes: Vec<u8>,
     pub snapshot_id: String,
     /// One entry per resident book, in corpus order -- not only the freshly
@@ -212,6 +226,111 @@ pub enum PublishError {
     Encode {
         error: usfm_onion_wire::dto::PackedEncodeError,
     },
+}
+
+/// Encodes exactly one book's own single-section-pair container -- the
+/// per-book wire encoding [`Braid::publish_scope`] and
+/// [`Braid::restore_packed_books`]'s test fixtures both need, shared rather
+/// than duplicated. Never touches [`PublicationCache`]: it is a bare call
+/// into `encode_corpus` with one `Fresh` section, with no reuse bookkeeping
+/// around it at all.
+pub(crate) fn encode_one_book_container(
+    snapshot_id: u64,
+    book: BookId,
+    tokens: &[OwnedToken],
+    findings: &usfm_onion::lint::LintResult,
+    stamps: LintStamps,
+) -> Result<(Vec<u8>, String), EncodeError> {
+    let EncodedCorpus { bytes, sources, .. } = encode_corpus(
+        snapshot_id,
+        Some(stamps),
+        &[CorpusSection::Fresh(CorpusSectionInput {
+            book,
+            tokens: CorpusSectionTokens::Owned { tokens },
+            findings: Some(findings),
+        })],
+    )?;
+    let source = sources
+        .into_iter()
+        .find(|(candidate, _)| *candidate == book)
+        .expect("the book we just encoded has a source")
+        .1;
+    Ok((bytes, source))
+}
+
+/// One book's own packed container from a [`Braid::publish_scope`] call --
+/// deliberately the same shape [`crate::RestoreRecord`] consumes
+/// (book/path, packed, source), and deliberately NOT [`PublishedCorpus`]-shaped.
+///
+/// A partial container -- one or a few books out of a whole corpus -- must be
+/// structurally unrepresentable as a complete corpus container: the two are
+/// different guarantees (a scoped publish for a live rebase preview or a
+/// partial sync is never "the whole corpus, safe to reopen cold"), and giving
+/// them the same shape would let a caller feed a scoped result to whatever
+/// consumes a `PublishedCorpus` and get back something that looks complete
+/// but is not.
+///
+/// Native-only, deliberately not `wasm`/`tsify`-derived (v0.1.5,
+/// bytes-at-boundary convention): `packed: Vec<u8>` crossing wasm directly
+/// would be a JS `number[]`. The wasm crate concatenates every in-scope
+/// book's `packed`/`source` into two single buffers plus extent records at
+/// the boundary and exposes its own DTOs for that shape -- this native
+/// per-book, owned-`Vec<u8>` shape is what a native caller actually wants
+/// (one value per book, no buffer bookkeeping of its own).
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct ScopedPublishedBook {
+    pub book: String,
+    pub packed: Vec<u8>,
+    /// Always present -- see [`Braid::publish_scope`]'s own doc comment for
+    /// why a scoped publish never has a splice-reuse arm.
+    pub source: String,
+    pub source_hash: String,
+}
+
+/// What one [`Braid::publish_scope`] call produced: per-book packed
+/// containers, in corpus order.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct ScopedPublication {
+    /// The corpus identity from the same `lint()` read this call published
+    /// against -- callers assert it against a subsequent
+    /// [`crate::MutationEffect::snapshot_id`] to detect a race between reading
+    /// this publication and a concurrent mutation.
+    pub snapshot_id: String,
+    pub books: Vec<ScopedPublishedBook>,
+}
+
+/// Why [`Braid::publish_scope`] could not produce a scoped publication.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "serde", serde(tag = "kind", rename_all = "camelCase"))]
+pub enum ScopedPublishError {
+    Scope(ScopeError),
+    Encode {
+        error: usfm_onion_wire::dto::PackedEncodeError,
+    },
+}
+
+impl std::fmt::Display for ScopedPublishError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scope(error) => write!(f, "{error}"),
+            Self::Encode { error } => write!(f, "{error:?}"),
+        }
+    }
+}
+
+impl std::error::Error for ScopedPublishError {}
+
+impl From<ScopeError> for ScopedPublishError {
+    fn from(value: ScopeError) -> Self {
+        Self::Scope(value)
+    }
 }
 
 impl Braid {
@@ -273,6 +392,72 @@ impl Braid {
         Ok(PublishedCorpus {
             bytes: publication.bytes,
             snapshot_id: format!("{:016x}", snapshot.id.0),
+            books,
+        })
+    }
+
+    /// Publishes exactly the books a scope names, as per-book packed
+    /// containers -- the exact shape [`crate::RestoreRecord`] consumes, never
+    /// [`PublishedCorpus`]-shaped (see [`ScopedPublishedBook`]'s own doc
+    /// comment for why that distinction is a safety requirement, not a
+    /// convenience).
+    ///
+    /// Lint-first, the same rule [`Self::publish`] follows: every dirty book
+    /// in scope is linted before it is encoded, so a book's finding sections
+    /// always match the bytes beside them. `snapshot_id` is the corpus
+    /// identity from that same `lint()` read.
+    ///
+    /// A chapter scope resolves to its book -- containers are book-grain, and
+    /// an ambiguous chapter refuses via [`ScopeError`] the same way every
+    /// other scoped read already does.
+    ///
+    /// Every returned book is ALWAYS freshly encoded and ALWAYS carries its
+    /// source -- there is no splice-reuse arm and no `encoded: false` case.
+    /// The caller is by definition asking for bytes it does not already
+    /// hold, so there is nothing to reuse against; and a scoped publication
+    /// is meant to be handed straight to a materializer, which is gated on
+    /// having source bytes to certify against, so a container without one
+    /// would be unusable the moment it arrived. This is also exactly why
+    /// this is its own verb rather than `publish(scope: Option<CorpusScope>)`
+    /// on the existing method: `publish`'s whole contract is splice-reuse
+    /// through [`PublicationCache`], and a scoped call has no cache entry to
+    /// reuse from or contribute to -- this method never reads or invalidates
+    /// `self.publication`.
+    pub fn publish_scope(
+        &mut self,
+        scope: CorpusScope,
+    ) -> Result<ScopedPublication, ScopedPublishError> {
+        let indices = self.resolve_format_targets(&scope)?;
+        let stamps = LintStamps {
+            config_fingerprint: LintConfigFingerprint::of(&self.config().lint).0,
+            engine_stamp: LintEngineStamp::current().0,
+        };
+
+        let snapshot = self.lint();
+        let snapshot_id = snapshot.id.0;
+        let mut books = Vec::with_capacity(indices.len());
+        for (index, _run) in indices {
+            let entry = &snapshot.books[index];
+            let (packed, source) = encode_one_book_container(
+                snapshot_id,
+                entry.book,
+                entry.tokens,
+                entry.result,
+                stamps,
+            )
+            .map_err(|error| ScopedPublishError::Encode {
+                error: error.into(),
+            })?;
+            books.push(ScopedPublishedBook {
+                book: entry.book.as_str().to_string(),
+                packed,
+                source,
+                source_hash: format!("{:016x}", entry.source_hash.0),
+            });
+        }
+
+        Ok(ScopedPublication {
+            snapshot_id: format!("{:016x}", snapshot_id),
             books,
         })
     }

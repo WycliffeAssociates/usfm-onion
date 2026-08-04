@@ -108,7 +108,13 @@ function emit(args, outDir) {
 }
 
 function verifyOne(caseName, packed, source) {
-  const result = verifyPackedCorpus(wasm, [{ path: caseName, packed, source }]);
+  const result = verifyPackedCorpus(wasm, packed, source, [
+    {
+      path: caseName,
+      packed: { byteOffset: 0, byteLength: packed.length },
+      source: { byteOffset: 0, byteLength: source.length },
+    },
+  ]);
   assert.equal(
     result.ok,
     true,
@@ -327,7 +333,13 @@ for (const kind of ["token", "finding"]) {
     const source = new Uint8Array(
       await readFile(path.join(vector.dir, `${vector.base}.usfm`)),
     );
-    const result = verifyPackedCorpus(wasm, [{ path: caseName, packed, source }]);
+    const result = verifyPackedCorpus(wasm, packed, source, [
+      {
+        path: caseName,
+        packed: { byteOffset: 0, byteLength: packed.length },
+        source: { byteOffset: 0, byteLength: source.length },
+      },
+    ]);
     assert.equal(result.ok, false, `${caseName}: malformed bytes must be refused`);
     assert.equal(
       result.error.kind,
@@ -474,9 +486,12 @@ for (const file of corpusPaths) {
   // Two records at different paths naming the same underlying book: a legal
   // corpus (paths, the real key, are distinct) that makes book-code selection
   // ambiguous.
-  const result = verifyPackedCorpus(wasm, [
-    { path: "dup/a", packed, source },
-    { path: "dup/b", packed, source },
+  // Both records name the same underlying bytes, so both extents point at
+  // the same range of the one shared buffer -- no need to duplicate them.
+  const sharedExtent = (buf) => ({ byteOffset: 0, byteLength: buf.length });
+  const result = verifyPackedCorpus(wasm, packed, source, [
+    { path: "dup/a", packed: sharedExtent(packed), source: sharedExtent(source) },
+    { path: "dup/b", packed: sharedExtent(packed), source: sharedExtent(source) },
   ]);
   assert.equal(result.ok, true, "two records naming the same book at different paths verify fine");
   const book = receiptFor(result.verified, "dup/a").receipt.book;

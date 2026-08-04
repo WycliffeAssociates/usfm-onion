@@ -203,7 +203,12 @@ pub fn wasm_parse(source: &str) -> ParsedUsfm {
 /// (the caller falls back to normal USFM ingest) and it carries the frozen
 /// `DecodeError` variant rather than a message a consumer would have to parse.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// This IS the direct wasm-ABI return type of `wasm_verify_packed_book`, so
+// its own `hashmap_as_object` is what actually governs how the nested
+// `LintIssue.messageParams` map serializes -- a nested type's own tsify
+// config is never consulted once it is reached only by composition (see the
+// `outcome!` macro's own comment in `resident.rs` for the mechanism).
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -250,18 +255,6 @@ pub fn wasm_verify_packed_book(packed: &[u8], source: &[u8]) -> PackedBookOutcom
     }
 }
 
-/// One book's own source, for [`wasm_verify_published_corpus`] -- addressed by
-/// book code alone, since verifying a corpus-wide container needs no source
-/// key (that is a resident-corpus concept; the container itself never names
-/// one).
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct PublishedCorpusSourceInput {
-    pub book: String,
-    pub source: Vec<u8>,
-}
-
 /// One book's receipt and findings out of a verified corpus container, in
 /// the container's own (corpus) order.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -281,7 +274,10 @@ pub struct PublishedCorpusBook {
 /// supplied, and findings that carry stamps must all carry the *same*
 /// stamps -- rather than book by book.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+// The direct wasm-ABI return type of `wasm_verify_published_corpus` -- see
+// `PackedBookOutcome`'s own comment above for why `hashmap_as_object` has to
+// live here rather than (only) on the nested `LintIssue`.
+#[tsify(into_wasm_abi, from_wasm_abi, hashmap_as_object)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -295,6 +291,13 @@ pub enum PublishedCorpusOutcome {
     Rejected {
         error: PackedDecodeError,
     },
+    /// A record's own extent into `sources` falls outside that buffer, or
+    /// its bytes are not valid UTF-8 -- refused by name (v0.1.5,
+    /// bytes-at-boundary convention; see [`crate::bytes`]), never clamped,
+    /// truncated, or lossily converted.
+    InvalidExtent {
+        book: String,
+    },
 }
 
 /// Verifies a whole packed corpus container against the exact sources every
@@ -302,6 +305,11 @@ pub enum PublishedCorpusOutcome {
 /// [`crate::resident::Braid::restore_published_corpus`], useful to a host
 /// that wants to validate a `corpus.bin` before deciding whether to restore
 /// it into a resident handle at all.
+///
+/// `packed` is the one whole-corpus container. `sources` is every named
+/// book's source bytes concatenated into one buffer; `records` names each
+/// book's own extent into it -- the same buffer-plus-extents pairing
+/// [`crate::resident::Braid::restore_published_corpus`] takes.
 ///
 /// Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
 /// (container/section structure, both integrity checksums, exact source
@@ -311,16 +319,21 @@ pub enum PublishedCorpusOutcome {
 #[wasm_bindgen(js_name = verifyPublishedCorpus)]
 pub fn wasm_verify_published_corpus(
     packed: &[u8],
-    sources: Vec<PublishedCorpusSourceInput>,
+    sources: &[u8],
+    records: Vec<crate::resident::PublishedCorpusRecord>,
 ) -> PublishedCorpusOutcome {
-    let mut decoded_sources = Vec::with_capacity(sources.len());
-    for source in &sources {
-        let Ok(text) = std::str::from_utf8(&source.source) else {
-            return PublishedCorpusOutcome::Rejected {
-                error: PackedDecodeError::InvalidUtf8,
+    let mut decoded_sources = Vec::with_capacity(records.len());
+    for record in &records {
+        let extent = crate::ByteExtent {
+            byte_offset: record.byte_offset,
+            byte_length: record.byte_length,
+        };
+        let Some(text) = crate::bytes::slice_extent_str(sources, extent) else {
+            return PublishedCorpusOutcome::InvalidExtent {
+                book: record.book.clone(),
             };
         };
-        let Some(book) = usfm_onion::token::BookId::from_str(&source.book) else {
+        let Some(book) = usfm_onion::token::BookId::from_str(&record.book) else {
             return PublishedCorpusOutcome::Rejected {
                 error: PackedDecodeError::InvalidSection,
             };

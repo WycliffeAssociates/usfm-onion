@@ -21,7 +21,7 @@ import {
   type MaterializedBook,
   type MaterializedPublishedBook,
   type PackedRecord,
-  type PublishedCorpusSource,
+  type PublishedCorpusRecord,
   type VerifiedPacked,
   type VerifiedPublished,
   type VerifyPackedResult,
@@ -30,13 +30,16 @@ import {
 
 declare const wasm: {
   verifyPackedBook(packed: Uint8Array, source: Uint8Array): unknown;
-  verifyPublishedCorpus(packed: Uint8Array, sources: unknown): unknown;
+  verifyPublishedCorpus(packed: Uint8Array, sources: Uint8Array, records: unknown): unknown;
 };
+declare const packedAll: Uint8Array;
+declare const sources: Uint8Array;
 declare const records: readonly PackedRecord[];
 declare const publishedPacked: Uint8Array;
-declare const publishedSources: readonly PublishedCorpusSource[];
+declare const publishedSources: Uint8Array;
+declare const publishedRecords: readonly PublishedCorpusRecord[];
 
-const result: VerifyPackedResult = verifyPackedCorpus(wasm as never, records);
+const result: VerifyPackedResult = verifyPackedCorpus(wasm as never, packedAll, sources, records);
 
 if (result.ok) {
   const verified: VerifiedPacked = result.verified;
@@ -102,6 +105,7 @@ const publishedResult: VerifyPublishedResult = verifyPublishedPacked(
   wasm as never,
   publishedPacked,
   publishedSources,
+  publishedRecords,
 );
 
 if (publishedResult.ok) {

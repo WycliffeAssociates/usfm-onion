@@ -240,6 +240,20 @@ export class Braid {
         return takeObject(ret);
     }
     /**
+     * Publishes exactly the books a scope names, as per-book packed
+     * containers -- the exact shape `restoreCorpus` consumes, never
+     * `PublishedCorpus`-shaped. Every returned book is always freshly
+     * encoded and always carries its source; there is no splice-reuse arm,
+     * and this call never reads or invalidates the handle's own
+     * `PublicationCache` (that cache is `publish`'s alone).
+     * @param {CorpusScope} scope
+     * @returns {ScopedPublishOutcome}
+     */
+    publishScope(scope) {
+        const ret = wasm.braid_publishScope(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+    /**
      * Removes a book. Removing an absent book is a no-op, not an error: the
      * requested end state already holds.
      * @param {string} book
@@ -288,13 +302,30 @@ export class Braid {
      * A book whose cached findings cannot be adopted still seeds: residency and
      * lint-priming are independent facts, so that book arrives with no lex or parse
      * and is simply awaiting recompute.
+     *
+     * `packed_all`/`sources` are two single buffers -- every record's own
+     * container concatenated into the first, every record's own source
+     * concatenated into the second -- with `records` naming each one's
+     * extent into whichever buffer it belongs to (v0.1.5, bytes-at-boundary
+     * convention: this is the exact shape [`Braid::publish_scope`]'s output
+     * already is, so it forwards here with zero reshaping -- see
+     * [`ScopedPublication`]'s own doc comment). An extent that falls
+     * outside its buffer, or whose own end overflows computing it, is
+     * refused (`RestoreError::InvalidExtent`, naming the record's own
+     * `path`) before any native call -- never clamped, never truncated.
+     * @param {Uint8Array} packed_all
+     * @param {Uint8Array} sources
      * @param {RestoreRecord[]} records
      * @returns {RestoreOutcome}
      */
-    restoreCorpus(records) {
-        const ptr0 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+    restoreCorpus(packed_all, sources, records) {
+        const ptr0 = passArray8ToWasm0(packed_all, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0);
+        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_restoreCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
         return takeObject(ret);
     }
     /**
@@ -302,24 +333,50 @@ export class Braid {
      * container -- the corpus-grain counterpart to [`Self::publish`], as
      * [`Self::restore_corpus`] is to a per-book publication.
      *
-     * `records` supplies each book's own source key and exact bound source
-     * (a packed container names the book but never the key a corpus was
-     * addressed by, and a freshly-encoded book's bound source is wire's own
-     * serialization, not necessarily any file on disk -- see
-     * [`PublishedBookInfo::source`]). Verification is corpus-wide
-     * (`verify_corpus`): every book must have exactly one source supplied,
-     * and findings that carry stamps must all carry the *same* stamps,
-     * checked atomically before anything installs.
+     * `packed` is the one whole-corpus container (a single `Uint8Array`
+     * argument, one memcpy). `sources` is every named book's source bytes
+     * concatenated into one buffer; `records` supplies each book's own
+     * declared code, its source key (a packed container names the book but
+     * never the key a corpus was originally addressed by), and its own
+     * extent into `sources` (v0.1.5, bytes-at-boundary convention -- see
+     * [`crate::bytes`]). An extent outside `sources`, or one whose own end
+     * overflows computing it, refuses by name
+     * (`RestoreError::InvalidExtent`, naming the record's own `book`)
+     * before any native call. Verification is corpus-wide (`verify_corpus`):
+     * every book must have exactly one source supplied, and findings that
+     * carry stamps must all carry the *same* stamps, checked atomically
+     * before anything installs.
      * @param {Uint8Array} packed
-     * @param {PublishedCorpusSource[]} records
+     * @param {Uint8Array} sources
+     * @param {PublishedCorpusRecord[]} records
      * @returns {RestoreOutcome}
      */
-    restorePublishedCorpus(packed, records) {
+    restorePublishedCorpus(packed, sources, records) {
         const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
+        return takeObject(ret);
+    }
+    /**
+     * Whole-book replacement from each targeted book's own declared
+     * baseline, atomic across the scope. `all`/`book` scopes only -- a
+     * chapter scope refuses via `BaselineError.chapterScopeUnsupported`
+     * rather than reverting one run in isolation (use `diffBaseline` plus
+     * `updateChapter` with the baseline run's own tokens instead).
+     *
+     * Atomicity: every targeted book must be resident and baselined before
+     * anything mutates -- any missing baseline refuses with every offender
+     * named, and resident state is left exactly as it was. A book already
+     * equal to its baseline is a no-op, absent from `changed`.
+     * @param {CorpusScope} scope
+     * @returns {RevertBaselineOutcome}
+     */
+    revertToBaseline(scope) {
+        const ret = wasm.braid_revertToBaseline(this.__wbg_ptr, addHeapObject(scope));
         return takeObject(ret);
     }
     /**
@@ -333,6 +390,21 @@ export class Braid {
      */
     setBaseline(book) {
         const ret = wasm.braid_setBaseline(this.__wbg_ptr, addHeapObject(book));
+        return takeObject(ret);
+    }
+    /**
+     * Declares each in-scope book's CURRENT resident state as its baseline
+     * -- no re-parse, no `BookInput`: the bulk, no-parse counterpart to
+     * `setBaseline`. `all`/`book` scopes only, deliberately symmetric with
+     * `revertToBaseline` (a baseline is a whole-book slot, so the set and
+     * revert halves of its lifecycle agree on what scopes can address it);
+     * a chapter scope refuses the same way. Idempotent, and there is no
+     * missing-baseline case -- this verb's whole point is to create one.
+     * @param {CorpusScope} scope
+     * @returns {RevertBaselineOutcome}
+     */
+    setBaselineToCurrent(scope) {
+        const ret = wasm.braid_setBaselineToCurrent(this.__wbg_ptr, addHeapObject(scope));
         return takeObject(ret);
     }
     /**
@@ -1133,21 +1205,29 @@ export function verifyPackedBook(packed, source) {
  * that wants to validate a `corpus.bin` before deciding whether to restore
  * it into a resident handle at all.
  *
+ * `packed` is the one whole-corpus container. `sources` is every named
+ * book's source bytes concatenated into one buffer; `records` names each
+ * book's own extent into it -- the same buffer-plus-extents pairing
+ * [`crate::resident::Braid::restore_published_corpus`] takes.
+ *
  * Runs the same corpus-wide trust boundary `restorePublishedCorpus` does
  * (container/section structure, both integrity checksums, exact source
  * length and content hash, the marker-catalog stamp, the all-or-none lint
  * stamp invariant), and nothing more: no resident state is read or
  * mutated, and no token crosses this boundary.
  * @param {Uint8Array} packed
- * @param {PublishedCorpusSourceInput[]} sources
+ * @param {Uint8Array} sources
+ * @param {PublishedCorpusRecord[]} records
  * @returns {PublishedCorpusOutcome}
  */
-export function verifyPublishedCorpus(packed, sources) {
+export function verifyPublishedCorpus(packed, sources, records) {
     const ptr0 = passArray8ToWasm0(packed, wasm.__wbindgen_export);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArrayJsValueToWasm0(sources, wasm.__wbindgen_export);
+    const ptr1 = passArray8ToWasm0(sources, wasm.__wbindgen_export);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.verifyPublishedCorpus(ptr0, len0, ptr1, len1);
+    const ptr2 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.verifyPublishedCorpus(ptr0, len0, ptr1, len1, ptr2, len2);
     return takeObject(ret);
 }
 
@@ -1179,12 +1259,27 @@ export function __wbg_Error_83742b46f01ce22d(arg0, arg1) {
     const ret = Error(getStringFromWasm0(arg0, arg1));
     return addHeapObject(ret);
 }
+export function __wbg_Number_a5a435bd7bbec835(arg0) {
+    const ret = Number(getObject(arg0));
+    return ret;
+}
 export function __wbg_String_8564e559799eccda(arg0, arg1) {
     const ret = String(getObject(arg1));
     const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+}
+export function __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda(arg0, arg1) {
+    const v = getObject(arg1);
+    const ret = typeof(v) === 'bigint' ? v : undefined;
+    getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
+    getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+}
+export function __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1(arg0) {
+    const v = getObject(arg0);
+    const ret = typeof(v) === 'boolean' ? v : undefined;
+    return isLikeNone(ret) ? 0xFFFFFF : ret ? 1 : 0;
 }
 export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
     const ret = debugString(getObject(arg1));
@@ -1193,6 +1288,23 @@ export function __wbg___wbindgen_debug_string_5398f5bb970e0daa(arg0, arg1) {
     getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
     getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
 }
+export function __wbg___wbindgen_in_41dbb8413020e076(arg0, arg1) {
+    const ret = getObject(arg0) in getObject(arg1);
+    return ret;
+}
+export function __wbg___wbindgen_is_bigint_e2141d4f045b7eda(arg0) {
+    const ret = typeof(getObject(arg0)) === 'bigint';
+    return ret;
+}
+export function __wbg___wbindgen_is_function_3c846841762788c1(arg0) {
+    const ret = typeof(getObject(arg0)) === 'function';
+    return ret;
+}
+export function __wbg___wbindgen_is_object_781bc9f159099513(arg0) {
+    const val = getObject(arg0);
+    const ret = typeof(val) === 'object' && val !== null;
+    return ret;
+}
 export function __wbg___wbindgen_is_string_7ef6b97b02428fae(arg0) {
     const ret = typeof(getObject(arg0)) === 'string';
     return ret;
@@ -1200,6 +1312,20 @@ export function __wbg___wbindgen_is_string_7ef6b97b02428fae(arg0) {
 export function __wbg___wbindgen_is_undefined_52709e72fb9f179c(arg0) {
     const ret = getObject(arg0) === undefined;
     return ret;
+}
+export function __wbg___wbindgen_jsval_eq_ee31bfad3e536463(arg0, arg1) {
+    const ret = getObject(arg0) === getObject(arg1);
+    return ret;
+}
+export function __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b(arg0, arg1) {
+    const ret = getObject(arg0) == getObject(arg1);
+    return ret;
+}
+export function __wbg___wbindgen_number_get_34bb9d9dcfa21373(arg0, arg1) {
+    const obj = getObject(arg1);
+    const ret = typeof(obj) === 'number' ? obj : undefined;
+    getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
+    getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
 }
 export function __wbg___wbindgen_string_get_395e606bd0ee4427(arg0, arg1) {
     const obj = getObject(arg1);
@@ -1216,8 +1342,90 @@ export function __wbg_call_e133b57c9155d22c() { return handleError(function (arg
     const ret = getObject(arg0).call(getObject(arg1));
     return addHeapObject(ret);
 }, arguments); }
+export function __wbg_done_08ce71ee07e3bd17(arg0) {
+    const ret = getObject(arg0).done;
+    return ret;
+}
+export function __wbg_entries_e8a20ff8c9757101(arg0) {
+    const ret = Object.entries(getObject(arg0));
+    return addHeapObject(ret);
+}
+export function __wbg_from_4bdf88943703fd48(arg0) {
+    const ret = Array.from(getObject(arg0));
+    return addHeapObject(ret);
+}
+export function __wbg_get_326e41e095fb2575() { return handleError(function (arg0, arg1) {
+    const ret = Reflect.get(getObject(arg0), getObject(arg1));
+    return addHeapObject(ret);
+}, arguments); }
+export function __wbg_get_a8ee5c45dabc1b3b(arg0, arg1) {
+    const ret = getObject(arg0)[arg1 >>> 0];
+    return addHeapObject(ret);
+}
+export function __wbg_get_unchecked_329cfe50afab7352(arg0, arg1) {
+    const ret = getObject(arg0)[arg1 >>> 0];
+    return addHeapObject(ret);
+}
+export function __wbg_get_with_ref_key_6412cf3094599694(arg0, arg1) {
+    const ret = getObject(arg0)[getObject(arg1)];
+    return addHeapObject(ret);
+}
+export function __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6(arg0) {
+    let result;
+    try {
+        result = getObject(arg0) instanceof ArrayBuffer;
+    } catch (_) {
+        result = false;
+    }
+    const ret = result;
+    return ret;
+}
+export function __wbg_instanceof_Map_f194b366846aca0c(arg0) {
+    let result;
+    try {
+        result = getObject(arg0) instanceof Map;
+    } catch (_) {
+        result = false;
+    }
+    const ret = result;
+    return ret;
+}
+export function __wbg_instanceof_Uint8Array_740438561a5b956d(arg0) {
+    let result;
+    try {
+        result = getObject(arg0) instanceof Uint8Array;
+    } catch (_) {
+        result = false;
+    }
+    const ret = result;
+    return ret;
+}
+export function __wbg_isArray_33b91feb269ff46e(arg0) {
+    const ret = Array.isArray(getObject(arg0));
+    return ret;
+}
+export function __wbg_isSafeInteger_ecd6a7f9c3e053cd(arg0) {
+    const ret = Number.isSafeInteger(getObject(arg0));
+    return ret;
+}
+export function __wbg_iterator_d8f549ec8fb061b1() {
+    const ret = Symbol.iterator;
+    return addHeapObject(ret);
+}
+export function __wbg_length_b3416cf66a5452c8(arg0) {
+    const ret = getObject(arg0).length;
+    return ret;
+}
+export function __wbg_length_ea16607d7b61445b(arg0) {
+    const ret = getObject(arg0).length;
+    return ret;
+}
 export function __wbg_new_49d5571bd3f0c4d4() {
     const ret = new Map();
+    return addHeapObject(ret);
+}
+export function __wbg_new_5f486cdf45a04d78(arg0) {
+    const ret = new Uint8Array(getObject(arg0));
     return addHeapObject(ret);
 }
 export function __wbg_new_a70fbab9066b301f() {
@@ -1228,10 +1436,17 @@ export function __wbg_new_ab79df5bd7c26067() {
     const ret = new Object();
     return addHeapObject(ret);
 }
-export function __wbg_parse_e9eddd2a82c706eb() { return handleError(function (arg0, arg1) {
-    const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
+export function __wbg_next_11b99ee6237339e3() { return handleError(function (arg0) {
+    const ret = getObject(arg0).next();
     return addHeapObject(ret);
 }, arguments); }
+export function __wbg_next_e01a967809d1aa68(arg0) {
+    const ret = getObject(arg0).next;
+    return addHeapObject(ret);
+}
+export function __wbg_prototypesetcall_d62e5099504357e6(arg0, arg1, arg2) {
+    Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), getObject(arg2));
+}
 export function __wbg_set_282384002438957f(arg0, arg1, arg2) {
     getObject(arg0)[arg1 >>> 0] = takeObject(arg2);
 }
@@ -1242,13 +1457,33 @@ export function __wbg_set_bf7251625df30a02(arg0, arg1, arg2) {
     const ret = getObject(arg0).set(getObject(arg1), getObject(arg2));
     return addHeapObject(ret);
 }
-export function __wbg_stringify_5ae93966a84901ac() { return handleError(function (arg0) {
-    const ret = JSON.stringify(getObject(arg0));
+export function __wbg_value_21fc78aab0322612(arg0) {
+    const ret = getObject(arg0).value;
     return addHeapObject(ret);
-}, arguments); }
-export function __wbindgen_cast_0000000000000001(arg0, arg1) {
+}
+export function __wbindgen_cast_0000000000000001(arg0) {
+    // Cast intrinsic for `F64 -> Externref`.
+    const ret = arg0;
+    return addHeapObject(ret);
+}
+export function __wbindgen_cast_0000000000000002(arg0) {
+    // Cast intrinsic for `I64 -> Externref`.
+    const ret = arg0;
+    return addHeapObject(ret);
+}
+export function __wbindgen_cast_0000000000000003(arg0, arg1) {
+    // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
+    const ret = getArrayU8FromWasm0(arg0, arg1);
+    return addHeapObject(ret);
+}
+export function __wbindgen_cast_0000000000000004(arg0, arg1) {
     // Cast intrinsic for `Ref(String) -> Externref`.
     const ret = getStringFromWasm0(arg0, arg1);
+    return addHeapObject(ret);
+}
+export function __wbindgen_cast_0000000000000005(arg0) {
+    // Cast intrinsic for `U64 -> Externref`.
+    const ret = BigInt.asUintN(64, arg0);
     return addHeapObject(ret);
 }
 export function __wbindgen_object_clone_ref(arg0) {
@@ -1362,6 +1597,11 @@ function getArrayJsValueFromWasm0(ptr, len) {
         result.push(takeObject(mem.getUint32(i, true)));
     }
     return result;
+}
+
+function getArrayU8FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
 }
 
 let cachedDataViewMemory0 = null;

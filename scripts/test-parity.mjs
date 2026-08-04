@@ -116,13 +116,16 @@ const METHODS = {
     wrapped: true,
     args: (a) => [a.corpus],
   },
-  // The reopen-from-packed gate. `RestoreRecord` is a plain (non-tagged)
-  // struct that crosses the wasm boundary through the generic
-  // serde-wasm-bindgen path, which represents `Vec<u8>` as `number[]`
-  // (confirmed against the generated `.d.ts`: `packed: number[]`), not a
-  // `Uint8Array` — so the transcript's own plain JSON number arrays are
-  // already the right shape and need no conversion here.
-  restore_corpus: { js: "restoreCorpus", wrapped: true, args: (a) => [a.records] },
+  // The reopen-from-packed gate. v0.1.5 bytes-at-boundary convention:
+  // `restoreCorpus` takes `(packedAll, sources, records)`, the first two as
+  // real `Uint8Array`s (the transcript's own JSON number arrays need one
+  // `new Uint8Array(...)` each) and `records[].packed`/`.source` as plain
+  // `{byteOffset, byteLength}` extent objects, already the right shape.
+  restore_corpus: {
+    js: "restoreCorpus",
+    wrapped: true,
+    args: (a) => [new Uint8Array(a.packedAll), new Uint8Array(a.sources), a.records],
+  },
   // Continues on the same just-restored instance (see FRESH_INSTANCE_STEPS)
   // rather than replaying restore_corpus's own args.
   restore_corpus_then_lint: { js: "lint", wrapped: false, args: () => [] },
@@ -131,7 +134,11 @@ const METHODS = {
   // stale suppressedCount of 0. This step's own `args.config` (not the
   // shared `transcript.config`) is what the fresh instance below is built
   // from, since it deliberately differs from every other step's config.
-  restore_corpus_suppressed: { js: "restoreCorpus", wrapped: true, args: (a) => [a.records] },
+  restore_corpus_suppressed: {
+    js: "restoreCorpus",
+    wrapped: true,
+    args: (a) => [new Uint8Array(a.packedAll), new Uint8Array(a.sources), a.records],
+  },
   restore_corpus_suppressed_then_lint: { js: "lint", wrapped: false, args: () => [] },
   // The publish gate: pins the wasm `publish()` verb's projection against the
   // native adapter it wraps (asserted byte-identical in the Rust generator
@@ -142,14 +149,53 @@ const METHODS = {
   // Clean-room re-review P1: pins the empty-sourceKey classification
   // (`{kind: "ingest", error: {kind: "duplicateSourceKey", source: ""}}`),
   // the pre-extraction wasm behavior `braid::RestoreError::
-  // EmptySourceKey` now reproduces. `packed` is a direct `Vec<u8>` function
-  // parameter (not a struct field), which crosses as `Uint8Array` -- unlike
-  // `records[].source`, a plain struct field that is already the right
-  // shape (`number[]`) with no conversion needed.
+  // EmptySourceKey` now reproduces. `packed`/`sources` are direct function
+  // parameters (not struct fields), which cross as `Uint8Array` -- each
+  // needs one `new Uint8Array(...)` from the transcript's plain JSON number
+  // array; `records[]` (flat `{book, sourceKey, byteOffset, byteLength}`) is
+  // already the right shape.
   restore_published_corpus_empty_source_key: {
     js: "restorePublishedCorpus",
     wrapped: true,
-    args: (a) => [new Uint8Array(a.packed), a.records],
+    args: (a) => [new Uint8Array(a.packed), new Uint8Array(a.sources), a.records],
+  },
+  // publish_scope: its own fresh handle (`publish_scope_seed` builds it),
+  // then the scoped publish itself.
+  publish_scope_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  publish_scope: { js: "publishScope", wrapped: true, args: (a) => [a.scope] },
+  // revert_to_baseline: its own fresh handle, seeded/baselined/edited via
+  // their own recorded steps, then the revert itself and the chapter-scope
+  // refusal continuing on that same instance.
+  revert_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  revert_set_baseline: { js: "setBaseline", wrapped: true, args: (a) => [a.book] },
+  revert_update_book: { js: "updateBook", wrapped: true, args: (a) => [a.book] },
+  revert_to_baseline: { js: "revertToBaseline", wrapped: true, args: (a) => [a.scope] },
+  revert_to_baseline_chapter_unsupported: {
+    js: "revertToBaseline",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
+  // set_baseline_to_current: its own fresh handle, seeded/edited via their
+  // own recorded steps, then the no-parse baseline declaration, its
+  // idempotence, and the chapter-scope refusal, all on that same instance.
+  set_baseline_to_current_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  set_baseline_to_current_edit: { js: "updateBook", wrapped: true, args: (a) => [a.book] },
+  set_baseline_to_current: { js: "setBaselineToCurrent", wrapped: true, args: (a) => [a.scope] },
+  set_baseline_to_current_idempotent: {
+    js: "setBaselineToCurrent",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
+  set_baseline_to_current_chapter_unsupported: {
+    js: "setBaselineToCurrent",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
+  // All scope on an empty corpus, on its own never-seeded fresh handle.
+  set_baseline_to_current_empty_corpus: {
+    js: "setBaselineToCurrent",
+    wrapped: true,
+    args: (a) => [a.scope],
   },
 };
 
@@ -168,6 +214,10 @@ const FRESH_INSTANCE_STEPS = new Set([
   "restore_corpus_suppressed",
   "publish_seed",
   "restore_published_corpus_empty_source_key",
+  "publish_scope_seed",
+  "revert_seed",
+  "set_baseline_to_current_seed",
+  "set_baseline_to_current_empty_corpus",
 ]);
 
 function makeMinter() {
@@ -189,6 +239,22 @@ function unwrap(outcome, expectedIsError) {
   }
   assert.equal(outcome.status, "ok", `expected an ok outcome, got ${JSON.stringify(outcome)}`);
   return outcome.value;
+}
+
+/**
+ * The transcript's own `output` is plain `JSON.parse`d data (a `Uint8Array`
+ * field serializes there as a plain number array -- `serde_json` has no
+ * native bytes representation, so `#[serde(with = "serde_bytes")]` on the
+ * Rust side changes only the WASM ABI encoding, not this JSON shape). A real
+ * wasm call's `actual`, though, hands back genuine `Uint8Array` instances
+ * for those same fields (v0.1.5, bytes-at-boundary convention) --
+ * `Array.isArray` is `false` for one, so `structuralEqual` would report a
+ * spurious type mismatch without this normalization first.
+ */
+function normalizeForComparison(value) {
+  return JSON.parse(
+    JSON.stringify(value, (_key, inner) => (inner instanceof Uint8Array ? Array.from(inner) : inner)),
+  );
 }
 
 let checked = 0;
@@ -214,7 +280,7 @@ function runLane(lane, steps) {
         `${target}/${lane}/${entry.step}: threw calling ${method.js} — ${error.stack ?? error}`,
       );
     }
-    const diff = structuralEqual(entry.output, actual);
+    const diff = structuralEqual(entry.output, normalizeForComparison(actual));
     checked += 1;
     if (diff) {
       failures += 1;
@@ -236,7 +302,8 @@ function isErrorStep(entry) {
     || entry.step.endsWith("_ambiguous")
     || entry.step.endsWith("_malformed")
     || entry.step.endsWith("_duplicate_token_id")
-    || entry.step.endsWith("_empty_source_key");
+    || entry.step.endsWith("_empty_source_key")
+    || entry.step.endsWith("_unsupported");
 }
 
 const byLane = new Map();
