@@ -9,9 +9,11 @@
 
 use usfm_onion::token::{BookId, LineEnding, OwnedToken};
 
+use crate::Braid;
 use crate::corpus::{BookState, ChapterRun};
 use crate::error::{IngestError, ScopeError};
-use crate::state::SourceHash;
+use crate::input::CorpusScope;
+use crate::state::{MutationEffect, Scope, SourceHash};
 
 /// One book's declared baseline: the same facts a resident book's current
 /// content carries, frozen at the moment `Braid::set_baseline` was called.
@@ -50,7 +52,18 @@ impl BaselineState {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BaselineError {
     Scope(ScopeError),
-    MissingBaseline { books: Vec<BookId> },
+    MissingBaseline {
+        books: Vec<BookId>,
+    },
+    /// [`Braid::revert_to_baseline`] supports only `Book`/`All` scopes — a
+    /// single chapter run has no baseline slot of its own to revert against
+    /// (baselines are whole-book), and reverting one run in isolation would
+    /// have to reconstruct the surrounding book from a mix of current and
+    /// baselined tokens, which is not what "revert" means. Deferred, not
+    /// planned as a follow-up in this phase: the sanctioned workaround is
+    /// `diff_baseline` (see what changed) followed by `update_chapter` with
+    /// the baseline run's own tokens (revert just that run by hand).
+    ChapterScopeUnsupported(crate::input::ChapterTarget),
 }
 
 impl std::fmt::Display for BaselineError {
@@ -60,6 +73,11 @@ impl std::fmt::Display for BaselineError {
             Self::MissingBaseline { books } => {
                 write!(f, "no baseline declared for {} book(s)", books.len())
             }
+            Self::ChapterScopeUnsupported(target) => write!(
+                f,
+                "revert_to_baseline does not support chapter scope ({target}); \
+                 use diff_baseline plus update_chapter instead"
+            ),
         }
     }
 }
@@ -69,6 +87,73 @@ impl std::error::Error for BaselineError {}
 impl From<ScopeError> for BaselineError {
     fn from(value: ScopeError) -> Self {
         Self::Scope(value)
+    }
+}
+
+impl Braid {
+    /// Whole-book replacement from each targeted book's own declared
+    /// baseline, atomic across the scope.
+    ///
+    /// `Book`/`All` scopes only — see [`BaselineError::ChapterScopeUnsupported`]
+    /// for why a chapter scope refuses instead of reverting one run in
+    /// isolation.
+    ///
+    /// Atomicity: the whole scope is validated before anything mutates —
+    /// every targeted book must be resident AND carry a baseline. Any missing
+    /// baseline refuses with every offending book named at once
+    /// (`BaselineError::MissingBaseline { books }`, listing all of them, not
+    /// just the first), and resident state, its stamps, and the snapshot id
+    /// are left byte-identical to before the call.
+    ///
+    /// A book whose current content already equals its baseline is a no-op:
+    /// it is left untouched and does not appear in
+    /// [`MutationEffect::changed`], not because reverting it would fail but
+    /// because there is nothing to rewrite. An actually-reverted book is
+    /// marked for lint recompute, the same as any other mutation; publication
+    /// cache invalidation and snapshot id recomputation both run through the
+    /// same internal effect-recording path every mutating verb shares. The
+    /// baseline slot itself is never touched by this call: afterwards
+    /// `is_dirty(scope)` is `false` and `diff_baseline` reports equality for
+    /// every reverted book.
+    pub fn revert_to_baseline(
+        &mut self,
+        scope: CorpusScope,
+    ) -> Result<MutationEffect, BaselineError> {
+        let indices: Vec<usize> = match scope {
+            CorpusScope::Chapter(target) => {
+                return Err(BaselineError::ChapterScopeUnsupported(target));
+            }
+            CorpusScope::Book(book) => {
+                vec![self.index_of(book).ok_or(ScopeError::BookNotFound(book))?]
+            }
+            CorpusScope::All => (0..self.books.len()).collect(),
+        };
+
+        // Validate the whole scope before touching anything: every targeted
+        // book must be resident (already established above) AND baselined.
+        let missing: Vec<BookId> = indices
+            .iter()
+            .filter(|&&index| self.books[index].baseline.is_none())
+            .map(|&index| self.books[index].book)
+            .collect();
+        if !missing.is_empty() {
+            return Err(BaselineError::MissingBaseline { books: missing });
+        }
+
+        let mut changed = Vec::new();
+        for index in indices {
+            let resident = &self.books[index];
+            let baseline = resident.baseline.as_ref().expect("checked missing above");
+            if resident.hash == baseline.hash && resident.source == baseline.source {
+                // Already equal to its baseline: a no-op for this book.
+                continue;
+            }
+            let reverted = resident.reverted_to_baseline(baseline);
+            changed.push(Scope::book(reverted.book));
+            self.books[index] = reverted;
+        }
+
+        Ok(self.effect(changed, Vec::new()))
     }
 }
 

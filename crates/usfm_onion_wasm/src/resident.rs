@@ -176,6 +176,19 @@ outcome!(
     ScopedOutput<crate::DiffSkeleton>,
     BaselineError
 );
+outcome!(
+    /// Per-book packed containers for a scope, or the reason it could not be
+    /// produced.
+    ScopedPublishOutcome,
+    braid::ScopedPublication,
+    ScopedPublishError
+);
+outcome!(
+    /// A baseline revert, or the reason it was refused.
+    RevertBaselineOutcome,
+    MutationEffect,
+    BaselineError
+);
 
 /// The resident configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -320,6 +333,34 @@ impl Braid {
     #[wasm_bindgen(js_name = publish)]
     pub fn publish(&mut self) -> PublishOutcome {
         PublishOutcome::from(self.inner.publish())
+    }
+
+    /// Publishes exactly the books a scope names, as per-book packed
+    /// containers -- the exact shape `restoreCorpus` consumes, never
+    /// `PublishedCorpus`-shaped. Every returned book is always freshly
+    /// encoded and always carries its source; there is no splice-reuse arm,
+    /// and this call never reads or invalidates the handle's own
+    /// `PublicationCache` (that cache is `publish`'s alone).
+    //
+    // The composition itself (`braid::Braid::publish_scope`) lives in braid;
+    // `ScopedPublication`/`ScopedPublishedBook` are braid's own tsify-derived
+    // types (re-exported below), so only the scope argument and the error
+    // need converting at this boundary.
+    #[wasm_bindgen(js_name = publishScope)]
+    pub fn publish_scope(&mut self, scope: CorpusScope) -> ScopedPublishOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return ScopedPublishOutcome::refused(ScopedPublishError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        ScopedPublishOutcome::from(
+            self.inner
+                .publish_scope(native)
+                .map_err(ScopedPublishError::from),
+        )
     }
 
     /// Restores the whole resident corpus from one packed `corpus.bin`
@@ -740,6 +781,34 @@ impl Braid {
                         )
                     })
                 })
+                .map_err(BaselineError::from),
+        )
+    }
+
+    /// Whole-book replacement from each targeted book's own declared
+    /// baseline, atomic across the scope. `all`/`book` scopes only -- a
+    /// chapter scope refuses via `BaselineError.chapterScopeUnsupported`
+    /// rather than reverting one run in isolation (use `diffBaseline` plus
+    /// `updateChapter` with the baseline run's own tokens instead).
+    ///
+    /// Atomicity: every targeted book must be resident and baselined before
+    /// anything mutates -- any missing baseline refuses with every offender
+    /// named, and resident state is left exactly as it was. A book already
+    /// equal to its baseline is a no-op, absent from `changed`.
+    #[wasm_bindgen(js_name = revertToBaseline)]
+    pub fn revert_to_baseline(&mut self, scope: CorpusScope) -> RevertBaselineOutcome {
+        let native = match scope_into_native(scope) {
+            Ok(native) => native,
+            Err(book) => {
+                return RevertBaselineOutcome::refused(BaselineError::Scope {
+                    error: ScopeError::BookNotFound { book },
+                });
+            }
+        };
+        RevertBaselineOutcome::from(
+            self.inner
+                .revert_to_baseline(native)
+                .map(MutationEffect::from)
                 .map_err(BaselineError::from),
         )
     }
@@ -1517,7 +1586,40 @@ impl From<braid::RestoreReport> for RestoreReport {
 // of them: braid's `wasm` feature already derives `Tsify` on them directly,
 // so there is nothing for this crate to redefine. See braid's own
 // `publication`/`restore` modules for their definitions and doc comments.
-pub use braid::{PublishError, PublishedBookInfo, PublishedCorpus, PublishedCorpusSource};
+pub use braid::{
+    PublishError, PublishedBookInfo, PublishedCorpus, PublishedCorpusSource, ScopedPublication,
+    ScopedPublishedBook,
+};
+
+/// Why [`Braid::publish_scope`] could not produce a scoped publication.
+///
+/// Mirrors `braid::ScopedPublishError` rather than reusing it verbatim (unlike
+/// [`PublishError`], which has no [`ScopeError`]-shaped variant to convert):
+/// its `Scope` arm wraps braid's own native `ScopeError`, which -- like every
+/// other scope-shaped error at this boundary -- projects to this crate's own
+/// String-based [`ScopeError`] DTO rather than crossing with braid's `BookId`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ScopedPublishError {
+    Scope {
+        error: ScopeError,
+    },
+    Encode {
+        error: usfm_onion_wire::dto::PackedEncodeError,
+    },
+}
+
+impl From<braid::ScopedPublishError> for ScopedPublishError {
+    fn from(error: braid::ScopedPublishError) -> Self {
+        match error {
+            braid::ScopedPublishError::Scope(error) => Self::Scope {
+                error: error.into(),
+            },
+            braid::ScopedPublishError::Encode { error } => Self::Encode { error },
+        }
+    }
+}
 
 /// A baseline that could not be recorded.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -1556,6 +1658,13 @@ pub enum BaselineError {
     MissingBaseline {
         books: Vec<String>,
     },
+    /// [`Braid::revert_to_baseline`] supports only `all`/`book` scopes; a
+    /// chapter scope refuses instead of reverting one run in isolation. Use
+    /// `diffBaseline` plus `updateChapter` with the baseline run's own
+    /// tokens instead.
+    ChapterScopeUnsupported {
+        target: ChapterTarget,
+    },
 }
 
 impl From<braid::BaselineError> for BaselineError {
@@ -1567,6 +1676,11 @@ impl From<braid::BaselineError> for BaselineError {
             braid::BaselineError::MissingBaseline { books } => Self::MissingBaseline {
                 books: books.iter().map(|book| book.as_str().to_string()).collect(),
             },
+            braid::BaselineError::ChapterScopeUnsupported(target) => {
+                Self::ChapterScopeUnsupported {
+                    target: target_out(&target),
+                }
+            }
         }
     }
 }

@@ -15,6 +15,8 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { verifyPackedCorpus, materialize } from "../js/packed.js";
+
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const target = process.argv.includes("web") ? "web" : "bundler";
 const pkgDir = path.join(rootDir, target === "bundler" ? "pkg-bundler" : "pkg-web");
@@ -158,6 +160,67 @@ function roundTrip(label) {
 }
 
 roundTrip("plain");
+
+// publishScope: the per-book verb -- its output must be feedable straight
+// into the pure-JS render lane (verifyPackedCorpus/materialize from
+// ./packed, no wasm call in that half), and its tokens must agree with the
+// same handle's own toTokens() for every book in scope.
+{
+  const original = new wasm.Braid(config, makeMinter());
+  unwrap(
+    original.replaceCorpus({
+      books: [
+        { kind: "usfm", sourceKey: "GEN.usfm", book: "GEN", source: GEN },
+        { kind: "usfm", sourceKey: "EXO.usfm", book: "EXO", source: EXO },
+      ],
+    }),
+    "publishScope: replaceCorpus",
+  );
+
+  const scoped = unwrap(original.publishScope({ kind: "all" }), "publishScope: all");
+  assert.equal(scoped.books.length, 2, "publishScope: both books in scope");
+  assert.ok(
+    scoped.books.every((book) => book.packed.length > 0 && book.source.length > 0),
+    "publishScope: every book is always encoded with its source",
+  );
+  check(
+    scoped.snapshotId,
+    original.expectedSnapshotId(),
+    "publishScope: snapshotId matches the handle's own corpus identity",
+  );
+
+  const records = scoped.books.map((book) => ({
+    path: `${book.book}.usfm`,
+    packed: new Uint8Array(book.packed),
+    source: new TextEncoder().encode(book.source),
+  }));
+  const verified = verifyPackedCorpus(wasm, records);
+  assert.ok(verified.ok, `publishScope: verifyPackedCorpus: ${JSON.stringify(verified)}`);
+  const materialized = materialize(verified.verified);
+
+  for (const book of scoped.books) {
+    const path = `${book.book}.usfm`;
+    const jsTokens = materialized.get(path).tokens;
+    const nativeTokens = unwrap(
+      original.toTokens([{ book: book.book }]),
+      `publishScope: toTokens ${book.book}`,
+    )[0].tokens;
+    check(jsTokens.length, nativeTokens.length, `publishScope: ${book.book} token count`);
+    const comparable = (tokens) =>
+      tokens.map((token) => ({
+        id: token.id,
+        kind: token.kind,
+        source: token.source,
+        sid: token.sid ?? null,
+        marker: token.marker ?? null,
+      }));
+    check(
+      comparable(jsTokens),
+      comparable(nativeTokens),
+      `publishScope: ${book.book} tokens (pure-JS materialize) equal toTokens()`,
+    );
+  }
+}
 
 // A suppressing config: packed bytes carry no `suppressedCount`, so the
 // restoring side must recompute it honestly rather than adopt a stale `0`

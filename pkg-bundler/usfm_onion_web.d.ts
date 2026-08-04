@@ -47,7 +47,7 @@ export type UsjElement =
 /**
  * A baseline comparison that cannot be answered.
  */
-export type BaselineError = { kind: "scope"; error: ScopeError } | { kind: "missingBaseline"; books: string[] };
+export type BaselineError = { kind: "scope"; error: ScopeError } | { kind: "missingBaseline"; books: string[] } | { kind: "chapterScopeUnsupported"; target: ChapterTarget };
 
 /**
  * A baseline that could not be recorded.
@@ -274,6 +274,30 @@ export interface PublishedBookInfo {
      */
     encoded: boolean;
     source: string | null;
+}
+
+/**
+ * One book\'s own packed container from a [`Braid::publish_scope`] call --
+ * deliberately the same shape [`crate::RestoreRecord`] consumes
+ * (book/path, packed, source), and deliberately NOT [`PublishedCorpus`]-shaped.
+ *
+ * A partial container -- one or a few books out of a whole corpus -- must be
+ * structurally unrepresentable as a complete corpus container: the two are
+ * different guarantees (a scoped publish for a live rebase preview or a
+ * partial sync is never \"the whole corpus, safe to reopen cold\"), and giving
+ * them the same shape would let a caller feed a scoped result to whatever
+ * consumes a `PublishedCorpus` and get back something that looks complete
+ * but is not.
+ */
+export interface ScopedPublishedBook {
+    book: string;
+    packed: number[];
+    /**
+     * Always present -- see [`Braid::publish_scope`]\'s own doc comment for
+     * why a scoped publish never has a splice-reuse arm.
+     */
+    source: string;
+    sourceHash: string;
 }
 
 /**
@@ -532,6 +556,21 @@ export type PackedBookOutcome = { status: "verified"; receipt: PackedBookReceipt
 export type PublishedCorpusOutcome = { status: "verified"; snapshotId: string; books: PublishedCorpusBook[] } | { status: "rejected"; error: PackedDecodeError };
 
 /**
+ * What one [`Braid::publish_scope`] call produced: per-book packed
+ * containers, in corpus order.
+ */
+export interface ScopedPublication {
+    /**
+     * The corpus identity from the same `lint()` read this call published
+     * against -- callers assert it against a subsequent
+     * [`crate::MutationEffect::snapshot_id`] to detect a race between reading
+     * this publication and a concurrent mutation.
+     */
+    snapshotId: string;
+    books: ScopedPublishedBook[];
+}
+
+/**
  * What one mutation rewrote. `chapter` absent means the whole book.
  */
 export interface Scope {
@@ -569,6 +608,22 @@ export type LintScope = "front" | { chapter: number } | "book";
 export type PatchPreparation = { kind: "unchanged" } | { kind: "ready"; id: FormatPatchId };
 
 /**
+ * Why [`Braid::publish_scope`] could not produce a scoped publication.
+ *
+ * Mirrors `braid::ScopedPublishError` rather than reusing it verbatim (unlike
+ * [`PublishError`], which has no [`ScopeError`]-shaped variant to convert):
+ * its `Scope` arm wraps braid\'s own native `ScopeError`, which -- like every
+ * other scope-shaped error at this boundary -- projects to this crate\'s own
+ * String-based [`ScopeError`] DTO rather than crossing with braid\'s `BookId`.
+ */
+export type ScopedPublishError = { kind: "scope"; error: ScopeError } | { kind: "encode"; error: PackedEncodeError };
+
+/**
+ * Why [`Braid::publish_scope`] could not produce a scoped publication.
+ */
+export type ScopedPublishError = ({ kind: "scope" } & ScopeError) | { kind: "encode"; error: PackedEncodeError };
+
+/**
  * Why a publish could not produce packed bytes.
  *
  * Every variant is a pathological-input safety net (see
@@ -596,6 +651,11 @@ export type PrimeRejectReason = "bookNotResident" | "sourceHashMismatch" | "conf
  *r" A baseline diff, or the reason it cannot be answered.
  */
 export type DiffBaselineOutcome = ApiResult<ScopedOutput<DiffSkeleton>, BaselineError>;
+
+/**
+ *r" A baseline revert, or the reason it was refused.
+ */
+export type RevertBaselineOutcome = ApiResult<MutationEffect, BaselineError>;
 
 /**
  *r" A mutation addressed by scope, or the reason the scope does not resolve.
@@ -666,6 +726,12 @@ export type ChapterLabelsOutcome = ApiResult<ChapterLabel[], ScopeError>;
  *r" One patch, or the reason it is not addressable.
  */
 export type PatchOutcome = ApiResult<Patch, PatchError>;
+
+/**
+ *r" Per-book packed containers for a scope, or the reason it could not be
+ *r" produced.
+ */
+export type ScopedPublishOutcome = ApiResult<ScopedPublication, ScopedPublishError>;
 
 /**
  *r" Whether a scope differs from its baseline, or the reason it does not resolve.
@@ -1117,6 +1183,15 @@ export class Braid {
      */
     publish(): PublishOutcome;
     /**
+     * Publishes exactly the books a scope names, as per-book packed
+     * containers -- the exact shape `restoreCorpus` consumes, never
+     * `PublishedCorpus`-shaped. Every returned book is always freshly
+     * encoded and always carries its source; there is no splice-reuse arm,
+     * and this call never reads or invalidates the handle's own
+     * `PublicationCache` (that cache is `publish`'s alone).
+     */
+    publishScope(scope: CorpusScope): ScopedPublishOutcome;
+    /**
      * Removes a book. Removing an absent book is a no-op, not an error: the
      * requested end state already holds.
      */
@@ -1165,6 +1240,19 @@ export class Braid {
      * checked atomically before anything installs.
      */
     restorePublishedCorpus(packed: Uint8Array, records: PublishedCorpusSource[]): RestoreOutcome;
+    /**
+     * Whole-book replacement from each targeted book's own declared
+     * baseline, atomic across the scope. `all`/`book` scopes only -- a
+     * chapter scope refuses via `BaselineError.chapterScopeUnsupported`
+     * rather than reverting one run in isolation (use `diffBaseline` plus
+     * `updateChapter` with the baseline run's own tokens instead).
+     *
+     * Atomicity: every targeted book must be resident and baselined before
+     * anything mutates -- any missing baseline refuses with every offender
+     * named, and resident state is left exactly as it was. A book already
+     * equal to its baseline is a no-op, absent from `changed`.
+     */
+    revertToBaseline(scope: CorpusScope): RevertBaselineOutcome;
     /**
      * Records one book's baseline — the state later comparisons are against.
      *

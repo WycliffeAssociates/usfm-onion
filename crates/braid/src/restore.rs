@@ -335,9 +335,7 @@ mod tests {
     use super::*;
     use crate::{BookInput, BraidConfig, CorpusInput, SourceKey};
     use usfm_onion::lint::{LintOptions, LintScope};
-    use usfm_onion_wire::corpus_codec::{
-        CorpusSection, CorpusSectionInput, CorpusSectionTokens, EncodedCorpus, LintStamps,
-    };
+    use usfm_onion_wire::corpus_codec::LintStamps;
 
     fn empty_resident() -> Braid {
         let mut next = 0u32;
@@ -398,24 +396,17 @@ mod tests {
             .iter()
             .find(|entry| entry.book == target)
             .expect("book is resident");
-        let EncodedCorpus { bytes, sources, .. } = usfm_onion_wire::corpus_codec::encode_corpus(
+        // Shares the same per-book encode path `Braid::publish_scope` uses
+        // (`crate::publication::encode_one_book_container`), rather than a
+        // second, hand-rolled `encode_corpus` call here.
+        crate::publication::encode_one_book_container(
             snapshot.id.0,
-            Some(stamps),
-            &[CorpusSection::Fresh(CorpusSectionInput {
-                book: target,
-                tokens: CorpusSectionTokens::Owned {
-                    tokens: found.tokens,
-                },
-                findings: Some(found.result),
-            })],
+            target,
+            found.tokens,
+            found.result,
+            stamps,
         )
-        .expect("one book encodes");
-        let source = sources
-            .into_iter()
-            .find(|(candidate, _)| *candidate == target)
-            .expect("the book we just encoded has a source")
-            .1;
-        (bytes, source)
+        .expect("one book encodes")
     }
 
     fn current_stamps(resident: &Braid) -> LintStamps {

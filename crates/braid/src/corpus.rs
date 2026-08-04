@@ -278,6 +278,36 @@ impl BookState {
             .map(|(index, _)| index)
             .collect()
     }
+
+    /// Whole-book replacement from this book's own declared baseline —
+    /// `Braid::revert_to_baseline`'s per-book step.
+    ///
+    /// Token identity is load-bearing here: every stored fact (source, hash,
+    /// tokens with their ORIGINAL ids, line ending, runs) is reinstalled
+    /// verbatim from `BaselineState`, never re-parsed or re-minted, because a
+    /// revert's whole point is to reproduce exactly what was baselined —
+    /// including the ids anything already anchored on. `token_identity` is
+    /// still recomputed (it is a derived fact about the reinstalled tokens,
+    /// not a stored one), the same as every other path that installs a token
+    /// stream. The baseline slot itself is carried forward unchanged: a
+    /// revert does not clear or move what it just reproduced.
+    pub(crate) fn reverted_to_baseline(&self, baseline: &BaselineState) -> Self {
+        Self {
+            source_key: self.source_key.clone(),
+            book: self.book,
+            hash: baseline.hash,
+            token_identity: TokenIdentity::of(&baseline.tokens),
+            source: baseline.source.clone(),
+            runs: baseline.runs.clone(),
+            tokens: baseline.tokens.clone(),
+            line_ending: baseline.line_ending,
+            lint_dirty: true,
+            lint: None,
+            patches: Vec::new(),
+            baseline: self.baseline.clone(),
+            vref_cache: Vec::new(),
+        }
+    }
 }
 
 /// The ordered runs of a token stream, using core's own chapter segmentation so

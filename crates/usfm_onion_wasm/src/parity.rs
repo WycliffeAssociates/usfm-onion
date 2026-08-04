@@ -704,6 +704,180 @@ fn run_lane(lane: &str, steps: &mut Vec<Step>) {
             result.expect_err("a repeated token id is refused")
         )),
     );
+
+    // ---- publish_scope / revert_to_baseline: each on its own fresh handle
+    // (recorded via its own "_seed" step, the same pattern `run_publish`
+    // uses), so neither disturbs any step recorded above.
+
+    // publish_scope(all): per-book packed containers.
+    let mut scoped_publisher = NativeBraid::new(braid_config(), minter());
+    let scoped_books_dto = match lane {
+        "usfm" => vec![
+            dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+            dto_book_usfm("02-EXO.usfm", "EXO", EXO_SOURCE),
+        ],
+        "tokens" => vec![
+            dto_book_tokens(
+                "01-GEN.usfm",
+                "GEN",
+                &owned(GEN_SOURCE),
+                resident::LineEnding::Lf,
+            ),
+            dto_book_tokens(
+                "02-EXO.usfm",
+                "EXO",
+                &owned(EXO_SOURCE),
+                resident::LineEnding::Lf,
+            ),
+        ],
+        _ => unreachable!(),
+    };
+    let scoped_books = match lane {
+        "usfm" => vec![
+            native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+            native_book_usfm("02-EXO.usfm", "EXO", EXO_SOURCE),
+        ],
+        "tokens" => vec![
+            native_book_tokens(
+                "01-GEN.usfm",
+                "GEN",
+                owned(GEN_SOURCE),
+                braid::LineEnding::Lf,
+            ),
+            native_book_tokens(
+                "02-EXO.usfm",
+                "EXO",
+                owned(EXO_SOURCE),
+                braid::LineEnding::Lf,
+            ),
+        ],
+        _ => unreachable!(),
+    };
+    let seed_effect = scoped_publisher
+        .replace_corpus(braid::CorpusInput::new(scoped_books))
+        .expect("two books");
+    push(
+        "publish_scope_seed",
+        json!({ "corpus": { "books": scoped_books_dto } }),
+        json!(resident::MutationEffect::from(seed_effect)),
+    );
+    let scoped = scoped_publisher
+        .publish_scope(braid::CorpusScope::All)
+        .expect("publishes");
+    push(
+        "publish_scope",
+        json!({ "scope": { "kind": "all" } }),
+        json!(scoped),
+    );
+
+    // revert_to_baseline: book-scoped revert after a divergent edit, plus the
+    // chapter-scope refusal, on the same freshly-seeded handle.
+    let mut reverter = NativeBraid::new(braid_config(), minter());
+    let revert_book_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let revert_book = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let seed_effect = reverter
+        .replace_corpus(braid::CorpusInput::new(vec![revert_book]))
+        .expect("one book");
+    push(
+        "revert_seed",
+        json!({ "corpus": { "books": [revert_book_dto] } }),
+        json!(resident::MutationEffect::from(seed_effect)),
+    );
+
+    let baseline_seed_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_SOURCE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let baseline_seed = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_SOURCE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_SOURCE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let effect = reverter
+        .set_baseline(baseline_seed)
+        .expect("GEN is resident");
+    push(
+        "revert_set_baseline",
+        json!({ "book": baseline_seed_dto }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    let further_edit_dto = match lane {
+        "usfm" => dto_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => dto_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            &owned(GEN_EDITED_WHOLE),
+            resident::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let further_edit = match lane {
+        "usfm" => native_book_usfm("01-GEN.usfm", "GEN", GEN_EDITED_WHOLE),
+        "tokens" => native_book_tokens(
+            "01-GEN.usfm",
+            "GEN",
+            owned(GEN_EDITED_WHOLE),
+            braid::LineEnding::Lf,
+        ),
+        _ => unreachable!(),
+    };
+    let effect = reverter.update_book(further_edit).expect("valid edit");
+    push(
+        "revert_update_book",
+        json!({ "book": further_edit_dto }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    let effect = reverter
+        .revert_to_baseline(braid::CorpusScope::Book(book_id("GEN")))
+        .expect("GEN has a baseline");
+    push(
+        "revert_to_baseline",
+        json!({ "scope": { "kind": "book", "book": "GEN" } }),
+        json!(resident::MutationEffect::from(effect)),
+    );
+
+    // revert_to_baseline: chapter scope refuses.
+    let error = reverter
+        .revert_to_baseline(braid::CorpusScope::Chapter(native_chapter_target(
+            "GEN", "1",
+        )))
+        .expect_err("chapter scope is unsupported");
+    push(
+        "revert_to_baseline_chapter_unsupported",
+        json!({ "scope": { "kind": "chapter", "target": dto_chapter_target("GEN", "1") } }),
+        json!(resident::BaselineError::from(error)),
+    );
 }
 
 /// Publish → restore → compare, both findings and summary — the packed

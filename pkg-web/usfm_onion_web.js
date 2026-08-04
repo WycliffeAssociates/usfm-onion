@@ -242,6 +242,20 @@ export class Braid {
         return takeObject(ret);
     }
     /**
+     * Publishes exactly the books a scope names, as per-book packed
+     * containers -- the exact shape `restoreCorpus` consumes, never
+     * `PublishedCorpus`-shaped. Every returned book is always freshly
+     * encoded and always carries its source; there is no splice-reuse arm,
+     * and this call never reads or invalidates the handle's own
+     * `PublicationCache` (that cache is `publish`'s alone).
+     * @param {CorpusScope} scope
+     * @returns {ScopedPublishOutcome}
+     */
+    publishScope(scope) {
+        const ret = wasm.braid_publishScope(this.__wbg_ptr, addHeapObject(scope));
+        return takeObject(ret);
+    }
+    /**
      * Removes a book. Removing an absent book is a no-op, not an error: the
      * requested end state already holds.
      * @param {string} book
@@ -322,6 +336,24 @@ export class Braid {
         const ptr1 = passArrayJsValueToWasm0(records, wasm.__wbindgen_export);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.braid_restorePublishedCorpus(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return takeObject(ret);
+    }
+    /**
+     * Whole-book replacement from each targeted book's own declared
+     * baseline, atomic across the scope. `all`/`book` scopes only -- a
+     * chapter scope refuses via `BaselineError.chapterScopeUnsupported`
+     * rather than reverting one run in isolation (use `diffBaseline` plus
+     * `updateChapter` with the baseline run's own tokens instead).
+     *
+     * Atomicity: every targeted book must be resident and baselined before
+     * anything mutates -- any missing baseline refuses with every offender
+     * named, and resident state is left exactly as it was. A book already
+     * equal to its baseline is a no-op, absent from `changed`.
+     * @param {CorpusScope} scope
+     * @returns {RevertBaselineOutcome}
+     */
+    revertToBaseline(scope) {
+        const ret = wasm.braid_revertToBaseline(this.__wbg_ptr, addHeapObject(scope));
         return takeObject(ret);
     }
     /**

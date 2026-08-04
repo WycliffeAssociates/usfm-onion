@@ -151,6 +151,22 @@ const METHODS = {
     wrapped: true,
     args: (a) => [new Uint8Array(a.packed), a.records],
   },
+  // publish_scope: its own fresh handle (`publish_scope_seed` builds it),
+  // then the scoped publish itself.
+  publish_scope_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  publish_scope: { js: "publishScope", wrapped: true, args: (a) => [a.scope] },
+  // revert_to_baseline: its own fresh handle, seeded/baselined/edited via
+  // their own recorded steps, then the revert itself and the chapter-scope
+  // refusal continuing on that same instance.
+  revert_seed: { js: "replaceCorpus", wrapped: true, args: (a) => [a.corpus] },
+  revert_set_baseline: { js: "setBaseline", wrapped: true, args: (a) => [a.book] },
+  revert_update_book: { js: "updateBook", wrapped: true, args: (a) => [a.book] },
+  revert_to_baseline: { js: "revertToBaseline", wrapped: true, args: (a) => [a.scope] },
+  revert_to_baseline_chapter_unsupported: {
+    js: "revertToBaseline",
+    wrapped: true,
+    args: (a) => [a.scope],
+  },
 };
 
 /** Steps that build their own fresh `Braid` rather than continuing the
@@ -168,6 +184,8 @@ const FRESH_INSTANCE_STEPS = new Set([
   "restore_corpus_suppressed",
   "publish_seed",
   "restore_published_corpus_empty_source_key",
+  "publish_scope_seed",
+  "revert_seed",
 ]);
 
 function makeMinter() {
@@ -236,7 +254,8 @@ function isErrorStep(entry) {
     || entry.step.endsWith("_ambiguous")
     || entry.step.endsWith("_malformed")
     || entry.step.endsWith("_duplicate_token_id")
-    || entry.step.endsWith("_empty_source_key");
+    || entry.step.endsWith("_empty_source_key")
+    || entry.step.endsWith("_unsupported");
 }
 
 const byLane = new Map();

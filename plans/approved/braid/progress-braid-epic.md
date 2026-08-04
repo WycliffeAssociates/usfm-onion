@@ -5626,3 +5626,73 @@ Clean-room verdict: no production findings; docs-only closeout (this entry, §R 
 stale host-crate references in comments) landed by the director. Process note: the crate
 deletion executed in the main session under the owner's own permission system after the
 builder sandbox correctly refused it on relayed authority.
+
+## 2026-08-04 — v0.1.5: `publish_scope` and `revert_to_baseline` (editor-RFC'd verbs)
+
+Two additive verbs on `braid::Braid`, both composition over state braid already holds — no
+wire-format change, no new crate, non-breaking.
+
+**`Braid::publish_scope(scope) -> Result<ScopedPublication, ScopedPublishError>`.** Produces
+per-book packed containers, one `ScopedPublishedBook { book, packed, source, source_hash }`
+per book in scope, in corpus order. Deliberately `RestoreRecord`-shaped, deliberately NOT
+`PublishedCorpus`-shaped: a partial container has to be structurally unrepresentable as a
+complete corpus container, because the two are different guarantees and giving them the same
+shape would let a caller feed a scoped result to whatever consumes a complete publication and
+get back something that looks whole but is not. Every book is ALWAYS freshly encoded and
+ALWAYS carries its source — no splice-reuse arm, no `encoded: false` case — because the
+caller is by definition asking for bytes it does not already hold, and downstream
+materialization is certification-gated (needs source to verify against), so bytes without a
+source would be unusable the moment they arrived; this is also exactly why it is a separate
+verb rather than `publish(scope: Option<CorpusScope>)`, since `publish`'s entire contract is
+`PublicationCache` splice-reuse and a scoped call has nothing to reuse from or contribute to
+(`publish_scope` never reads or invalidates `self.publication`, proven by a dedicated test).
+Lint-first, same rule as `publish()`. `snapshot_id` is the corpus identity from the same
+`lint()` read. Chapter scope resolves to its book (containers are book-grain); per-book
+encoding shares the one real wire path (`encode_one_book_container`, promoted out of what was
+a `restore.rs`-only test helper) rather than a second hand-rolled `encode_corpus` call.
+
+**`Braid::revert_to_baseline(scope) -> Result<MutationEffect, BaselineError>`.** Whole-book
+replacement from `BaselineState`, atomic across the scope. `Book`/`All` only — a chapter scope
+refuses via `BaselineError::ChapterScopeUnsupported` (deferred, not planned as a near-term
+follow-up: a single chapter run has no baseline slot of its own, and reverting one run in
+isolation would mean reconstructing the book from a mix of current and baselined tokens, which
+is not what "revert" means; the sanctioned workaround is `diffBaseline` to see what changed
+followed by `updateChapter` with the baseline run's own tokens). Atomicity: the whole scope
+(every targeted book resident AND baselined) is validated before anything mutates; any missing
+baseline refuses with every offending book named at once, state untouched byte-for-byte. Token
+identity is load-bearing: the baseline's stored source, hash, tokens (their ORIGINAL ids),
+line ending, and runs are reinstalled verbatim via a new `BookState::reverted_to_baseline`,
+never re-parsed or re-minted — pinned by a test that uses distinctly-prefixed opaque token-push
+ids specifically because a positional re-parse would coincidentally re-derive the same ids and
+mask a "merely equal content" bug. A book already equal to its baseline is a no-op, absent from
+`changed`. Reuses the standard `effect()` path every mutation shares, so publication-cache and
+format-patch-table invalidation fire the same way any other mutation's does; the baseline slot
+itself is never touched.
+
+**Wasm glue**: `publishScope`/`revertToBaseline` on the wasm `Braid` class, pure DTO
+delegation following the `publish`/`diffBaseline` patterns exactly. `braid::ScopedPublication`/
+`ScopedPublishedBook` are reused directly (already tsify-derived, like `PublishedCorpus`);
+`ScopedPublishError`/`BaselineError`'s new `ChapterScopeUnsupported` arm get thin wasm-side
+mirrors because they carry a `ScopeError`/`ChapterTarget`, which — like every other
+scope-shaped error at this boundary — projects to the crate's own String-based DTO.
+
+Gates, all green: `cargo test --workspace --all-features` (291 braid+wasm+wire+core tests,
+0 failed, +14 new native tests: scoped-publish round trip through `restore_corpus` into a
+fresh `Braid`, always-encode on a clean previously-published book, snapshot-id-equals-lint,
+publication-cache non-interference, revert atomicity/identity/no-op/chapter-refusal);
+`cargo doc --workspace --no-deps --all-features -D warnings` clean; `cargo fmt --all --check`
+clean; lint oracle byte-identical (no re-bless); JS: `test:packed`/`:web` (410 cases,
+unchanged), `test:parity`/`:web` (82 steps × 2 lanes, 0 divergences — new steps
+`publish_scope(_seed)`/`revert_seed`/`revert_set_baseline`/`revert_update_book`/
+`revert_to_baseline`/`revert_to_baseline_chapter_unsupported` each on their own fresh handle so
+they don't perturb the existing 19-step sequence), `test:publish`/`:web` (17 checks, +1 new
+publishScope→verifyPackedCorpus/materialize round trip compared against `toTokens()`),
+`test:publish:js`/`:js:web` (27 checks, unchanged), `golden:wasm`/`:web` (7 fixtures,
+unchanged). Dev-mode gate runs dirtied the committed `pkg-*` trees; restored via `git restore
+pkg-bundler pkg-web` and rebuilt release (`npm run build`) before this commit.
+
+Version bump: workspace `Cargo.toml` and npm `package.json` 0.1.4 → 0.1.5 (additive,
+non-breaking on both surfaces).
+
+Not tagged, not merged, not pushed — branch `v0.1.5-scoped` off `master` (b6a1fcd, v0.1.4),
+awaiting review.
