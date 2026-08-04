@@ -10,7 +10,7 @@ import type {
 } from "../pkg-bundler/usfm_onion_web.js";
 
 /** One book's own source for a combined-corpus verify: addressed by book
- * code alone, the same as `usfm_onion_host::PublishedCorpusSourceInput` --
+ * code alone, the same as the native side's `PublishedCorpusSource` --
  * a combined container has no per-book caller-supplied path. */
 export type PublishedCorpusSource = Readonly<{
   book: string;

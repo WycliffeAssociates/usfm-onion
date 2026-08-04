@@ -48,8 +48,10 @@ pub struct RestoreRecord {
 ///
 /// Deliberately native, not a wasm-facing DTO: `Ingest` carries
 /// [`crate::IngestError`] verbatim (`BookId`, `ChapterTarget`, etc.) rather
-/// than a String-projected mirror of it. braid must not grow a wire or
-/// wasm-bindgen dependency, and the wasm crate already owns a `IngestError`
+/// than a String-projected mirror of it. This error stays a native type:
+/// default and serde-only builds of braid activate no wasm glue (tsify and
+/// wasm-bindgen enter only behind the `wasm` feature), and the wasm crate
+/// already owns a `IngestError`
 /// String-projection it converts *from* `crate::IngestError` for its own
 /// verbs -- reusing that existing conversion is the "one definition, not a
 /// second hand-copy" choice, so this error is not re-derived here just to be

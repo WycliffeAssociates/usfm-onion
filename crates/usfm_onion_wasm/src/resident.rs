@@ -1431,7 +1431,7 @@ impl From<braid::RestoreError> for RestoreError {
             // duplicate one is, and the key it names is empty by definition
             // of the variant): see
             // `braid::RestoreError::EmptySourceKey`'s own doc
-            // comment for why the host side can't express this as
+            // comment for why the native side can't express this as
             // `braid::IngestError::DuplicateSourceKey` itself.
             braid::RestoreError::EmptySourceKey => Self::Ingest {
                 error: IngestError::DuplicateSourceKey {

@@ -2142,4 +2142,5 @@ standing consolidation direction to its structural conclusion:
   `PublicationCache`. There is exactly ONE Braid; the wasm class is DTO glue over it.
 - `usfm_onion_host` (introduced v0.1.2) is deleted. Its free functions were consumed by no
   released downstream; the 0.x native surface break is accepted and ledger-recorded.
-- The four-crate DAG becomes three: core ← wire ← braid ← wasm (each depending leftward).
+- One workspace crate is deleted; the remaining DAG is a straight line of four:
+  core ← wire ← braid ← wasm (each depending leftward), with no side composition crate.
