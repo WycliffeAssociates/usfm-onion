@@ -6189,3 +6189,97 @@ nullish means absent IS the boundary contract, documented on the helper's doc
 comment. The declared TS types never permitted null on these fields, so an
 off-contract caller is flagged by tsc on their side; the legacy JSON path's
 null rejection was incidental, not designed.
+
+### v0.1.6 — Sid occurrence ordinals, phase 1 (2026-08-05)
+
+Editor-reported seed refusal: token sids like `"DEU 16:14_dup_1"` — the exact
+spelling our own shipped `js/token-sids.js` (`normalizeTokenSids`, the JS
+twin of `derive_canonical_sids`) stamps on a duplicate-verse region — were
+refused by `OwnedToken::from_parts` as `UnresolvableSid`: the structured
+`Sid` had no field to hold the occurrence. Duplicate verses are real data;
+the suffix is genuine address information ("the second 16:14"), not noise
+to strip.
+
+Two-phase design, phase 1 shipped this release, phase 2 explicitly deferred
+(no editor-side change needed for phase 1 — see
+`plans/approved/sid-occurrence-ordinals.md` for the full design, wire layout
+table, and bounds rules):
+- Phase 1 (this): `Sid` gains `verse_occurrence`/`chapter_occurrence: u8`
+  (default 0); `Sid::parse`/`Display` legalize the exact
+  `"BOOK C:V[-END][_cdup_N][_dup_N]"` grammar `derive_canonical_sids`
+  already writes (N in 1..=255, wrong order/zero/overflow refused, never
+  repaired); the packed wire sid entry carries both ordinals. Parse itself
+  is unchanged — it never mints occurrences, only ingest/export can carry
+  them a boundary already supplied.
+- Phase 2 (deferred): parse mints occurrences for a real duplicate verse it
+  encounters itself; `derive_canonical_sids` is deleted from `src/diff/mod.rs`
+  once `Sid` carries the fact directly; `vref`'s duplicate-verse handling and
+  `js/token-sids.js`'s `normalizeTokenSids` are unified/retired the same way.
+
+Wire layout change (verified against the real codec rather than assumed;
+two deviations from the original sketch, both because reality disagreed with
+the premise, not preference):
+1. **Book stays inline, not hoisted to the section header.** The section's
+   `book` looked redundant with the packed entry's own 3-byte book — but a
+   resident sid can legitimately name a different book (a non-canonical
+   `\id`, e.g. `\id xyz lower case`), and that divergence is exercised by two
+   existing native round-trip tests (`token_codec_tests::round_trips_every_
+   token_kind`, `owned_round_trips_every_token_kind`). Dropping the book
+   would have silently regressed a tested lossless-round-trip guarantee, so
+   it stays.
+2. **Entry widens 8 -> 16 bytes**, not 8 -> 8. With the book staying and the
+   fidelity bit moving off the delta byte (delta now gets the full 0-255
+   range instead of the v1 7-bit ceiling — a bridge past 127 verses used to
+   silently degrade to `AnchorOnly`; it no longer does), the entry needs 11
+   bytes; this schema's `ElementWidth` vocabulary has no width between eight
+   and sixteen, so it pads to 16 (5 unused spare bytes) rather than adding a
+   new width case crate-wide (Rust + generated JS mirror) to save two bytes.
+`crate::schema::FORMAT_VERSION` bumps 1 -> 2; the existing version-gate
+(`DecodeError::UnsupportedVersion`) refuses a v0.1.5-published container
+cleanly, never dual-decodes it — a warm cache holding one re-seeds from
+source, the same recovery an unreadable container already requires.
+
+A real, caught-before-ship regression during this work: `Sid` gaining public
+fields changed its `Serialize` derive's JSON output for *every* sid, not
+just occurrence-nonzero ones, which moved the lint oracle's token-digest hash
+even though parse itself never changed. Root-caused (not re-blessed) with
+`#[serde(skip_serializing_if = "is_zero_u8")]` on both new fields — an
+occurrence-0 sid's JSON is byte-identical to before this release, which is
+also why `golden:wasm`/`golden:wasm:web` needed no re-bless.
+
+Re-blessed (regenerated via `finding_goldens::generate_finding_goldens` /
+`token_goldens::generate_token_goldens`, pre-authorized for this layout
+change only): all 17 `crates/usfm_onion_wire/golden/finding/*.bin` and 14 of
+`crates/usfm_onion_wire/golden/token/*.bin` (every fixture's bytes shift with
+the wider sid entry and the format-version bump). One fixture retired outright
+rather than re-blessed: `sid-fidelity-overwide-bridge-anchor-only` proved a
+127-verse `AnchorOnly` degradation that v2's unshared delta byte eliminates;
+replaced with `sid-fidelity-wide-bridge-stays-exact` (same source idea, `\v
+1-255`, proving the new ceiling instead). `js/wire-schema.js`/`.d.ts`
+regenerated via `cargo run --example generate_js_schema`; `js/packed.js`'s
+`sidAt` updated to read the widened entry (book stays inline there too,
+matching the Rust decision).
+
+New tests: `Sid::parse`/`Display` grammar round-trip + bounds
+(`token::from_parts_tests::sid_parses_the_occurrence_suffix_grammar`);
+`OwnedToken::from_parts` accepting the editor's exact dup-suffixed spelling
+(`from_parts_accepts_a_dup_suffixed_sid`); the mixed-vocabulary contract pin
+(`token::mixed_vocabulary_pin` — a parsed duplicate verse still mints the
+same bare sid twice, `"GEN 1:1" != "GEN 1:1_dup_1"`, documented as phase-1
+contract, not a bug); a native braid end-to-end test
+(`restore::tests::a_dup_suffixed_token_push_seeds_pulls_and_survives_
+publish_restore`) — token-push a book with `_dup_1` stamped on a duplicate
+region, `update_book` succeeds, `to_tokens` returns the spelling verbatim,
+`publish`/`restore_published_corpus` preserves it through the packed wire.
+Deviation: the wasm parity transcript was not extended with a dedicated
+dup-sid step (packet left this "your call"; the native braid test already
+exercises ingest, pull, and the packed round trip end to end, and the
+transcript is large, shared infrastructure other in-flight work also
+depends on staying stable).
+
+Version bump 0.1.5 -> 0.1.6 (workspace `Cargo.toml` `[workspace.package]`
+version, inherited by every member crate; `package.json`). Gate battery:
+workspace 680/0 (-D warnings, all-features, 28 ignored/exhaustive-corpus),
+rustdoc clean, fmt clean, lint oracle byte-identical (no re-bless), wire
+crate's own ignored corpus round-trips (5/0) green, npm build green,
+test:packed:types clean.

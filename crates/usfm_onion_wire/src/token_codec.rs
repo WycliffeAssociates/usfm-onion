@@ -103,7 +103,7 @@ impl TokenSectionBuffers {
             },
             FieldPayload {
                 id: token_field::PACKED_SID_DICTIONARY,
-                width: ElementWidth::Eight,
+                width: ElementWidth::Sixteen,
                 count: self.sid_count,
                 bytes: &self.sids,
             },

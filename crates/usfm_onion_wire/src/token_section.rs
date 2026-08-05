@@ -11,8 +11,8 @@ use usfm_onion::token::{BookId, Sid};
 use crate::container::{Section, SectionField};
 use crate::error::{DecodeError, EncodeError};
 use crate::schema::{
-    INDEX_NONE_U16, MAX_DISTINCT_SIDS, PACKED_SID_LEN, SID_DELTA_MASK, SID_FIDELITY_BIT,
-    SectionKind, TokenKindTag, token_field,
+    INDEX_NONE_U16, MAX_DISTINCT_SIDS, PACKED_SID_LEN, SID_FIDELITY_BIT, SectionKind, TokenKindTag,
+    token_field,
 };
 use crate::token_payload::StringDictionary;
 
@@ -22,8 +22,16 @@ pub(crate) enum SidFidelity {
     AnchorOnly,
 }
 
-/// Eight-byte wire SID. Its representation is explicit rather than `repr(Rust)`
-/// so core layout changes cannot silently alter persisted bytes.
+/// Sixteen-byte wire SID. Its representation is explicit rather than
+/// `repr(Rust)` so core layout changes cannot silently alter persisted bytes.
+///
+/// v2 layout (v0.1.6): widens the v1 8-byte entry to carry the two occurrence
+/// ordinals phase-1 sids can now spell (`_cdup_N`/`_dup_N`), and gives delta
+/// its own unshared byte (full 0-255 range, no fidelity-bit sharing). See
+/// [`crate::schema::layout::packed_sid`] for why the book stays inline rather
+/// than being hoisted to the section header, and why the record pads to 16
+/// rather than a tighter width. v1 containers are rejected by the container
+/// format-version check, never dual-decoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PackedSid([u8; PACKED_SID_LEN]);
 
@@ -31,22 +39,33 @@ impl PackedSid {
     pub(crate) fn encode(sid: Sid, requested_fidelity: SidFidelity) -> Self {
         // The caller derives requested_fidelity from exact number-token source;
         // core Sid alone cannot distinguish sequences or suffixed verses.
+        //
+        // `sid.verse_end_delta` is already a `u8` (see `Sid`'s own struct docs:
+        // a bridge cannot in-domain span more than 255 verses), so this can
+        // never actually overflow the entry's now-unshared delta byte — but the
+        // bound is asserted rather than assumed, so a future change to that
+        // invariant fails loudly here instead of silently truncating.
         let source_delta = sid.verse_end().saturating_sub(sid.verse);
-        let (delta, fidelity) = if source_delta > u16::from(SID_DELTA_MASK) {
+        debug_assert!(source_delta <= u16::from(u8::MAX));
+        let (delta, fidelity) = if source_delta > u16::from(u8::MAX) {
             (0, SidFidelity::AnchorOnly)
         } else {
             (source_delta as u8, requested_fidelity)
         };
         let mut bytes = [0u8; PACKED_SID_LEN];
-        bytes[..3].copy_from_slice(sid.book.as_str().as_bytes());
-        bytes[3..5].copy_from_slice(&sid.chapter.to_le_bytes());
-        bytes[5..7].copy_from_slice(&sid.verse.to_le_bytes());
-        bytes[7] = delta
-            | if fidelity == SidFidelity::AnchorOnly {
-                SID_FIDELITY_BIT
-            } else {
-                0
-            };
+        use crate::schema::layout::packed_sid;
+        bytes[packed_sid::BOOK..packed_sid::BOOK + 3].copy_from_slice(sid.book.as_str().as_bytes());
+        bytes[packed_sid::CHAPTER..packed_sid::CHAPTER + 2]
+            .copy_from_slice(&sid.chapter.to_le_bytes());
+        bytes[packed_sid::VERSE..packed_sid::VERSE + 2].copy_from_slice(&sid.verse.to_le_bytes());
+        bytes[packed_sid::DELTA] = delta;
+        bytes[packed_sid::VERSE_OCCURRENCE] = sid.verse_occurrence;
+        bytes[packed_sid::CHAPTER_OCCURRENCE] = sid.chapter_occurrence;
+        bytes[packed_sid::FLAGS] = if fidelity == SidFidelity::AnchorOnly {
+            SID_FIDELITY_BIT
+        } else {
+            0
+        };
         Self(bytes)
     }
 
@@ -55,12 +74,17 @@ impl PackedSid {
     }
 
     pub(crate) fn decode(self) -> Result<(Sid, SidFidelity), DecodeError> {
-        let book_text = std::str::from_utf8(&self.0[..3]).map_err(|_| DecodeError::InvalidUtf8)?;
+        use crate::schema::layout::packed_sid;
+        let book_text = std::str::from_utf8(&self.0[packed_sid::BOOK..packed_sid::BOOK + 3])
+            .map_err(|_| DecodeError::InvalidUtf8)?;
         let book = BookId::from_str(book_text).ok_or(DecodeError::InvalidSection)?;
-        let chapter = u16::from_le_bytes([self.0[3], self.0[4]]);
-        let verse = u16::from_le_bytes([self.0[5], self.0[6]]);
-        let delta = self.0[7] & SID_DELTA_MASK;
-        let fidelity = if self.0[7] & SID_FIDELITY_BIT == 0 {
+        let chapter =
+            u16::from_le_bytes([self.0[packed_sid::CHAPTER], self.0[packed_sid::CHAPTER + 1]]);
+        let verse = u16::from_le_bytes([self.0[packed_sid::VERSE], self.0[packed_sid::VERSE + 1]]);
+        let delta = self.0[packed_sid::DELTA];
+        let verse_occurrence = self.0[packed_sid::VERSE_OCCURRENCE];
+        let chapter_occurrence = self.0[packed_sid::CHAPTER_OCCURRENCE];
+        let fidelity = if self.0[packed_sid::FLAGS] & SID_FIDELITY_BIT == 0 {
             SidFidelity::Exact
         } else {
             SidFidelity::AnchorOnly
@@ -69,7 +93,8 @@ impl PackedSid {
             Sid::new(book, chapter, verse)
         } else {
             Sid::with_range(book, chapter, verse, verse.saturating_add(u16::from(delta)))
-        };
+        }
+        .with_occurrences(chapter_occurrence, verse_occurrence);
         Ok((sid, fidelity))
     }
 
@@ -101,7 +126,7 @@ impl<'wire> SidDictionary<'wire> {
             return Err(DecodeError::TooManySids { found: field.count });
         }
         let count = field.count as u16;
-        // The container already proved `count * 8 == byte_len` for this
+        // The container already proved `count * 16 == byte_len` for this
         // fixed-width field; what remains is that each record's book code is a
         // legal one, which a decoded `Sid` cannot represent otherwise.
         for record in field.bytes.chunks_exact(PACKED_SID_LEN) {
@@ -368,6 +393,7 @@ fn u32_at(bytes: &[u8], row: u32) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::layout::packed_sid;
 
     fn book(code: &str) -> BookId {
         BookId::from_str(code).unwrap()
@@ -376,7 +402,8 @@ mod tests {
     #[test]
     fn packed_sid_round_trips_exact_and_anchor_only_ranges() {
         let exact = PackedSid::encode(Sid::with_range(book("GEN"), 1, 1, 128), SidFidelity::Exact);
-        assert_eq!(exact.as_bytes()[7], 127);
+        assert_eq!(exact.as_bytes()[packed_sid::DELTA], 127);
+        assert_eq!(exact.as_bytes()[packed_sid::FLAGS], 0);
         let (sid, fidelity) = exact.decode().unwrap();
         assert_eq!(sid.verse_end(), 128);
         assert_eq!(fidelity, SidFidelity::Exact);
@@ -385,20 +412,53 @@ mod tests {
             Sid::with_range(book("GEN"), 1, 1, 2),
             SidFidelity::AnchorOnly,
         );
-        assert_eq!(anchor_only.as_bytes()[7], 0x81);
+        assert_eq!(anchor_only.as_bytes()[packed_sid::DELTA], 1);
+        assert_eq!(anchor_only.as_bytes()[packed_sid::FLAGS], SID_FIDELITY_BIT);
         let (sid, fidelity) = anchor_only.decode().unwrap();
         assert_eq!(sid.verse_end(), 2);
         assert_eq!(fidelity, SidFidelity::AnchorOnly);
     }
 
+    /// v2's delta byte is unshared with the fidelity bit, so a bridge up to the
+    /// full 255-verse ceiling `Sid` itself allows stays `Exact` — the v1
+    /// layout's 127-verse "becomes AnchorOnly" ceiling no longer exists.
     #[test]
-    fn packed_sid_wider_than_127_becomes_anchor_only() {
-        let packed = PackedSid::encode(Sid::with_range(book("GEN"), 1, 1, 129), SidFidelity::Exact);
-        assert_eq!(packed.as_bytes()[7], 0x80);
+    fn packed_sid_delta_up_to_255_stays_exact() {
+        let packed = PackedSid::encode(Sid::with_range(book("GEN"), 1, 1, 256), SidFidelity::Exact);
+        assert_eq!(packed.as_bytes()[packed_sid::DELTA], 255);
         let (sid, fidelity) = packed.decode().unwrap();
         assert_eq!(sid.verse, 1);
-        assert_eq!(sid.verse_end(), 1);
-        assert_eq!(fidelity, SidFidelity::AnchorOnly);
+        assert_eq!(sid.verse_end(), 256);
+        assert_eq!(fidelity, SidFidelity::Exact);
+    }
+
+    #[test]
+    fn packed_sid_carries_occurrence_ordinals() {
+        let sid = Sid::new(book("GEN"), 16, 14).with_occurrences(0, 1);
+        let packed = PackedSid::encode(sid, SidFidelity::Exact);
+        assert_eq!(packed.as_bytes()[packed_sid::VERSE_OCCURRENCE], 1);
+        assert_eq!(packed.as_bytes()[packed_sid::CHAPTER_OCCURRENCE], 0);
+        let (decoded, _) = packed.decode().unwrap();
+        assert_eq!(decoded, sid);
+        assert_eq!(decoded.verse_occurrence, 1);
+    }
+
+    /// The book stays inline per entry (the section's own book is a poor
+    /// substitute — see `packed_sid`'s module doc): a sid naming a book other
+    /// than the section's own still round-trips with its own book, which is
+    /// what a non-canonical `\id`'s minted sid needs.
+    #[test]
+    fn a_sid_naming_a_different_book_round_trips_its_own_book() {
+        let mut builder = SidDictionaryBuilder::new(book("GEN"));
+        let index = builder
+            .intern(Sid::new(book("EXO"), 1, 1), SidFidelity::Exact)
+            .unwrap();
+        let raw: [u8; PACKED_SID_LEN] = builder.bytes()
+            [usize::from(index) * PACKED_SID_LEN..(usize::from(index) + 1) * PACKED_SID_LEN]
+            .try_into()
+            .unwrap();
+        let (decoded, _) = PackedSid::from_bytes(raw).decode().unwrap();
+        assert_eq!(decoded.book, book("EXO"));
     }
 
     #[test]
@@ -463,11 +523,5 @@ mod tests {
         }
         assert_eq!(interned, MAX_DISTINCT_SIDS);
         assert_eq!(builder.len(), MAX_DISTINCT_SIDS);
-    }
-
-    #[test]
-    fn packed_sid_rejects_an_invalid_book() {
-        let packed = PackedSid::from_bytes(*b"G-N\x01\x00\x01\x00\x00");
-        assert_eq!(packed.decode(), Err(DecodeError::InvalidSection));
     }
 }

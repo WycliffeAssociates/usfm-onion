@@ -44,9 +44,8 @@ use crate::schema::{
     MAX_DISTINCT_SIDS, MAX_MARKER_DESCRIPTORS, NUMBER_FLAG_HAS_END, NUMBER_RECORD_LEN,
     PACKED_SID_LEN, PARAM_CONTRACTS, SECTION_ALIGN, SECTION_CHECKSUM_OFFSET,
     SECTION_FLAG_POSITIONAL_IDS, SECTION_HEADER_LEN, SECTION_MAGIC, SECTION_VERSION,
-    SID_DELTA_MASK, SID_FIDELITY_BIT, SPAN_ABSENT, TOC_ENTRY_LEN, TOC_FLAGS_KNOWN,
-    TOKEN_SECTION_FLAGS_KNOWN, TOKEN_SECTION_RULES_VERSION, finding_field, finding_flag, layout,
-    token_field,
+    SID_FIDELITY_BIT, SPAN_ABSENT, TOC_ENTRY_LEN, TOC_FLAGS_KNOWN, TOKEN_SECTION_FLAGS_KNOWN,
+    TOKEN_SECTION_RULES_VERSION, finding_field, finding_flag, layout, token_field,
 };
 
 /// The exact command that regenerates the checked-in files — printed in their
@@ -223,7 +222,6 @@ pub fn render() -> (String, String) {
     konst!(MAX_MARKER_DESCRIPTORS: number = MAX_MARKER_DESCRIPTORS);
     konst!(PACKED_SID_LEN: number = PACKED_SID_LEN);
     konst!(SID_FIDELITY_BIT: number = SID_FIDELITY_BIT);
-    konst!(SID_DELTA_MASK: number = SID_DELTA_MASK);
     konst!(STRING_DICTIONARY_ENTRY_LEN: number = layout::STRING_DICTIONARY_ENTRY_LEN);
 
     writeln!(
@@ -363,6 +361,9 @@ pub fn render() -> (String, String) {
             ("chapter", layout::packed_sid::CHAPTER),
             ("verse", layout::packed_sid::VERSE),
             ("delta", layout::packed_sid::DELTA),
+            ("verseOccurrence", layout::packed_sid::VERSE_OCCURRENCE),
+            ("chapterOccurrence", layout::packed_sid::CHAPTER_OCCURRENCE),
+            ("flags", layout::packed_sid::FLAGS),
         ],
     );
     render_offsets(

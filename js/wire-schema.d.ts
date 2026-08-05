@@ -60,7 +60,6 @@ export declare const SPAN_ABSENT: number;
 export declare const MAX_MARKER_DESCRIPTORS: number;
 export declare const PACKED_SID_LEN: number;
 export declare const SID_FIDELITY_BIT: number;
-export declare const SID_DELTA_MASK: number;
 export declare const STRING_DICTIONARY_ENTRY_LEN: number;
 export declare const ELEMENT_WIDTHS: readonly number[];
 
@@ -147,6 +146,9 @@ export declare const PACKED_SID_OFFSET: Readonly<{
   chapter: number;
   verse: number;
   delta: number;
+  verseOccurrence: number;
+  chapterOccurrence: number;
+  flags: number;
 }>;
 
 export declare const DESCRIPTOR_RECORD_OFFSET: Readonly<{

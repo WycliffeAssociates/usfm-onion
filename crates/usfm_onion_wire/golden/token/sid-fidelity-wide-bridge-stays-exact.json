@@ -1,0 +1,5 @@
+{
+  "name": "sid-fidelity-wide-bridge-stays-exact",
+  "kind": "good",
+  "proves": "v2's unshared delta byte covers a bridge up to Sid's own 255-verse ceiling as Exact — the v1 7-bit-delta ceiling that degraded this to AnchorOnly is gone"
+}

@@ -1349,7 +1349,7 @@ mod tests {
                 },
                 FieldPayload {
                     id: crate::schema::token_field::PACKED_SID_DICTIONARY,
-                    width: ElementWidth::Eight,
+                    width: ElementWidth::Sixteen,
                     count: 0,
                     bytes: &[],
                 },
