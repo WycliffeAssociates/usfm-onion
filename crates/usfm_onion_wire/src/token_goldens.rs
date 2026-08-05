@@ -59,11 +59,16 @@ struct GoodVector {
     source: &'static str,
     encoding: Encoding,
     proves: &'static str,
-    /// True only for the designed-lossy over-wide-bridge vector: the packed
-    /// sid format's 7-bit delta cannot represent a >127-verse range, so the
-    /// codec degrades to `AnchorOnly` and stores just the anchor. That is the
-    /// behavior under test, not a bug — the token-equality check compares
-    /// everything except `sid.verse_end()` for these.
+    /// True for a vector whose packed sid cannot represent its full bridge
+    /// width and degrades to `AnchorOnly`, storing just the anchor. Always
+    /// `false` in the current vector set: v2's delta byte is unshared with
+    /// the fidelity bit (see `crate::schema::layout::packed_sid`) and covers
+    /// every width `Sid` itself allows (0-255), so there is no longer a
+    /// bridge that degrades on width alone — v1's >127-verse case is
+    /// `sid-fidelity-wide-bridge-stays-exact` below instead. Kept as a field
+    /// (not removed) so a future ceiling change has somewhere to hang a
+    /// lossy vector again. When true, the token-equality check compares
+    /// everything except `sid.verse_end()`.
     sid_range_end_lossy: bool,
 }
 
@@ -119,11 +124,11 @@ fn good_vectors() -> Vec<GoodVector> {
             sid_range_end_lossy: false,
         },
         GoodVector {
-            name: "sid-fidelity-overwide-bridge-anchor-only",
-            source: "\\id GEN\n\\c 1\n\\p\n\\v 1-200 a\n",
+            name: "sid-fidelity-wide-bridge-stays-exact",
+            source: "\\id GEN\n\\c 1\n\\p\n\\v 1-255 a\n",
             encoding: Encoding::Parsed,
-            proves: "a bridge wider than the 7 packed-sid delta bits degrades to AnchorOnly in the codec itself",
-            sid_range_end_lossy: true,
+            proves: "v2's unshared delta byte covers a bridge up to Sid's own 255-verse ceiling as Exact — the v1 7-bit-delta ceiling that degraded this to AnchorOnly is gone",
+            sid_range_end_lossy: false,
         },
         GoodVector {
             name: "attributes-none-default-and-empty",

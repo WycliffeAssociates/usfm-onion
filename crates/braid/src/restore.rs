@@ -734,6 +734,118 @@ mod tests {
         assert_summaries_match(&restored_snapshot.summary, &expected_summary);
     }
 
+    /// The editor's exact reported scenario, natively: a token-push book
+    /// whose tokens carry `_dup_1` sids on a duplicate-verse region — the
+    /// shape `js/token-sids.js`'s `normalizeTokenSids` produces (sticky sid
+    /// stamped on every token, second `\v 14` region suffixed) — must seed,
+    /// pull back verbatim, and survive a publish/restore round trip through
+    /// the packed wire. Phase 1 (this release) makes exactly this
+    /// representable; see `plans/approved/sid-occurrence-ordinals.md`.
+    #[test]
+    fn a_dup_suffixed_token_push_seeds_pulls_and_survives_publish_restore() {
+        use usfm_onion::parse::parse;
+        use usfm_onion::token::{OwnedToken, OwnedTokenParts};
+
+        const DEU: &str = "\\id DEU\n\\c 16\n\\p\n\\v 14 First.\n\\v 14 Second.\n";
+
+        // Rebuild every token whose parsed sid is the bare duplicate anchor
+        // and whose own source text falls in the *second* occurrence (after
+        // "Second.\n" begins) with the `_dup_1` spelling stamped on it --
+        // exactly what an editor's own duplicate-detection pass does, since
+        // `parse` itself stays bare in phase 1 (never mints occurrences).
+        let parsed = parse(DEU);
+        // The second `\v 14` marker's own byte offset -- restamping from
+        // there (not from "Second." itself) catches that occurrence's number
+        // and marker tokens too, not just its text.
+        let second_region_starts = DEU.rfind("\\v 14").expect("fixture has a second \\v 14");
+        let tokens: Vec<OwnedToken> = parsed
+            .tokens
+            .iter()
+            .map(|token| {
+                let owned = OwnedToken::from_parsed(token);
+                let restamp = owned.sid() == Some("DEU 16:14")
+                    && token.span.start as usize >= second_region_starts;
+                if !restamp {
+                    return owned;
+                }
+                OwnedToken::from_parts(OwnedTokenParts {
+                    id: owned.id().as_str(),
+                    kind: owned.kind(),
+                    source: owned.source(),
+                    sid: Some("DEU 16:14_dup_1"),
+                    marker: owned.marker_name(),
+                    nested: owned.nested(),
+                    book_code: owned.book_code().map(|c| (&*c.code, c.is_valid)),
+                    number: owned.number_info().cloned(),
+                    attributes: owned.attributes(),
+                    attribute_source: owned.attribute_list(),
+                    attribute_offset: owned.attribute_offset(),
+                })
+                .expect("restamping only the sid keeps every other fact legal")
+            })
+            .collect();
+        assert!(
+            tokens.iter().any(|t| t.sid() == Some("DEU 16:14_dup_1")),
+            "the fixture must actually carry the dup-suffixed spelling"
+        );
+
+        let mut original = empty_resident();
+        original
+            .update_book(BookInput::Tokens(crate::BookTokensInput {
+                source_key: SourceKey::new("DEU.usfm").unwrap(),
+                book: book("DEU"),
+                tokens,
+                line_ending: usfm_onion::token::LineEnding::Lf,
+            }))
+            .expect("a dup-suffixed sid is representable in phase 1");
+
+        // Pulled tokens must carry the exact spelling verbatim.
+        let pulled = original
+            .to_tokens(crate::Scope::book(book("DEU")))
+            .expect("DEU is resident")
+            .remove(0)
+            .tokens;
+        assert!(
+            pulled.iter().any(|t| t.sid() == Some("DEU 16:14_dup_1")),
+            "to_tokens must return the dup-suffixed spelling verbatim"
+        );
+        assert!(pulled.iter().any(|t| t.sid() == Some("DEU 16:14")));
+
+        // Publish + restore through the packed wire must preserve it.
+        let published = original.publish().expect("publishes");
+        let records: Vec<PublishedCorpusSource> = published
+            .books
+            .iter()
+            .map(|book| PublishedCorpusSource {
+                book: book.book.clone(),
+                source_key: format!("{}.usfm", book.book),
+                source: book
+                    .source
+                    .clone()
+                    .expect("a freshly encoded book carries its bound source")
+                    .into_bytes(),
+            })
+            .collect();
+        let mut reopened = empty_resident();
+        let report = reopened
+            .restore_published_corpus(&published.bytes, &records)
+            .expect("restores");
+        assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+
+        let restored_pulled = reopened
+            .to_tokens(crate::Scope::book(book("DEU")))
+            .expect("DEU is resident after restore")
+            .remove(0)
+            .tokens;
+        assert!(
+            restored_pulled
+                .iter()
+                .any(|t| t.sid() == Some("DEU 16:14_dup_1")),
+            "the packed round trip must preserve the occurrence, not coerce it back to the bare anchor"
+        );
+        assert!(restored_pulled.iter().any(|t| t.sid() == Some("DEU 16:14")));
+    }
+
     /// A clean project must be able to restore its *negative* lint result:
     /// "lint ran and found nothing" is evidence, and without it reopening a
     /// clean corpus re-runs every rule. Ported from the wasm-only adapter's

@@ -19,7 +19,12 @@ pub const CONTAINER_MAGIC: [u8; 4] = *b"uson";
 pub const SECTION_MAGIC: [u8; 4] = *b"usos";
 
 /// The only container/section layout version this build encodes or decodes.
-pub const FORMAT_VERSION: u16 = 1;
+///
+/// Bumped 1 -> 2 in v0.1.6 for the packed-sid entry layout change (book
+/// dropped, occurrence ordinals added — see [`layout::packed_sid`]). A v1
+/// container is refused by this check, not dual-decoded: v0.1.5-published
+/// containers must be re-seeded from source, not read by this build.
+pub const FORMAT_VERSION: u16 = 2;
 
 /// The only TOC-entry section version this build encodes or decodes.
 pub const SECTION_VERSION: u16 = 1;
@@ -121,13 +126,36 @@ pub mod layout {
         pub const COUNT: usize = 12;
     }
 
-    /// Packed SID record (8 bytes).
+    /// Packed SID record (16 bytes, widened from v1's 8 — see below).
+    ///
+    /// v2 layout (v0.1.6): adds the two occurrence ordinals phase-1 sids carry
+    /// (`_cdup_N`/`_dup_N`). An earlier draft of this layout also tried to drop
+    /// the book, reasoning that the owning section header's own book makes a
+    /// per-entry copy redundant — but a resident book-code token can mint a
+    /// sid naming a *different* book than the section's own (a malformed or
+    /// non-canonical `\id`, still round-tripped losslessly per this crate's
+    /// lossless-by-design contract), so the book is not actually redundant and
+    /// stays. There is no 10-byte element width in this schema's width
+    /// vocabulary (`ElementWidth` has no variant between eight and sixteen),
+    /// so the record is padded to 16 rather than adding a new width case
+    /// crate-wide for two spare bytes; bytes 11..16 are unused padding, same
+    /// as the sparse number/book-code records' own trailing spare bytes.
+    /// v1 containers (8-byte entries, no occurrences) are rejected by the
+    /// format-version check, not dual-decoded.
     pub mod packed_sid {
         pub const BOOK: usize = 0;
         pub const CHAPTER: usize = 3;
         pub const VERSE: usize = 5;
-        /// Range delta in the low seven bits, fidelity in the top bit.
+        /// Range delta, full byte (0-255) — unlike v1, does not share this byte
+        /// with the fidelity bit; see [`FLAGS`].
         pub const DELTA: usize = 7;
+        /// `_dup_N` positional ordinal, 0 when the anchor is not a duplicate.
+        pub const VERSE_OCCURRENCE: usize = 8;
+        /// `_cdup_N` positional ordinal, 0 when the anchor is not in a duplicate
+        /// chapter.
+        pub const CHAPTER_OCCURRENCE: usize = 9;
+        /// Fidelity bit (top bit) plus spare bits.
+        pub const FLAGS: usize = 10;
     }
 
     /// Marker descriptor record (8 bytes).
@@ -298,10 +326,11 @@ pub const SPAN_ABSENT: u32 = u32::MAX;
 /// `marker_descriptor_index` column minus its sentinel.
 pub const MAX_MARKER_DESCRIPTORS: u32 = INDEX_NONE_U16 as u32;
 
-/// Packed SID dictionary record width and final-byte bit allocation.
-pub const PACKED_SID_LEN: usize = 8;
+/// Packed SID dictionary record width and flags-byte bit allocation. v2
+/// layout (v0.1.6): widened 8 -> 16 (see [`layout::packed_sid`]); no delta
+/// mask — the delta byte is unshared and gets the full range.
+pub const PACKED_SID_LEN: usize = 16;
 pub const SID_FIDELITY_BIT: u8 = 1 << 7;
-pub const SID_DELTA_MASK: u8 = SID_FIDELITY_BIT - 1;
 
 /// Stable token-row discriminant, separate from Rust's enum layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1395,12 +1424,16 @@ mod tests {
         let sids = field(token_field::PACKED_SID_DICTIONARY);
         let bridge = (0..sids.len() / PACKED_SID_LEN)
             .map(|index| &sids[index * PACKED_SID_LEN..(index + 1) * PACKED_SID_LEN])
-            .find(|record| record[packed_sid::DELTA] & SID_DELTA_MASK != 0)
+            .find(|record| record[packed_sid::DELTA] != 0)
             .expect("the bridge verse interns a ranged sid");
         assert_eq!(&bridge[packed_sid::BOOK..packed_sid::BOOK + 3], b"GEN");
+        // The section header names the same book too — a fact that holds for
+        // every sid a normal parse mints, though the packed entry's own book
+        // stays authoritative for the (real, tested) case where they diverge.
+        assert_eq!(section.header.book, book);
         assert_eq!(u16_at(bridge, packed_sid::CHAPTER), 1);
         assert_eq!(u16_at(bridge, packed_sid::VERSE), 1);
-        assert_eq!(bridge[packed_sid::DELTA] & SID_DELTA_MASK, 1);
+        assert_eq!(bridge[packed_sid::DELTA], 1);
 
         // Marker descriptor: name index resolves in the string dictionary.
         let strings = field(token_field::STRING_DICTIONARY);

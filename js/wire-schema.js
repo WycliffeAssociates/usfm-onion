@@ -44,7 +44,7 @@ function deepFreeze(value) {
 
 export const CONTAINER_MAGIC = "uson";
 export const SECTION_MAGIC = "usos";
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 export const SECTION_VERSION = 1;
 export const TOKEN_SECTION_RULES_VERSION = 0;
 export const FINDING_SECTION_RULES_VERSION = 1;
@@ -80,9 +80,8 @@ export const BOOK_CODE_FLAG_VALID = 1;
 export const ATTRIBUTE_FLAG_DEFAULT = 1;
 export const SPAN_ABSENT = 4294967295;
 export const MAX_MARKER_DESCRIPTORS = 65535;
-export const PACKED_SID_LEN = 8;
+export const PACKED_SID_LEN = 16;
 export const SID_FIDELITY_BIT = 128;
-export const SID_DELTA_MASK = 127;
 export const STRING_DICTIONARY_ENTRY_LEN = 4;
 export const ELEMENT_WIDTHS = deepFreeze([1, 2, 4, 8, 16]);
 
@@ -169,6 +168,9 @@ export const PACKED_SID_OFFSET = deepFreeze({
   chapter: 3,
   verse: 5,
   delta: 7,
+  verseOccurrence: 8,
+  chapterOccurrence: 9,
+  flags: 10,
 });
 
 export const DESCRIPTOR_RECORD_OFFSET = deepFreeze({
@@ -228,7 +230,7 @@ export const TOKEN_FIELD = deepFreeze([
   { id: 9, name: "tokenIdDictionary", elementWidth: null, required: false },
   { id: 10, name: "stringDictionary", elementWidth: null, required: true },
   { id: 11, name: "markerDescriptorDictionary", elementWidth: 8, required: true },
-  { id: 12, name: "packedSidDictionary", elementWidth: 8, required: true },
+  { id: 12, name: "packedSidDictionary", elementWidth: 16, required: true },
 ]);
 
 export const FINDING_FIELD = deepFreeze([

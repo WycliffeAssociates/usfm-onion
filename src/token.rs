@@ -786,11 +786,15 @@ impl OwnedToken {
                 chapter,
                 verse,
                 verse_end_delta,
+                verse_occurrence,
+                chapter_occurrence,
             } = sid;
             framed(state, book.as_str().as_bytes());
             state.write_u16(*chapter);
             state.write_u16(*verse);
             state.write_u8(*verse_end_delta);
+            state.write_u8(*verse_occurrence);
+            state.write_u8(*chapter_occurrence);
         });
 
         match payload {
@@ -2100,6 +2104,25 @@ pub struct Sid {
     pub chapter: u16,
     pub verse: u16,
     verse_end_delta: u8,
+    /// Positional occurrence of this verse address among duplicate `chapter:verse`
+    /// regions in the same book (`_dup_N` spelling), 0 when there is no duplicate.
+    /// Phase 1 (this field's introduction): only carried through — never minted by
+    /// parse. See `plans/approved/sid-occurrence-ordinals.md`.
+    ///
+    /// Skipped when zero so every existing (occurrence-0) sid's JSON is
+    /// byte-identical to before this field existed — the lint oracle and the
+    /// wasm golden vectors both pin that byte identity.
+    #[serde(skip_serializing_if = "is_zero_u8")]
+    pub verse_occurrence: u8,
+    /// Positional occurrence of this address among duplicate *chapters* (`_cdup_N`
+    /// spelling), 0 when there is no duplicate chapter. Same phase-1 contract as
+    /// `verse_occurrence`.
+    #[serde(skip_serializing_if = "is_zero_u8")]
+    pub chapter_occurrence: u8,
+}
+
+fn is_zero_u8(value: &u8) -> bool {
+    *value == 0
 }
 
 impl Sid {
@@ -2109,6 +2132,8 @@ impl Sid {
             chapter,
             verse,
             verse_end_delta: 0,
+            verse_occurrence: 0,
+            chapter_occurrence: 0,
         }
     }
 
@@ -2123,7 +2148,18 @@ impl Sid {
             chapter,
             verse,
             verse_end_delta: delta,
+            verse_occurrence: 0,
+            chapter_occurrence: 0,
         }
+    }
+
+    /// Returns this sid with its occurrence ordinals set. Phase 1's only writer of
+    /// non-zero occurrences: a boundary that read `_cdup_N`/`_dup_N` off a spelling
+    /// it did not mint, never parse (which stays bare in this phase).
+    pub fn with_occurrences(mut self, chapter_occurrence: u8, verse_occurrence: u8) -> Self {
+        self.chapter_occurrence = chapter_occurrence;
+        self.verse_occurrence = verse_occurrence;
+        self
     }
 
     /// The resolved range end (saturating). Equal to `verse` for a single verse.
@@ -2149,11 +2185,23 @@ impl Sid {
     /// gets this type's spelling, which is what makes the two views converge
     /// instead of multiplying.
     pub fn parse(text: &str) -> Option<Self> {
-        let (book, locator) = text.split_once(' ')?;
+        // Occurrence suffixes ride on the *verse* segment, in the exact order
+        // `derive_canonical_sids`/`normalizeTokenSids` write them: "_cdup_N" first,
+        // then "_dup_N". Peel them off the tail before parsing book/chapter/verse,
+        // and refuse (never repair) a wrong order, a missing/zero/out-of-range N,
+        // or trailing garbage after them.
+        let (base, chapter_occurrence, verse_occurrence) = split_occurrence_suffixes(text)?;
+
+        let (book, locator) = base.split_once(' ')?;
         let book = BookId::from_str(book)?;
         let (chapter, verses) = match locator.split_once(':') {
             // A chapter anchor: verse zero, and no locator to read.
-            None => return Some(Self::new(book, parse_sid_number(locator)?, 0)),
+            None => {
+                return Some(
+                    Self::new(book, parse_sid_number(locator)?, 0)
+                        .with_occurrences(chapter_occurrence, verse_occurrence),
+                );
+            }
             Some(parts) => parts,
         };
         let chapter = parse_sid_number(chapter)?;
@@ -2161,7 +2209,10 @@ impl Sid {
             // Verse zero here is the boundary formatter's spelling of the chapter
             // anchor the branch above spells without a locator; both are this
             // library's own output, so both resolve to the same value.
-            None => Some(Self::new(book, chapter, parse_sid_number(verses)?)),
+            None => Some(
+                Self::new(book, chapter, parse_sid_number(verses)?)
+                    .with_occurrences(chapter_occurrence, verse_occurrence),
+            ),
             Some((start, end)) => {
                 let verse = parse_sid_number(start)?;
                 let verse_end = parse_sid_number(end)?;
@@ -2172,7 +2223,10 @@ impl Sid {
                 if verse == 0 || verse_end <= verse || verse_end - verse > u16::from(u8::MAX) {
                     return None;
                 }
-                Some(Self::with_range(book, chapter, verse, verse_end))
+                Some(
+                    Self::with_range(book, chapter, verse, verse_end)
+                        .with_occurrences(chapter_occurrence, verse_occurrence),
+                )
             }
         }
     }
@@ -2185,6 +2239,47 @@ impl Sid {
             format!("{}-{}", self.verse, self.verse_end())
         }
     }
+}
+
+/// Peels a trailing `"_cdup_N"` then `"_dup_N"` off an anchor spelling, in that
+/// exact order — the order `derive_canonical_sids`/`normalizeTokenSids` write
+/// them. Returns the remaining base text plus the two ordinals (0 when absent).
+/// Refuses (returns `None`) a wrong order, a missing/non-numeric/zero/>255
+/// ordinal, or trailing garbage after a recognized suffix — this never repairs
+/// a spelling, only recognizes the exact one this library's own writers emit.
+fn split_occurrence_suffixes(text: &str) -> Option<(&str, u8, u8)> {
+    let (rest, verse_occurrence) = match strip_occurrence_suffix(text, "_dup_") {
+        Some((rest, n)) => (rest, n),
+        None => (text, 0),
+    };
+    let (base, chapter_occurrence) = match strip_occurrence_suffix(rest, "_cdup_") {
+        Some((rest, n)) => (rest, n),
+        None => (rest, 0),
+    };
+    Some((base, chapter_occurrence, verse_occurrence))
+}
+
+/// Strips one `"{tag}N"` suffix (e.g. `tag = "_dup_"`) off the end of `text`,
+/// requiring `N` to parse as a nonzero `u8` with no leading zero and no
+/// trailing bytes after it. `None` when the tag is absent; also `None`
+/// (refused, not silently skipped) when the tag is present but `N` is
+/// malformed — callers must not fall back to treating a malformed suffix as
+/// ordinary text.
+fn strip_occurrence_suffix<'a>(text: &'a str, tag: &str) -> Option<(&'a str, u8)> {
+    let idx = text.rfind(tag)?;
+    let base = &text[..idx];
+    let digits = &text[idx + tag.len()..];
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if digits.len() > 1 && digits.starts_with('0') {
+        return None;
+    }
+    let n: u16 = digits.parse().ok()?;
+    if n == 0 || n > u16::from(u8::MAX) {
+        return None;
+    }
+    Some((base, n as u8))
 }
 
 /// One `u16` field of an anchor: digits only, no sign, no padding, no whitespace —
@@ -2214,7 +2309,14 @@ fn parse_sid_number(text: &str) -> Option<u16> {
 /// it and content recorded then must still read back. Nothing emits it again.
 impl std::fmt::Display for Sid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())
+        write!(f, "{} {}:{}", self.book, self.chapter, self.verse_locator())?;
+        if self.chapter_occurrence > 0 {
+            write!(f, "_cdup_{}", self.chapter_occurrence)?;
+        }
+        if self.verse_occurrence > 0 {
+            write!(f, "_dup_{}", self.verse_occurrence)?;
+        }
+        Ok(())
     }
 }
 
@@ -2255,11 +2357,16 @@ mod sid_size_guard {
     #[test]
     fn sid_stays_pointer_sized() {
         // Sid is the hot path for every chapter/verse the walker tracks.
-        // Growing it past 8 bytes (e.g. by adding a heap field) would
-        // turn it into a pointer-equivalent and reintroduce the cost
-        // the sous-chef pattern was chosen to avoid.
+        // Growing it past a couple of machine words (e.g. by adding a heap
+        // field) would turn it into a pointer-equivalent and reintroduce the
+        // cost the sous-chef pattern was chosen to avoid. v0.1.6 added two
+        // `u8` occurrence ordinals (`verse_occurrence`/`chapter_occurrence`,
+        // ingest/export phase 1 of duplicate-verse addressing — see
+        // `plans/approved/sid-occurrence-ordinals.md`), which raised the
+        // ceiling from 8 to 16: still `Copy`, still no heap field, just no
+        // longer single-word.
         assert!(
-            size_of::<Sid>() <= 8,
+            size_of::<Sid>() <= 16,
             "Sid grew to {} bytes — keep it Copy-cheap",
             size_of::<Sid>()
         );
@@ -2732,6 +2839,44 @@ mod encode_attr_value_tests {
     }
 }
 
+/// Cross-lane pin (deliberate non-fix, phase 1): `parse` itself never mints
+/// occurrence ordinals — only ingest/export can carry them — so a genuinely
+/// duplicate verse parsed straight from USFM mints the *same* bare sid twice.
+/// That bare sid is not equal to the suffixed spelling an editor's own
+/// dup-detection pass (or `derive_canonical_sids`) would stamp on it. This is
+/// documented contract for phase 1, not an accident: unifying the two lanes
+/// (parse minting occurrences itself) is phase 2's job. See
+/// `plans/approved/sid-occurrence-ordinals.md`.
+#[cfg(test)]
+mod mixed_vocabulary_pin {
+    use crate::parse::parse;
+    use crate::token::{Sid, TokenKind};
+
+    #[test]
+    fn a_parsed_duplicate_verse_mints_the_same_bare_sid_twice() {
+        let source = "\\id GEN\n\\c 1\n\\v 1 first\n\\v 1 second\n";
+        let sids: Vec<Sid> = parse(source)
+            .tokens
+            .iter()
+            .filter(|token| token.kind() == TokenKind::Number)
+            .filter_map(|token| token.sid)
+            .filter(|sid| sid.verse != 0)
+            .collect();
+        assert_eq!(sids.len(), 2, "both \\v 1 numbers carry a sid");
+        assert_eq!(sids[0], sids[1], "parse mints the bare anchor both times");
+        assert_eq!(sids[0].to_string(), "GEN 1:1");
+
+        // The suffixed spelling a dup-detection pass would stamp on the
+        // second occurrence is a *different* Sid — not a repair of the same
+        // one, and not something `parse` produces on its own.
+        let suffixed = Sid::parse("GEN 1:1_dup_1").unwrap();
+        assert_ne!(
+            sids[1], suffixed,
+            "GEN 1:1 != GEN 1:1_dup_1 under Sid equality"
+        );
+    }
+}
+
 #[cfg(test)]
 mod from_parts_tests {
     use super::*;
@@ -2819,6 +2964,86 @@ mod from_parts_tests {
         ] {
             assert_eq!(Sid::parse(text), None, "{text:?} must not parse");
         }
+    }
+
+    /// The occurrence-suffix grammar phase 1 legalizes: `derive_canonical_sids`
+    /// (and its JS twin, `normalizeTokenSids`) writes `"_cdup_N"` then
+    /// `"_dup_N"`, each optional, N in 1..=255. Parse never *mints* these —
+    /// only accepts a spelling this library's own writers already produce.
+    /// See `plans/approved/sid-occurrence-ordinals.md`.
+    #[test]
+    fn sid_parses_the_occurrence_suffix_grammar() {
+        let book = BookId::from_str("GEN").unwrap();
+        for (text, want) in [
+            (
+                "GEN 16:14_dup_1",
+                Sid::new(book, 16, 14).with_occurrences(0, 1),
+            ),
+            (
+                "GEN 16:14_cdup_1",
+                Sid::new(book, 16, 14).with_occurrences(1, 0),
+            ),
+            (
+                "GEN 16:14_cdup_2_dup_3",
+                Sid::new(book, 16, 14).with_occurrences(2, 3),
+            ),
+            (
+                "GEN 1:1-2_dup_1",
+                Sid::with_range(book, 1, 1, 2).with_occurrences(0, 1),
+            ),
+            (
+                "GEN 1:0_cdup_1",
+                Sid::new(book, 1, 0).with_occurrences(1, 0),
+            ),
+            (
+                "GEN 16:14_dup_255",
+                Sid::new(book, 16, 14).with_occurrences(0, 255),
+            ),
+        ] {
+            let parsed = Sid::parse(text);
+            assert_eq!(parsed, Some(want), "{text} must parse to {want:?}");
+            assert_eq!(
+                parsed.unwrap().to_string(),
+                text,
+                "{text} must round-trip through Display"
+            );
+        }
+
+        for text in [
+            "GEN 16:14_dup_0",         // ordinal 0 is refused, not "no suffix"
+            "GEN 16:14_dup_256",       // past the u8 ceiling
+            "GEN 16:14_dup_01",        // leading zero
+            "GEN 16:14_dup_",          // absent number
+            "GEN 16:14_dup",           // no number at all
+            "GEN 16:14_dup_1_cdup_1",  // wrong order: dup must follow cdup
+            "GEN 16:14_dup_1x",        // trailing garbage after the number
+            "GEN 16:14_cdup_1_cdup_1", // cdup cannot repeat
+            "GEN 16:14_dup_1_dup_1",   // dup cannot repeat
+        ] {
+            assert_eq!(Sid::parse(text), None, "{text:?} must not parse");
+        }
+    }
+
+    /// The editor's exact reported failure: `js/token-sids.js`'s
+    /// `normalizeTokenSids` stamps `"DEU 16:14_dup_1"` on the duplicate-verse
+    /// region of a token-push book, and `from_parts` used to refuse it as an
+    /// `UnresolvableSid` because the structured `Sid` could not represent the
+    /// occurrence. Phase 1 (this) makes the spelling representable, so the
+    /// same boundary call now succeeds. See
+    /// `plans/approved/sid-occurrence-ordinals.md`.
+    #[test]
+    fn from_parts_accepts_a_dup_suffixed_sid() {
+        let book = BookId::from_str("DEU").unwrap();
+        let token = OwnedToken::from_parts(OwnedTokenParts {
+            sid: Some("DEU 16:14_dup_1"),
+            ..parts("editor-dup-1", TokenKind::Text, "some text")
+        })
+        .expect("a dup-suffixed sid is representable in phase 1");
+        assert_eq!(token.sid(), Some("DEU 16:14_dup_1"));
+        assert_eq!(
+            token.parsed_sid(),
+            Some(Sid::new(book, 16, 14).with_occurrences(0, 1))
+        );
     }
 
     #[test]

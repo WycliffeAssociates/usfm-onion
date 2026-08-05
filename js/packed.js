@@ -48,7 +48,6 @@ import {
   SECTION_KIND,
   SECTION_MAGIC,
   SECTION_VERSION,
-  SID_DELTA_MASK,
   SPAN_ABSENT,
   STRING_DICTIONARY_ENTRY_LEN,
   TOC_ENTRY_LEN,
@@ -407,6 +406,11 @@ function buildTokenReader(section, source, receipt) {
     return next === 0 ? defaultBook : bookCodeText(next - 1);
   };
 
+  // v2 layout (v0.1.6): widens the packed entry to carry the two occurrence
+  // ordinals phase-1 sids can spell (`_cdup_N`/`_dup_N`). The book stays
+  // inline per entry — a resident sid can legitimately name a book other
+  // than the section's own (a non-canonical `\id`), so the section's book is
+  // not a safe substitute; see the Rust `packed_sid` module doc.
   const sidAt = (index) => {
     if (index === INDEX_NONE_U16) return null;
     if (index >= sidCount) fail("invalidSection");
@@ -415,9 +419,15 @@ function buildTokenReader(section, source, receipt) {
     const at = index * PACKED_SID_LEN;
     const chapter = sidView.getUint16(at + PACKED_SID_OFFSET.chapter, true);
     const verse = sidView.getUint16(at + PACKED_SID_OFFSET.verse, true);
-    const delta = sidView.getUint8(at + PACKED_SID_OFFSET.delta) & SID_DELTA_MASK;
+    const delta = sidView.getUint8(at + PACKED_SID_OFFSET.delta);
+    const chapterOccurrence = sidView.getUint8(at + PACKED_SID_OFFSET.chapterOccurrence);
+    const verseOccurrence = sidView.getUint8(at + PACKED_SID_OFFSET.verseOccurrence);
     const locator = delta === 0 ? `${verse}` : `${verse}-${verse + delta}`;
-    const text = `${ascii(sids.bytes, at + PACKED_SID_OFFSET.book, 3)} ${chapter}:${locator}`;
+    // Suffix order/spelling mirrors core `Sid`'s own `Display`: "_cdup_N" then
+    // "_dup_N", each only when its ordinal is nonzero.
+    let text = `${ascii(sids.bytes, at + PACKED_SID_OFFSET.book, 3)} ${chapter}:${locator}`;
+    if (chapterOccurrence > 0) text += `_cdup_${chapterOccurrence}`;
+    if (verseOccurrence > 0) text += `_dup_${verseOccurrence}`;
     sidCache[index] = text;
     return text;
   };

@@ -13,7 +13,8 @@ use crate::container::{
 };
 use crate::error::{DecodeError, EncodeError, LayoutRefusal};
 use crate::schema::{
-    CONTAINER_HEADER_LEN, SECTION_HEADER_LEN, SectionKind, finding_field, token_field,
+    CONTAINER_HEADER_LEN, PACKED_SID_LEN, SECTION_HEADER_LEN, SectionKind, finding_field,
+    token_field,
 };
 use crate::token_section::{SidDictionaryBuilder, SidFidelity, TokenColumns};
 use usfm_onion::token::{BookId, Sid};
@@ -30,9 +31,13 @@ static STRING_DICTIONARY: [u8; 7] = [0, 0, 0, 0, b'a', b'd', b'd'];
 // One descriptor: name index 0, not nested.
 static DESCRIPTOR_DICTIONARY: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 static FINDING_ROW: [u8; 16] = [0; 16];
-// Two eight-byte packed-SID records: GEN 1:1 and GEN 1:2, exact fidelity.
-static SID_DICTIONARY: [u8; 16] = [
-    b'G', b'E', b'N', 1, 0, 1, 0, 0, b'G', b'E', b'N', 1, 0, 2, 0, 0,
+// Two sixteen-byte packed-SID records (v2 layout: book(3), chapter(2),
+// verse(2), delta(1), verse_occurrence(1), chapter_occurrence(1), flags(1),
+// 5 spare bytes — see `crate::schema::layout::packed_sid`): GEN 1:1 and
+// GEN 1:2, both exact fidelity, no occurrences.
+static SID_DICTIONARY: [u8; 32] = [
+    b'G', b'E', b'N', 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'G', b'E', b'N', 1, 0, 2, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0,
 ];
 
 // Both rows anchored: row 0 -> dictionary entry 0, row 1 -> entry 1.
@@ -102,7 +107,7 @@ fn token_section(code: &str, source_hash: u64) -> SectionPayload<'static> {
             },
             FieldPayload {
                 id: token_field::PACKED_SID_DICTIONARY,
-                width: ElementWidth::Eight,
+                width: ElementWidth::Sixteen,
                 count: 2,
                 bytes: &SID_DICTIONARY,
             },
@@ -436,11 +441,14 @@ fn container_magic_and_version_gate_the_buffer() {
     bytes[..4].copy_from_slice(b"nosu");
     assert_eq!(read_container(&bytes), Err(DecodeError::BadMagic));
 
+    // 9999 rather than the previous version this build superseded: this build
+    // *is* format version 2 (v0.1.6's packed-sid layout change), so the
+    // "unsupported" probe has to name a version this build never claims.
     let mut bytes = unchecked(write(&[]));
-    put_u16(&mut bytes, 4, 2);
+    put_u16(&mut bytes, 4, 9999);
     assert_eq!(
         read_container(&bytes),
-        Err(DecodeError::UnsupportedVersion { found: 2 })
+        Err(DecodeError::UnsupportedVersion { found: 9999 })
     );
 }
 
@@ -1139,7 +1147,7 @@ fn single_entry_sid_dictionary_resolves() {
         &mut section,
         token_field::PACKED_SID_DICTIONARY,
         1,
-        &SID_DICTIONARY[..8],
+        &SID_DICTIONARY[..16],
     );
     static BOTH_ROWS_ENTRY_ZERO: [u8; 4] = [0, 0, 0, 0];
     set_field(
@@ -1170,25 +1178,11 @@ fn sid_index_past_the_dictionary_rejects() {
     );
 }
 
-#[test]
-fn undecodable_sid_record_rejects_the_whole_column() {
-    static BAD_BOOK: [u8; 16] = [
-        b'G', b'E', b'N', 1, 0, 1, 0, 0, b'G', b'-', b'N', 1, 0, 2, 0, 0,
-    ];
-    let mut section = token_section("GEN", 1);
-    set_field(
-        &mut section,
-        token_field::PACKED_SID_DICTIONARY,
-        2,
-        &BAD_BOOK,
-    );
-    let bytes = write(&[section]);
-    let (_, sections) = read_all(&bytes).unwrap();
-    assert_eq!(
-        TokenColumns::from_section(&sections[0]).err(),
-        Some(DecodeError::InvalidSection)
-    );
-}
+// `undecodable_sid_record_rejects_the_whole_column` (a malformed book byte
+// inside a packed sid record) is removed in v2: the book is no longer part
+// of the packed entry, decoded instead from the section's own already-valid
+// `BookId`, so there is no longer a byte pattern in a sid record that fails
+// to decode. See `plans/approved/sid-occurrence-ordinals.md`.
 
 #[test]
 fn sid_dictionary_above_the_index_ceiling_rejects() {
@@ -1196,9 +1190,11 @@ fn sid_dictionary_above_the_index_ceiling_rejects() {
     // 65,536 cannot be addressed and must be refused by count, before the
     // half-megabyte payload is walked.
     let ceiling = usize::from(u16::MAX);
-    let mut dictionary = Vec::with_capacity((ceiling + 1) * 8);
+    let mut dictionary = Vec::with_capacity((ceiling + 1) * PACKED_SID_LEN);
     for _ in 0..=ceiling {
-        dictionary.extend_from_slice(b"GEN   ");
+        // GEN, chapter 1, verse 1, delta/occurrences/flags/spare all zero
+        // (16 bytes, v2 layout -- see `crate::schema::layout::packed_sid`).
+        dictionary.extend_from_slice(b"GEN           ");
     }
     let mut section = token_section("GEN", 1);
     set_field(
@@ -1222,7 +1218,7 @@ fn sid_dictionary_above_the_index_ceiling_rejects() {
         &mut section,
         token_field::PACKED_SID_DICTIONARY,
         ceiling as u32,
-        &dictionary[..ceiling * 8],
+        &dictionary[..ceiling * PACKED_SID_LEN],
     );
     let bytes = write(&[section]);
     let (_, sections) = read_all(&bytes).unwrap();

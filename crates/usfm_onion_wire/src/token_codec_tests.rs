@@ -644,10 +644,13 @@ fn fidelity_comes_from_the_designator_not_the_anchor() {
         fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 6b-11 a\n", "a"),
         Some(SidFidelity::AnchorOnly)
     );
-    // A bridge wider than the seven delta bits degrades in the codec itself.
+    // v2's delta byte is unshared with the fidelity bit (see
+    // `crate::schema::layout::packed_sid`), so a bridge that would have
+    // degraded past the v1 layout's 127-verse ceiling now stays exact up to
+    // `Sid`'s own 255-verse delta ceiling.
     assert_eq!(
         fidelity_of("\\id GEN\n\\c 1\n\\p\n\\v 1-200 a\n", "a"),
-        Some(SidFidelity::AnchorOnly)
+        Some(SidFidelity::Exact)
     );
 }
 
