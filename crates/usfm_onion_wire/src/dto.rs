@@ -80,6 +80,15 @@ use crate::error::TokenInputError;
 /// `Option` first restores the exact old tolerance: present-but-`undefined`
 /// means default, same as absent. Apply to every non-`Option`
 /// `#[serde(default)]` field on a boundary-crossing DTO.
+///
+/// Explicit `null` is deliberately treated the same way (owner ruling,
+/// 2026-08-05): serde-wasm-bindgen conflates `null` and `undefined` — both
+/// reach serde as `None`, indistinguishably — so refusing one but not the
+/// other would take a JS normalization wrapper over every verb, a whole new
+/// owned drift surface. The declared TS types never permitted `null` on
+/// these fields (`attributes?: AttributeItem[]`, not `| null`), so a caller
+/// sending it is already off-contract and `tsc` flags it on their side; at
+/// runtime the boundary contract is simply: nullish means absent.
 pub fn undefined_is_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,

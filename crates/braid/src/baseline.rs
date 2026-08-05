@@ -144,7 +144,17 @@ impl Braid {
         for index in indices {
             let resident = &self.books[index];
             let baseline = resident.baseline.as_ref().expect("checked missing above");
-            if resident.hash == baseline.hash && resident.source == baseline.source {
+            // Full content identity, the same four facts `BookState::content_eq`
+            // compares — token equality included, because two streams can
+            // serialize to identical bytes while carrying different token
+            // identities, and reverting exists precisely to reinstate the
+            // baseline's ids. Hash-and-source alone would wrongly no-op that
+            // case and leave the replacement ids resident.
+            if resident.hash == baseline.hash
+                && resident.source == baseline.source
+                && resident.line_ending == baseline.line_ending
+                && resident.tokens == baseline.tokens
+            {
                 // Already equal to its baseline: a no-op for this book.
                 continue;
             }

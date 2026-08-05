@@ -179,6 +179,46 @@ fn revert_identity_reinstalls_the_baselines_own_token_ids() {
     );
 }
 
+/// Same serialized bytes, different token ids, must still revert (clean-room
+/// review P1): the no-op predicate compares full content identity -- tokens
+/// included -- never hash-and-source alone, because two streams can
+/// serialize identically while carrying different identities, and reverting
+/// exists precisely to reinstate the baseline's ids. A hash-and-source
+/// predicate wrongly no-ops here and leaves the replacement ids resident.
+#[test]
+fn same_bytes_different_ids_is_not_a_no_op() {
+    let mut resident = seeded();
+    resident
+        .update_book(token_push("GEN", relabelled(GEN_SOURCE, "orig")))
+        .unwrap();
+    resident
+        .set_baseline(token_push("GEN", relabelled(GEN_SOURCE, "orig")))
+        .unwrap();
+
+    // Identical source bytes, freshly minted ids -- identity-only divergence.
+    resident
+        .update_book(token_push("GEN", relabelled(GEN_SOURCE, "edited")))
+        .unwrap();
+
+    let effect = resident
+        .revert_to_baseline(CorpusScope::Book(id("GEN")))
+        .expect("GEN has a baseline");
+    assert_eq!(
+        effect.changed,
+        vec![braid::Scope::book(id("GEN"))],
+        "an identity-only divergence is a real change, not a no-op"
+    );
+    let reverted_ids: Vec<String> = resident.to_tokens(braid::Scope::book(id("GEN"))).unwrap()[0]
+        .tokens
+        .iter()
+        .map(|token| token.id().as_str().to_string())
+        .collect();
+    assert!(
+        reverted_ids.iter().all(|id| id.starts_with("orig-")),
+        "the baseline's own ids are reinstated, not the same-bytes replacements: {reverted_ids:?}"
+    );
+}
+
 /// A book whose current content already equals its baseline is a no-op:
 /// absent from `changed`, not an error.
 #[test]

@@ -6163,3 +6163,29 @@ golden 7/7. Lesson (standing, joins the serializer-flip family): a
 serializer migration's compatibility surface includes VALUES the old path
 silently erased, not just shapes it emitted — gates that only feed
 well-formed inputs cannot see it; the editor's real traffic was the gate.
+
+### v0.1.5 clean-room review round 1 — P1 fix (2026-08-05)
+
+Deferred clean-room review ran post-ship; verdict: one P1, one P2.
+
+P1 (fixed): revert_to_baseline's no-op predicate compared hash+source only,
+so a same-bytes/different-token-ids divergence (baseline `orig-*`, update
+with identical serialized bytes but `edited-*` ids) wrongly no-opped and left
+the replacement ids resident — contradicting the stable-id restoration
+contract the verb was specified around. BookState::content_eq's own doc
+comment already named this exact hazard; the revert path hand-rolled a weaker
+check because BaselineState is not a BookState. Fix: the predicate now
+compares the same four facts content_eq does (hash, source, line ending,
+tokens). Regression `same_bytes_different_ids_is_not_a_no_op` reproduces the
+reviewer's scenario verbatim and fails against the old predicate (verified by
+temporarily reverting the fix). Battery: workspace 0 failures (-D warnings,
+all-features), fmt, oracle byte-identical, parity 94×2/0, publish 33.
+
+P2 (RESOLVED, owner ruling 2026-08-05: option A): undefined_is_default also
+accepts explicit null — serde-wasm-bindgen conflates null/undefined, both
+reach serde as None indistinguishably, so refusing null alone would require a
+JS normalization wrapper over every verb (a new owned drift surface). Ruled:
+nullish means absent IS the boundary contract, documented on the helper's doc
+comment. The declared TS types never permitted null on these fields, so an
+off-contract caller is flagged by tsc on their side; the legacy JSON path's
+null rejection was incidental, not designed.
